@@ -11,7 +11,7 @@
           "functions",
           "serve",
           "--env-file",
-          ".supabase/.env.local",
+          "./supabase/.env.local",
           "--no-verify-jwt"
         ],
         "timeout": 10000,
