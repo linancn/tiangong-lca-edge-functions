@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "type": "node",
+        "request": "launch",
+        "name": "Launch Supabase Function",
+        "runtimeExecutable": "npx",
+        "runtimeArgs": [
+          "supabase",
+          "functions",
+          "serve",
+          "--env-file",
+          ".supabase/.env.local",
+          "--no-verify-jwt"
+        ],
+        "timeout": 10000,
+        "console": "integratedTerminal",
+        "internalConsoleOptions": "neverOpen",
+        "skipFiles": [
+          "<node_internals>/**"
+        ]
+      }
+    ]
+  }
