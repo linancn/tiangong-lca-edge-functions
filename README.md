@@ -59,7 +59,7 @@ npx supabase login
 
 npx supabase functions new hello
 
-npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy hello --project-ref qgzvkongdjqiiamzbbts
 
 npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
