@@ -9,6 +9,8 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 nvm install 20
 nvm use
 
+curl -fsSL https://deno.land/install.sh | sh # Then manually add the deno directory to your $HOME/.zshrc (or similar)
+
 npm i supabase --save-dev
 npm update supabase --save-dev
 
