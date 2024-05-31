@@ -22,8 +22,6 @@ Rename the `.env.example` to `.env.local` and fill in the the values before the 
 
 ## Local Development
 
-USE `VSCode Debug` -> `Launch Supabase Function` to start Server.
-
 ```bash
 
 Started supabase local development setup.
