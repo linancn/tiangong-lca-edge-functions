@@ -5,9 +5,40 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
-import OpenAI from "https://deno.land/x/openai@v4.47.1/mod.ts";
+import OpenAI from "https://deno.land/x/openai/mod.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js";
+import { corsHeaders } from "../_shared/cors.ts";
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  // Get the session or user object
+  const authHeader = req.headers.get("Authorization");
+
+  // If no Authorization header, return error immediately
+  if (!authHeader) {
+    return new Response("Unauthorized Request", { status: 401 });
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+
+  const supabaseClient = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+  );
+
+  const { data } = await supabaseClient.auth.getUser(token);
+  if (!data || !data.user) {
+    return new Response("User Not Found", { status: 404 });
+  }
+
+  const user = data.user;
+  if (user?.role !== "authenticated") {
+    return new Response("Forbidden", { status: 403 });
+  }
+
   const { query } = await req.json();
   const apiKey = Deno.env.get("OPENAI_API_KEY");
 
