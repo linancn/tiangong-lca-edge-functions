@@ -44,6 +44,9 @@ service_role key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZ
 ## Local Test
 
 ```bash
+
+npx supabase functions serve --env-file ./supabase/.env.local
+
 curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/embedding' \
   --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
   --header 'Content-Type: application/json' \
@@ -57,7 +60,7 @@ npx supabase login
 
 npx supabase functions new hello
 
-npx supabase functions deploy hello --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts
 
 npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
