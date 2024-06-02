@@ -1,55 +1,61 @@
-/// <reference types="https://esm.sh/v135/@supabase/functions-js@2.4.1/src/edge-runtime.d.ts" />
+/// <reference types="https://esm.sh/v135/@supabase/functions-js/src/edge-runtime.d.ts" />
 
-import { ChatOpenAI } from "https://esm.sh/@langchain/openai@0.1.0";
-import { BaseClient } from "https://esm.sh/@xata.io/client@0.28.4";
-import { RunnableWithMessageHistory } from "https://esm.sh/@langchain/core@0.2.5/runnables";
-import { AgentExecutor, createOpenAIFunctionsAgent } from "https://esm.sh/langchain@0.2.4/agents";
 import { XataChatMessageHistory } from "https://esm.sh/@langchain/community@0.2.5/stores/message/xata";
-import { ChatPromptTemplate, MessagesPlaceholder } from "https://esm.sh/@langchain/core@0.2.5/prompts";
 import { DuckDuckGoSearch } from "https://esm.sh/@langchain/community@0.2.5/tools/duckduckgo_search";
+import {
+  ChatPromptTemplate,
+  MessagesPlaceholder,
+} from "https://esm.sh/@langchain/core@0.2.5/prompts";
+import { RunnableWithMessageHistory } from "https://esm.sh/@langchain/core@0.2.5/runnables";
+import { ChatOpenAI } from "https://esm.sh/@langchain/openai@0.1.1";
+import { BaseClient } from "https://esm.sh/@xata.io/client@0.28.4";
+import {
+  AgentExecutor,
+  createOpenAIFunctionsAgent,
+} from "https://esm.sh/langchain@0.2.4/agents";
 
-import { corsHeaders } from '../_shared/cors.ts';
-//import { getXataClient } from '../xata.ts'
+import { corsHeaders } from "../_shared/cors.ts";
 
-const openai_apiKey = Deno.env.get("OPENAI_API_KEY")
-const openai_model = Deno.env.get('OPENAI_MODEL')
-const xata_apiKey = Deno.env.get('XATA_API_KEY');
-const xata_db_url = Deno.env.get('XATA_MEMORY_DB_URL');
-const xata_branch = Deno.env.get('XATA_BRANCH');
-const xata_table_name = Deno.env.get('XATA_TABLE_NAME');
+const openai_api_key = Deno.env.get("OPENAI_API_KEY") ?? "";
+const openai_chat_model = Deno.env.get("OPENAI_CHAT_MODEL") ?? "";
+const xata_api_key = Deno.env.get("XATA_API_KEY") ?? "";
+const xata_db_url = Deno.env.get("XATA_MEMORY_DB_URL") ?? "";
+const xata_branch = Deno.env.get("XATA_BRANCH") ?? "";
+const xata_table_name = Deno.env.get("XATA_TABLE_NAME") ?? "";
 
-const getXataClient = () => {
-  if (!xata_apiKey) {
-    throw new Error("XATA_API_KEY not set");
+const getXataClient = (): BaseClient | undefined => {
+  if (xata_db_url && xata_api_key && xata_branch) {
+    const xata = new BaseClient({
+      databaseURL: xata_db_url,
+      apiKey: xata_api_key,
+      branch: xata_branch,
+    });
+    return xata;
   }
-
-  if (!xata_db_url) {
-    throw new Error("XATA_DB_URL not set");
-  }
-  const xata = new BaseClient({
-    databaseURL: xata_db_url,
-    apiKey: xata_apiKey,
-    branch: xata_branch,
-  });
-  return xata;
+  return undefined;
 };
 
-function initChatHistory(session_id: string){
+function initChatHistory(session_id: string) {
+  const client = getXataClient();
+  if (!client) {
+    throw new Error("Failed to get Xata client");
+  }
   return new XataChatMessageHistory({
     table: xata_table_name,
     sessionId: session_id,
-    client: getXataClient(),
-    apiKey: xata_apiKey,
-    createTable: false,
-  })
+    client: client,
+    apiKey: xata_api_key,
+    createTable: true,
+  });
 }
 
 Deno.serve(async (req) => {
   // This is needed if you're planning to invoke your function from a browser.
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
-  try{
+
+  try {
     const tools = [new DuckDuckGoSearch({ maxResults: 1 })];
 
     const prompt = ChatPromptTemplate.fromMessages([
@@ -57,62 +63,60 @@ Deno.serve(async (req) => {
       new MessagesPlaceholder("history"),
       ["human", "{input}"],
       new MessagesPlaceholder("agent_scratchpad"),
-      ]);
+    ]);
 
-    const llm = new ChatOpenAI({ 
-      apiKey: openai_apiKey,
+    const llm = new ChatOpenAI({
+      apiKey: openai_api_key,
       temperature: 0,
-      model: openai_model,
+      model: openai_chat_model,
     });
 
     const agent = await createOpenAIFunctionsAgent({
-        llm,
-        tools,
-        prompt
-
-    })
+      llm,
+      tools,
+      prompt,
+    });
 
     const agentExecutor = AgentExecutor.fromAgentAndTools({
-        agent: agent,
-        tools: tools,
-        returnIntermediateSteps: true,
-      });
+      agent: agent,
+      tools: tools,
+      returnIntermediateSteps: true,
+    });
 
     const agentExecutorWithHistory = new RunnableWithMessageHistory({
-        runnable: agentExecutor,
-        getMessageHistory: (sessionId) => initChatHistory(sessionId),
-        inputMessagesKey: "input",
-        historyMessagesKey: "history",
+      runnable: agentExecutor,
+      getMessageHistory: (sessionId) => initChatHistory(sessionId),
+      inputMessagesKey: "input",
+      historyMessagesKey: "history",
     });
-    
-    const { query, sessionId } = await req.json();
-    console.log(query)
-    const result = await agentExecutorWithHistory.invoke(
-        {
-            input: query,
-        },
-        {
-            configurable: {sessionId: sessionId}
-        }
-    )
-    return new Response(
-      JSON.stringify(result), 
-      {
-      headers: { "Content-Type": "application/json" },
-      status: 200,
-      }
-    )
 
+    const { query, sessionId } = await req.json();
+    console.log(query);
+    const res = await agentExecutorWithHistory.invoke(
+      {
+        input: query,
+      },
+      {
+        configurable: { sessionId: sessionId },
+      },
+    );
+    console.log(res);
+    return new Response(
+      JSON.stringify(res),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      },
+    );
   } catch (error) {
     return new Response(
-      JSON.stringify({ error: error.message }), 
+      JSON.stringify({ error: error.message }),
       {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 400,
-      }
-    )
+      },
+    );
   }
-
 });
 
 /* To invoke locally:
@@ -125,6 +129,6 @@ Deno.serve(async (req) => {
 curl -i --location --request POST 'http://localhost:54321/functions/v1/agent' \
   --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
   --header 'Content-Type: application/json' \
-  --data '{"query":"Hello", "sessionId": "1"}'
+  --data '{"query":"你是谁？", "sessionId": "1"}'
 
 */
