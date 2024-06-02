@@ -1,12 +1,12 @@
-/// <reference types="https://esm.sh/v135/@supabase/functions-js@2.4.1/src/edge-runtime.d.ts" />
+/// <reference types="https://esm.sh/v135/@supabase/functions-js/src/edge-runtime.d.ts" />
 
-import { ChatOpenAI } from "https://esm.sh/@langchain/openai@0.1.0";
-import { BaseClient } from "https://esm.sh/@xata.io/client@0.28.4";
-import { RunnableWithMessageHistory } from "https://esm.sh/@langchain/core@0.2.5/runnables";
-import { AgentExecutor, createOpenAIFunctionsAgent } from "https://esm.sh/langchain@0.2.4/agents";
-import { XataChatMessageHistory } from "https://esm.sh/@langchain/community@0.2.5/stores/message/xata";
-import { ChatPromptTemplate, MessagesPlaceholder } from "https://esm.sh/@langchain/core@0.2.5/prompts";
-import { DuckDuckGoSearch } from "https://esm.sh/@langchain/community@0.2.5/tools/duckduckgo_search";
+import { ChatOpenAI } from "https://esm.sh/@langchain/openai";
+import { BaseClient } from "https://esm.sh/@xata.io/client";
+import { RunnableWithMessageHistory } from "https://esm.sh/@langchain/core/runnables";
+import { AgentExecutor, createOpenAIFunctionsAgent } from "https://esm.sh/langchain/agents";
+import { XataChatMessageHistory } from "https://esm.sh/@langchain/community/stores/message/xata";
+import { ChatPromptTemplate, MessagesPlaceholder } from "https://esm.sh/@langchain/core/prompts";
+import { DuckDuckGoSearch } from "https://esm.sh/@langchain/community/tools/duckduckgo_search";
 
 import { corsHeaders } from '../_shared/cors.ts';
 //import { getXataClient } from '../xata.ts'
