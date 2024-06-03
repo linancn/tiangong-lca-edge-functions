@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
   //   return new Response("Forbidden", { status: 403 });
   // }
 
-  const { query } = await req.json();
+  const { query, filter } = await req.json();
 
   if (!query) {
     return new Response("Missing query", { status: 400 });
@@ -117,11 +117,11 @@ FulltextQueryZH: A query list for full-text search in Simplified Chinese, includ
   ];
   const queryFulltextString = combinedFulltextQueries.join(" OR ");
 
-  console.log(queryFulltextString);
+  // console.log(queryFulltextString);
 
   const semanticQueryEn = res.semantic_query_en;
 
-  console.log(semanticQueryEn);
+  // console.log(semanticQueryEn);
 
   const embeddings = new OpenAIEmbeddings({
     apiKey: openai_api_key,
@@ -129,13 +129,14 @@ FulltextQueryZH: A query list for full-text search in Simplified Chinese, includ
   });
 
   const vectors = await embeddings.embedQuery(semanticQueryEn);
-  const vectorStr = "[" + vectors.toString() + "]";
+  const vectorStr = `[${vectors.toString()}]`;
 
-  console.log(vectorStr);
+  // console.log(vectorStr);
 
   const { data, error } = await supabaseClient.rpc("hybrid_search", {
     query_text: queryFulltextString,
     query_embedding: vectorStr,
+    ...(filter !== undefined ? { filter } : {}),
   });
 
   if (error) {
