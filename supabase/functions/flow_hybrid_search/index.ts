@@ -6,21 +6,25 @@
 /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
 import { ChatPromptTemplate } from "https://esm.sh/@langchain/core@0.2.5/prompts";
-import { ChatOpenAI } from "https://esm.sh/@langchain/openai@0.1.1";
+import {
+  ChatOpenAI,
+  OpenAIEmbeddings,
+} from "https://esm.sh/@langchain/openai@0.1.1";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const openai_api_key = Deno.env.get("OPENAI_API_KEY") ?? "";
 const openai_chat_model = Deno.env.get("OPENAI_CHAT_MODEL") ?? "";
-const supabase_url = Deno.env.get("SUPABASE_URL") ?? "";
-const supabase_anon_key = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+const openai_embedding_model = Deno.env.get("OPENAI_EMBEDDING_MODEL") ?? "";
+const supabase_url = Deno.env.get("LOCAL_SUPABASE_URL") ?? "";
+const supabase_anon_key = Deno.env.get("LOCAL_SUPABASE_ANON_KEY") ?? "";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // // Get the session or user object
+  // Get the session or user object
   // const authHeader = req.headers.get("Authorization");
 
   // // If no Authorization header, return error immediately
@@ -30,10 +34,10 @@ Deno.serve(async (req) => {
 
   // const token = authHeader.replace("Bearer ", "");
 
-  // const supabaseClient = createClient(
-  //   supabase_url,
-  //   supabase_anon_key,
-  // );
+  const supabaseClient = createClient(
+    supabase_url,
+    supabase_anon_key,
+  );
 
   // const { data } = await supabaseClient.auth.getUser(token);
   // if (!data || !data.user) {
@@ -69,13 +73,19 @@ Deno.serve(async (req) => {
         title: "FulltextQueryEN",
         description:
           "original names and synonyms for fulltext queries in English",
-        type: "string[]",
+        type: "array",
+        "items": {
+          "type": "string",
+        },
       },
       fulltext_query_zh: {
         title: "FulltextQueryZH",
         description:
           "original names and synonyms for fulltext queries in Simplified Chinese",
-        type: "string[]",
+        type: "array",
+        "items": {
+          "type": "string",
+        },
       },
     },
     required: ["semantic_query_en", "fulltext_query_en", "fulltext_query_zh"],
@@ -87,7 +97,7 @@ Deno.serve(async (req) => {
     [
       "system",
       `Field: Life Cycle Assessment (LCA)
-Task: Extract and transform description of flows into three specific queries:
+Task: Transform description of flows into three specific queries:
 SemanticQueryEN: A query for semantic retrieval in English.
 FulltextQueryEN: A query list for full-text search in English, including original names and synonyms.
 FulltextQueryZH: A query list for full-text search in Simplified Chinese, including original names and synonyms.`,
@@ -99,27 +109,44 @@ FulltextQueryZH: A query list for full-text search in Simplified Chinese, includ
 
   const res = await chain.invoke({ input: query });
 
-  console.log({ res });
+  // console.log({ res });
 
-  // async function getEmbedding(
-  //   query: string | Array<string> | Array<number> | Array<Array<number>>,
-  // ) {
-  //   try {
-  //     const response = await openai.embeddings.create({
-  //       input: query,
-  //       model: "text-embedding-3-small",
-  //     });
-  //     return response.data;
-  //   } catch (error) {
-  //     console.error("Error creating embedding:", error);
-  //     return { error: "Failed to create embedding" };
-  //   }
-  // }
+  const combinedFulltextQueries = [
+    ...res.fulltext_query_zh,
+    ...res.fulltext_query_en,
+  ];
+  const queryFulltextString = combinedFulltextQueries.join(" OR ");
 
-  // const embeddingResult = await getEmbedding(query);
+  console.log(queryFulltextString);
 
-  return new Response(JSON.stringify(res), {
+  const semanticQueryEn = res.semantic_query_en;
+
+  console.log(semanticQueryEn);
+
+  const embeddings = new OpenAIEmbeddings({
+    apiKey: openai_api_key,
+    model: openai_embedding_model,
+  });
+
+  const vectors = await embeddings.embedQuery(semanticQueryEn);
+
+  console.log(vectors);
+
+  const { data, error } = await supabaseClient.rpc("hybrid_search", {
+    query_text: queryFulltextString,
+    query_embedding: vectors,
+  });
+
+  if (error) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { "Content-Type": "application/json" },
+      status: 500,
+    });
+  }
+
+  return new Response(JSON.stringify({ data }), {
     headers: { "Content-Type": "application/json" },
+    status: 200,
   });
 });
 
@@ -131,6 +158,6 @@ FulltextQueryZH: A query list for full-text search in Simplified Chinese, includ
   curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/flow_hybrid_search' \
     --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
     --header 'Content-Type: application/json' \
-    --data '{"query":"生物化学和医学研究中酶抑制剂开发的1,10-菲咯啉流"}'
+    --data '{"query":"hexafluoropropene，有机化合物，属于卤代烯烃类。这个化合物的分子式为C3H2F6。可能具有特定的毒性和环境影响"}'
 
 */
