@@ -1,7 +1,6 @@
 /// <reference types="https://esm.sh/v135/@supabase/functions-js/src/edge-runtime.d.ts" />
 
 import { XataChatMessageHistory } from "https://esm.sh/@langchain/community@0.2.5/stores/message/xata";
-import { DuckDuckGoSearch } from "https://esm.sh/@langchain/community@0.2.5/tools/duckduckgo_search";
 import {
   ChatPromptTemplate,
   MessagesPlaceholder,
@@ -15,6 +14,7 @@ import {
 } from "https://esm.sh/langchain@0.2.4/agents";
 
 import { corsHeaders } from "../_shared/cors.ts";
+import SearchInternetTool from "../tools/search_Internet_tool.ts";
 
 const openai_api_key = Deno.env.get("OPENAI_API_KEY") ?? "";
 const openai_chat_model = Deno.env.get("OPENAI_CHAT_MODEL") ?? "";
@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const tools = [new DuckDuckGoSearch({ maxResults: 1 })];
+    const tools = [new SearchInternetTool(2).invoke()];
 
     const prompt = ChatPromptTemplate.fromMessages([
       ["system", ""],
@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
     );
     console.log(res);
     return new Response(
-      JSON.stringify(res),
+      JSON.stringify(res.output),
       {
         headers: { "Content-Type": "application/json" },
         status: 200,
