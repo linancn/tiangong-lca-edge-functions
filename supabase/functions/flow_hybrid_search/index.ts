@@ -129,8 +129,9 @@ FulltextQueryZH: A query list for full-text search in Simplified Chinese, includ
   });
 
   const vectors = await embeddings.embedQuery(semanticQueryEn);
+  const vectorStr = vectors.toString();
 
-  console.log(vectors);
+  console.log(vectorStr);
 
   const { data, error } = await supabaseClient.rpc("hybrid_search", {
     query_text: queryFulltextString,
