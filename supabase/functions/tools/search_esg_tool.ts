@@ -25,22 +25,27 @@ interface RecordType {
     xata: object;
 }
 
+
 class SearchEsgTool {
+    openaiClient: OpenAIEmbeddings;
+
+    constructor(){
+        this.openaiClient = new OpenAIEmbeddings({
+            apiKey: "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",
+            model: "text-embedding-3-small",
+        });
+    }
 
     async search(query: string, topK: number, filter: object) {
         const pc = new Pinecone({ apiKey: pinecone_api_key});
         const index = pc.index(pinecone_index_name);
-        const openaiClient = new OpenAIEmbeddings({
-            apiKey: openai_api_key,
-            model: openai_embedding_model,
-        });
         const xata = new BaseClient({
             databaseURL: xata_esg_db_url,
             apiKey: xata_api_key,
             branch: xata_branch,
         })
-        const searchVector = await openaiClient.embedQuery(query);
-
+        
+        const searchVector = await this.openaiClient.embedQuery(query);
         const queryResponse = await index.namespace(pinecone_namespace_esg).query({
             vector: searchVector,
             filter: filter,
@@ -50,7 +55,7 @@ class SearchEsgTool {
         if (!queryResponse) {
             console.error("doc id does not exist");
         }
-        console.log(queryResponse.matches)
+
         const id_set = new Set();
         for (const doc of queryResponse.matches) {
             id_set.add(doc?.metadata?.rec_id);
@@ -83,7 +88,7 @@ class SearchEsgTool {
                 }
             }
             return docList;
-        }
+    }
 
     invoke() {
         return new DynamicStructuredTool({
