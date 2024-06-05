@@ -14,7 +14,7 @@ const xata_api_key = Deno.env.get("XATA_API_KEY") ?? "";
 const xata_esg_db_url = Deno.env.get("XATA_ESG_DB_URL") ?? "";
 const xata_branch = Deno.env.get("XATA_BRANCH") ?? "";
 
-const openai_api_key = Deno.env.get("OPENAI_API") ?? "";
+const openai_api_key = Deno.env.get("OPENAI_API_KEY") ?? "";
 const openai_embedding_model = Deno.env.get("OPENAI_EMBEDDING_MODEL") ?? "";
 
 interface RecordType {
@@ -31,8 +31,8 @@ class SearchEsgTool {
 
     constructor(){
         this.openaiClient = new OpenAIEmbeddings({
-            apiKey: "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",
-            model: "text-embedding-3-small",
+            apiKey: openai_api_key,
+            model: openai_embedding_model,
         });
     }
 
@@ -43,8 +43,7 @@ class SearchEsgTool {
             databaseURL: xata_esg_db_url,
             apiKey: xata_api_key,
             branch: xata_branch,
-        })
-        
+        });
         const searchVector = await this.openaiClient.embedQuery(query);
         const queryResponse = await index.namespace(pinecone_namespace_esg).query({
             vector: searchVector,
