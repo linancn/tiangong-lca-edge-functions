@@ -1,20 +1,16 @@
 import SearchApi from "npm:duckduckgo-search@1.0.5";
-import { DynamicTool } from "https://esm.sh/@langchain/core@0.2.5/tools";
+import {  DynamicStructuredTool } from "https://esm.sh/@langchain/core@0.2.5/tools";
+import { z } from "https://esm.sh/zod@3.23.8";
 
-class searchInternetTool {
-    maxResults: number;
+class SearchInternetTool {
 
-    constructor(maxResults: number = 1) {
-        this.maxResults = maxResults;
-    }
-
-    async search(query: string) {
+    async search(query: string, maxResults: number) {
         const res = [];
         let count = 0;
         for await (const result of SearchApi.text(query)) {
             res.push(result)
             count++;
-            if (count >= this.maxResults) {
+            if (count >= maxResults) {
                 break;
             }
         }
@@ -22,18 +18,22 @@ class searchInternetTool {
     }
 
     invoke() {
-        return new DynamicTool({
+        return new DynamicStructuredTool({
             name: "Search_Internet_Tool",
             description: "Call this tool to search the internet for information.",
-            func: async (query: string) => {
+            schema: z.object({
+                query: z.string(),
+                maxResults: z.number().default(3),
+            }),
+            func: async ({ query, maxResults }) => {
                 if (!query) {
                     throw new Error("Query is required");
                 }
-                const results = await this.search(query);
-                return JSON.stringify(results); // 将结果转换为字符串
+                const results = await this.search(query, maxResults);
+                return JSON.stringify(results); 
             }
         });
     }
 }
 
-export default searchInternetTool
+export default SearchInternetTool

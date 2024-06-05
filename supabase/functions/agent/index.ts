@@ -15,6 +15,7 @@ import {
 
 import { corsHeaders } from "../_shared/cors.ts";
 import SearchInternetTool from "../tools/search_Internet_tool.ts";
+import SearchEsgTool from "../tools/search_esg_tool.ts";
 
 const openai_api_key = Deno.env.get("OPENAI_API_KEY") ?? "";
 const openai_chat_model = Deno.env.get("OPENAI_CHAT_MODEL") ?? "";
@@ -55,8 +56,11 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  try {
-    const tools = [new SearchInternetTool(2).invoke()];
+  //try {
+    const tools = [
+      new SearchInternetTool().invoke(), 
+      new SearchEsgTool().invoke()
+    ];
 
     const prompt = ChatPromptTemplate.fromMessages([
       ["system", ""],
@@ -108,7 +112,7 @@ Deno.serve(async (req) => {
         status: 200,
       },
     );
-  } catch (error) {
+  /*} catch (error) {
     return new Response(
       JSON.stringify({ error: error.message }),
       {
@@ -117,6 +121,7 @@ Deno.serve(async (req) => {
       },
     );
   }
+  */
 });
 
 /* To invoke locally:
@@ -126,9 +131,9 @@ Deno.serve(async (req) => {
 
   string query:
 
-curl -i --location --request POST 'http://localhost:54321/functions/v1/agent' \
+  curl -i --location --request POST 'http://localhost:54321/functions/v1/agent' \
   --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
   --header 'Content-Type: application/json' \
-  --data '{"query":"你是谁？", "sessionId": "1"}'
+  --data '{"query":"does alibaba have board committees overseeing climate risk? search in the esg database. topK is 5, doc id is rec_cosa04n2v20pl80pk30g", "sessionId": "zyh1222"}'
 
 */
