@@ -111,7 +111,7 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   const combinedFulltextQueries = [
     ...res.fulltext_query_zh,
     ...res.fulltext_query_en,
-  ];
+  ].map(query => `(${query})`);;
   const queryFulltextString = combinedFulltextQueries.join(" OR ");
 
   console.log(queryFulltextString);
