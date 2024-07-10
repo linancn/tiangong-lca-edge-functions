@@ -16,8 +16,8 @@ import { corsHeaders } from "../_shared/cors.ts";
 const openai_api_key = Deno.env.get("OPENAI_API_KEY") ?? "";
 const openai_chat_model = Deno.env.get("OPENAI_CHAT_MODEL") ?? "";
 const openai_embedding_model = Deno.env.get("OPENAI_EMBEDDING_MODEL") ?? "";
-const supabase_url = Deno.env.get("LOCAL_SUPABASE_URL") ?? "";
-const supabase_anon_key = Deno.env.get("LOCAL_SUPABASE_ANON_KEY") ?? "";
+// const supabase_url = Deno.env.get("LOCAL_SUPABASE_URL") ?? "";
+// const supabase_anon_key = Deno.env.get("LOCAL_SUPABASE_ANON_KEY") ?? "";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -25,29 +25,37 @@ Deno.serve(async (req) => {
   }
 
   // Get the session or user object
-  // const authHeader = req.headers.get("Authorization");
+  const authHeader = req.headers.get("Authorization");
 
-  // // If no Authorization header, return error immediately
-  // if (!authHeader) {
-  //   return new Response("Unauthorized Request", { status: 401 });
-  // }
+  // If no Authorization header, return error immediately
+  if (!authHeader) {
+    return new Response("Unauthorized Request", { status: 401 });
+  }
 
-  // const token = authHeader.replace("Bearer ", "");
+  const token = authHeader.replace("Bearer ", "");
+
+  // const supabaseClient = createClient(
+  //   supabase_url,
+  //   supabase_anon_key,
+  // );
 
   const supabaseClient = createClient(
-    supabase_url,
-    supabase_anon_key,
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
   );
 
-  // const { data } = await supabaseClient.auth.getUser(token);
-  // if (!data || !data.user) {
-  //   return new Response("User Not Found", { status: 404 });
-  // }
+  const { data: userData } = await supabaseClient.auth.getUser(token);
+  if (!userData || !userData.user) {
+    return new Response("User Not Found", { status: 404 });
+  }
 
-  // const user = data.user;
-  // if (user?.role !== "authenticated") {
-  //   return new Response("Forbidden", { status: 403 });
-  // }
+  const user = userData.user;
+  if (user?.role !== "authenticated") {
+    return new Response("Forbidden", { status: 403 });
+  }
+
+  // console.log("user", user);
 
   const { query, filter } = await req.json();
 
@@ -111,14 +119,14 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   const combinedFulltextQueries = [
     ...res.fulltext_query_zh,
     ...res.fulltext_query_en,
-  ].map(query => `(${query})`);;
+  ].map((query) => `(${query})`);
   const queryFulltextString = combinedFulltextQueries.join(" OR ");
 
-  console.log(queryFulltextString);
+  // console.log("queryFulltextString", queryFulltextString);
 
   const semanticQueryEn = res.semantic_query_en;
 
-  console.log(semanticQueryEn);
+  // console.log(semanticQueryEn);
 
   const embeddings = new OpenAIEmbeddings({
     apiKey: openai_api_key,
@@ -128,13 +136,18 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   const vectors = await embeddings.embedQuery(semanticQueryEn);
   const vectorStr = `[${vectors.toString()}]`;
 
-  // console.log(vectorStr);
+  // console.log("vectorStr", vectorStr);
+
+  const filter_condition = filter;
 
   const { data, error } = await supabaseClient.rpc("hybrid_search", {
     query_text: queryFulltextString,
     query_embedding: vectorStr,
-    ...(filter !== undefined ? { filter } : {}),
+    ...(filter_condition !== undefined ? { filter_condition } : {}),
   });
+
+  // console.log("data", data);
+  // console.log("error", error);
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -143,8 +156,8 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
     });
   }
 
-  return new Response(JSON.stringify({ data }), {
-    headers: { "Content-Type": "application/json" },
+  return new Response(JSON.stringify(data), {
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
     status: 200,
   });
 });
