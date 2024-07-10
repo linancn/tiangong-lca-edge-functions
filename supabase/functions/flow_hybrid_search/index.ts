@@ -66,13 +66,13 @@ Deno.serve(async (req) => {
     properties: {
       semantic_query_en: {
         title: "SemanticQueryEN",
-        description: "semantic query in English",
+        description: "A query for semantic retrieval in English.",
         type: "string",
       },
       fulltext_query_en: {
         title: "FulltextQueryEN",
         description:
-          "original names and synonyms for fulltext queries in English",
+          "FulltextQueryEN: A query list for full-text search in English, including original names and synonyms.",
         type: "array",
         "items": {
           "type": "string",
@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
       fulltext_query_zh: {
         title: "FulltextQueryZH",
         description:
-          "original names and synonyms for fulltext queries in Simplified Chinese",
+          "FulltextQueryZH: A query list for full-text search in Simplified Chinese, including original names and synonyms.",
         type: "array",
         "items": {
           "type": "string",
@@ -97,10 +97,7 @@ Deno.serve(async (req) => {
     [
       "system",
       `Field: Life Cycle Assessment (LCA)
-Task: Transform description of flows into three specific queries:
-SemanticQueryEN: A query for semantic retrieval in English.
-FulltextQueryEN: A query list for full-text search in English, including original names and synonyms.
-FulltextQueryZH: A query list for full-text search in Simplified Chinese, including original names and synonyms.`,
+Task: Transform description of flows into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.`,
     ],
     ["human", "Flow description: {input}"],
   ]);
@@ -114,14 +111,14 @@ FulltextQueryZH: A query list for full-text search in Simplified Chinese, includ
   const combinedFulltextQueries = [
     ...res.fulltext_query_zh,
     ...res.fulltext_query_en,
-  ];
+  ].map(query => `(${query})`);;
   const queryFulltextString = combinedFulltextQueries.join(" OR ");
 
-  // console.log(queryFulltextString);
+  console.log(queryFulltextString);
 
   const semanticQueryEn = res.semantic_query_en;
 
-  // console.log(semanticQueryEn);
+  console.log(semanticQueryEn);
 
   const embeddings = new OpenAIEmbeddings({
     apiKey: openai_api_key,
