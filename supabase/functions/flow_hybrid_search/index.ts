@@ -119,14 +119,14 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   const combinedFulltextQueries = [
     ...res.fulltext_query_zh,
     ...res.fulltext_query_en,
-  ].map((query) => `(${query})`);
+  ].map(query => `(${query})`);;
   const queryFulltextString = combinedFulltextQueries.join(" OR ");
 
-  // console.log("queryFulltextString", queryFulltextString);
+  console.log(queryFulltextString);
 
   const semanticQueryEn = res.semantic_query_en;
 
-  // console.log(semanticQueryEn);
+  console.log(semanticQueryEn);
 
   const embeddings = new OpenAIEmbeddings({
     apiKey: openai_api_key,
