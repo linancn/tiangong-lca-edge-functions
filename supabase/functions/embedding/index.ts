@@ -5,10 +5,10 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
-import { OpenAIEmbeddings } from "https://esm.sh/@langchain/openai@0.1.1";
+import { OpenAIEmbeddings } from 'https://esm.sh/@langchain/openai@0.1.1';
 
-const openai_api_key = Deno.env.get("OPENAI_API_KEY") ?? "";
-const openai_embedding_model = Deno.env.get("OPENAI_EMBEDDING_MODEL") ?? "";
+const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
+const openai_embedding_model = Deno.env.get('OPENAI_EMBEDDING_MODEL') ?? '';
 
 Deno.serve(async (req) => {
   const { query } = await req.json();
@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
   const vectors = await embeddings.embedQuery(query);
 
   return new Response(JSON.stringify(vectors), {
-    headers: { "Content-Type": "application/json" },
+    headers: { 'Content-Type': 'application/json' },
   });
 });
 

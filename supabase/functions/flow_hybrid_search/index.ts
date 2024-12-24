@@ -5,23 +5,20 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
-import { ChatPromptTemplate } from "https://esm.sh/@langchain/core@0.2.5/prompts";
-import {
-  ChatOpenAI,
-  OpenAIEmbeddings,
-} from "https://esm.sh/@langchain/openai@0.1.1";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.4";
-import { corsHeaders } from "../_shared/cors.ts";
+import { ChatPromptTemplate } from 'https://esm.sh/@langchain/core@0.2.5/prompts';
+import { ChatOpenAI, OpenAIEmbeddings } from 'https://esm.sh/@langchain/openai@0.1.1';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { corsHeaders } from '../_shared/cors.ts';
 
-const openai_api_key = Deno.env.get("OPENAI_API_KEY") ?? "";
-const openai_chat_model = Deno.env.get("OPENAI_CHAT_MODEL") ?? "";
-const openai_embedding_model = Deno.env.get("OPENAI_EMBEDDING_MODEL") ?? "";
-const supabase_url = Deno.env.get("LOCAL_SUPABASE_URL") ?? "";
-const supabase_anon_key = Deno.env.get("LOCAL_SUPABASE_ANON_KEY") ?? "";
+const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
+const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? '';
+const openai_embedding_model = Deno.env.get('OPENAI_EMBEDDING_MODEL') ?? '';
+const supabase_url = Deno.env.get('LOCAL_SUPABASE_URL') ?? '';
+const supabase_anon_key = Deno.env.get('LOCAL_SUPABASE_ANON_KEY') ?? '';
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
 
   // Get the session or user object
@@ -49,7 +46,7 @@ Deno.serve(async (req) => {
   const { query, filter } = await req.json();
 
   if (!query) {
-    return new Response("Missing query", { status: 400 });
+    return new Response('Missing query', { status: 400 });
   }
 
   const model = new ChatOpenAI({
@@ -59,44 +56,44 @@ Deno.serve(async (req) => {
   });
 
   const querySchema = {
-    type: "object",
+    type: 'object',
     properties: {
       semantic_query_en: {
-        title: "SemanticQueryEN",
-        description: "A query for semantic retrieval in English.",
-        type: "string",
+        title: 'SemanticQueryEN',
+        description: 'A query for semantic retrieval in English.',
+        type: 'string',
       },
       fulltext_query_en: {
-        title: "FulltextQueryEN",
+        title: 'FulltextQueryEN',
         description:
-          "FulltextQueryEN: A query list for full-text search in English, including original names and synonyms.",
-        type: "array",
+          'FulltextQueryEN: A query list for full-text search in English, including original names and synonyms.',
+        type: 'array',
         items: {
-          type: "string",
+          type: 'string',
         },
       },
       fulltext_query_zh: {
-        title: "FulltextQueryZH",
+        title: 'FulltextQueryZH',
         description:
-          "FulltextQueryZH: A query list for full-text search in Simplified Chinese, including original names and synonyms.",
-        type: "array",
+          'FulltextQueryZH: A query list for full-text search in Simplified Chinese, including original names and synonyms.',
+        type: 'array',
         items: {
-          type: "string",
+          type: 'string',
         },
       },
     },
-    required: ["semantic_query_en", "fulltext_query_en", "fulltext_query_zh"],
+    required: ['semantic_query_en', 'fulltext_query_en', 'fulltext_query_zh'],
   };
 
   const modelWithStructuredOutput = model.withStructuredOutput(querySchema);
 
   const prompt = ChatPromptTemplate.fromMessages([
     [
-      "system",
+      'system',
       `Field: Life Cycle Assessment (LCA)
 Task: Transform description of flows into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.`,
     ],
-    ["human", "Flow description: {input}"],
+    ['human', 'Flow description: {input}'],
   ]);
 
   const chain = prompt.pipe(modelWithStructuredOutput);
@@ -105,11 +102,10 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
 
   // console.log({ res });
 
-  const combinedFulltextQueries = [
-    ...res.fulltext_query_zh,
-    ...res.fulltext_query_en,
-  ].map((query) => `(${query})`);
-  const queryFulltextString = combinedFulltextQueries.join(" OR ");
+  const combinedFulltextQueries = [...res.fulltext_query_zh, ...res.fulltext_query_en].map(
+    (query) => `(${query})`,
+  );
+  const queryFulltextString = combinedFulltextQueries.join(' OR ');
 
   console.log(queryFulltextString);
 
@@ -127,7 +123,7 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
 
   // console.log(vectorStr);
 
-  const { data, error } = await supabaseClient.rpc("hybrid_search", {
+  const { data, error } = await supabaseClient.rpc('hybrid_search', {
     query_text: queryFulltextString,
     query_embedding: vectorStr,
     ...(filter !== undefined ? { filter } : {}),
@@ -135,13 +131,13 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' },
       status: 500,
     });
   }
 
   return new Response(JSON.stringify({ data }), {
-    headers: { "Content-Type": "application/json" },
+    headers: { 'Content-Type': 'application/json' },
     status: 200,
   });
 });

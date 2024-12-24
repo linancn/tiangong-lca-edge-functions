@@ -14,8 +14,7 @@ Deno.serve(async (req) => {
   });
 
   // Return the embedding
-  return new Response(
-    JSON.stringify({ embedding }),
-    { headers: { 'Content-Type': 'application/json' } }
-  );
+  return new Response(JSON.stringify({ embedding }), {
+    headers: { 'Content-Type': 'application/json' },
+  });
 });
