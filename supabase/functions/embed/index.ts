@@ -1,3 +1,4 @@
+// Setup type definitions for built-in Supabase Runtime APIs
 import '@supabase/functions-js/edge-runtime.d.ts';
 
 const session = new Supabase.ai.Session('gte-small');
