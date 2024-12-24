@@ -34,10 +34,7 @@ Deno.serve(async (req) => {
 
   // const token = authHeader.replace("Bearer ", "");
 
-  const supabaseClient = createClient(
-    supabase_url,
-    supabase_anon_key,
-  );
+  const supabaseClient = createClient(supabase_url, supabase_anon_key);
 
   // const { data } = await supabaseClient.auth.getUser(token);
   // if (!data || !data.user) {
@@ -74,8 +71,8 @@ Deno.serve(async (req) => {
         description:
           "FulltextQueryEN: A query list for full-text search in English, including original names and synonyms.",
         type: "array",
-        "items": {
-          "type": "string",
+        items: {
+          type: "string",
         },
       },
       fulltext_query_zh: {
@@ -83,8 +80,8 @@ Deno.serve(async (req) => {
         description:
           "FulltextQueryZH: A query list for full-text search in Simplified Chinese, including original names and synonyms.",
         type: "array",
-        "items": {
-          "type": "string",
+        items: {
+          type: "string",
         },
       },
     },
@@ -111,7 +108,7 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   const combinedFulltextQueries = [
     ...res.fulltext_query_zh,
     ...res.fulltext_query_en,
-  ].map(query => `(${query})`);;
+  ].map((query) => `(${query})`);
   const queryFulltextString = combinedFulltextQueries.join(" OR ");
 
   console.log(queryFulltextString);

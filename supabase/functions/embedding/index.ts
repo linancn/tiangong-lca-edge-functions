@@ -20,10 +20,9 @@ Deno.serve(async (req) => {
 
   const vectors = await embeddings.embedQuery(query);
 
-  return new Response(
-    JSON.stringify(vectors),
-    { headers: { "Content-Type": "application/json" } },
-  );
+  return new Response(JSON.stringify(vectors), {
+    headers: { "Content-Type": "application/json" },
+  });
 });
 
 /* To invoke locally:
