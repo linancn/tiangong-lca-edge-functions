@@ -1,0 +1,12 @@
+============================================================
+Embed
+============================================================
+### @name Embed：Local
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/embed' \
+    --header 'Content-Type: application/json' \
+    --data '{"query":"二氧化碳排放"}'
+
+### @name Embed：Remote
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/embed' \
+    --header 'Content-Type: application/json' \
+    --data '{"query": "二氧化碳排放"}'

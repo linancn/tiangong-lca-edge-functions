@@ -44,6 +44,7 @@ service_role key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZ
 
 ```bash
 
+npm start
 npx supabase functions serve --env-file ./supabase/.env.local
 
 curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/embedding' \
