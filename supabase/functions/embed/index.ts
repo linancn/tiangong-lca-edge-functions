@@ -14,7 +14,6 @@ Deno.serve(async (req) => {
   // Get the session or user object
   const authHeader = req.headers.get('Authorization');
   const xKey = req.headers.get('x_key');
-  console.log('x_key', xKey);
 
   // If no authHeader and no xKey, return error
   if (!authHeader && !xKey) {
@@ -27,12 +26,12 @@ Deno.serve(async (req) => {
     user = { role: 'authenticated' };
   } else {
     const token = authHeader?.replace('Bearer ', '') ?? '';
-    console.log('token', token);
 
     const supabaseClient = createClient(
-      Deno.env.get('REMOTE_SUPABASE_URL') ?? '',
-      Deno.env.get('REMOTE_SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      Deno.env.get('SUPABASE_URL') ?? 'REMOTE_SUPABASE_URL' ?? '',
+      Deno.env.get('SUPABASE_ANON_KEY') ?? 'REMOTE_SUPABASE_ANON_KEY' ?? '',
     );
+
     const { data } = await supabaseClient.auth.getUser(token);
     if (!data || !data.user) {
       return new Response('User Not Found', { status: 404 });

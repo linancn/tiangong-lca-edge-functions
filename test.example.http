@@ -11,4 +11,5 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/embed' \
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/embed' \
     --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
     --header 'Content-Type: application/json' \
+    --header 'x_key: {{$dotenv X_KEY}}' \
     --data '{"query": "二氧化碳排放"}'
