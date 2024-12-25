@@ -13,8 +13,8 @@ import { corsHeaders } from '../_shared/cors.ts';
 const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? '';
 const openai_embedding_model = Deno.env.get('OPENAI_EMBEDDING_MODEL') ?? '';
-const supabase_url = Deno.env.get('LOCAL_SUPABASE_URL') ?? '';
-const supabase_anon_key = Deno.env.get('LOCAL_SUPABASE_ANON_KEY') ?? '';
+const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? '';
+const supabase_anon_key = Deno.env.get('REMOTE_SUPABASE_ANON_KEY') ?? '';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
