@@ -28,8 +28,8 @@ Deno.serve(async (req) => {
     const token = authHeader?.replace('Bearer ', '') ?? '';
 
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? 'REMOTE_SUPABASE_URL' ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? 'REMOTE_SUPABASE_ANON_KEY' ?? '',
+      Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('REMOTE_SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     );
 
     const { data } = await supabaseClient.auth.getUser(token);
