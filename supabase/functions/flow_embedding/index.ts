@@ -1,5 +1,9 @@
-import { corsHeaders } from "../_shared/cors.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// Setup type definitions for built-in Supabase Runtime APIs
+import '@supabase/functions-js/edge-runtime.d.ts';
+
+import { createClient } from '@supabase/supabase-js@2';
+import { corsHeaders } from '../_shared/cors.ts';
+
 
 interface Name {
     baseName?: string;
