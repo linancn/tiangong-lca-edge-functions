@@ -8,7 +8,7 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
 nvm install 20
 nvm use
 
-curl -fsSL https://deno.land/install.sh | sh # Then manually add the deno directory to your $HOME/.zshrc (or similar)
+curl -fsSL https://deno.land/install.sh | sh -s v1.45.2
 
 npm i supabase --save-dev
 npm update supabase --save-dev
@@ -62,7 +62,8 @@ npx supabase functions new hello
 
 npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts
 npx supabase functions deploy embed --project-ref qgzvkongdjqiiamzbbts
-
+npx supabase functions deploy flow_embedding --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqiiamzbbts
 
 npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
