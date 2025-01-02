@@ -136,18 +136,15 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // 权限校验
   const authHeader = req.headers.get('Authorization');
   const xKey = req.headers.get('x_key');
 
-  // 如果没有认证头和x_key，返回未授权错误
   if (!authHeader && !xKey) {
     return new Response('Unauthorized Request', { status: 401 });
   }
 
   let user;
   if (xKey == Deno.env.get('X_KEY')) {
-    // 如果有正确的x_key，允许访问
     user = { role: 'authenticated' };
   } else {
     const token = authHeader?.replace('Bearer ', '') ?? '';
@@ -168,7 +165,6 @@ Deno.serve(async (req) => {
     return new Response('Forbidden', { status: 403 });
   }
 
-  // 处理业务逻辑
   try {
     let requestData = await req.json();
     if (typeof requestData === 'string') {
