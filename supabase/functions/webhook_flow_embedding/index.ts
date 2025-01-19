@@ -68,11 +68,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { embedding } = await response.json();
+    const { embedding, extracted_text } = await response.json();
 
     const { error: updateError } = await supabaseClient
       .from(table)
-      .update({ embedding: embedding, embedding_at: new Date().toISOString() })
+      .update({
+        embedding: embedding,
+        extracted_text: extracted_text,
+        embedding_at: new Date().toISOString(),
+      })
       .eq('id', record.id);
     console.log(`${table} ${record.id} embedding ${type} request`);
 

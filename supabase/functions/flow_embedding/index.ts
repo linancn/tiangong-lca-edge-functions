@@ -42,7 +42,7 @@ function filterEnContent(jsonContent: any, key: string): string | null {
   return value['#text'] || null;
 }
 
-function processJsonRecord(jsonContent: any): FilteredContent | null {
+function processJsonRecordEn(jsonContent: any): FilteredContent | null {
   try {
     const filtered: FilteredContent = {
       classificationInformation:
@@ -131,6 +131,78 @@ function dictToConciseString(data: FilteredContent): string {
 
 const session = new Supabase.ai.Session('gte-small');
 
+function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null {
+  try {
+    const filtered: FilteredContent = {
+      classificationInformation: {} as any,
+    };
+
+    const classificationInformation = jsonContent.flowDataSet.flowInformation.dataSetInformation.classificationInformation;
+    if (classificationInformation) {
+      const categories = classificationInformation['common:elementaryFlowCategorization']?.['common:category'];
+      if (Array.isArray(categories) && categories.length > 0) {
+        (filtered.classificationInformation as any).categories = categories.map((category: any) => category['#text']);
+      }
+    }
+
+    const name = jsonContent.flowDataSet.flowInformation.dataSetInformation.name;
+    const nameKeys = [
+      'baseName',
+      'treatmentStandardsRoutes',
+      'mixAndLocationTypes',
+      'flowProperties',
+      'other',
+    ];
+
+    if (name) {
+      nameKeys.forEach((key) => {
+        const value = name[key];
+        if (value) {
+          if (!filtered.name) filtered.name = {};
+          filtered.name[key as keyof Name] = Array.isArray(value)
+            ? value.map((item: any) => `${item['#text']}`).join(' ; ')
+            : `${value['#text']}`;
+        }
+      });
+    }
+
+    const dataSetInformation = jsonContent.flowDataSet.flowInformation.dataSetInformation;
+
+    const synonyms = dataSetInformation['common:synonyms'];
+    if (synonyms) {
+      filtered.synonyms = Array.isArray(synonyms)
+        ? synonyms.map((item: any) => `${item['#text']}`).join(' ; ')  
+        : `${synonyms['#text']}`;
+    }
+
+    const generalComment = dataSetInformation['common:generalComment'];
+    if (generalComment) {
+      filtered.generalComment = Array.isArray(generalComment)
+        ? generalComment.map((item: any) => `${item['#text']}`).join(' ; ')
+        : `${generalComment['#text']}`;
+    }
+
+    const casNumber = dataSetInformation.CASNumber;
+    if (casNumber) filtered.CASNumber = casNumber;
+
+    const other = dataSetInformation['common:other'];
+    if (other) filtered.other = other;
+
+    Object.keys(filtered).forEach((key) => {
+      const filteredKey = key as keyof FilteredContent;  // Assert the key is a valid key of FilteredContent
+      if (filtered[filteredKey] === undefined || filtered[filteredKey] === null || 
+          (typeof filtered[filteredKey] === 'object' && Object.keys(filtered[filteredKey]).length === 0)) {
+        delete filtered[filteredKey];
+      }
+    });
+
+    return filtered;
+  } catch (error) {
+    console.error('Error processing JSON record:', error);
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -171,24 +243,39 @@ Deno.serve(async (req) => {
       requestData = JSON.parse(requestData);
     }
 
-    // console.log("requestData", requestData);
+    // Process JSON data for both English and all language content
+    // const filteredContentEn = processJsonRecordEn(requestData);
+    // if (!filteredContentEn) {
+    //   throw new Error('Failed to process JSON data');
+    // }
 
-    const filteredContent = processJsonRecord(requestData);
-    if (!filteredContent) {
+    // const filteredContentAll = processJsonRecordAllLanguages(requestData);
+    // if (!filteredContentAll) {
+    //   throw new Error('Failed to process JSON data');
+    // }
+
+    // Generate the extracted text and embedding concurrently
+    const [filteredContentEn, extractedText] = await Promise.all([
+      processJsonRecordEn(requestData),
+      processJsonRecordAllLanguages(requestData),
+    ]);
+
+    if (!filteredContentEn) {
       throw new Error('Failed to process JSON data');
     }
+    const stringDataEn = dictToConciseString(filteredContentEn);
 
-    const stringData = dictToConciseString(filteredContent);
-    // console.log("stringData", stringData);
-    const embedding = await session.run(stringData, {
+    // Run embedding calculation
+    const embedding = await session.run(stringDataEn, {
       mean_pool: true,
       normalize: true,
     });
-    // console.log('embedding', embedding);
 
+    // Ensure both 'embedding' and 'extracted_text' are part of the response
     return new Response(
       JSON.stringify({
-        embedding,
+        embedding: embedding,      // Include the embedding
+        extracted_text: extractedText, // Include the extracted text
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -204,3 +291,4 @@ Deno.serve(async (req) => {
     });
   }
 });
+
