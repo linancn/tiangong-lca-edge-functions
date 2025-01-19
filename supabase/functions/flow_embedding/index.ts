@@ -137,15 +137,11 @@ function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null
       classificationInformation: {} as any,
     };
 
-    const classificationInformation =
-      jsonContent.flowDataSet.flowInformation.dataSetInformation.classificationInformation;
+    const classificationInformation = jsonContent.flowDataSet.flowInformation.dataSetInformation.classificationInformation;
     if (classificationInformation) {
-      const categories =
-        classificationInformation['common:elementaryFlowCategorization']?.['common:category'];
+      const categories = classificationInformation['common:elementaryFlowCategorization']?.['common:category'];
       if (Array.isArray(categories) && categories.length > 0) {
-        (filtered.classificationInformation as any).categories = categories.map(
-          (category: any) => category['#text'],
-        );
+        (filtered.classificationInformation as any).categories = categories.map((category: any) => category['#text']);
       }
     }
 
@@ -175,7 +171,7 @@ function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null
     const synonyms = dataSetInformation['common:synonyms'];
     if (synonyms) {
       filtered.synonyms = Array.isArray(synonyms)
-        ? synonyms.map((item: any) => `${item['#text']}`).join(' ; ')
+        ? synonyms.map((item: any) => `${item['#text']}`).join(' ; ')  
         : `${synonyms['#text']}`;
     }
 
@@ -193,13 +189,9 @@ function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null
     if (other) filtered.other = other;
 
     Object.keys(filtered).forEach((key) => {
-      const filteredKey = key as keyof FilteredContent; // Assert the key is a valid key of FilteredContent
-      if (
-        filtered[filteredKey] === undefined ||
-        filtered[filteredKey] === null ||
-        (typeof filtered[filteredKey] === 'object' &&
-          Object.keys(filtered[filteredKey]).length === 0)
-      ) {
+      const filteredKey = key as keyof FilteredContent;  // Assert the key is a valid key of FilteredContent
+      if (filtered[filteredKey] === undefined || filtered[filteredKey] === null || 
+          (typeof filtered[filteredKey] === 'object' && Object.keys(filtered[filteredKey]).length === 0)) {
         delete filtered[filteredKey];
       }
     });
@@ -282,7 +274,7 @@ Deno.serve(async (req) => {
     // Ensure both 'embedding' and 'extracted_text' are part of the response
     return new Response(
       JSON.stringify({
-        embedding: embedding, // Include the embedding
+        embedding: embedding,      // Include the embedding
         extracted_text: extractedText, // Include the extracted text
       }),
       {
@@ -299,3 +291,4 @@ Deno.serve(async (req) => {
     });
   }
 });
+
