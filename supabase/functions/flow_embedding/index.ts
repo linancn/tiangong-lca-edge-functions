@@ -137,11 +137,15 @@ function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null
       classificationInformation: {} as any,
     };
 
-    const classificationInformation = jsonContent.flowDataSet.flowInformation.dataSetInformation.classificationInformation;
+    const classificationInformation =
+      jsonContent.flowDataSet.flowInformation.dataSetInformation.classificationInformation;
     if (classificationInformation) {
-      const categories = classificationInformation['common:elementaryFlowCategorization']?.['common:category'];
-      if (Array.isArray(categories)) {
-        (filtered.classificationInformation as any).categories = categories.map((category: any) => category['#text']);
+      const categories =
+        classificationInformation['common:elementaryFlowCategorization']?.['common:category'];
+      if (Array.isArray(categories) && categories.length > 0) {
+        (filtered.classificationInformation as any).categories = categories.map(
+          (category: any) => category['#text'],
+        );
       }
     }
 
@@ -160,8 +164,8 @@ function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null
         if (value) {
           if (!filtered.name) filtered.name = {};
           filtered.name[key as keyof Name] = Array.isArray(value)
-            ? value.map((item: any) => `${item['#text']}`).join(' ; ')  // 使用分号分隔
-            : `${value['#text']}`; 
+            ? value.map((item: any) => `${item['#text']}`).join(' ; ')
+            : `${value['#text']}`;
         }
       });
     }
@@ -171,14 +175,14 @@ function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null
     const synonyms = dataSetInformation['common:synonyms'];
     if (synonyms) {
       filtered.synonyms = Array.isArray(synonyms)
-        ? synonyms.map((item: any) => `${item['#text']}`).join(' ; ')  // 使用分号分隔
+        ? synonyms.map((item: any) => `${item['#text']}`).join(' ; ')
         : `${synonyms['#text']}`;
     }
 
     const generalComment = dataSetInformation['common:generalComment'];
     if (generalComment) {
       filtered.generalComment = Array.isArray(generalComment)
-        ? generalComment.map((item: any) => `${item['#text']}`).join(' ; ')  // 使用分号分隔
+        ? generalComment.map((item: any) => `${item['#text']}`).join(' ; ')
         : `${generalComment['#text']}`;
     }
 
@@ -187,6 +191,18 @@ function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null
 
     const other = dataSetInformation['common:other'];
     if (other) filtered.other = other;
+
+    Object.keys(filtered).forEach((key) => {
+      const filteredKey = key as keyof FilteredContent; // Assert the key is a valid key of FilteredContent
+      if (
+        filtered[filteredKey] === undefined ||
+        filtered[filteredKey] === null ||
+        (typeof filtered[filteredKey] === 'object' &&
+          Object.keys(filtered[filteredKey]).length === 0)
+      ) {
+        delete filtered[filteredKey];
+      }
+    });
 
     return filtered;
   } catch (error) {
@@ -266,7 +282,7 @@ Deno.serve(async (req) => {
     // Ensure both 'embedding' and 'extracted_text' are part of the response
     return new Response(
       JSON.stringify({
-        embedding: embedding,      // Include the embedding
+        embedding: embedding, // Include the embedding
         extracted_text: extractedText, // Include the extracted text
       }),
       {
@@ -283,4 +299,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-
