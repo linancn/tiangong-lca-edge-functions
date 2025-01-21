@@ -129,19 +129,38 @@ function dictToConciseString(data: FilteredContent): string {
   return parts.join('\n');
 }
 
-const session = new Supabase.ai.Session('gte-small');
+function flattenJson(jsonContent: any): string {
+  const result: string[] = [];
 
-function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null {
+  function traverse(value: any) {
+    if (Array.isArray(value)) {
+      value.forEach((item) => traverse(item));
+    } else if (typeof value === 'object' && value !== null) {
+      Object.values(value).forEach((val) => traverse(val));
+    } else if (typeof value === 'string') {
+      result.push(value.trim());
+    }
+  }
+
+  traverse(jsonContent);
+  return result.join('; ');
+}
+
+function processJsonRecordAllLanguages(jsonContent: any): string | null {
   try {
     const filtered: FilteredContent = {
       classificationInformation: {} as any,
     };
 
-    const classificationInformation = jsonContent.flowDataSet.flowInformation.dataSetInformation.classificationInformation;
+    const classificationInformation =
+      jsonContent.flowDataSet.flowInformation.dataSetInformation.classificationInformation;
     if (classificationInformation) {
-      const categories = classificationInformation['common:elementaryFlowCategorization']?.['common:category'];
+      const categories =
+        classificationInformation['common:elementaryFlowCategorization']?.['common:category'];
       if (Array.isArray(categories) && categories.length > 0) {
-        (filtered.classificationInformation as any).categories = categories.map((category: any) => category['#text']);
+        (filtered.classificationInformation as any).categories = categories.map((category: any) =>
+          category['#text'].trim(),
+        );
       }
     }
 
@@ -160,8 +179,8 @@ function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null
         if (value) {
           if (!filtered.name) filtered.name = {};
           filtered.name[key as keyof Name] = Array.isArray(value)
-            ? value.map((item: any) => `${item['#text']}`).join(' ; ')
-            : `${value['#text']}`;
+            ? value.map((item: any) => item['#text'].trim()).join('; ')
+            : value['#text'].trim();
         }
       });
     }
@@ -171,15 +190,15 @@ function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null
     const synonyms = dataSetInformation['common:synonyms'];
     if (synonyms) {
       filtered.synonyms = Array.isArray(synonyms)
-        ? synonyms.map((item: any) => `${item['#text']}`).join(' ; ')  
-        : `${synonyms['#text']}`;
+        ? synonyms.map((item: any) => item['#text'].trim()).join('; ')
+        : synonyms['#text'].trim();
     }
 
     const generalComment = dataSetInformation['common:generalComment'];
     if (generalComment) {
       filtered.generalComment = Array.isArray(generalComment)
-        ? generalComment.map((item: any) => `${item['#text']}`).join(' ; ')
-        : `${generalComment['#text']}`;
+        ? generalComment.map((item: any) => item['#text'].trim()).join('; ')
+        : generalComment['#text'].trim();
     }
 
     const casNumber = dataSetInformation.CASNumber;
@@ -189,19 +208,25 @@ function processJsonRecordAllLanguages(jsonContent: any): FilteredContent | null
     if (other) filtered.other = other;
 
     Object.keys(filtered).forEach((key) => {
-      const filteredKey = key as keyof FilteredContent;  // Assert the key is a valid key of FilteredContent
-      if (filtered[filteredKey] === undefined || filtered[filteredKey] === null || 
-          (typeof filtered[filteredKey] === 'object' && Object.keys(filtered[filteredKey]).length === 0)) {
+      const filteredKey = key as keyof FilteredContent; // Assert the key is a valid key of FilteredContent
+      if (
+        filtered[filteredKey] === undefined ||
+        filtered[filteredKey] === null ||
+        (typeof filtered[filteredKey] === 'object' &&
+          Object.keys(filtered[filteredKey]).length === 0)
+      ) {
         delete filtered[filteredKey];
       }
     });
 
-    return filtered;
+    return flattenJson(filtered);
   } catch (error) {
     console.error('Error processing JSON record:', error);
     return null;
   }
 }
+
+const session = new Supabase.ai.Session('gte-small');
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -274,7 +299,7 @@ Deno.serve(async (req) => {
     // Ensure both 'embedding' and 'extracted_text' are part of the response
     return new Response(
       JSON.stringify({
-        embedding: embedding,      // Include the embedding
+        embedding: embedding, // Include the embedding
         extracted_text: extractedText, // Include the extracted text
       }),
       {
@@ -291,4 +316,3 @@ Deno.serve(async (req) => {
     });
   }
 });
-
