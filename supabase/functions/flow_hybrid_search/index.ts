@@ -6,13 +6,12 @@
 /// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
 import { ChatPromptTemplate } from 'https://esm.sh/@langchain/core@0.2.5/prompts';
-import { ChatOpenAI, OpenAIEmbeddings } from 'https://esm.sh/@langchain/openai@0.1.1';
+import { ChatOpenAI } from 'https://esm.sh/@langchain/openai@0.1.1';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
 import { corsHeaders } from '../_shared/cors.ts';
 
 const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? '';
-const openai_embedding_model = Deno.env.get('OPENAI_EMBEDDING_MODEL') ?? '';
 const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? '';
 const supabase_anon_key = Deno.env.get('REMOTE_SUPABASE_ANON_KEY') ?? '';
 
@@ -113,12 +112,18 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
 
   console.log(semanticQueryEn);
 
-  const embeddings = new OpenAIEmbeddings({
-    apiKey: openai_api_key,
-    model: openai_embedding_model,
-  });
+  // const embeddings = new OpenAIEmbeddings({
+  //   apiKey: openai_api_key,
+  //   model: openai_embedding_model,
+  // });
 
-  const vectors = await embeddings.embedQuery(semanticQueryEn);
+  // const vectors = await embeddings.embedQuery(semanticQueryEn);
+
+  const session = new Supabase.ai.Session('gte-small');
+  const vectors = await session.run(semanticQueryEn, {
+    mean_pool: true,
+    normalize: true,
+  }) as number[];
   const vectorStr = `[${vectors.toString()}]`;
 
   // console.log(vectorStr);
