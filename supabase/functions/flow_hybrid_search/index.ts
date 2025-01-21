@@ -120,10 +120,10 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   // const vectors = await embeddings.embedQuery(semanticQueryEn);
 
   const session = new Supabase.ai.Session('gte-small');
-  const vectors = await session.run(semanticQueryEn, {
+  const vectors = (await session.run(semanticQueryEn, {
     mean_pool: true,
     normalize: true,
-  }) as number[];
+  })) as number[];
   const vectorStr = `[${vectors.toString()}]`;
 
   // console.log(vectorStr);

@@ -158,9 +158,9 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
       const categories =
         classificationInformation['common:elementaryFlowCategorization']?.['common:category'];
       if (Array.isArray(categories) && categories.length > 0) {
-        (filtered.classificationInformation as any).categories = categories.map((category: any) =>
-          category['#text'].trim(),
-        );
+        (filtered.classificationInformation as any).categories = categories
+          .map((category: any) => (category['#text'] ? category['#text'].trim() : null))
+          .filter((text: string | null) => text !== null);
       }
     }
 
@@ -177,10 +177,15 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
       nameKeys.forEach((key) => {
         const value = name[key];
         if (value) {
-          if (!filtered.name) filtered.name = {};
+          filtered.name = filtered.name || {};
           filtered.name[key as keyof Name] = Array.isArray(value)
-            ? value.map((item: any) => item['#text'].trim()).join('; ')
-            : value['#text'].trim();
+            ? value
+                .map((item: any) => (item['#text'] ? item['#text'].trim() : null))
+                .filter((text: string | null) => text !== null)
+                .join('; ')
+            : value['#text']
+              ? value['#text'].trim()
+              : null;
         }
       });
     }
@@ -190,15 +195,25 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
     const synonyms = dataSetInformation['common:synonyms'];
     if (synonyms) {
       filtered.synonyms = Array.isArray(synonyms)
-        ? synonyms.map((item: any) => item['#text'].trim()).join('; ')
-        : synonyms['#text'].trim();
+        ? synonyms
+            .map((item: any) => (item['#text'] ? item['#text'].trim() : null))
+            .filter((text: string | null) => text !== null)
+            .join('; ')
+        : synonyms['#text']
+          ? synonyms['#text'].trim()
+          : null;
     }
 
     const generalComment = dataSetInformation['common:generalComment'];
     if (generalComment) {
       filtered.generalComment = Array.isArray(generalComment)
-        ? generalComment.map((item: any) => item['#text'].trim()).join('; ')
-        : generalComment['#text'].trim();
+        ? generalComment
+            .map((item: any) => (item['#text'] ? item['#text'].trim() : null))
+            .filter((text: string | null) => text !== null)
+            .join('; ')
+        : generalComment['#text']
+          ? generalComment['#text'].trim()
+          : null;
     }
 
     const casNumber = dataSetInformation.CASNumber;
@@ -208,7 +223,7 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
     if (other) filtered.other = other;
 
     Object.keys(filtered).forEach((key) => {
-      const filteredKey = key as keyof FilteredContent; // Assert the key is a valid key of FilteredContent
+      const filteredKey = key as keyof FilteredContent;
       if (
         filtered[filteredKey] === undefined ||
         filtered[filteredKey] === null ||
