@@ -1,13 +1,9 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
 // Setup type definitions for built-in Supabase Runtime APIs
-/// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
+import '@supabase/functions-js/edge-runtime.d.ts';
 
-import { ChatPromptTemplate } from 'https://esm.sh/@langchain/core@0.2.5/prompts';
-import { ChatOpenAI } from 'https://esm.sh/@langchain/openai@0.1.1';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { ChatOpenAI } from '@langchain/openai';
+import { createClient } from '@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
 const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
