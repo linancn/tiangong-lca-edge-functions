@@ -46,7 +46,7 @@ function filterEnContent(jsonContent: any, key: string): string | null {
 
   if (Array.isArray(value)) {
     const enItem = value.find((item) => item?.['@xml:lang'] === 'en');
-    return enItem ? enItem['#text'] ?? null : null;
+    return enItem ? (enItem['#text'] ?? null) : null;
   }
 
   // 如果不是数组, 则尝试直接取 '#text'
@@ -73,8 +73,7 @@ function processJsonRecordEn(jsonContent: any): FilteredContent | null {
     };
 
     // 安全获取 name
-    const name =
-      jsonContent?.flowDataSet?.flowInformation?.dataSetInformation?.name ?? null;
+    const name = jsonContent?.flowDataSet?.flowInformation?.dataSetInformation?.name ?? null;
 
     // 需要处理的 key 列表
     const nameKeys = [
@@ -95,8 +94,7 @@ function processJsonRecordEn(jsonContent: any): FilteredContent | null {
     });
 
     // 安全获取 dataSetInformation
-    const dataSetInformation =
-      jsonContent?.flowDataSet?.flowInformation?.dataSetInformation ?? {};
+    const dataSetInformation = jsonContent?.flowDataSet?.flowInformation?.dataSetInformation ?? {};
 
     // synonyms
     const synonyms = filterEnContent(dataSetInformation, 'common:synonyms');
@@ -141,16 +139,12 @@ function dictToConciseString(data: FilteredContent): string {
   // 分类信息分类
   try {
     const categories =
-      data?.classificationInformation?.['common:elementaryFlowCategorization']?.[
-        'common:category'
-      ];
+      data?.classificationInformation?.['common:elementaryFlowCategorization']?.['common:category'];
     if (Array.isArray(categories)) {
       const sortedCategories = [...categories].sort(
         (a, b) => parseInt(a['@level']) - parseInt(b['@level']),
       );
-      const classificationPath = sortedCategories
-        .map((c) => c?.['#text'] ?? '')
-        .join(' > ');
+      const classificationPath = sortedCategories.map((c) => c?.['#text'] ?? '').join(' > ');
       parts.push(`Classification: ${classificationPath}.`);
     }
   } catch (_error) {
@@ -211,25 +205,20 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
 
     // classificationInformation
     const classificationInformation =
-      jsonContent?.flowDataSet?.flowInformation?.dataSetInformation
-        ?.classificationInformation;
+      jsonContent?.flowDataSet?.flowInformation?.dataSetInformation?.classificationInformation;
     if (classificationInformation) {
       const categories =
-        classificationInformation?.['common:elementaryFlowCategorization']
-          ?.['common:category'];
+        classificationInformation?.['common:elementaryFlowCategorization']?.['common:category'];
       if (Array.isArray(categories) && categories.length > 0) {
         // 收集各分类名称
         (filtered.classificationInformation as any).categories = categories
-          .map((category: any) =>
-            category?.['#text'] ? category['#text'].trim() : null,
-          )
+          .map((category: any) => (category?.['#text'] ? category['#text'].trim() : null))
           .filter((text: string | null) => text !== null);
       }
     }
 
     // name处理
-    const name =
-      jsonContent?.flowDataSet?.flowInformation?.dataSetInformation?.name;
+    const name = jsonContent?.flowDataSet?.flowInformation?.dataSetInformation?.name;
     const nameKeys = [
       'baseName',
       'treatmentStandardsRoutes',
@@ -246,34 +235,29 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
           // 如果是数组，需要把 #text 全部拼接
           filtered.name[key as keyof Name] = Array.isArray(value)
             ? value
-                .map((item: any) =>
-                  item?.['#text'] ? item['#text'].trim() : null,
-                )
+                .map((item: any) => (item?.['#text'] ? item['#text'].trim() : null))
                 .filter((text: string | null) => text !== null)
                 .join('; ')
             : value?.['#text']
-            ? value['#text'].trim()
-            : null;
+              ? value['#text'].trim()
+              : null;
         }
       });
     }
 
-    const dataSetInformation =
-      jsonContent?.flowDataSet?.flowInformation?.dataSetInformation;
+    const dataSetInformation = jsonContent?.flowDataSet?.flowInformation?.dataSetInformation;
 
     // synonyms
     const synonyms = dataSetInformation?.['common:synonyms'];
     if (synonyms) {
       filtered.synonyms = Array.isArray(synonyms)
         ? synonyms
-            .map((item: any) =>
-              item?.['#text'] ? item['#text'].trim() : null,
-            )
+            .map((item: any) => (item?.['#text'] ? item['#text'].trim() : null))
             .filter((text: string | null) => text !== null)
             .join('; ')
         : synonyms?.['#text']
-        ? synonyms['#text'].trim()
-        : null;
+          ? synonyms['#text'].trim()
+          : null;
     }
 
     // generalComment
@@ -281,14 +265,12 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
     if (generalComment) {
       filtered.generalComment = Array.isArray(generalComment)
         ? generalComment
-            .map((item: any) =>
-              item?.['#text'] ? item['#text'].trim() : null,
-            )
+            .map((item: any) => (item?.['#text'] ? item['#text'].trim() : null))
             .filter((text: string | null) => text !== null)
             .join('; ')
         : generalComment?.['#text']
-        ? generalComment['#text'].trim()
-        : null;
+          ? generalComment['#text'].trim()
+          : null;
     }
 
     // CASNumber
@@ -382,7 +364,7 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        embedding,        // embedding 结果
+        embedding, // embedding 结果
         extracted_text: extractedText, // 提取到的多语言文本
       }),
       {
