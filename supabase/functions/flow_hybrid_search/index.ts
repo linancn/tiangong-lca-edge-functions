@@ -17,25 +17,25 @@ Deno.serve(async (req) => {
   }
 
   // Get the session or user object
-  const authHeader = req.headers.get("Authorization");
+  const authHeader = req.headers.get('Authorization');
 
   // If no Authorization header, return error immediately
   if (!authHeader) {
-    return new Response("Unauthorized Request", { status: 401 });
+    return new Response('Unauthorized Request', { status: 401 });
   }
 
-  const token = authHeader.replace("Bearer ", "");
+  const token = authHeader.replace('Bearer ', '');
 
   const supabaseClient = createClient(supabase_url, supabase_anon_key);
 
   const { data: authData } = await supabaseClient.auth.getUser(token);
   if (!authData || !authData.user) {
-    return new Response("User Not Found", { status: 404 });
+    return new Response('User Not Found', { status: 404 });
   }
 
   const user = authData.user;
-  if (user?.role !== "authenticated") {
-    return new Response("Forbidden", { status: 403 });
+  if (user?.role !== 'authenticated') {
+    return new Response('Forbidden', { status: 403 });
   }
 
   const { query, filter } = await req.json();
