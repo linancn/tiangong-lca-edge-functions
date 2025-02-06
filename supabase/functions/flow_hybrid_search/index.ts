@@ -1,18 +1,13 @@
-// Follow this setup guide to integrate the Deno language server with your editor:
-// https://deno.land/manual/getting_started/setup_your_environment
-// This enables autocomplete, go to definition, etc.
-
 // Setup type definitions for built-in Supabase Runtime APIs
-/// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
+import '@supabase/functions-js/edge-runtime.d.ts';
 
-import { ChatPromptTemplate } from 'https://esm.sh/@langchain/core@0.2.5/prompts';
-import { ChatOpenAI, OpenAIEmbeddings } from 'https://esm.sh/@langchain/openai@0.1.1';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.43.4';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
+import { ChatOpenAI } from '@langchain/openai';
+import { createClient } from '@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 
 const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? '';
-const openai_embedding_model = Deno.env.get('OPENAI_EMBEDDING_MODEL') ?? '';
 const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? '';
 const supabase_anon_key = Deno.env.get('REMOTE_SUPABASE_ANON_KEY') ?? '';
 
@@ -22,26 +17,26 @@ Deno.serve(async (req) => {
   }
 
   // Get the session or user object
-  // const authHeader = req.headers.get("Authorization");
+  const authHeader = req.headers.get('Authorization');
 
-  // // If no Authorization header, return error immediately
-  // if (!authHeader) {
-  //   return new Response("Unauthorized Request", { status: 401 });
-  // }
+  // If no Authorization header, return error immediately
+  if (!authHeader) {
+    return new Response('Unauthorized Request', { status: 401 });
+  }
 
-  // const token = authHeader.replace("Bearer ", "");
+  const token = authHeader.replace('Bearer ', '');
 
   const supabaseClient = createClient(supabase_url, supabase_anon_key);
 
-  // const { data } = await supabaseClient.auth.getUser(token);
-  // if (!data || !data.user) {
-  //   return new Response("User Not Found", { status: 404 });
-  // }
+  const { data: authData } = await supabaseClient.auth.getUser(token);
+  if (!authData || !authData.user) {
+    return new Response('User Not Found', { status: 404 });
+  }
 
-  // const user = data.user;
-  // if (user?.role !== "authenticated") {
-  //   return new Response("Forbidden", { status: 403 });
-  // }
+  const user = authData.user;
+  if (user?.role !== 'authenticated') {
+    return new Response('Forbidden', { status: 403 });
+  }
 
   const { query, filter } = await req.json();
 
@@ -113,12 +108,18 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
 
   console.log(semanticQueryEn);
 
-  const embeddings = new OpenAIEmbeddings({
-    apiKey: openai_api_key,
-    model: openai_embedding_model,
-  });
+  // const embeddings = new OpenAIEmbeddings({
+  //   apiKey: openai_api_key,
+  //   model: openai_embedding_model,
+  // });
 
-  const vectors = await embeddings.embedQuery(semanticQueryEn);
+  // const vectors = await embeddings.embedQuery(semanticQueryEn);
+
+  const session = new Supabase.ai.Session('gte-small');
+  const vectors = (await session.run(semanticQueryEn, {
+    mean_pool: true,
+    normalize: true,
+  })) as number[];
   const vectorStr = `[${vectors.toString()}]`;
 
   // console.log(vectorStr);

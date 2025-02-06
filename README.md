@@ -10,8 +10,8 @@ nvm use
 
 curl -fsSL https://deno.land/install.sh | sh -s v1.45.2
 
-npm i supabase --save-dev
-npm update supabase --save-dev
+# Update packages
+npm update && npm ci
 
 npx supabase start
 
