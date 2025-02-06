@@ -7,3 +7,5 @@ deno.lock
 
 .gitignore
 sqls
+
+.DS_Store
