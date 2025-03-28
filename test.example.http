@@ -44,3 +44,23 @@ curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/process_embedding
     --header 'Content-Type: application/json' \
     --header 'x_key: {{$dotenv X_KEY}}' \
     --data ''
+
+
+### @name Sign Request
+curl -X POST https://qgzvkongdjqiiamzbbts.supabase.co/functions/v1/sign_request \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
+    --header 'x_key: {{$dotenv X_KEY}}' \
+    --data '{
+        "url": "https://qgzvkongdjqiiamzbbts.supabase.co/functions/v1/request_process_data",
+        "headers": {"Content-Type": "application/json"},
+    "body": {"id": "42d1385b-178a-4a04-b58c-1d5668c32ffd", "version": "00.00.001", "dataSetInternalID": "0"},
+    "isvSk": "1qaZ_Xsw2_Mju7"
+  }'
+
+
+### @name Get Local IP
+curl -X GET https://qgzvkongdjqiiamzbbts.supabase.co/functions/v1/get_local_ip \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
+    --header 'x_key: {{$dotenv X_KEY}}' 
