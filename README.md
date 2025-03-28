@@ -68,5 +68,10 @@ npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqii
 npx supabase functions deploy process_embedding --project-ref qgzvkongdjqiiamzbbts
 npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts
 
+npx supabase functions deploy request_process_data --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy sign_request --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy run_antchain_calculation --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy get_local_ip --project-ref qgzvkongdjqiiamzbbts
+
 npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
