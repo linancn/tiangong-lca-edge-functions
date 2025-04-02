@@ -4,16 +4,56 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { ChatOpenAI } from '@langchain/openai';
 import { createClient } from '@supabase/supabase-js@2';
+import { Redis } from '@upstash/redis';
 import { corsHeaders } from '../_shared/cors.ts';
+import decodeApiKey from '../_shared/decode_api_key.ts';
+import supabaseAuth from '../_shared/supabase_auth.ts';
 
 const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? '';
 const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? '';
 const supabase_anon_key = Deno.env.get('REMOTE_SUPABASE_ANON_KEY') ?? '';
 
+const redis_url = Deno.env.get('UPSTASH_REDIS_URL') ?? '';
+const redis_token = Deno.env.get('UPSTASH_REDIS_TOKEN') ?? '';
+
+const redis = new Redis({
+  url: redis_url,
+  token: redis_token,
+});
+
+const supabase = createClient(supabase_url, supabase_anon_key);
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
+  }
+
+  let email = req.headers.get('email') ?? '';
+  let password = req.headers.get('password') ?? '';
+
+  const apiKey = req.headers.get('x-api-key') ?? '';
+
+  if (apiKey) {
+    const credentials = decodeApiKey(apiKey);
+    if (credentials) {
+      if (!email) email = credentials.email;
+      if (!password) password = credentials.password;
+    } else {
+      return new Response(JSON.stringify({ error: 'Invalid API Key' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+  }
+
+  if (!(await redis.exists('lca_' + email))) {
+    const authResponse = await supabaseAuth(supabase, email, password);
+    if (authResponse.status !== 200) {
+      return authResponse;
+    } else {
+      await redis.setex('lca_' + email, 3600, '');
+    }
   }
 
   // Get the session or user object
