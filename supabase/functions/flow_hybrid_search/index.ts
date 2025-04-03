@@ -10,8 +10,10 @@ import { corsHeaders } from '../_shared/cors.ts';
 
 const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? '';
-const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? '';
-const supabase_anon_key = Deno.env.get('REMOTE_SUPABASE_ANON_KEY') ?? '';
+
+const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '';
+const supabase_anon_key =
+  Deno.env.get('REMOTE_SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
 const redis_url = Deno.env.get('UPSTASH_REDIS_URL') ?? '';
 const redis_token = Deno.env.get('UPSTASH_REDIS_TOKEN') ?? '';
