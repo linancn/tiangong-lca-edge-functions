@@ -5,9 +5,8 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { ChatOpenAI } from '@langchain/openai';
 import { createClient } from '@supabase/supabase-js@2';
 import { Redis } from '@upstash/redis';
+import { authenticateRequest } from '../_shared/auth_middleware.ts';
 import { corsHeaders } from '../_shared/cors.ts';
-import decodeApiKey from '../_shared/decode_api_key.ts';
-import supabaseAuth from '../_shared/supabase_auth.ts';
 
 const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? '';
@@ -29,53 +28,10 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  let email = req.headers.get('email') ?? '';
-  let password = req.headers.get('password') ?? '';
+  const authResult = await authenticateRequest(req, supabase, redis);
 
-  const apiKey = req.headers.get('x-api-key') ?? '';
-
-  if (apiKey) {
-    const credentials = decodeApiKey(apiKey);
-    if (credentials) {
-      if (!email) email = credentials.email;
-      if (!password) password = credentials.password;
-    } else {
-      return new Response(JSON.stringify({ error: 'Invalid API Key' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-  }
-
-  if (!(await redis.exists('lca_' + email))) {
-    const authResponse = await supabaseAuth(supabase, email, password);
-    if (authResponse.status !== 200) {
-      return authResponse;
-    } else {
-      await redis.setex('lca_' + email, 3600, '');
-    }
-  }
-
-  // Get the session or user object
-  const authHeader = req.headers.get('Authorization');
-
-  // If no Authorization header, return error immediately
-  if (!authHeader) {
-    return new Response('Unauthorized Request', { status: 401 });
-  }
-
-  const token = authHeader.replace('Bearer ', '');
-
-  const supabaseClient = createClient(supabase_url, supabase_anon_key);
-
-  const { data: authData } = await supabaseClient.auth.getUser(token);
-  if (!authData || !authData.user) {
-    return new Response('User Not Found', { status: 404 });
-  }
-
-  const user = authData.user;
-  if (user?.role !== 'authenticated') {
-    return new Response('Forbidden', { status: 403 });
+  if (!authResult.isAuthenticated) {
+    return authResult.response!;
   }
 
   const { query, filter } = await req.json();
@@ -162,9 +118,9 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   })) as number[];
   const vectorStr = `[${vectors.toString()}]`;
 
-  // console.log(vectorStr);
+  console.log(vectorStr);
 
-  const { data, error } = await supabaseClient.rpc('hybrid_search', {
+  const { data, error } = await supabase.rpc('hybrid_search', {
     query_text: queryFulltextString,
     query_embedding: vectorStr,
     ...(filter !== undefined ? { filter } : {}),
@@ -182,15 +138,3 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
     status: 200,
   });
 });
-
-/* To invoke locally:
-
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/flow_hybrid_search' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"query":"hexafluoropropene，有机化合物，属于卤代烯烃类。这个化合物的分子式为C3H2F6。可能具有特定的毒性和环境影响"}'
-
-*/
