@@ -117,7 +117,7 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
 
   // console.log(vectorStr);
 
-  const { data, error } = await supabase.rpc('hybrid_search', {
+  const { data, error } = await supabase.rpc('hybrid_search_flows', {
     query_text: queryFulltextString,
     query_embedding: vectorStr,
     ...(filter !== undefined ? { filter_condition: filter } : {}),
