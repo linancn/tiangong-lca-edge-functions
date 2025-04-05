@@ -2,7 +2,6 @@ import { SupabaseClient } from '@supabase/supabase-js@2';
 import { Redis } from '@upstash/redis';
 import { corsHeaders } from './cors.ts';
 import decodeApiKey from './decode_api_key.ts';
-import supabaseAuth from './supabase_auth.ts';
 
 export interface AuthResult {
   isAuthenticated: boolean;
@@ -83,18 +82,28 @@ export async function authenticateRequest(
 
   const userIdFromRedis = await redis.get('lca_' + email);
   if (!userIdFromRedis) {
-    const authResponse = await supabaseAuth(supabase, email, password);
-    const authData = await authResponse.json();
-    if (authResponse.status !== 200) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+    if (error) {
       return {
         isAuthenticated: false,
-        response: authResponse,
+        response: new Response('Unauthorized', { status: 401 }),
+      };
+    }
+    if (data.user.role !== 'authenticated') {
+      return {
+        isAuthenticated: false,
+        response: new Response('You are not an authenticated user.', {
+          status: 401,
+        }),
       };
     } else {
-      await redis.setex('lca_' + email, 3600, authData.userId);
+      await redis.setex('lca_' + email, 3600, data.user.id);
       return {
         isAuthenticated: true,
-        userId: authData.userId,
+        userId: data.user.id,
       };
     }
   }

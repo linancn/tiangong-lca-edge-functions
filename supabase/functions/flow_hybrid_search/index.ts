@@ -12,8 +12,10 @@ const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? '';
 
 const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '';
-const supabase_anon_key =
-  Deno.env.get('REMOTE_SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+const supabase_service_key =
+  Deno.env.get('REMOTE_SUPABASE_SERVICE_ROLE_KEY') ??
+  Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ??
+  '';
 
 const redis_url = Deno.env.get('UPSTASH_REDIS_URL') ?? '';
 const redis_token = Deno.env.get('UPSTASH_REDIS_TOKEN') ?? '';
@@ -23,7 +25,7 @@ const redis = new Redis({
   token: redis_token,
 });
 
-const supabase = createClient(supabase_url, supabase_anon_key);
+const supabase = createClient(supabase_url, supabase_service_key);
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -100,18 +102,11 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   );
   const queryFulltextString = combinedFulltextQueries.join(' OR ');
 
-  console.log(queryFulltextString);
+  // console.log(queryFulltextString);
 
   const semanticQueryEn = res.semantic_query_en;
 
   // console.log(semanticQueryEn);
-
-  // const embeddings = new OpenAIEmbeddings({
-  //   apiKey: openai_api_key,
-  //   model: openai_embedding_model,
-  // });
-
-  // const vectors = await embeddings.embedQuery(semanticQueryEn);
 
   const session = new Supabase.ai.Session('gte-small');
   const vectors = (await session.run(semanticQueryEn, {
@@ -120,14 +115,14 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   })) as number[];
   const vectorStr = `[${vectors.toString()}]`;
 
-  console.log(vectorStr);
+  // console.log(vectorStr);
 
   const { data, error } = await supabase.rpc('hybrid_search', {
     query_text: queryFulltextString,
     query_embedding: vectorStr,
     ...(filter !== undefined ? { filter_condition: filter } : {}),
   });
-  console.log({ data, error });
+  // console.log({ data, error });
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
