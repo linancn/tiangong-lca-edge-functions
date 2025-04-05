@@ -104,7 +104,7 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
 
   const semanticQueryEn = res.semantic_query_en;
 
-  console.log(semanticQueryEn);
+  // console.log(semanticQueryEn);
 
   // const embeddings = new OpenAIEmbeddings({
   //   apiKey: openai_api_key,
@@ -125,8 +125,9 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   const { data, error } = await supabase.rpc('hybrid_search', {
     query_text: queryFulltextString,
     query_embedding: vectorStr,
-    ...(filter !== undefined ? { filter } : {}),
+    ...(filter !== undefined ? { filter_condition: filter } : {}),
   });
+  console.log({ data, error });
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
