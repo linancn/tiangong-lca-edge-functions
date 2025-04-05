@@ -59,4 +59,4 @@ curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/flow_hybrid_searc
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'x-api-key: {{$dotenv X_API_KEY}}' \
-    --data '{"query": "二氧化碳排放"}'
+    --data '{"query": "氯氰菊酯"}'
