@@ -52,7 +52,7 @@ curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/flow_hybrid_searc
     --header 'Content-Type: application/json' \
     --header 'x-region: {{$dotenv X_REGION}}' \
     --header 'x-api-key: {{$dotenv X_API_KEY}}' \
-    --data ''
+    --data '{"query": "氯氰菊酯"}'
 
 ### @name Flow_Hybrid_Search：Local
 
