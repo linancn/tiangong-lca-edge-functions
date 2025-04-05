@@ -61,6 +61,14 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search
     --header 'x-api-key: {{$dotenv X_API_KEY}}' \
     --data '{"query": "氯氰菊酯"}'
 
+### @name Process_Hybrid_Search：Remote
+
+curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/process_hybrid_search' \
+    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
+    --header 'Content-Type: application/json' \
+    --header 'x-region: {{$dotenv X_REGION}}' \
+    --header 'x-api-key: {{$dotenv X_API_KEY}}' \
+    --data '{"query": "硅酸盐水泥"}'
 
 ### @name Process_Hybrid_Search：Local
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_hybrid_search' \
