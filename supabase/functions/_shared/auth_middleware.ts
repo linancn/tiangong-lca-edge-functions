@@ -6,7 +6,7 @@ import supabaseAuth from './supabase_auth.ts';
 
 export interface AuthResult {
   isAuthenticated: boolean;
-  user_id?: string;
+  userId?: string;
   response?: Response;
 }
 
@@ -55,6 +55,13 @@ export async function authenticateRequest(
     const token = authHeader.replace('Bearer ', '');
     const { data: authData } = await supabase.auth.getUser(token);
 
+    if (authData.user?.role === 'authenticated') {
+      return {
+        isAuthenticated: true,
+        userId: authData.user?.id,
+      };
+    }
+
     if (!authData || !authData.user) {
       // Only return error if no API key was provided as alternative
       if (!apiKey) {
@@ -74,21 +81,26 @@ export async function authenticateRequest(
     }
   }
 
-  if (!(await redis.exists('lca_' + email))) {
+  const userIdFromRedis = await redis.get('lca_' + email);
+  if (!userIdFromRedis) {
     const authResponse = await supabaseAuth(supabase, email, password);
-    console.log('authResponse', authResponse);
+    const authData = await authResponse.json();
     if (authResponse.status !== 200) {
       return {
         isAuthenticated: false,
         response: authResponse,
       };
     } else {
-      await redis.setex('lca_' + email, 3600, '');
+      await redis.setex('lca_' + email, 3600, authData.userId);
+      return {
+        isAuthenticated: true,
+        userId: authData.userId,
+      };
     }
   }
 
   return {
     isAuthenticated: true,
-    user_id: user ? user.id : undefined,
+    userId: typeof userIdFromRedis === 'string' ? userIdFromRedis : undefined,
   };
 }

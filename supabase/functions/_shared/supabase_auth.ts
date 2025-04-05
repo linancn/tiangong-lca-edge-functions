@@ -16,18 +16,13 @@ async function supabaseAuth(supabase: SupabaseClient, email: string, password: s
       status: 401,
     });
   } else {
-    return new Response(
-      JSON.stringify({
-        status: 'Authorized',
-        userId: data.user.id,
-      }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-        },
+    // console.log('User authenticated:', data.user);
+    return new Response(JSON.stringify({ userId: data.user.id }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
       },
-    );
+    });
   }
 }
 
