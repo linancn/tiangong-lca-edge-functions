@@ -60,3 +60,10 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search
     --header 'Content-Type: application/json' \
     --header 'x-api-key: {{$dotenv X_API_KEY}}' \
     --data '{"query": "氯氰菊酯"}'
+
+
+### @name Process_Hybrid_Search：Local
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_hybrid_search' \
+    --header 'Content-Type: application/json' \
+    --header 'x-api-key: {{$dotenv X_API_KEY}}' \
+    --data '{"query": "硅酸盐水泥"}'
