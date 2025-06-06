@@ -86,9 +86,9 @@ Deno.serve(async (req) => {
     [
       'system',
       `Field: Life Cycle Assessment (LCA)
-Task: Transform description of flows into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.`,
+Task: Transform description of processes into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.`,
     ],
-    ['human', 'Flow description: {input}'],
+    ['human', 'Process description: {input}'],
   ]);
 
   const chain = prompt.pipe(modelWithStructuredOutput);
@@ -115,16 +115,14 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
   })) as number[];
   const vectorStr = `[${vectors.toString()}]`;
 
-  // console.log("vectorStr", vectorStr);
+  console.log(vectorStr);
 
-  const filter_condition = filter;
-
-  const { data, error } = await supabase.rpc('hybrid_search_flows', {
+  const { data, error } = await supabase.rpc('hybrid_search_processes', {
     query_text: queryFulltextString,
     query_embedding: vectorStr,
     ...(filter !== undefined ? { filter_condition: filter } : {}),
   });
-  // console.log({ data, error });
+  console.log({ data, error });
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -133,8 +131,8 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
     });
   }
 
-  return new Response(JSON.stringify(data), {
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  return new Response(JSON.stringify({ data }), {
+    headers: { 'Content-Type': 'application/json' },
     status: 200,
   });
 });
