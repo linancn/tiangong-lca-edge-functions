@@ -31,8 +31,8 @@ interface FilteredContent {
   typeOfDataSet?: string;
   LCIMethodPrinciple?: string;
   LCIMethodApproaches?: string;
-  inputs?: string[]; 
-  outputs?: string[]; 
+  inputs?: string[];
+  outputs?: string[];
 }
 
 /**
@@ -68,7 +68,8 @@ function processJsonRecordEn(jsonContent: any): FilteredContent | null {
     if (!jsonContent) return null;
 
     const classificationInformation =
-      jsonContent?.processDataSet?.processInformation?.dataSetInformation?.classificationInformation;
+      jsonContent?.processDataSet?.processInformation?.dataSetInformation
+        ?.classificationInformation;
 
     const filtered: FilteredContent = {
       classificationInformation: classificationInformation ?? {},
@@ -91,30 +92,46 @@ function processJsonRecordEn(jsonContent: any): FilteredContent | null {
       }
     });
 
-    const dataSetInformation = jsonContent?.processDataSet?.processInformation?.dataSetInformation ?? {};
+    const dataSetInformation =
+      jsonContent?.processDataSet?.processInformation?.dataSetInformation ?? {};
 
     const generalComment = filterEnContent(dataSetInformation, 'common:generalComment');
     if (generalComment) filtered.generalComment = generalComment;
 
-    const referenceYear = jsonContent?.processDataSet?.processInformation?.time?.['common:referenceYear'];
+    const referenceYear =
+      jsonContent?.processDataSet?.processInformation?.time?.['common:referenceYear'];
     if (referenceYear) filtered.referenceYear = referenceYear;
 
-    const dataSetValidUntil = jsonContent?.processDataSet?.processInformation?.time?.['common:dataSetValidUntil'];
+    const dataSetValidUntil =
+      jsonContent?.processDataSet?.processInformation?.time?.['common:dataSetValidUntil'];
     if (dataSetValidUntil) filtered.dataSetValidUntil = dataSetValidUntil;
 
-    const locationOfOperationSupplyOrProduction = jsonContent?.processDataSet?.processInformation?.geography?.locationOfOperationSupplyOrProduction?.['@location'];
-    if (locationOfOperationSupplyOrProduction) filtered.locationOfOperationSupplyOrProduction = locationOfOperationSupplyOrProduction;
+    const locationOfOperationSupplyOrProduction =
+      jsonContent?.processDataSet?.processInformation?.geography
+        ?.locationOfOperationSupplyOrProduction?.['@location'];
+    if (locationOfOperationSupplyOrProduction)
+      filtered.locationOfOperationSupplyOrProduction = locationOfOperationSupplyOrProduction;
 
-    const technologyDescriptionAndIncludedProcesses = filterEnContent(jsonContent?.processDataSet?.processInformation?.technology, 'technologyDescriptionAndIncludedProcesses');
-    if (technologyDescriptionAndIncludedProcesses) filtered.technologyDescriptionAndIncludedProcesses = technologyDescriptionAndIncludedProcesses;
+    const technologyDescriptionAndIncludedProcesses = filterEnContent(
+      jsonContent?.processDataSet?.processInformation?.technology,
+      'technologyDescriptionAndIncludedProcesses',
+    );
+    if (technologyDescriptionAndIncludedProcesses)
+      filtered.technologyDescriptionAndIncludedProcesses =
+        technologyDescriptionAndIncludedProcesses;
 
-    const typeOfDataSet = jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation?.typeOfDataSet;
+    const typeOfDataSet =
+      jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation?.typeOfDataSet;
     if (typeOfDataSet) filtered.typeOfDataSet = typeOfDataSet;
 
-    const LCIMethodPrinciple = jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation?.LCIMethodPrinciple;
+    const LCIMethodPrinciple =
+      jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation
+        ?.LCIMethodPrinciple;
     if (LCIMethodPrinciple) filtered.LCIMethodPrinciple = LCIMethodPrinciple;
 
-    const LCIMethodApproaches = jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation?.LCIMethodApproaches;
+    const LCIMethodApproaches =
+      jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation
+        ?.LCIMethodApproaches;
     if (LCIMethodApproaches) filtered.LCIMethodApproaches = LCIMethodApproaches;
 
     const exchanges = jsonContent?.processDataSet?.exchanges?.exchange;
@@ -124,7 +141,10 @@ function processJsonRecordEn(jsonContent: any): FilteredContent | null {
 
       exchanges.forEach((exchange) => {
         const direction = exchange.exchangeDirection;
-        const description = filterEnContent(exchange.referenceToFlowDataSet, 'common:shortDescription');
+        const description = filterEnContent(
+          exchange.referenceToFlowDataSet,
+          'common:shortDescription',
+        );
         if (description) {
           if (direction === 'Input') {
             filtered.inputs?.push(description);
@@ -165,7 +185,9 @@ function dictToConciseString(data: FilteredContent): string {
     parts.push(`Mix and Location Types: ${data.name.mixAndLocationTypes}.`);
   }
   if (data.name?.functionalUnitFlowProperties) {
-    parts.push(`Quantitative product or process properties: ${data.name.functionalUnitFlowProperties}.`);
+    parts.push(
+      `Quantitative product or process properties: ${data.name.functionalUnitFlowProperties}.`,
+    );
   }
 
   if (data.referenceYear) {
@@ -178,8 +200,7 @@ function dictToConciseString(data: FilteredContent): string {
 
   // 分类信息分类
   try {
-    const categories =
-      data?.classificationInformation?.['common:classification']?.['common:class'];
+    const categories = data?.classificationInformation?.['common:classification']?.['common:class'];
     if (Array.isArray(categories)) {
       const sortedCategories = [...categories].sort(
         (a, b) => parseInt(a['@level']) - parseInt(b['@level']),
@@ -260,10 +281,10 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
     };
 
     const classificationInformation =
-      jsonContent?.processDataSet?.processInformation?.dataSetInformation?.classificationInformation;
+      jsonContent?.processDataSet?.processInformation?.dataSetInformation
+        ?.classificationInformation;
     if (classificationInformation) {
-      const categories =
-        classificationInformation?.['common:classification']?.['common:class'];
+      const categories = classificationInformation?.['common:classification']?.['common:class'];
       if (Array.isArray(categories) && categories.length > 0) {
         (filtered.classificationInformation as any).categories = categories
           .map((category: any) => (category?.['#text'] ? category['#text'].trim() : null))
@@ -310,18 +331,27 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
           : null;
     }
 
-    const referenceYear = jsonContent?.processDataSet?.processInformation?.time?.['common:referenceYear'];
+    const referenceYear =
+      jsonContent?.processDataSet?.processInformation?.time?.['common:referenceYear'];
     if (referenceYear) filtered.referenceYear = referenceYear;
 
-    const dataSetValidUntil = jsonContent?.processDataSet?.processInformation?.time?.['common:dataSetValidUntil'];
+    const dataSetValidUntil =
+      jsonContent?.processDataSet?.processInformation?.time?.['common:dataSetValidUntil'];
     if (dataSetValidUntil) filtered.dataSetValidUntil = dataSetValidUntil;
 
-    const locationOfOperationSupplyOrProduction = jsonContent?.processDataSet?.processInformation?.geography?.locationOfOperationSupplyOrProduction?.['@location'];
-    if (locationOfOperationSupplyOrProduction) filtered.locationOfOperationSupplyOrProduction = locationOfOperationSupplyOrProduction;
+    const locationOfOperationSupplyOrProduction =
+      jsonContent?.processDataSet?.processInformation?.geography
+        ?.locationOfOperationSupplyOrProduction?.['@location'];
+    if (locationOfOperationSupplyOrProduction)
+      filtered.locationOfOperationSupplyOrProduction = locationOfOperationSupplyOrProduction;
 
-    const technologyDescriptionAndIncludedProcesses = jsonContent?.processDataSet?.processInformation?.technology?.technologyDescriptionAndIncludedProcesses;
+    const technologyDescriptionAndIncludedProcesses =
+      jsonContent?.processDataSet?.processInformation?.technology
+        ?.technologyDescriptionAndIncludedProcesses;
     if (technologyDescriptionAndIncludedProcesses) {
-      filtered.technologyDescriptionAndIncludedProcesses = Array.isArray(technologyDescriptionAndIncludedProcesses)
+      filtered.technologyDescriptionAndIncludedProcesses = Array.isArray(
+        technologyDescriptionAndIncludedProcesses,
+      )
         ? technologyDescriptionAndIncludedProcesses
             .map((item: any) => (item?.['#text'] ? item['#text'].trim() : null))
             .filter((text: string | null) => text !== null)
@@ -331,13 +361,18 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
           : null;
     }
 
-    const typeOfDataSet = jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation?.typeOfDataSet;
+    const typeOfDataSet =
+      jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation?.typeOfDataSet;
     if (typeOfDataSet) filtered.typeOfDataSet = typeOfDataSet;
 
-    const LCIMethodPrinciple = jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation?.LCIMethodPrinciple;
+    const LCIMethodPrinciple =
+      jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation
+        ?.LCIMethodPrinciple;
     if (LCIMethodPrinciple) filtered.LCIMethodPrinciple = LCIMethodPrinciple;
 
-    const LCIMethodApproaches = jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation?.LCIMethodApproaches;
+    const LCIMethodApproaches =
+      jsonContent?.processDataSet?.modellingAndValidation?.LCIMethodAndAllocation
+        ?.LCIMethodApproaches;
     if (LCIMethodApproaches) filtered.LCIMethodApproaches = LCIMethodApproaches;
 
     const exchanges = jsonContent?.processDataSet?.exchanges?.exchange;
@@ -350,7 +385,10 @@ function processJsonRecordAllLanguages(jsonContent: any): string | null {
         const description = exchange.referenceToFlowDataSet?.['common:shortDescription'];
         if (description) {
           const descriptions = Array.isArray(description)
-            ? description.map((item: any) => item?.['#text']?.trim()).filter(Boolean).join('; ')
+            ? description
+                .map((item: any) => item?.['#text']?.trim())
+                .filter(Boolean)
+                .join('; ')
             : description?.['#text']?.trim();
           if (descriptions) {
             if (direction === 'Input') {
