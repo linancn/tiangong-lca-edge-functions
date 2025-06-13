@@ -1,5 +1,5 @@
 // Setup type definitions for built-in Supabase Runtime APIs
-import '@supabase/functions-js/edge-runtime.d.ts';
+/// <reference types="https://esm.sh/@supabase/functions-js/src/edge-runtime.d.ts" />
 
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { ChatOpenAI } from '@langchain/openai';
@@ -95,18 +95,12 @@ Task: Transform description of processes into three specific queries: SemanticQu
 
   const res = await chain.invoke({ input: query });
 
-  // console.log({ res });
-
   const combinedFulltextQueries = [...res.fulltext_query_zh, ...res.fulltext_query_en].map(
     (query) => `(${query})`,
   );
   const queryFulltextString = combinedFulltextQueries.join(' OR ');
 
-  // console.log(queryFulltextString);
-
   const semanticQueryEn = res.semantic_query_en;
-
-  // console.log(semanticQueryEn);
 
   const session = new Supabase.ai.Session('gte-small');
   const vectors = (await session.run(semanticQueryEn, {
@@ -115,14 +109,11 @@ Task: Transform description of processes into three specific queries: SemanticQu
   })) as number[];
   const vectorStr = `[${vectors.toString()}]`;
 
-  console.log(vectorStr);
-
   const { data, error } = await supabase.rpc('hybrid_search_processes', {
     query_text: queryFulltextString,
     query_embedding: vectorStr,
     ...(filter !== undefined ? { filter_condition: filter } : {}),
   });
-  console.log({ data, error });
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {
@@ -130,9 +121,27 @@ Task: Transform description of processes into three specific queries: SemanticQu
       status: 500,
     });
   }
-
-  return new Response(JSON.stringify({ data }), {
-    headers: { 'Content-Type': 'application/json' },
+  if (data) {
+    if (data.length > 0) {
+      return new Response(
+        JSON.stringify({
+          data,
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
+          status: 200,
+        },
+      );
+    }
+  }
+  return new Response('[]', {
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+    },
     status: 200,
   });
 });
