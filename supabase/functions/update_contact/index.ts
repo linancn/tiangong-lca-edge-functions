@@ -7,10 +7,10 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 
 import { createClient } from '@supabase/supabase-js@2';
-import getDataDetail from '../_shared/get_data.ts';
-import updateData from '../_shared/update_data.ts';
 import check_state_code from '../_shared/check_state_code.ts';
+import getDataDetail from '../_shared/get_data.ts';
 import getUserRole from '../_shared/get_user_role.ts';
+import updateData from '../_shared/update_data.ts';
 
 const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '';
 const supabase_service_key =
@@ -52,7 +52,12 @@ Deno.serve(async (req) => {
   }
 
   const { id, version, data, option } = await req.json();
-  const { data: oldData, success: oldDataSuccess } = await getDataDetail(id, version, 'contacts', supabase);
+  const { data: oldData, success: oldDataSuccess } = await getDataDetail(
+    id,
+    version,
+    'contacts',
+    supabase,
+  );
   const { data: userRole } = await getUserRole(user.id, supabase);
 
   if (!oldDataSuccess) {
@@ -60,11 +65,11 @@ Deno.serve(async (req) => {
   }
 
   if (userRole?.find((item: any) => item.role === 'review-admin')) {
-    if(typeof data?.state_code === 'number'){
+    if (typeof data?.state_code === 'number') {
       const checkResult = check_state_code(oldData?.stateCode, data?.state_code);
-    if (!checkResult) {
-      return new Response('State Code Not Allowed', { status: 403 });
-    }
+      if (!checkResult) {
+        return new Response('State Code Not Allowed', { status: 403 });
+      }
     }
   } else {
     if (oldData?.userId !== user.id) {
@@ -74,7 +79,9 @@ Deno.serve(async (req) => {
 
   const updateResult = await updateData(id, version, 'contacts', data, supabase);
 
-  return new Response(JSON.stringify(updateResult), { headers: { 'Content-Type': 'application/json',...corsHeaders } });
+  return new Response(JSON.stringify(updateResult), {
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+  });
 });
 
 /* To invoke locally:

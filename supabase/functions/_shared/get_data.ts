@@ -1,11 +1,6 @@
 import { SupabaseClient } from '@supabase/supabase-js@2';
 
-async function getDataDetail(
-  id: string,
-  version: string,
-  table: string,
-  supabase: SupabaseClient,
-) {
+async function getDataDetail(id: string, version: string, table: string, supabase: SupabaseClient) {
   let result: any = {};
   if (id && id.length === 36) {
     if (version && version.length === 9) {
