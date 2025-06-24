@@ -7,7 +7,10 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 
 import { createClient } from '@supabase/supabase-js@2';
-import { getDataDetail } from '../_shared/get_data.ts';
+import check_state_code from '../_shared/check_state_code.ts';
+import getDataDetail from '../_shared/get_data.ts';
+import getUserRole from '../_shared/get_user_role.ts';
+import updateData from '../_shared/update_data.ts';
 
 const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '';
 const supabase_service_key =
@@ -38,7 +41,6 @@ Deno.serve(async (req) => {
   );
 
   const userData = await userSupabase.auth.getUser(token);
-  console.log('userData', userData);
 
   if (!userData?.data || !userData.data.user) {
     return new Response('User Not Found', { status: 404 });
@@ -49,17 +51,37 @@ Deno.serve(async (req) => {
     return new Response('Forbidden', { status: 403 });
   }
 
-  const { id, version, state_code, data, option } = await req.json();
+  const { id, version, data, option } = await req.json();
+  const { data: oldData, success: oldDataSuccess } = await getDataDetail(
+    id,
+    version,
+    'contacts',
+    supabase,
+  );
+  const { data: userRole } = await getUserRole(user.id, supabase);
 
-  // const data_version = data?.contactInformation?.dataSetInformation?.referenceToContact?.['@version'];
+  if (!oldDataSuccess) {
+    return new Response('Data Not Found', { status: 404 });
+  }
 
-  const old_data = await getDataDetail(id, version, 'contacts', supabase);
+  if (userRole?.find((item: any) => item.role === 'review-admin')) {
+    if (typeof data?.state_code === 'number') {
+      const checkResult = check_state_code(oldData?.stateCode, data?.state_code);
+      if (!checkResult) {
+        return new Response('State Code Not Allowed', { status: 403 });
+      }
+    }
+  } else {
+    if (oldData?.userId !== user.id) {
+      return new Response('Forbidden', { status: 403 });
+    }
+  }
 
-  console.log('old_data', old_data);
+  const updateResult = await updateData(id, version, 'contacts', data, supabase);
 
-  // Data owner update, state_code = 0
-
-  return new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
+  return new Response(JSON.stringify(updateResult), {
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+  });
 });
 
 /* To invoke locally:
