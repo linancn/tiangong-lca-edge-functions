@@ -51,11 +51,14 @@ Deno.serve(async (req) => {
     return new Response('Forbidden', { status: 403 });
   }
 
-  const { id, version, data, option } = await req.json();
+  const { id, version, table,data } = await req.json();
+  if(!table){
+    return new Response('Table Not Found', { status: 404 });
+  };
   const { data: oldData, success: oldDataSuccess } = await getDataDetail(
     id,
     version,
-    'contacts',
+    table,
     supabase,
   );
   const { data: userRole } = await getUserRole(user.id, supabase);
@@ -77,7 +80,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  const updateResult = await updateData(id, version, 'contacts', data, supabase);
+  const updateResult = await updateData(id, version, table, data, supabase);
 
   return new Response(JSON.stringify(updateResult), {
     headers: { 'Content-Type': 'application/json', ...corsHeaders },
