@@ -7,10 +7,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 
 import { createClient } from '@supabase/supabase-js@2';
-import check_state_code from '../_shared/check_state_code.ts';
-import getDataDetail from '../_shared/get_data.ts';
 import getUserRole from '../_shared/get_user_role.ts';
-import updateData from '../_shared/update_data.ts';
 
 const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '';
 const supabase_service_key =
@@ -41,57 +38,50 @@ Deno.serve(async (req) => {
   );
 
   const userData = await userSupabase.auth.getUser(token);
-
   if (!userData?.data || !userData.data.user) {
     return new Response('User Not Found', { status: 404 });
   }
-
   const user = userData.data.user;
   if (user?.role !== 'authenticated') {
     return new Response('Forbidden', { status: 403 });
   }
 
-  const { id, version, table, data } = await req.json();
-  if (!table) {
-    return new Response('Table Not Found', { status: 404 });
-  }
-  const { data: oldData, success: oldDataSuccess } = await getDataDetail(
-    id,
-    version,
-    table,
-    supabase,
-  );
-  const { data: userRole } = await getUserRole(user.id, supabase);
+  const { id, data } = await req.json();
 
-  if (!oldDataSuccess) {
+  let selectQuery = supabase.from('comments').select('*').eq('review_id', id);
+
+  const { data: userRole } = await getUserRole(user.id, supabase);
+  const isReviewMember = userRole?.find((item: any) => item.role === 'review-member');
+  const isReviewAdmin = userRole?.find((item: any) => item.role === 'review-admin');
+  if (isReviewMember) {
+    selectQuery = selectQuery.eq('reviewer_id', user.id);
+  }
+
+  const { data: oldData } = await selectQuery;
+  if (!oldData) {
     return new Response('Data Not Found', { status: 404 });
   }
 
-  if (typeof data?.state_code === 'number') {
-    const checkResult = check_state_code(oldData?.stateCode, data?.state_code);
-    if (!checkResult) {
-      return new Response('State Code Not Allowed', { status: 403 });
-    }
+  let updateResult = {};
+  if (isReviewMember) {
+    updateResult = await supabase
+      .from('comments')
+      .update(data)
+      .eq('review_id', id)
+      .eq('reviewer_id', user.id)
+      .select();
+    return new Response(JSON.stringify(updateResult), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
   }
-    if (!userRole?.find((item: any) => item.role === 'review-admin')&&oldData?.userId !== user.id) {
-      return new Response('Forbidden', { status: 403 });
-    }
+  if (isReviewAdmin) {
+    updateResult = await supabase.from('comments').update(data).eq('review_id', id).select();
+    return new Response(JSON.stringify(updateResult), {
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  }
 
-  const updateResult = await updateData(id, version, table, data, supabase);
-
-  return new Response(JSON.stringify(updateResult), {
+  return new Response(JSON.stringify({ error: true, data: null, message: 'Forbidden' }), {
     headers: { 'Content-Type': 'application/json', ...corsHeaders },
   });
 });
-
-/* To invoke locally:
-
-  1. Run `supabase start` (see: https://supabase.com/docs/reference/cli/supabase-start)
-  2. Make an HTTP request:
-
-  curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/update_contact' \
-    --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0' \
-    --header 'Content-Type: application/json' \
-    --data '{"name":"Functions"}'
-
-*/
