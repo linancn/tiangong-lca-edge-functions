@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     }
   }else{
     const isOwner = userRole?.find((item: any) => item.role === 'owner'&&item.team_id===teamId);
-    if (!isOwner) {
+    if (!isOwner&&userId!==user.id) {
       return new Response('Forbidden', { status: 403 });
     }
   }
