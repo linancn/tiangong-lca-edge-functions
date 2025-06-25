@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     (item: any) => item.team_id === '00000000-0000-0000-0000-000000000000' && item.role === 'admin',
   );
 
-  if (!isAdminOrOwner&&!isSystemAdmin) {
+  if (!isAdminOrOwner && !isSystemAdmin) {
     return new Response('Forbidden', { status: 403 });
   }
 

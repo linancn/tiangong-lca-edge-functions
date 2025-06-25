@@ -73,9 +73,9 @@ Deno.serve(async (req) => {
       return new Response('State Code Not Allowed', { status: 403 });
     }
   }
-    if (!userRole?.find((item: any) => item.role === 'review-admin')&&oldData?.userId !== user.id) {
-      return new Response('Forbidden', { status: 403 });
-    }
+  if (!userRole?.find((item: any) => item.role === 'review-admin') && oldData?.userId !== user.id) {
+    return new Response('Forbidden', { status: 403 });
+  }
 
   const updateResult = await updateData(id, version, table, data, supabase);
 
