@@ -46,10 +46,14 @@ Deno.serve(async (req) => {
   const { id, data } = await req.json();
 
   const { data: userRole } = await getUserRole(user.id, supabase);
-  const canUpdate = userRole?.find(
+  const isAdminOrOwner = userRole?.find(
     (item: any) => item.team_id === id && (item.role === 'owner' || item.role === 'admin'),
   );
-  if (!canUpdate) {
+  const isSystemAdmin = userRole?.find(
+    (item: any) => item.team_id === '00000000-0000-0000-0000-000000000000' && item.role === 'admin',
+  );
+
+  if (!isAdminOrOwner&&!isSystemAdmin) {
     return new Response('Forbidden', { status: 403 });
   }
 
