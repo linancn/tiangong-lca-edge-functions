@@ -113,7 +113,6 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
     query_embedding: vectorStr,
     ...(filter !== undefined ? { filter_condition: filter } : {}),
   });
-  // console.log('Hybrid search result:', data, error);
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), {

@@ -1,7 +1,14 @@
 {
   "[typescript]": {
-    "editor.defaultFormatter": "denoland.vscode-deno"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
   },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "editor.formatOnSave": true,
+  "deno.enable": true,
   "deno.enablePaths": ["supabase/functions"],
   "deno.lint": true,
   "deno.importMap": "./supabase/functions/import_map.json"
