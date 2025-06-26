@@ -1,4 +1,3 @@
-// Setup type definitions for built-in Supabase Runtime APIs
 import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { ChatPromptTemplate } from '@langchain/core/prompts';

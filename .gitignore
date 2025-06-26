@@ -3,3 +3,9 @@ supabase/.temp
 supabase/.env.local
 node_modules
 package-lock.json
+deno.lock
+
+.gitignore
+sqls
+
+.DS_Store
