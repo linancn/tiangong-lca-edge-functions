@@ -1,11 +1,10 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 // import { corsHeaders } from '../_shared/cors.ts';
 export const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  };
-  
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+};
 
 /**
  * Get local IP addresses
@@ -15,12 +14,12 @@ async function getLocalIpAddresses(): Promise<string[]> {
   try {
     // Get network interfaces using Deno API
     const networkInterfaces = await Deno.networkInterfaces();
-    
+
     // Filter for IPv4 addresses that aren't loopback addresses
     const ipAddresses = networkInterfaces
-      .filter(ni => ni.family === 'IPv4' && !ni.address.startsWith('127.'))
-      .map(ni => ni.address);
-    
+      .filter((ni) => ni.family === 'IPv4' && !ni.address.startsWith('127.'))
+      .map((ni) => ni.address);
+
     return ipAddresses;
   } catch (error) {
     console.error('Error getting network interfaces:', error);
@@ -55,9 +54,9 @@ async function getDnsServers(): Promise<string[]> {
     const file = await Deno.readTextFile('/etc/resolv.conf');
     const lines = file.split('\n');
     const dnsServers = lines
-      .filter(line => line.trim().startsWith('nameserver'))
-      .map(line => line.split(/\s+/)[1]);
-    
+      .filter((line) => line.trim().startsWith('nameserver'))
+      .map((line) => line.split(/\s+/)[1]);
+
     return dnsServers;
   } catch (error) {
     // This is expected to fail on Windows or in some environments
@@ -103,22 +102,19 @@ serve(async (req: RequestWithRemoteAddr) => {
       },
     };
 
-    return new Response(
-      JSON.stringify(responseData, null, 2),
-      {
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-        },
+    return new Response(JSON.stringify(responseData, null, 2), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
       },
-    );
+    });
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    
+
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: errorMessage 
+      JSON.stringify({
+        success: false,
+        error: errorMessage,
       }),
       {
         status: 500,
@@ -129,4 +125,4 @@ serve(async (req: RequestWithRemoteAddr) => {
       },
     );
   }
-}); 
+});
