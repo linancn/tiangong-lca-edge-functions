@@ -5,11 +5,11 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 
-import { createClient } from '@supabase/supabase-js@2';
+import { createClient, SupabaseClient } from '@supabase/supabase-js@2';
 import check_state_code from '../_shared/check_state_code.ts';
 import getDataStatus from '../_shared/get_data_status.ts';
 import getUserRole from '../_shared/get_user_role.ts';
-import updateData from '../_shared/update_data.ts';
+// import updateData from '../_shared/update_data.ts';
 
 const supabase_url = Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '';
 const supabase_service_key =
@@ -24,12 +24,28 @@ const userSupabase = createClient(
   Deno.env.get('SUPABASE_ANON_KEY') ?? '',
 );
 
+async function updateData(
+  id: string,
+  version: string,
+  table: string,
+  data: any,
+  supabase: SupabaseClient,
+) {
+  const updateResult = await supabase
+    .from(table)
+    .update(data)
+    .eq('id', id)
+    .eq('version', version)
+    .select('state_code,rule_verification');
+  return Promise.resolve(updateResult);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  const time_start = Date.now();
+  // const time_start = Date.now();
 
   // Get the session or user object
   const authHeader = req.headers.get('Authorization');
