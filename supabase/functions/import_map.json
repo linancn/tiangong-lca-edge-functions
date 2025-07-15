@@ -1,5 +1,6 @@
 {
   "imports": {
+    "@aws-sdk/client-cognito-identity-provider": "npm:/@aws-sdk/client-cognito-identity-provider",
     "@supabase/functions-js/edge-runtime.d.ts": "jsr:@supabase/functions-js/edge-runtime.d.ts",
     "@hono/hono": "jsr:@hono/hono",
     "@langchain/core/messages": "npm:/@langchain/core/messages",
