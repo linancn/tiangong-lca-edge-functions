@@ -77,7 +77,7 @@ npx supabase functions deploy get_local_ip --project-ref qgzvkongdjqiiamzbbts
 npx supabase functions deploy create_calculation --project-ref qgzvkongdjqiiamzbbts
 npx supabase functions deploy query_calculation_status --project-ref qgzvkongdjqiiamzbbts
 npx supabase functions deploy query_calculation_results --project-ref qgzvkongdjqiiamzbbts
-
+npx supabase functions deploy update_data_v2 --project-ref qgzvkongdjqiiamzbbts
 
 npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
