@@ -80,6 +80,8 @@ npx supabase functions deploy query_calculation_results --project-ref qgzvkongdj
 npx supabase functions deploy update_data_v2 --project-ref qgzvkongdjqiiamzbbts
 
 npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy change_email_cognito --project-ref qgzvkongdjqiiamzbbts
 
 npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
