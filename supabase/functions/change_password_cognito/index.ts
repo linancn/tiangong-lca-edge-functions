@@ -6,7 +6,7 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 
 import {
-  AdminCreateUserCommand,
+  AdminGetUserCommand,
   AdminSetUserPasswordCommand,
   CognitoIdentityProviderClient,
 } from '@aws-sdk/client-cognito-identity-provider';
@@ -25,20 +25,17 @@ const awsClient = new CognitoIdentityProviderClient({
   },
 });
 
-async function signUpUser(email: string, password: string) {
+async function changePassword(email: string, password: string) {
   try {
-    const createCmd = new AdminCreateUserCommand({
+    // check if user exists
+    const getUserCmd = new AdminGetUserCommand({
       UserPoolId: Deno.env.get('COGNITO_USER_POOL_ID') ?? '',
       Username: email,
-      MessageAction: 'SUPPRESS',
-      UserAttributes: [
-        { Name: 'email', Value: email },
-        { Name: 'email_verified', Value: 'true' },
-      ],
     });
 
-    const createResult = await awsClient.send(createCmd);
+    await awsClient.send(getUserCmd);
 
+    // if user exists, set the new password
     const setPasswordCmd = new AdminSetUserPasswordCommand({
       UserPoolId: Deno.env.get('COGNITO_USER_POOL_ID') ?? '',
       Username: email,
@@ -48,14 +45,14 @@ async function signUpUser(email: string, password: string) {
 
     await awsClient.send(setPasswordCmd);
 
-    return { success: true, result: createResult, userExists: false };
+    return { success: true, userExists: true };
   } catch (error) {
-    if (error.name === 'UsernameExistsException') {
-      console.log(`User already exists: ${email}`);
-      return { success: true, result: null, userExists: true };
+    if (error.name === 'UserNotFoundException') {
+      console.log(`User not found: ${email}, ignoring password change.`);
+      return { success: true, userExists: false };
     }
 
-    console.error(`Error creating user ${email}:`, error);
+    console.error(`Error changing password for user ${email}:`, error);
     throw error;
   }
 }
@@ -94,14 +91,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const result = await signUpUser(user.email!, password);
+    const result = await changePassword(user.email!, password);
 
-    if (result.userExists) {
+    if (!result.userExists) {
       return new Response(
         JSON.stringify({
-          message: 'User already exists',
+          message: 'User not found in Cognito',
           email: user.email,
-          status: 'already_registered',
+          status: 'user_not_found',
         }),
         {
           headers: { 'Content-Type': 'application/json', ...corsHeaders },
@@ -109,24 +106,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log(`User registration completed successfully: ${user.email}`);
+    console.log(`Password changed successfully for user: ${user.email}`);
     return new Response(
       JSON.stringify({
-        message: 'User created successfully',
-        userId: result.result?.User?.Username,
-        userStatus: result.result?.User?.UserStatus,
+        message: 'Password changed successfully',
         email: user.email,
-        status: 'created',
+        status: 'password_changed',
       }),
       {
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       },
     );
   } catch (error) {
-    console.error(`Error during user registration for ${user.email}:`, error);
+    console.error(`Error during password change for ${user.email}:`, error);
     return new Response(
       JSON.stringify({
-        error: 'Failed to create user',
+        error: 'Failed to change password',
         details: error.message,
         email: user.email,
       }),
