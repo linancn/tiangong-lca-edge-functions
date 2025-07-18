@@ -1,9 +1,10 @@
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
+import { corsHeaders } from './cors.ts';
 
 export interface AuthResult {
   isAuthenticated: boolean;
-  response?: string;
   userId?: string;
+  response?: Response;
   email?: string;
 }
 
@@ -31,13 +32,15 @@ export async function authenticateCognitoToken(token: string): Promise<AuthResul
     if (!userId) {
       return {
         isAuthenticated: false,
-        response: 'Invalid token: missing user ID',
+        response: new Response('Invalid token: missing user ID', {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }),
       };
     }
 
     return {
       isAuthenticated: true,
-      response: userId,
       userId,
       email,
     };
@@ -45,7 +48,10 @@ export async function authenticateCognitoToken(token: string): Promise<AuthResul
     console.error('Cognito token verification failed:', error);
     return {
       isAuthenticated: false,
-      response: error instanceof Error ? error.message : 'Token verification failed',
+      response: new Response(error instanceof Error ? error.message : 'Token verification failed', {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }),
     };
   }
 }
