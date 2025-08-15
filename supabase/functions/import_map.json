@@ -10,6 +10,7 @@
     "@langchain/langgraph": "npm:/@langchain/langgraph",
     "@langchain/langgraph/prebuilt": "npm:/@langchain/langgraph/prebuilt",
     "@langchain/openai": "npm:/@langchain/openai",
+    "@openai/openai": "jsr:/@openai/openai",
     "@opensearch-project/opensearch": "npm:/@opensearch-project/opensearch",
     "@opensearch-project/opensearch/aws": "npm:/@opensearch-project/opensearch/aws",
     "@pinecone-database/pinecone": "npm:/@pinecone-database/pinecone",
