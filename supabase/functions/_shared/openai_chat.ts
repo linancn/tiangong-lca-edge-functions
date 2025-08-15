@@ -34,11 +34,9 @@ export interface OpenAIChatResult {
  * @returns Output text plus raw response
  */
 export async function openaiChat(
-  instruct: string,
   input: string,
   options: OpenAIChatOptions = {},
 ): Promise<OpenAIChatResult> {
-  if (!instruct) throw new Error('instruct must not be empty');
   if (!input) throw new Error('input must not be empty');
 
   const client = getClient();
@@ -48,7 +46,6 @@ export async function openaiChat(
   const response = await client.responses.create({
     model,
     stream,
-    instructions: instruct,
     input,
   });
 
@@ -60,9 +57,8 @@ export async function openaiChat(
 
 // Example usage (only runs when this file is executed directly, not when imported).
 if (import.meta.main) {
-  const demoInstruct = 'You are a concise assistant.';
   const demoInput = 'Say hello in one short sentence.';
-  openaiChat(demoInstruct, demoInput)
+  openaiChat(demoInput)
     .then((r) => console.log('[demo]', r.text))
     .catch((e) => console.error('[demo error]', e));
 }
