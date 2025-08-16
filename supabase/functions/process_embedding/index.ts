@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
     }
 
     const systemPrompt =
-      'You are an expert summarizer for LCA process datasets. Produce a concise, self-contained English description of the process: purpose, key inputs, key outputs, technology, location, and quantitative aspects if present. Keep it under 500 tokens. Output only the summary.';
+      'Summarize the LCA process dataset in clear English. Include purpose, main inputs, main outputs, technology used, location, and any quantitative details if available. Keep it concise, self-contained, and under 500 tokens. Output only the summary.';
     const modelInput = `${systemPrompt}\n\nJSON:\n${JSON.stringify(input)}`;
 
     const { text } = await openaiChat(modelInput, { stream: false });
