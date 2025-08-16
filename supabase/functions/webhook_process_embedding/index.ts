@@ -3,6 +3,7 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { createClient } from '@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
+import { openaiChat } from '../_shared/openai_chat.ts';
 
 interface WebhookPayload {
   type: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -43,45 +44,35 @@ Deno.serve(async (req) => {
       throw new Error('No record data found');
     }
 
-    const jsonData = record.json;
+    const jsonData = record.json_ordered;
     if (!jsonData) {
-      throw new Error('No JSON data found in record');
-    }
-    const embeddingServiceUrl = `${supabaseUrl}/functions/v1/process_embedding`;
-    const response = await fetch(embeddingServiceUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: secretApiKey,
-      },
-      body: JSON.stringify(jsonData),
-    });
-    // console.log('response', response);
-
-    if (!response.ok) {
-      throw new Error(
-        `Process embedding service error:${JSON.stringify(
-          response.json(),
-        )} ${response.statusText} ${response.status}, embeddingServiceUrl: ${embeddingServiceUrl}, data: ${JSON.stringify(jsonData)}`,
-      );
+      throw new Error('No json_ordered data found in record');
     }
 
-    const { embedding, extracted_text } = await response.json();
+    const systemPrompt =
+      'Summarize the following LCA process dataset from JSON input. Include: purpose, main inputs, main outputs, technology, location, and quantitative details if available. Keep it concise, self-contained, under 500 tokens. Output only the summary text.';
+    const modelInput = `${systemPrompt}\nJSON:\n${JSON.stringify(jsonData)}`;
+
+    const { text } = await openaiChat(modelInput, { stream: false });
+    const summary = (text || '').trim();
+    if (!summary) throw new Error('Empty summary from model');
+
+    console.log(`${table} ${record.id} ${record.version} embedding ${type} request`);
 
     const { error: updateError } = await supabaseClient
       .from(table)
       .update({
-        embedding: embedding,
-        extracted_text: extracted_text,
+        extracted_text: summary,
         embedding_at: new Date().toISOString(),
       })
-      .eq('id', record.id);
-    console.log(`${table} ${record.id} embedding ${type} request`);
+      .eq('id', record.id)
+      .eq('version', record.version);
+    console.log(`${table} ${record.id} ${record.version} embedding ${type} request`);
 
     if (updateError) {
       throw updateError;
     }
-    console.log(`${table} ${record.id} embedding ${type} success`);
+    console.log(`${table} ${record.id} ${record.version} embedding ${type} success`);
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
