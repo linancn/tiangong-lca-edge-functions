@@ -49,6 +49,8 @@ Deno.serve(async (req) => {
       throw new Error('No json_ordered data found in record');
     }
 
+    console.log(`${table} ${record.id} ${record.version} summary ${type} request`);
+
     const systemPrompt =
       'Summarize the following LCA process dataset from JSON input. Include: purpose, main inputs, main outputs, technology, location, and quantitative details if available. Keep it concise, self-contained, under 500 tokens. Output only the summary text.';
     const modelInput = `${systemPrompt}\nJSON:\n${JSON.stringify(jsonData)}`;
@@ -56,8 +58,6 @@ Deno.serve(async (req) => {
     const { text } = await openaiChat(modelInput, { stream: false });
     const summary = (text || '').trim();
     if (!summary) throw new Error('Empty summary from model');
-
-    console.log(`${table} ${record.id} ${record.version} embedding ${type} request`);
 
     const { error: updateError } = await supabaseClient
       .from(table)
@@ -67,12 +67,11 @@ Deno.serve(async (req) => {
       })
       .eq('id', record.id)
       .eq('version', record.version);
-    console.log(`${table} ${record.id} ${record.version} embedding ${type} request`);
 
     if (updateError) {
       throw updateError;
     }
-    console.log(`${table} ${record.id} ${record.version} embedding ${type} success`);
+    console.log(`${table} ${record.id} ${record.version} summary ${type} success`);
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
