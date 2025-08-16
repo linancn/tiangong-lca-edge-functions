@@ -174,7 +174,8 @@ async function processJob(job: Job) {
     update
       ${sql(schema)}.${sql(table)}
     set
-      ${sql(embeddingColumn)} = ${JSON.stringify(embedding)}
+      ${sql(embeddingColumn)} = ${JSON.stringify(embedding)},
+      embedding_at = now()
     where
       id = ${id} and version = ${version}
   `;

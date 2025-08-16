@@ -63,7 +63,6 @@ Deno.serve(async (req) => {
       .from(table)
       .update({
         extracted_text: summary,
-        embedding_at: new Date().toISOString(),
       })
       .eq('id', record.id)
       .eq('version', record.version);
