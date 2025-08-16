@@ -17,10 +17,8 @@
     "@redis/client": "npm:/@redis/client",
     "@supabase/supabase-js@2": "jsr:@supabase/supabase-js@2",
     "@upstash/redis": "npm:/@upstash/redis",
-    "@tavily/core": "npm:/@tavily/core",
     "aws-jwt-verify": "npm:/aws-jwt-verify",
-    "duck-duck-scrape": "npm:/duck-duck-scrape",
-    "neo4j-driver": "https://deno.land/x/neo4j_driver_lite@5.27.0/mod.ts",
+    "postgres": "https://deno.land/x/postgresjs@v3.4.7/mod.js",
     "zod": "npm:/zod"
   }
 }

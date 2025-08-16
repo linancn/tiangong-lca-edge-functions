@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
 
   const model = new ChatOpenAI({
     model: openai_chat_model,
-    temperature: 0,
+    // temperature: 0,
     apiKey: openai_api_key,
   });
 
