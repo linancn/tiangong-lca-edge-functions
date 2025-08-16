@@ -14,9 +14,11 @@ const sql = postgres(
   Deno.env.get('SUPABASE_DB_URL')!,
 );
 
+// Job schema: now supports composite PK (id, version)
 const jobSchema = z.object({
   jobId: z.number(),
-  id: z.number(),
+  id: z.uuid(),
+  version: z.string(),
   schema: z.string(),
   table: z.string(),
   contentFunction: z.string(),
@@ -32,6 +34,7 @@ type FailedJob = z.infer<typeof failedJobSchema>;
 
 type Row = {
   id: string;
+  version: string;
   content: unknown;
 };
 
@@ -140,25 +143,26 @@ async function generateEmbedding(text: string) {
  * Processes an embedding job.
  */
 async function processJob(job: Job) {
-  const { jobId, id, schema, table, contentFunction, embeddingColumn } = job;
+  const { jobId, id, version, schema, table, contentFunction, embeddingColumn } = job;
 
   // Fetch content for the schema/table/row combination
   const [row]: [Row] = await sql`
     select
       id,
+      version,
       ${sql(contentFunction)}(t) as content
     from
       ${sql(schema)}.${sql(table)} t
     where
-      id = ${id}
+      id = ${id} and version = ${version}
   `;
 
   if (!row) {
-    throw new Error(`row not found: ${schema}.${table}/${id}`);
+    throw new Error(`row not found: ${schema}.${table}/${id}/${version}`);
   }
 
   if (typeof row.content !== 'string') {
-    throw new Error(`invalid content - expected string: ${schema}.${table}/${id}`);
+    throw new Error(`invalid content - expected string: ${schema}.${table}/${id}/${version}`);
   }
 
   const embedding = await generateEmbedding(row.content);
@@ -169,7 +173,7 @@ async function processJob(job: Job) {
     set
       ${sql(embeddingColumn)} = ${JSON.stringify(embedding)}
     where
-      id = ${id}
+      id = ${id} and version = ${version}
   `;
 
   await sql`
@@ -182,7 +186,9 @@ async function processJob(job: Job) {
  */
 function catchUnload() {
   return new Promise((reject) => {
-    addEventListener('beforeunload', (ev: any) => {
+    // Edge runtime beforeunload event detail isn't strongly typed; capture minimal shape
+    addEventListener('beforeunload', (ev: Event & { detail?: { reason?: string } }) => {
+      // Use optional chaining to avoid runtime errors if detail is absent
       reject(new Error(ev.detail?.reason));
     });
   });
