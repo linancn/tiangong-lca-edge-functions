@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
       throw new Error('No json_ordered data found in record');
     }
 
-    console.log(`${table} ${record.id} ${record.version} summary ${type} request`);
+    // console.log(`${table} ${record.id} ${record.version} summary ${type} request`);
 
     const systemPrompt =
       'Summarize the following LCA process dataset from JSON input. Include: purpose, main inputs, main outputs, technology, location, and quantitative details if available. Keep it concise, self-contained, under 500 tokens. Output only the summary text.';
@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     if (updateError) {
       throw updateError;
     }
-    console.log(`${table} ${record.id} ${record.version} summary ${type} success`);
+    console.log(summary);
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
