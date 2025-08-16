@@ -17,7 +17,7 @@ const sql = postgres(
 // Job schema: now supports composite PK (id, version)
 const jobSchema = z.object({
   jobId: z.number(),
-  id: z.uuid(),
+  id: z.string().uuid(),
   version: z.string(),
   schema: z.string(),
   table: z.string(),
@@ -145,6 +145,9 @@ async function generateEmbedding(text: string) {
 async function processJob(job: Job) {
   const { jobId, id, version, schema, table, contentFunction, embeddingColumn } = job;
 
+  // Log the id & version for traceability of each job
+  console.log('processing embedding job', { id, version, jobId, table: `${schema}.${table}` });
+
   // Fetch content for the schema/table/row combination
   const [row]: [Row] = await sql`
     select
@@ -179,6 +182,9 @@ async function processJob(job: Job) {
   await sql`
     select pgmq.delete(${QUEUE_NAME}, ${jobId}::bigint)
   `;
+
+  // Confirm completion for this id/version
+  console.log('finished embedding job', { id, version, jobId });
 }
 
 /**
