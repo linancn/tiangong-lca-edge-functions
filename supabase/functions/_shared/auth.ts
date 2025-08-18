@@ -109,17 +109,17 @@ export async function authenticateRequest(
   const authHeader = req.headers.get('Authorization');
   const apiKey = req.headers.get('apikey');
 
-  // 收集所有可能的认证结果
+  // Collect all possible authentication results
   const authResults: Array<{ method: AuthMethod; result: AuthResult | Promise<AuthResult> }> = [];
 
-  // 检查 Service API key
+  // Check Service API key
   if (allowedMethods.includes(AuthMethod.SERVICE_API_KEY) && apiKey) {
     console.log('Checking Service API key authentication');
     const result = authenticateServiceApiKey(apiKey, serviceApiKey);
     authResults.push({ method: AuthMethod.SERVICE_API_KEY, result });
   }
 
-  // 检查 User API key
+  // Check User API key
   if (allowedMethods.includes(AuthMethod.USER_API_KEY) && supabase && redis && authHeader) {
     console.log('Checking User API key authentication');
     const apiKeyValue = authHeader.replace('Bearer ', '');
@@ -127,7 +127,7 @@ export async function authenticateRequest(
     authResults.push({ method: AuthMethod.USER_API_KEY, result });
   }
 
-  // 检查 Supabase JWT
+  // Check Supabase JWT
   if (allowedMethods.includes(AuthMethod.JWT) && supabase && authHeader) {
     console.log('Checking Supabase JWT authentication');
     const token = authHeader.replace('Bearer ', '');
@@ -135,7 +135,7 @@ export async function authenticateRequest(
     authResults.push({ method: AuthMethod.JWT, result });
   }
 
-  // 如果没有找到任何认证方法，返回未授权
+  // If no authentication method is found, return unauthorized
   if (authResults.length === 0) {
     console.log('No valid authentication method found');
     return {
@@ -147,7 +147,7 @@ export async function authenticateRequest(
     };
   }
 
-  // 等待所有异步认证结果
+  // Await all asynchronous authentication results
   const resolvedResults = await Promise.all(
     authResults.map(async ({ method, result }) => ({
       method,
@@ -155,7 +155,7 @@ export async function authenticateRequest(
     })),
   );
 
-  // 统计认证成功和失败的方法
+  // Count successful and failed authentication methods
   const successfulAuths = resolvedResults.filter((r) => r.result.isAuthenticated);
   const failedAuths = resolvedResults.filter((r) => !r.result.isAuthenticated);
 
@@ -163,7 +163,7 @@ export async function authenticateRequest(
     `Authentication results: ${successfulAuths.length} successful, ${failedAuths.length} failed`,
   );
 
-  // 如果多个方法都成功，返回错误（最多只能有一种方法通过）
+  // If multiple methods succeed, return error (only one method is allowed)
   if (successfulAuths.length > 1) {
     console.log('Multiple authentication methods succeeded, which is not allowed');
     return {
@@ -175,14 +175,14 @@ export async function authenticateRequest(
     };
   }
 
-  // 如果只有一个方法成功，返回该结果
+  // If only one method succeeds, return that result
   if (successfulAuths.length === 1) {
     const { method, result } = successfulAuths[0];
     console.log(`Authentication successful with method: ${method}`);
     return result;
   }
 
-  // 如果所有方法都失败，返回第一个失败的结果
+  // If all methods fail, return the first failed result
   console.log('All authentication methods failed');
   return failedAuths[0].result;
 }
