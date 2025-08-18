@@ -62,10 +62,10 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // Authenticate the request by apikey
+  // Authenticate the request by JWT
   const authResult = await authenticateRequest(req, {
     supabase: supabaseClient,
-    allowedMethods: [AuthMethod.SERVICE_API_KEY],
+    allowedMethods: [AuthMethod.JWT],
     serviceApiKey: Deno.env.get('SERVICE_API_KEY') ?? '',
   });
 
