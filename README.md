@@ -58,21 +58,11 @@ curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/embedding
 ```bash
 npx supabase login
 
-npx supabase functions new hello
-
 npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
-npx supabase functions deploy embed --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-
 npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-
-npx supabase functions deploy flow_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-
 npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-
-npx supabase functions deploy process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-
 npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
 npx supabase functions deploy request_process_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
@@ -85,9 +75,9 @@ npx supabase functions deploy query_calculation_results --project-ref qgzvkongdj
 
 npx supabase functions deploy update_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
-npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts
-npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts
-npx supabase functions deploy change_email_cognito --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy change_email_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
 npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
