@@ -1,9 +1,10 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import '@supabase/functions-js/edge-runtime.d.ts';
 
-import { createClient } from '@supabase/supabase-js@2';
+import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { openaiChat } from '../_shared/openai_chat.ts';
+import { supabaseClient } from '../_shared/supabase_client.ts';
 
 interface WebhookPayload {
   type: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -14,22 +15,17 @@ interface WebhookPayload {
 }
 
 Deno.serve(async (req) => {
-  // if (req.method === 'OPTIONS') {
-  //   return new Response('ok', { headers: corsHeaders });
-  // }
+  const authResult = await authenticateRequest(req, {
+    supabase: supabaseClient,
+    allowedMethods: [AuthMethod.SERVICE_API_KEY],
+    serviceApiKey: Deno.env.get('SERVICE_API_KEY') ?? '',
+  });
 
-  // Get the session or user object
-  const secretApiKey = req.headers.get('apikey');
-
-  // If no Authorization header, return error immediately
-  if (!secretApiKey) {
-    return new Response('Unauthorized Request', { status: 401 });
+  if (!authResult.isAuthenticated) {
+    return authResult.response!;
   }
 
   try {
-    const supabaseUrl = Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseClient = createClient(supabaseUrl, secretApiKey);
-
     const payload: WebhookPayload = await req.json();
     const { type, table, record } = payload;
 
