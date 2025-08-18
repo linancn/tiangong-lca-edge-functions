@@ -1,8 +1,9 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import '@supabase/functions-js/edge-runtime.d.ts';
 
-import { createClient } from '@supabase/supabase-js@2';
+import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
+import { supabaseClient } from '../_shared/supabase_client.ts';
 
 const session = new Supabase.ai.Session('gte-small');
 
@@ -11,33 +12,16 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  // Get the session or user object
-  const authHeader = req.headers.get('Authorization');
-  const xKey = req.headers.get('x_key');
+  const authResult = await authenticateRequest(req, {
+    supabase: supabaseClient,
+    allowedMethods: [AuthMethod.JWT],
+  });
 
-  // If no authHeader and no xKey, return error
-  if (!authHeader && !xKey) {
-    return new Response('Unauthorized Request', { status: 401 });
+  if (!authResult.isAuthenticated) {
+    return authResult.response!;
   }
 
-  let user;
-  if (xKey == Deno.env.get('X_KEY')) {
-    // Allow user if xKey is present
-    user = { role: 'authenticated' };
-  } else {
-    const token = authHeader?.replace('Bearer ', '') ?? '';
-
-    const supabaseClient = createClient(
-      Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('REMOTE_SUPABASE_ANON_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-    );
-
-    const { data } = await supabaseClient.auth.getUser(token);
-    if (!data || !data.user) {
-      return new Response('User Not Found', { status: 404 });
-    }
-    user = data.user;
-  }
+  const user = authResult.user;
 
   if (user?.role !== 'authenticated') {
     return new Response('Forbidden', { status: 403 });

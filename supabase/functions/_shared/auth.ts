@@ -100,58 +100,91 @@ export async function authenticateRequest(
     serviceApiKey,
   } = config;
 
-  // Check for service API key first if it's an allowed method
-  if (allowedMethods.includes(AuthMethod.SERVICE_API_KEY)) {
-    console.log('Authenticating with Service API key');
-    const apiKey = req.headers.get('apikey');
-    if (apiKey) {
-      console.log('Service API key found');
-      const authResult = authenticateServiceApiKey(apiKey, serviceApiKey);
-      console.log('Service API key authentication result:', authResult);
-      return authResult;
-    }
-    console.log('No Service API key found');
-  }
-  const authHeader = req.headers.get('Authorization');
-
-  // Check for User API key
-  if (allowedMethods.includes(AuthMethod.USER_API_KEY) && supabase && redis) {
-    console.log('Authenticating with User API key');
-    if (authHeader) {
-      console.log('User API key found');
-      const apiKey = authHeader.replace('Bearer ', '');
-      const authResult = authenticateUserApiKey(apiKey, supabase, redis);
-      console.log('User API key authentication result:', authResult);
-      return authResult;
-    }
-    console.log('No User API key found');
-  }
-
-  // Check for Authorization header (Supabase JWT)
-  if (authHeader && allowedMethods.includes(AuthMethod.JWT) && supabase) {
-    console.log('Authenticating with Supabase JWT');
-    const token = authHeader.replace('Bearer ', '');
-    console.log('Supabase JWT token:', token);
-    const authResult = await authenticateSupabaseJWT(token, supabase);
-    console.log('Supabase JWT authentication result:', authResult);
-    return authResult;
-  }
-
   // If authentication is not required, return success
   if (!requireAuth) {
     console.log('Authentication is not required');
     return { isAuthenticated: true };
   }
 
-  console.log('No valid authentication method found');
-  // No valid authentication method found
-  return {
-    isAuthenticated: false,
-    response: new Response('Unauthorized Request', {
-      status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    }),
-  };
+  const authHeader = req.headers.get('Authorization');
+  const apiKey = req.headers.get('apikey');
+
+  // 收集所有可能的认证结果
+  const authResults: Array<{ method: AuthMethod; result: AuthResult | Promise<AuthResult> }> = [];
+
+  // 检查 Service API key
+  if (allowedMethods.includes(AuthMethod.SERVICE_API_KEY) && apiKey) {
+    console.log('Checking Service API key authentication');
+    const result = authenticateServiceApiKey(apiKey, serviceApiKey);
+    authResults.push({ method: AuthMethod.SERVICE_API_KEY, result });
+  }
+
+  // 检查 User API key
+  if (allowedMethods.includes(AuthMethod.USER_API_KEY) && supabase && redis && authHeader) {
+    console.log('Checking User API key authentication');
+    const apiKeyValue = authHeader.replace('Bearer ', '');
+    const result = authenticateUserApiKey(apiKeyValue, supabase, redis);
+    authResults.push({ method: AuthMethod.USER_API_KEY, result });
+  }
+
+  // 检查 Supabase JWT
+  if (allowedMethods.includes(AuthMethod.JWT) && supabase && authHeader) {
+    console.log('Checking Supabase JWT authentication');
+    const token = authHeader.replace('Bearer ', '');
+    const result = authenticateSupabaseJWT(token, supabase);
+    authResults.push({ method: AuthMethod.JWT, result });
+  }
+
+  // 如果没有找到任何认证方法，返回未授权
+  if (authResults.length === 0) {
+    console.log('No valid authentication method found');
+    return {
+      isAuthenticated: false,
+      response: new Response('Unauthorized Request', {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }),
+    };
+  }
+
+  // 等待所有异步认证结果
+  const resolvedResults = await Promise.all(
+    authResults.map(async ({ method, result }) => ({
+      method,
+      result: await result,
+    })),
+  );
+
+  // 统计认证成功和失败的方法
+  const successfulAuths = resolvedResults.filter((r) => r.result.isAuthenticated);
+  const failedAuths = resolvedResults.filter((r) => !r.result.isAuthenticated);
+
+  console.log(
+    `Authentication results: ${successfulAuths.length} successful, ${failedAuths.length} failed`,
+  );
+
+  // 如果多个方法都成功，返回错误（最多只能有一种方法通过）
+  if (successfulAuths.length > 1) {
+    console.log('Multiple authentication methods succeeded, which is not allowed');
+    return {
+      isAuthenticated: false,
+      response: new Response('Multiple authentication methods provided', {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }),
+    };
+  }
+
+  // 如果只有一个方法成功，返回该结果
+  if (successfulAuths.length === 1) {
+    const { method, result } = successfulAuths[0];
+    console.log(`Authentication successful with method: ${method}`);
+    return result;
+  }
+
+  // 如果所有方法都失败，返回第一个失败的结果
+  console.log('All authentication methods failed');
+  return failedAuths[0].result;
 }
 
 /**

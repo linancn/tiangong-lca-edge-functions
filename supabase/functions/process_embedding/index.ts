@@ -1,6 +1,8 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
+import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { openaiChat } from '../_shared/openai_chat.ts';
+import { supabaseClient } from '../_shared/supabase_client.ts';
 
 // 1) summarize input JSON, 2) embed the summary.
 const session = new Supabase.ai.Session('gte-small');
@@ -10,16 +12,17 @@ Deno.serve(async (req) => {
   //   return new Response('ok', { headers: corsHeaders });
   // }
 
-  const secretApiKey = req.headers.get('apikey');
-  if (!secretApiKey) {
-    return new Response('Unauthorized Request', { status: 401 });
+  const authResult = await authenticateRequest(req, {
+    supabase: supabaseClient,
+    allowedMethods: [AuthMethod.SERVICE_API_KEY],
+    serviceApiKey: Deno.env.get('DEFAULT_SECRET_API_KEY'),
+  });
+
+  if (!authResult.isAuthenticated) {
+    return authResult.response!;
   }
 
   try {
-    if (secretApiKey !== Deno.env.get('DEFAULT_SECRET_API_KEY')) {
-      return new Response('Unauthorized Request', { status: 401 });
-    }
-
     let input = await req.json();
     if (typeof input === 'string') {
       input = JSON.parse(input);

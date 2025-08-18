@@ -1,7 +1,9 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import '@supabase/functions-js/edge-runtime.d.ts';
 
+import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
+import { supabaseClient } from '../_shared/supabase_client.ts';
 
 interface Name {
   baseName?: string;
@@ -307,18 +309,17 @@ Deno.serve(async (req) => {
   //   return new Response('ok', { headers: corsHeaders });
   // }
 
-  // const authHeader = req.headers.get('Authorization');
-  const secretApiKey = req.headers.get('apikey');
+  const authResult = await authenticateRequest(req, {
+    supabase: supabaseClient,
+    allowedMethods: [AuthMethod.SERVICE_API_KEY],
+    serviceApiKey: Deno.env.get('DEFAULT_SECRET_API_KEY'),
+  });
 
-  if (!secretApiKey) {
-    return new Response('Unauthorized Request', { status: 401 });
+  if (!authResult.isAuthenticated) {
+    return authResult.response!;
   }
 
   try {
-    if (secretApiKey !== Deno.env.get('DEFAULT_SECRET_API_KEY')) {
-      return new Response('Unauthorized Request', { status: 401 });
-    }
-
     let requestData = await req.json();
     if (typeof requestData === 'string') {
       requestData = JSON.parse(requestData);
