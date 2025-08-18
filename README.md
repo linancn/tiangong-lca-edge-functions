@@ -58,6 +58,9 @@ curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/embedding
 ```bash
 npx supabase login
 
+npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
+
+
 npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
@@ -78,6 +81,4 @@ npx supabase functions deploy update_data --project-ref qgzvkongdjqiiamzbbts --n
 npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy change_email_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-
-npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
