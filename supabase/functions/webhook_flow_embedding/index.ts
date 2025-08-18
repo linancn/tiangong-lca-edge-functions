@@ -1,10 +1,10 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import '@supabase/functions-js/edge-runtime.d.ts';
 
-import { createClient } from '@supabase/supabase-js@2';
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { openaiChat } from '../_shared/openai_chat.ts';
+import { supabaseClient } from '../_shared/supabase_client.ts';
 
 interface WebhookPayload {
   type: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -13,11 +13,6 @@ interface WebhookPayload {
   record: Record<string, unknown> | null;
   old_record: Record<string, unknown> | null;
 }
-
-const supabaseClient = createClient(
-  Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '',
-  Deno.env.get('REMOTE_SUPABASE_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ?? '',
-);
 
 Deno.serve(async (req) => {
   // Authenticate the request by apikey
