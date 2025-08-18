@@ -60,10 +60,10 @@ npx supabase login
 
 npx supabase functions new hello
 
-npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts
-npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
-npx supabase functions deploy embed --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy embed --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
 npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
