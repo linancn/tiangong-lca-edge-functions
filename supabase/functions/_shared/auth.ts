@@ -4,7 +4,7 @@ import { corsHeaders } from './cors.ts';
 import decodeApiKey from './decode_api_key.ts';
 
 export interface AuthedUser {
-  userId?: string;
+  id?: string;
   email?: string;
 }
 
@@ -90,32 +90,47 @@ export async function authenticateRequest(
 
   // Check for service API key first if it's an allowed method
   if (allowedMethods.includes(AuthMethod.SERVICE_API_KEY)) {
+    console.log('Authenticating with Service API key');
     const apiKey = req.headers.get('apikey');
     if (apiKey) {
-      return authenticateServiceApiKey(apiKey, serviceApiKey);
+      console.log('Service API key found');
+      const authResult = authenticateServiceApiKey(apiKey, serviceApiKey);
+      console.log('Service API key authentication result:', authResult);
+      return authResult;
     }
+    console.log('No Service API key found');
   }
   const authHeader = req.headers.get('Authorization');
 
   // Check for User API key
   if (allowedMethods.includes(AuthMethod.USER_API_KEY) && supabase && redis) {
+    console.log('Authenticating with User API key');
     if (authHeader) {
+      console.log('User API key found');
       const apiKey = authHeader.replace('Bearer ', '');
-      return authenticateUserApiKey(apiKey, supabase, redis);
+      const authResult = authenticateUserApiKey(apiKey, supabase, redis);
+      console.log('User API key authentication result:', authResult);
+      return authResult;
     }
+    console.log('No User API key found');
   }
 
   // Check for Authorization header (Supabase JWT)
   if (authHeader && allowedMethods.includes(AuthMethod.JWT) && supabase) {
+    console.log('Authenticating with Supabase JWT');
     const token = authHeader.replace('Bearer ', '');
-    return await authenticateSupabaseJWT(token, supabase);
+    const authResult = await authenticateSupabaseJWT(token, supabase);
+    console.log('Supabase JWT authentication result:', authResult);
+    return authResult;
   }
 
   // If authentication is not required, return success
   if (!requireAuth) {
+    console.log('Authentication is not required');
     return { isAuthenticated: true };
   }
 
+  console.log('No valid authentication method found');
   // No valid authentication method found
   return {
     isAuthenticated: false,
@@ -161,7 +176,7 @@ async function authenticateSupabaseJWT(
   return {
     isAuthenticated: true,
     user: {
-      userId: authData.user.id,
+      id: authData.user.id,
       email: authData.user.email,
     },
   };
@@ -198,7 +213,7 @@ async function authenticateUserApiKey(
     return {
       isAuthenticated: true,
       user: {
-        userId: String(cachedUserId),
+        id: String(cachedUserId),
         email: email,
       },
     };
@@ -235,7 +250,7 @@ async function authenticateUserApiKey(
   return {
     isAuthenticated: true,
     user: {
-      userId: data.user.id,
+      id: data.user.id,
       email: data.user.email,
     },
   };
@@ -272,7 +287,7 @@ function authenticateServiceApiKey(providedKey: string, expectedKey?: string): A
     isAuthenticated: true,
     // Service requests don't have a specific user
     user: {
-      userId: 'service',
+      id: 'service',
     },
   };
 }
