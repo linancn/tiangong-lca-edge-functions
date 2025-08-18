@@ -1,11 +1,23 @@
+import type { User, UserAppMetadata, UserMetadata } from '@supabase/supabase-js@2';
 import { SupabaseClient } from '@supabase/supabase-js@2';
 import { Redis } from '@upstash/redis';
 import { corsHeaders } from './cors.ts';
 import decodeApiKey from './decode_api_key.ts';
 
-export interface AuthedUser {
-  id?: string;
-  email?: string;
+const _defaultAppMetadata: UserAppMetadata = {
+  provider: '',
+};
+
+const _defaultUserMetadata: UserMetadata = {
+  provider: '',
+};
+
+const _defaultAud = '';
+
+const _defaultCreatedAt = '';
+
+export interface AuthedUser extends User {
+  role?: string;
 }
 
 /**
@@ -13,7 +25,7 @@ export interface AuthedUser {
  */
 export interface AuthResult {
   isAuthenticated: boolean;
-  user?: AuthedUser;
+  user?: User | AuthedUser;
   response?: Response;
 }
 
@@ -175,10 +187,7 @@ async function authenticateSupabaseJWT(
 
   return {
     isAuthenticated: true,
-    user: {
-      id: authData.user.id,
-      email: authData.user.email,
-    },
+    user: authData.user,
   };
 }
 
@@ -215,6 +224,10 @@ async function authenticateUserApiKey(
       user: {
         id: String(cachedUserId),
         email: email,
+        app_metadata: _defaultAppMetadata,
+        user_metadata: _defaultUserMetadata,
+        aud: _defaultAud,
+        created_at: _defaultCreatedAt,
       },
     };
   }
@@ -252,6 +265,10 @@ async function authenticateUserApiKey(
     user: {
       id: data.user.id,
       email: data.user.email,
+      app_metadata: _defaultAppMetadata,
+      user_metadata: _defaultUserMetadata,
+      aud: _defaultAud,
+      created_at: _defaultCreatedAt,
     },
   };
 }
@@ -288,6 +305,11 @@ function authenticateServiceApiKey(providedKey: string, expectedKey?: string): A
     // Service requests don't have a specific user
     user: {
       id: 'service',
+      role: 'service',
+      app_metadata: _defaultAppMetadata,
+      user_metadata: _defaultUserMetadata,
+      aud: _defaultAud,
+      created_at: _defaultCreatedAt,
     },
   };
 }
