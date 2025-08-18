@@ -131,6 +131,7 @@ export async function authenticateRequest(
   if (authHeader && allowedMethods.includes(AuthMethod.JWT) && supabase) {
     console.log('Authenticating with Supabase JWT');
     const token = authHeader.replace('Bearer ', '');
+    console.log('Supabase JWT token:', token);
     const authResult = await authenticateSupabaseJWT(token, supabase);
     console.log('Supabase JWT authentication result:', authResult);
     return authResult;
@@ -164,12 +165,13 @@ async function authenticateSupabaseJWT(
   supabase: SupabaseClient,
 ): Promise<AuthResult> {
   const { data: authData } = await supabase.auth.getUser(token);
+  console.log('Supabase JWT authentication result:', authData);
 
   if (!authData?.user) {
     return {
       isAuthenticated: false,
       response: new Response('User Not Found', {
-        status: 404,
+        status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }),
     };
