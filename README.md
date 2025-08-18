@@ -75,14 +75,15 @@ npx supabase functions deploy process_embedding --project-ref qgzvkongdjqiiamzbb
 
 npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
-npx supabase functions deploy request_process_data --project-ref qgzvkongdjqiiamzbbts
-npx supabase functions deploy sign_request --project-ref qgzvkongdjqiiamzbbts
-npx supabase functions deploy run_antchain_calculation --project-ref qgzvkongdjqiiamzbbts
-npx supabase functions deploy get_local_ip --project-ref qgzvkongdjqiiamzbbts
-npx supabase functions deploy create_calculation --project-ref qgzvkongdjqiiamzbbts
-npx supabase functions deploy query_calculation_status --project-ref qgzvkongdjqiiamzbbts
-npx supabase functions deploy query_calculation_results --project-ref qgzvkongdjqiiamzbbts
-npx supabase functions deploy update_data_v2 --project-ref qgzvkongdjqiiamzbbts
+npx supabase functions deploy request_process_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy sign_request --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy run_antchain_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy get_local_ip --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy create_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy query_calculation_status --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy query_calculation_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+
+npx supabase functions deploy update_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
 npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts
 npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts
