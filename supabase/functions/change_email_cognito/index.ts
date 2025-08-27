@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
   const authResult = await authenticateRequest(req, {
     supabase: supabaseClient,
     allowedMethods: [AuthMethod.JWT],
-    serviceApiKey: Deno.env.get('SERVICE_API_KEY') ?? '',
+    serviceApiKey: Deno.env.get('REMOTE_SERVICE_API_KEY') ?? Deno.env.get('SERVICE_API_KEY') ?? '',
   });
 
   if (!authResult.isAuthenticated) {
