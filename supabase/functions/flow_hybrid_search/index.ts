@@ -3,7 +3,6 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { ChatOpenAI } from '@langchain/openai';
 import { Redis } from '@upstash/redis';
-// import { authenticateRequest } from '../_shared/auth_middleware.ts';
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseClient as supabase } from '../_shared/supabase_client.ts';
