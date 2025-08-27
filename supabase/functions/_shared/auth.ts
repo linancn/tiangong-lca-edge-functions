@@ -1,6 +1,7 @@
 import type { User, UserAppMetadata, UserMetadata } from '@supabase/supabase-js@2';
 import { SupabaseClient } from '@supabase/supabase-js@2';
 import { Redis } from '@upstash/redis';
+import { authenticateCognitoToken } from './cognito_auth.ts';
 import { corsHeaders } from './cors.ts';
 import decodeApiKey from './decode_api_key.ts';
 
@@ -188,6 +189,28 @@ export async function authenticateRequest(
 }
 
 /**
+ * Determine if a bearer token is from Cognito or Supabase
+ * @param bearerKey - The bearer token to analyze
+ * @returns Token type: 'cognito' or 'supabase'
+ */
+function getTokenType(bearerKey: string): 'cognito' | 'supabase' {
+  const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
+  if (jwtPattern.test(bearerKey)) {
+    try {
+      const payload = JSON.parse(atob(bearerKey.split('.')[1]));
+      if (payload.iss && payload.iss.includes('cognito')) {
+        return 'cognito';
+      }
+    } catch (_error) {
+      // If parsing fails, we assume it's not a Cognito token
+      return 'supabase';
+    }
+  }
+  return 'supabase';
+}
+
+/**
  * Authenticate using Supabase JWT token, used in TianGong LCA Web App. JWT token in the Authorization header, after `Bearer ` prefix.
  * @param token - The JWT token
  * @param supabase - The Supabase client, created with `Publishable key`
@@ -197,6 +220,11 @@ async function authenticateSupabaseJWT(
   token: string,
   supabase: SupabaseClient,
 ): Promise<AuthResult> {
+  if (getTokenType(token) === 'cognito') {
+    console.log('Detected Cognito token, delegating to Cognito authentication');
+    return await authenticateCognitoToken(token);
+  }
+
   const { data: authData } = await supabase.auth.getUser(token);
   console.log('Supabase JWT authentication result:', authData);
 
