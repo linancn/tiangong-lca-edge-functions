@@ -9,7 +9,6 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/embed' \
 
 ### @name Embed：Remote
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/embed' \
-    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
     --header 'Content-Type: application/json' \
     --header 'x_key: {{$dotenv X_KEY}}' \
     --data '{"query": "二氧化碳排放"}'
@@ -17,14 +16,12 @@ curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/embed' \
 
 ### @name Flow_Embedding：Remote
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/flow_embedding' \
-    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
     --header 'Content-Type: application/json' \
     --header 'x_key: {{$dotenv X_KEY}}' \
     --data '{"flowDataSet":{"@xmlns":"http://lca.jrc.it/ILCD/Flow","@version":"1.1","@locations":"../ILCDLocations.xml","@xmlns:ecn":"http://eplca.jrc.ec.europa.eu/ILCD/Extensions/2018/ECNumber","@xmlns:xsi":"http://www.w3.org/2001/XMLSchema-instance","@xmlns:common":"http://lca.jrc.it/ILCD/Common","flowInformation":{"geography":{},"dataSetInformation":{"name":{"baseName":{"#text":"测试流","@xml:lang":"zh"},"treatmentStandardsRoutes":[{"#text":"test","@xml:lang":"en"},{"#text":"c","@xml:lang":"zh"}]},"common:UUID":"53ab88e6-c50d-422e-a457-cfbb1d53e3d4","common:other":{},"classificationInformation":{"common:elementaryFlowCategorization":{"common:category":{"@catId":"","@level":"0"}}}}},"@xsi:schemaLocation":"http://lca.jrc.it/ILCD/Flow ../../schemas/ILCD_FlowDataSet.xsd","modellingAndValidation":{"LCIMethod":{},"complianceDeclarations":{"compliance":{"common:referenceToComplianceSystem":{}}}},"administrativeInformation":{"dataEntryBy":{"common:timeStamp":"2025-01-02T13:50:53+08:00","common:referenceToDataSetFormat":{},"common:referenceToPersonOrEntityEnteringTheData":{}},"publicationAndOwnership":{"common:dataSetVersion":"01.01.000","common:referenceToOwnershipOfDataSet":{}}}}}'
 
 ### @name Flow_Embedding：Local
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_embedding' \
-    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
     --header 'Content-Type: application/json' \
     --header 'x_key: {{$dotenv X_KEY}}' \
     --data '{"flowDataSet":{"@xmlns":"http://lca.jrc.it/ILCD/Flow","@version":"1.1","@locations":"../ILCDLocations.xml","@xmlns:ecn":"http://eplca.jrc.ec.europa.eu/ILCD/Extensions/2018/ECNumber","@xmlns:xsi":"http://www.w3.org/2001/XMLSchema-instance","@xmlns:common":"http://lca.jrc.it/ILCD/Common","flowInformation":{"geography":{},"dataSetInformation":{"name":{"baseName":{"#text":"测试流","@xml:lang":"zh"},"treatmentStandardsRoutes":[{"#text":"test","@xml:lang":"en"},{"#text":"c","@xml:lang":"zh"}]},"common:UUID":"53ab88e6-c50d-422e-a457-cfbb1d53e3d4","common:other":{},"classificationInformation":{"common:elementaryFlowCategorization":{"common:category":{"@catId":"","@level":"0"}}}}},"@xsi:schemaLocation":"http://lca.jrc.it/ILCD/Flow ../../schemas/ILCD_FlowDataSet.xsd","modellingAndValidation":{"LCIMethod":{},"complianceDeclarations":{"compliance":{"common:referenceToComplianceSystem":{}}}},"administrativeInformation":{"dataEntryBy":{"common:timeStamp":"2025-01-02T13:50:53+08:00","common:referenceToDataSetFormat":{},"common:referenceToPersonOrEntityEnteringTheData":{}},"publicationAndOwnership":{"common:dataSetVersion":"01.01.000","common:referenceToOwnershipOfDataSet":{}}}}}'
@@ -32,7 +29,6 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_embedding' \
 
 ### @name Process_Embedding：Local
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_embedding' \
-    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
     --header 'Content-Type: application/json' \
     --header 'x_key: {{$dotenv X_KEY}}' \
     --data ''
@@ -40,14 +36,12 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_embedding'
 
 ### @name Process_Embedding：Remote
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/process_embedding' \
-    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
     --header 'Content-Type: application/json' \
     --header 'x_key: {{$dotenv X_KEY}}' \
     --data ''
 
 ### @name Process_Summary_Embedding：Local
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_summary_embedding' \
-    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
     --header 'Content-Type: application/json' \
     --header 'apikey: {{$dotenv SECRET_VALUE}}' \
     --data ''
@@ -56,7 +50,6 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_summary_em
 ### @name Flow_Hybrid_Search：Remote
 
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/flow_hybrid_search' \
-    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
     --header 'Content-Type: application/json' \
     --header 'x-region: {{$dotenv X_REGION}}' \
     --header 'x-api-key: {{$dotenv X_API_KEY}}' \
@@ -72,7 +65,6 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search
 ### @name Process_Hybrid_Search：Remote
 
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/process_hybrid_search' \
-    --header 'Authorization: Bearer {{$dotenv REMOTE_BEARER_TOKEN}}' \
     --header 'Content-Type: application/json' \
     --header 'x-region: {{$dotenv X_REGION}}' \
     --header 'x-api-key: {{$dotenv X_API_KEY}}' \
