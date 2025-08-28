@@ -13,7 +13,7 @@ curl -fsSL https://deno.land/install.sh | sh -s v2.1.4
 # Install dependencies (first run)
 npm install
 
-# Run npm update && npm ci to update dependencies again after executing deno cache in VSCode.
+# Update dependencies
 npm update && npm ci
 
 npm start
