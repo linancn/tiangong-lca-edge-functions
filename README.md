@@ -68,6 +68,7 @@ npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiia
 npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy webhook_model_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
 npx supabase functions deploy request_process_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy sign_request --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
