@@ -61,26 +61,33 @@ npx supabase login
 
 npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 
-
+## Search Functions
 npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
+## Embedding Functions
 npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy webhook_model_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
-npx supabase functions deploy request_process_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy sign_request --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy run_antchain_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy get_local_ip --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy create_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy query_calculation_status --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy query_calculation_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+## Antchain Related Functions (Not yet used)
+# npx supabase functions deploy antchain_request_process_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_sign_request --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_run_antchain_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_get_local_ip --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_create_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_query_calculation_status --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_query_calculation_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
+## Data Operation Functions
 npx supabase functions deploy update_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
+## Cognito Functions
 npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy change_email_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+
+## Langgraph AI Related Functions
+npx supabase functions deploy ai_suggest --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
