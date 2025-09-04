@@ -9,3 +9,22 @@ export const langgraphClient = new Client({
   apiUrl: Deno.env.get('LANGGRAPH_API_URL') ?? '',
   apiKey: Deno.env.get('LANGGRAPH_API_KEY') ?? '',
 });
+
+
+export interface Assistant {
+  assistant_id: string;
+  graph_id: string;
+  created_at: string;
+  updated_at: string;
+  config: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  version: number;
+  name: string;
+  description: string | null;
+  context: Record<string, unknown>;
+}
+
+export async function listAssistants(): Promise<Assistant[]> {
+  const assistants = await langgraphClient.assistants.search() as Assistant[];
+  return assistants;
+}

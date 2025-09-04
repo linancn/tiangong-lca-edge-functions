@@ -77,8 +77,8 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_hybrid_sea
     --data '{"query": "硅酸盐水泥"}'
 
 
-### @name AI_Suggest：Local
-curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/ai_suggest' \
+### @name AI_Suggest：Remote
+curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/ai_suggest' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
     --data '{
@@ -127,3 +127,4 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/ai_suggest' \
   "dataType": "process",
   "options": {}
 }'
+
