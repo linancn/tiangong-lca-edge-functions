@@ -17,6 +17,7 @@
     "@upstash/redis": "npm:/@upstash/redis",
     "aws-jwt-verify": "npm:/aws-jwt-verify",
     "postgres": "https://deno.land/x/postgresjs@v3.4.7/mod.js",
-    "zod": "npm:/zod@3.25.76"
+    "zod": "npm:/zod@3.25.76",
+    "@tiangong-lca/tidas-sdk": "npm:@tiangong-lca/tidas-sdk@0.1.14"
   }
 }
