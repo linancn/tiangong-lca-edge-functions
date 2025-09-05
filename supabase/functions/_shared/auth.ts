@@ -1,9 +1,10 @@
 import type { User, UserAppMetadata, UserMetadata } from '@supabase/supabase-js@2';
 import { SupabaseClient } from '@supabase/supabase-js@2';
-import { Redis } from '@upstash/redis';
+// import { Redis } from '@upstash/redis';
 import { authenticateCognitoToken } from './cognito_auth.ts';
 import { corsHeaders } from './cors.ts';
 import decodeApiKey from './decode_api_key.ts';
+import { redisGet, redisSet, type RedisClient }from './redis_client.ts';
 
 const _defaultAppMetadata: UserAppMetadata = {
   provider: '',
@@ -37,7 +38,7 @@ export interface AuthConfig {
   /** Supabase client instance */
   supabase?: SupabaseClient;
   /** Redis client instance for caching */
-  redis?: Redis;
+  redis?: RedisClient;
   /** Whether to require authentication (default: true) */
   requireAuth?: boolean;
   /** Allowed authentication methods */
@@ -264,7 +265,7 @@ async function authenticateSupabaseJWT(
 async function authenticateUserApiKey(
   apiKey: string,
   supabase: SupabaseClient,
-  redis: Redis,
+  redis: RedisClient,
 ): Promise<AuthResult> {
   const credentials = decodeApiKey(apiKey);
   if (!credentials) {
@@ -279,7 +280,7 @@ async function authenticateUserApiKey(
 
   const { email = '', password = '' } = credentials;
   const cacheKey = `lca_${email}`;
-  const cachedUserId = await redis.get(cacheKey);
+  const cachedUserId = await redisGet(redis, cacheKey);
 
   if (cachedUserId) {
     return {
@@ -321,7 +322,8 @@ async function authenticateUserApiKey(
   }
 
   // Cache the user ID for 1 hour
-  await redis.setex(cacheKey, 3600, data.user.id);
+  // await redis.setex(cacheKey, 3600, data.user.id);
+  await redisSet(redis, cacheKey, data.user.id, { ex: 3600 });
 
   return {
     isAuthenticated: true,
