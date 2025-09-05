@@ -2,26 +2,19 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { ChatOpenAI } from '@langchain/openai';
-import { Redis } from '@upstash/redis';
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { supabaseClient as supabase } from '../_shared/supabase_client.ts';
-
+import { getRedisClient } from '../_shared/redis_client.ts';
 const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? '';
 
-const redis_url = Deno.env.get('UPSTASH_REDIS_URL') ?? '';
-const redis_token = Deno.env.get('UPSTASH_REDIS_TOKEN') ?? '';
-
-const redis = new Redis({
-  url: redis_url,
-  token: redis_token,
-});
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+  const redis = await getRedisClient();
 
   const authResult = await authenticateRequest(req, {
     supabase: supabase,
