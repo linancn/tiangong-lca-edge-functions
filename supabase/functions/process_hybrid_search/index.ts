@@ -30,6 +30,8 @@ Deno.serve(async (req) => {
     return authResult.response!;
   }
 
+  console.log('Auth Success:', authResult);
+
   const { query, filter } = await req.json();
 
   if (!query) {
@@ -99,15 +101,20 @@ Task: Transform description of processes into three specific queries: SemanticQu
     mean_pool: true,
     normalize: true,
   })) as number[];
-  const vectorStr = `[${vectors.toString()}]`;
+  const vectorStr = `[${vectors.join(',')}]`;
+
+  const filterCondition = filter !== undefined 
+    ? (typeof filter === 'string' ? filter : JSON.stringify(filter))
+    : {};
 
   const { data, error } = await supabase.rpc('hybrid_search_processes', {
     query_text: queryFulltextString,
     query_embedding: vectorStr,
-    ...(filter !== undefined ? { filter_condition: filter } : {}),
+    filter_condition: filterCondition,
   });
 
   if (error) {
+    console.error('Hybrid search error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { 'Content-Type': 'application/json' },
       status: 500,
