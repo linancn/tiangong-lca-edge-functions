@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
   console.log("AI Suggest Edge Function cost: ", time_cost, "ms");
 
   return new Response(JSON.stringify(result), {
-    headers: { "Content-Type": "application/json" },
+    headers: {...corsHeaders, "Content-Type": "application/json" },
     status: 200,
   });
 });
