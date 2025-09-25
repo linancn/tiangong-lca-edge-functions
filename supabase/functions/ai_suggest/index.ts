@@ -1,18 +1,9 @@
 import "@supabase/functions-js/edge-runtime.d.ts";
-
-import { Redis } from "@upstash/redis";
 import { authenticateRequest, AuthMethod } from "../_shared/auth.ts";
 import { corsHeaders } from "../_shared/cors.ts";
 import { supabaseClient as supabase } from "../_shared/supabase_client.ts";
 import { langgraphClient, listAssistants } from "../_shared/langgraph_client.ts";
-
-const redis_url = Deno.env.get("UPSTASH_REDIS_URL") ?? "";
-const redis_token = Deno.env.get("UPSTASH_REDIS_TOKEN") ?? "";
-
-const redis = new Redis({
-  url: redis_url,
-  token: redis_token,
-});
+import { getRedisClient } from "../_shared/redis_client.ts";
 
 
 async function suggestData(
@@ -60,6 +51,8 @@ Deno.serve(async (req) => {
   }
   const time_start = Date.now();
 
+  const redis = await getRedisClient();
+  
   const authResult = await authenticateRequest(req, {
     supabase: supabase,
     redis: redis,
@@ -90,7 +83,7 @@ Deno.serve(async (req) => {
   console.log("AI Suggest Edge Function cost: ", time_cost, "ms");
 
   return new Response(JSON.stringify(result), {
-    headers: { "Content-Type": "application/json" },
+    headers: {...corsHeaders, "Content-Type": "application/json" },
     status: 200,
   });
 });
