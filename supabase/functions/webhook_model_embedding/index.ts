@@ -48,7 +48,19 @@ Deno.serve(async (req) => {
     // console.log(`${table} ${record.id} ${record.version} summary ${type} request`);
 
     const systemPrompt =
-      'From the given life cycle assessment ILCD Life Cycle Model JSON, write one continuous paragraph (<500 tokens) suitable for embedding and retrieval. Integrate, in this order and only if explicitly available: name (use name.baseName; append process/route qualifiers from name.treatmentStandardsRoutes; append production-state qualifiers from name.mixAndLocationTypes as non-geographic tags), classification (highest→lowest, in one sentence), reference time (representative year if present; otherwise omit—do not infer; do not use dataset timestamps as representativeness), location (use original location code(s) exactly as given; derive from referenced processes geography if the model has none; if multiple, state “multiple” and keep codes verbatim; never treat mixAndLocationTypes as geography), technology description (summarize included unit processes and operation flow by synthesizing common:generalComment and each referenced process common:shortDescription, deduplicated), LCI method principle (e.g., Attributional/Consequential, only if stated), LCI method approaches (state dataset type such as Partly/Non-terminated system, cut-off/completeness rules, and main data sources/DB versions, only if stated; if available only in referenced processes, say the model follows the referenced processes practice), intended applications (if explicitly provided). Preserve all codes or IDs verbatim, exclude all URIs or schema references, and never invent values. If an element is missing, omit it entirely without placeholder text. Output only one continuous English paragraph, ending with the dataset UUID in parentheses.';
+      `
+From the given life cycle assessment ILCD Life Cycle Model JSON, write one continuous English paragraph (<500 tokens) suitable for embedding and retrieval. The paragraph must strictly follow the natural language template below. Fill in values only if explicitly available. Do not add, remove, or reorder sentences. If a field has no value, omit the entire sentence where it belongs, not just the placeholder. 
+Always output in English only. Omit or translate non-English names. For technology and included processes, write concise natural sentences, do not mechanically list all referenced processes. Summarize supporting processes by category (utilities, water, energy, treatment) instead of enumerating all. If LCI method information is incomplete, output only what is explicitly given, but note that additional details are not stated.
+
+Template:
+<name.baseName [plus any qualifiers from name.treatmentStandardsRoutes and name.mixAndLocationTypes, joined with commas as non-geographic tags]> is classified under <classification path highest→lowest>. The reference time is <representative year>. The location is <location code(s) exactly as given; if multiple, state “multiple” and keep codes verbatim>. The technology and included processes are <summary of included unit processes and operation flow synthesized from common:generalComment and referenced process common:shortDescription, deduplicated>. The LCI method principle is <LCIMethodPrinciple, e.g. Attributional/Consequential>. The LCI method approaches are <dataset type such as Partly/Non-terminated system, cut-off/completeness rules, and main data sources/DB versions, or note that the model follows the referenced processes practice>. Its intended applications are <explicit intended application if provided>. (<UUID>)
+
+Additional rules:
+Preserve any codes or IDs verbatim.
+Exclude all URIs or schema references.
+Never treat mixAndLocationTypes as geography.
+Do not infer or invent values.
+`;
     const modelInput = `${systemPrompt}\nJSON:\n${JSON.stringify(jsonData)}`;
 
     const { text } = await openaiChat(modelInput, { stream: false });

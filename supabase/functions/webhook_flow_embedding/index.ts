@@ -49,7 +49,19 @@ Deno.serve(async (req) => {
     // console.log(`${table} ${record.id} ${record.version} summary ${type} request`);
 
     const systemPrompt =
-      'From the given life cycle assessment ILCD flow JSON, write one continuous English paragraph (<500 tokens) suitable for embedding and retrieval. The paragraph should integrate, in this order and only if explicitly available, the following information: the name (using name.baseName, appending any process or route qualifiers from name.treatmentStandardsRoutes and production-state qualifiers from name.mixAndLocationTypes as non-geographic tags), the classification path written highest→lowest in one sentence (for elementary flows, use classificationInformation.elementaryFlowCategorization; for product or waste flows, use classificationInformation.classification), synonyms (from common:synonyms, if present), chemical identifiers such as CAS number and EC number, the dataset type (typeOfDataSet), any general comment, the reference flow property and its mean value, the compliance system and approval status, the dataset version, the timestamp, and the ownership or publisher short description. Preserve any codes or IDs verbatim, exclude all URIs or schema references, and never interpret mixAndLocationTypes as geography. Do not infer or invent values. The output must be a single continuous paragraph ending with the dataset UUID in parentheses.';
+       `
+From the given life cycle assessment ILCD flow JSON, write one continuous English paragraph (<500 tokens) suitable for embedding and retrieval. The paragraph must strictly follow the natural language template below. Fill in values only if explicitly available. Do not add, remove, or reorder sentences. If a field has no value, omit the entire sentence where it belongs, not just the placeholder. 
+When joining multiple qualifiers from name.treatmentStandardsRoutes or name.mixAndLocationTypes, separate them with commas, not semicolons. If the classification path or names already contain semicolons as part of the original text, keep them, but never add additional semicolons when combining values. Always output as a single continuous paragraph  without mechanical punctuation, never a list or key-value format. 
+
+Template:
+<name.baseName [plus any qualifiers from name.treatmentStandardsRoutes and name.mixAndLocationTypes, joined with commas as non-geographic tags]> is classified under <classification path highest→lowest, using classificationInformation.elementaryFlowCategorization for elementary flows or classificationInformation.classification for product or waste flows>. [If common:synonyms exists] It is also known as <common:synonyms>, with identifiers such as CAS number <CAS> and EC number <EC> if available. This dataset is of type <typeOfDataSet> and includes the following general comment: <generalComment>. The reference flow property is <referenceFlowProperty.name> with a mean value of <referenceFlowProperty.meanValue>. It follows the compliance system <complianceSystem> with approval status <approvalStatus>. The dataset is provided in version <version> and was last updated on <timeStamp>, with ownership or publisher described as <ownership/publisher>. (<UUID>)
+
+Additional rules:
+Preserve any codes or IDs verbatim.
+Exclude all URIs or schema references.
+Never interpret mixAndLocationTypes as geography (treat them only as non-geographic tags).
+Do not infer or invent values.
+ `;
     const modelInput = `${systemPrompt}\nJSON:\n${JSON.stringify(jsonData)}`;
 
     const { text } = await openaiChat(modelInput, { stream: false });
