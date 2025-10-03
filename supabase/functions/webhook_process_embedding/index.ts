@@ -47,7 +47,18 @@ Deno.serve(async (req) => {
 
     // console.log(`${table} ${record.id} ${record.version} summary ${type} request`);
 
-    const systemPrompt = `From the given life cycle assessment ILCD Process JSON, write one continuous English paragraph (<500 tokens) suitable for embedding and retrieval. Integrate, in this order and only if explicitly available: Process type (typeOfDataSet) and whether it implies background inclusion/aggregation (e.g., unit process single operation, unit process black box, partly terminated system, LCI result). Purpose/intended application; Reference product / reference flow (identify the exchange that matches processInformation.quantitativeReference.referenceToReferenceFlow) and the reported amount (state “unit as in source” if the unit is not explicit). Main inputs (top 3–6 by presence in exchanges, list name + amount, and note Measured/Estimated); Main outputs/emissions (key product + notable wastewater/emissions with amounts). Technology and included processes (plain language). Location & time representativeness (country/sub-location, reference year). Method/meta: dataset type, allocation note, cut-off/completeness rule, review type/reviewer (if present), compliance system. Data source citation (short description from dataSource or publication info, if present). Preserve all codes or IDs verbatim, exclude all URIs or schema references, and never invent values. If an element is missing, omit it entirely. Output must be one continuous English paragraph, ending with the dataset UUID in parentheses.`;
+    const systemPrompt = `
+From the given life cycle assessment ILCD Process JSON, write one continuous English paragraph (<500 tokens) suitable for embedding and retrieval. The paragraph must strictly follow the natural language template below. Fill in values only if explicitly available. Do not add, remove, or reorder sentences. If a field has no value, omit the entire sentence where it belongs, not just the placeholder.
+If the reference product or flow cannot be resolved to a valid exchange with both name, amount, and unit, omit the entire sentence. Do not output placeholder values such as 0 or "unit as in source". When listing main inputs or outputs, include at most 3–6 key items and write them as a natural English sentence, using commas and "and" instead of a mechanical list. Keep the technology and included processes description concise. Always output in English only, omit non-English content.
+
+Template:
+<name.baseName> is of type <typeOfDataSet, including whether it implies background inclusion/aggregation such as unit process single operation, unit process black box, partly terminated system, or LCI result>. Its intended purpose or application is <processInformation.purposeAndIntendedApplication>. The reference product or flow is <reference product/exchange name that matches processInformation.quantitativeReference.referenceToReferenceFlow> with a reported amount of <amount and unit, or “unit as in source” if unit is not explicit>. The main inputs are <top 3-6 inputs by presence in exchanges, each with name, amount, and note Measured/Estimated>. The main outputs and emissions are <key product plus notable wastewater and emissions with amounts>. The technology and included processes are <plain language description>. The location and time representativeness are <country or sub-location, reference year>. Methodological details are: dataset type, allocation note, cut-off or completeness rule, review type or reviewer if present, and compliance system. The data source is <short description from dataSource or publication info>. (<UUID>)
+
+Additional rules:
+Preserve any codes or IDs verbatim.
+Exclude all URIs or schema references.
+Do not infer or invent values.
+`;
     const modelInput = `${systemPrompt}\nJSON:\n${JSON.stringify(jsonData)}`;
 
     const { text } = await openaiChat(modelInput, { stream: false });
