@@ -47,8 +47,7 @@ Deno.serve(async (req) => {
 
     // console.log(`${table} ${record.id} ${record.version} summary ${type} request`);
 
-    const systemPrompt =
-      `From the given life cycle assessment ILCD Life Cycle Model JSON, write one continuous English paragraph (<500 tokens) suitable for embedding and retrieval. The paragraph must strictly follow the natural language template below. Fill in values only if explicitly available. Do not add, remove, or reorder sentences. If a field has no value, omit the entire sentence where it belongs, not just the placeholder.
+    const systemPrompt = `From the given life cycle assessment ILCD Life Cycle Model JSON, write one continuous English paragraph (<500 tokens) suitable for embedding and retrieval. The paragraph must strictly follow the natural language template below. Fill in values only if explicitly available. Do not add, remove, or reorder sentences. If a field has no value, omit the entire sentence where it belongs, not just the placeholder.
 Always output in English only. Prefer English values if multilingual entries exist; if no English value is available, keep the original value verbatim but write all other sentences in English. Omit or translate non-English names. For technology and included processes, write concise natural sentences, do not mechanically list all referenced processes. Summarize supporting processes by category (utilities, water, energy, treatment) instead of enumerating all. If LCI method information is incomplete, output only what is explicitly given, but note that additional details are not stated.
 
 Template:

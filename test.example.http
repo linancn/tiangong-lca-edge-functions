@@ -76,6 +76,20 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_hybrid_sea
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
     --data '{"query": "硅酸盐水泥"}'
 
+### @name lifecyclemodel_Hybrid_Search：Remote
+
+curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/lifecyclemodel_hybrid_search' \
+    --header 'Content-Type: application/json' \
+    --header 'x-region: {{$dotenv X_REGION}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --data '{"query": "烧结砖"}'
+
+### @name lifecyclemodel_Hybrid_Search：Local
+
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lifecyclemodel_hybrid_search' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --data '{"query": "烧结砖"}'
 
 ### @name AI_Suggest：Remote
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/ai_suggest' \

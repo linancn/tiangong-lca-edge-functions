@@ -64,6 +64,7 @@ npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkong
 ## Search Functions
 npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy lifecyclemodel_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
 ## Embedding Functions
 npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
