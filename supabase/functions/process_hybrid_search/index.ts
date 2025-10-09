@@ -5,12 +5,11 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { ChatOpenAI } from '@langchain/openai';
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
-import { supabaseClient as supabase } from '../_shared/supabase_client.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
+import { supabaseClient as supabase } from '../_shared/supabase_client.ts';
 
 const openai_api_key = Deno.env.get('OPENAI_API_KEY') ?? '';
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? '';
-
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -103,9 +102,8 @@ Task: Transform description of processes into three specific queries: SemanticQu
   })) as number[];
   const vectorStr = `[${vectors.join(',')}]`;
 
-  const filterCondition = filter !== undefined 
-    ? (typeof filter === 'string' ? filter : JSON.stringify(filter))
-    : {};
+  const filterCondition =
+    filter !== undefined ? (typeof filter === 'string' ? filter : JSON.stringify(filter)) : {};
 
   const { data, error } = await supabase.rpc('hybrid_search_processes', {
     query_text: queryFulltextString,

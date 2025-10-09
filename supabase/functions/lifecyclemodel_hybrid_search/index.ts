@@ -76,9 +76,9 @@ Deno.serve(async (req) => {
     [
       'system',
       `Field: Life Cycle Assessment (LCA)
-Task: Transform description of flows into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.`,
+Task: Transform description of lifecycle models into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.`,
     ],
-    ['human', 'Flow description: {input}'],
+    ['human', 'Lifecycle model description: {input}'],
   ]);
 
   const chain = prompt.pipe(modelWithStructuredOutput);
@@ -108,7 +108,13 @@ Task: Transform description of flows into three specific queries: SemanticQueryE
     filter_condition: filterCondition,
   };
 
-  const { data, error } = await supabase.rpc('hybrid_search_flows', requestBody);
+    console.log('LLM structured res:', JSON.stringify(res, null, 2));
+    console.log('combinedFulltextQueries:', combinedFulltextQueries);
+    console.log('queryFulltextString.len:', queryFulltextString.length);
+    console.log('semanticQueryEn:', semanticQueryEn);
+    console.log('requestBody:', JSON.stringify(requestBody, null, 2));
+
+  const { data, error } = await supabase.rpc('hybrid_search_lifecyclemodels', requestBody);
 
   if (error) {
     console.error('Hybrid search error:', error);
