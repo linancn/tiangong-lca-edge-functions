@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
 
   const model = new ChatOpenAI({
     model: openai_chat_model,
-    // temperature: 0,
+    reasoning: { effort: 'minimal' },
     apiKey: openai_api_key,
   });
 
@@ -108,11 +108,11 @@ Task: Transform description of lifecycle models into three specific queries: Sem
     filter_condition: filterCondition,
   };
 
-    console.log('LLM structured res:', JSON.stringify(res, null, 2));
-    console.log('combinedFulltextQueries:', combinedFulltextQueries);
-    console.log('queryFulltextString.len:', queryFulltextString.length);
-    console.log('semanticQueryEn:', semanticQueryEn);
-    console.log('requestBody:', JSON.stringify(requestBody, null, 2));
+  // console.log('LLM structured res:', JSON.stringify(res, null, 2));
+  // console.log('combinedFulltextQueries:', combinedFulltextQueries);
+  // console.log('queryFulltextString.len:', queryFulltextString.length);
+  // console.log('semanticQueryEn:', semanticQueryEn);
+  // console.log('requestBody:', JSON.stringify(requestBody, null, 2));
 
   const { data, error } = await supabase.rpc('hybrid_search_lifecyclemodels', requestBody);
 
