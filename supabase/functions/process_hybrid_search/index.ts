@@ -40,6 +40,7 @@ Deno.serve(async (req) => {
   const model = new ChatOpenAI({
     model: openai_chat_model,
     reasoning: { effort: 'minimal' },
+    streaming: false,
     apiKey: openai_api_key,
   });
 
