@@ -62,6 +62,18 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
     --data '{"query": "氯氰菊酯"}'
 
+### @name Flow_Hybrid_Search：Local（长文本错误示例）
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+  --data @payload_error.json
+
+### @name Flow_Hybrid_Search：Local（长文本正确示例）
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+  --data @payload_correct.json
+
 ### @name Process_Hybrid_Search：Remote
 
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/process_hybrid_search' \
