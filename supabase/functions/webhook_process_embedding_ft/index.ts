@@ -105,6 +105,174 @@ const toDisplayText = (value: any, lang = DEFAULT_LANG): string | null => {
   return getLangText(value, lang) ?? getTextFromDict(value);
 };
 
+const formatNumber = (value: any): string => {
+  if (value === null || value === undefined) return "";
+  const parseNumber = (input: any): number | null => {
+    if (typeof input === "number") {
+      return Number.isFinite(input) ? input : null;
+    }
+    if (typeof input === "string") {
+      const trimmed = input.trim();
+      if (!trimmed) return null;
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    try {
+      const parsed = Number(String(input));
+      return Number.isFinite(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const num = parseNumber(value);
+  if (num === null) return String(value);
+  if (Object.is(num, -0) || num === 0) return "0";
+
+  const precision = 6;
+  const abs = Math.abs(num);
+  const exponent = Math.floor(Math.log10(abs));
+  const useExponential = exponent < -4 || exponent >= precision;
+
+  if (useExponential) {
+    const raw = num.toExponential(precision - 1);
+    const [mantissa, exp] = raw.split("e");
+    let cleanedMantissa = mantissa;
+    if (mantissa.includes(".")) {
+      cleanedMantissa = mantissa.replace(/\.?0+$/, "");
+    }
+    let sign = "";
+    let digits = exp;
+    if (exp.startsWith("+") || exp.startsWith("-")) {
+      sign = exp[0];
+      digits = exp.slice(1);
+    }
+    digits = digits.replace(/^0+/, "") || "0";
+    if (digits.length < 2) digits = digits.padStart(2, "0");
+    return `${cleanedMantissa}e${sign}${digits}`;
+  }
+
+  const decimals = Math.max(0, precision - 1 - exponent);
+  const fixed = num.toFixed(decimals);
+  return fixed.includes(".") ? fixed.replace(/\.?0+$/, "") : fixed;
+};
+
+const collectTexts = (value: any, lang = DEFAULT_LANG): string[] => {
+  if (value === null || value === undefined) return [];
+
+  if (
+    typeof value === "string" || typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    const text = String(value).trim();
+    return text ? [text] : [];
+  }
+
+  let entries: any[] = [];
+  if (Array.isArray(value)) {
+    entries = value;
+  } else if (isObject(value)) {
+    entries = [value];
+  } else {
+    return [];
+  }
+
+  const langMatches: string[] = [];
+  const fallback: string[] = [];
+  for (const entry of entries) {
+    if (entry === null || entry === undefined) {
+      continue;
+    }
+    if (
+      typeof entry === "string" || typeof entry === "number" ||
+      typeof entry === "boolean"
+    ) {
+      const text = String(entry).trim();
+      if (text) fallback.push(text);
+      continue;
+    }
+    if (!isObject(entry)) continue;
+    const entryLang = pickProperty(entry, [
+      "@xml:lang",
+      "xml:lang",
+      "xml_lang",
+      "lang",
+    ]);
+    const text = getTextFromDict(entry);
+    if (!text) continue;
+    if (lang && entryLang === lang) {
+      langMatches.push(text);
+    } else {
+      fallback.push(text);
+    }
+  }
+  return langMatches.length ? langMatches : fallback;
+};
+
+const pickText = (value: any, lang = DEFAULT_LANG): string | null => {
+  if (value === null || value === undefined) return null;
+
+  if (Array.isArray(value)) {
+    const texts = collectTexts(value, lang);
+    return texts.length ? texts[0] : null;
+  }
+
+  if (
+    typeof value === "string" || typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    const text = String(value).trim();
+    return text || null;
+  }
+
+  if (isObject(value)) {
+    if (typeof (value as any).get_text === "function") {
+      const text = (value as any).get_text(lang);
+      if (text) {
+        const trimmed = String(text).trim();
+        if (trimmed) return trimmed;
+      }
+    }
+    const direct = getTextFromDict(value);
+    if (direct) return direct;
+  }
+
+  return null;
+};
+
+const joinTexts = (
+  value: any,
+  lang = DEFAULT_LANG,
+  sep = "\n\n",
+): string | null => {
+  const texts = collectTexts(value, lang)
+    .map((text) => text.trim())
+    .filter((text) => text);
+  return texts.length ? texts.join(sep) : null;
+};
+
+const pickShortDescription = (ref: any, lang = DEFAULT_LANG): string | null => {
+  if (ref === null || ref === undefined) return null;
+  if (Array.isArray(ref)) {
+    for (const entry of ref) {
+      const text = pickShortDescription(entry, lang);
+      if (text) return text;
+    }
+    return null;
+  }
+  if (isObject(ref)) {
+    const shortDesc = pickProperty(ref, [
+      "common:shortDescription",
+      "common_short_description",
+    ]);
+    const text = pickText(shortDesc, lang);
+    if (text) return text;
+    const direct = getTextFromDict(ref);
+    if (direct) return direct;
+  }
+  return null;
+};
+
 const findProcessDataSet = (data: any): any => {
   if (!isObject(data)) return null;
 
@@ -127,33 +295,76 @@ const findProcessDataSet = (data: any): any => {
   return null;
 };
 
-const getFlowName = (
-  referenceToFlow: Record<string, any> | undefined,
-  lang = DEFAULT_LANG,
-) => {
-  if (!referenceToFlow) return null;
-  const shortDesc = pickProperty(referenceToFlow, [
-    "common:shortDescription",
-    "shortDescription",
-    "common:short_description",
-    "common:shortdescription",
-  ]);
-  return getLangText(shortDesc, lang);
+const composeProcessTitle = (dataInfo: any, lang = DEFAULT_LANG): string => {
+  if (!dataInfo) return "Process";
+  const nameObj = pickProperty(dataInfo, ["name"]);
+  const parts: string[] = [];
+  const fields = [
+    ["baseName", "base_name", "basename"],
+    ["mixAndLocationTypes", "mix_and_location_types"],
+    ["treatmentStandardsRoutes", "treatment_standards_routes"],
+  ];
+  for (const names of fields) {
+    const value = nameObj ? pickProperty(nameObj, names) : undefined;
+    const part = joinTexts(value, lang, " | ");
+    if (part) parts.push(part);
+  }
+  return parts.length ? parts.join(" | ") : "Process";
 };
 
-const getReferenceFlow = (
-  processDataSet: any,
-  refFlowId: string | null,
-  lang = DEFAULT_LANG,
-): { name: string | null; direction: any; amount: any; uuid: any } | null => {
-  if (!refFlowId) return null;
+const getDataSetVersion = (dataset: any): string | null => {
+  if (!dataset) return null;
+  const admin = pickProperty(dataset, [
+    "administrativeInformation",
+    "administrative_information",
+  ]);
+  const publication = admin
+    ? pickProperty(admin, [
+      "publicationAndOwnership",
+      "publication_and_ownership",
+    ])
+    : null;
+  const version = publication
+    ? pickProperty(publication, [
+      "common:dataSetVersion",
+      "common_data_set_version",
+      "dataSetVersion",
+      "data_set_version",
+      "version",
+    ])
+    : null;
+  return version ? toDisplayText(version, DEFAULT_LANG) : null;
+};
 
-  const exchangesObj = pickProperty(processDataSet, ["exchanges"]);
+const getReferenceFlowSummary = (
+  dataset: any,
+  quantRef: any,
+  lang = DEFAULT_LANG,
+): { name: string | null; amount: string | null } => {
+  if (!dataset || !quantRef) {
+    return { name: null, amount: null };
+  }
+  let refId: any = pickProperty(quantRef, [
+    "referenceToReferenceFlow",
+    "reference_to_reference_flow",
+    "@ref",
+  ]);
+  if (isObject(refId)) {
+    refId = pickProperty(refId, ["@ref", "ref", "#text"]);
+  }
+  if (refId === null || refId === undefined) {
+    return { name: null, amount: null };
+  }
+
+  const exchangesObj = pickProperty(dataset, ["exchanges"]);
   const exchangeList = ensureArray(
     pickProperty(exchangesObj, ["exchange"]) ?? exchangesObj,
   );
-  if (!exchangeList.length) return null;
+  if (!exchangeList.length) {
+    return { name: null, amount: null };
+  }
 
+  let refExchange: any = null;
   for (const ex of exchangeList) {
     const exId = pickProperty(ex, [
       "dataSetInternalID",
@@ -162,37 +373,333 @@ const getReferenceFlow = (
       "@data_set_internal_id",
     ]);
     if (
-      exId !== undefined && exId !== null && String(exId) === String(refFlowId)
+      exId !== undefined && exId !== null && String(exId) === String(refId)
     ) {
-      const reference = pickProperty(ex, [
-        "referenceToFlowDataSet",
-        "reference_to_flow_data_set",
-      ]);
-      return {
-        name: getFlowName(reference, lang),
-        direction: pickProperty(ex, [
-          "exchangeDirection",
-          "exchange_direction",
-        ]),
-        amount: pickProperty(ex, [
-          "meanAmount",
-          "mean_amount",
-          "resultingAmount",
-          "resulting_amount",
-        ]),
-        uuid: reference
-          ? pickProperty(reference, [
-            "@refObjectId",
-            "@refObjectID",
-            "refObjectId",
-            "refObjectID",
-          ])
-          : null,
-      };
+      refExchange = ex;
+      break;
     }
   }
 
-  return null;
+  if (!refExchange) {
+    return { name: null, amount: null };
+  }
+
+  const reference = pickProperty(refExchange, [
+    "referenceToFlowDataSet",
+    "reference_to_flow_data_set",
+  ]);
+  const name = pickShortDescription(reference, lang);
+  const amountRaw = pickProperty(refExchange, ["meanAmount", "mean_amount"]);
+  const amount = amountRaw !== undefined && amountRaw !== null
+    ? formatNumber(amountRaw)
+    : null;
+  return { name, amount };
+};
+
+const getClassificationPath = (dataInfo: any): string | null => {
+  if (!dataInfo) return null;
+
+  const classificationInfo = pickProperty(dataInfo, [
+    "classificationInformation",
+    "classification_information",
+  ]);
+  if (!classificationInfo) return null;
+
+  const commonClassification = pickProperty(classificationInfo, [
+    "common:classification",
+    "common_classification",
+    "classification",
+  ]);
+  if (!commonClassification) return null;
+
+  const classes = ensureArray(
+    pickProperty(commonClassification, [
+      "common:class",
+      "common_class",
+      "class",
+    ]),
+  );
+  if (!classes.length) return null;
+
+  const getLevel = (item: any): number | null => {
+    const level = isObject(item) ? pickProperty(item, ["@level", "level"]) : null;
+    if (level === undefined || level === null) return null;
+    const parsed = Number(level);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const sorted = classes.slice().sort((a, b) => {
+    const levelA = getLevel(a);
+    const levelB = getLevel(b);
+    if (levelA === null && levelB === null) return 0;
+    if (levelA === null) return 1;
+    if (levelB === null) return -1;
+    return levelA - levelB;
+  });
+
+  const parts: string[] = [];
+  for (const entry of sorted) {
+    const text = getTextFromDict(entry);
+    if (text) parts.push(text);
+  }
+  return parts.length ? parts.join(" > ") : null;
+};
+
+const getTimeCoverage = (processInfo: any, lang = DEFAULT_LANG): string | null => {
+  const timeInfo = processInfo ? pickProperty(processInfo, ["time"]) : null;
+  if (!timeInfo) return null;
+
+  const year = toDisplayText(
+    pickProperty(timeInfo, [
+      "common:referenceYear",
+      "common_reference_year",
+      "referenceYear",
+      "reference_year",
+    ]),
+    lang,
+  );
+  const until = toDisplayText(
+    pickProperty(timeInfo, [
+      "common:dataSetValidUntil",
+      "common_data_set_valid_until",
+      "dataSetValidUntil",
+      "validUntil",
+      "valid_until",
+    ]),
+    lang,
+  );
+  const description = joinTexts(
+    pickProperty(timeInfo, [
+      "common:timeRepresentativenessDescription",
+      "common_time_representativeness_description",
+      "timeRepresentativenessDescription",
+      "time_representativeness_description",
+    ]),
+    lang,
+  );
+
+  const parts: string[] = [];
+  if (year || until) {
+    const yearText = year ?? "None";
+    const line = until
+      ? `Reference Year: ${yearText} | Valid Until: ${until}`
+      : `Reference Year: ${yearText}`;
+    parts.push(line);
+  }
+  if (description) parts.push(description);
+  return parts.length ? parts.join("\n") : null;
+};
+
+const getGeography = (
+  processInfo: any,
+  lang = DEFAULT_LANG,
+): { code: string | null; restrictions: string | null } => {
+  const geography = processInfo ? pickProperty(processInfo, ["geography"]) : null;
+  const location = geography
+    ? pickProperty(geography, [
+      "locationOfOperationSupplyOrProduction",
+      "location_of_operation_supply_or_production",
+    ])
+    : null;
+  if (!location) return { code: null, restrictions: null };
+  const code = toDisplayText(
+    pickProperty(location, ["location", "@location"]),
+    lang,
+  );
+  const restrictions = joinTexts(
+    pickProperty(location, [
+      "descriptionOfRestrictions",
+      "description_of_restrictions",
+    ]),
+    lang,
+  );
+  return { code: code ?? null, restrictions: restrictions ?? null };
+};
+
+const getGeographyDescription = (
+  processInfo: any,
+  lang = DEFAULT_LANG,
+): string | null => {
+  const { restrictions } = getGeography(processInfo, lang);
+  return restrictions;
+};
+
+const getTechnology = (processInfo: any, lang = DEFAULT_LANG): string | null => {
+  const technology = processInfo ? pickProperty(processInfo, ["technology"]) : null;
+  if (!technology) return null;
+  const applicability = joinTexts(
+    pickProperty(technology, [
+      "technologicalApplicability",
+      "technological_applicability",
+    ]),
+    lang,
+  );
+  const description = joinTexts(
+    pickProperty(technology, [
+      "technologyDescriptionAndIncludedProcesses",
+      "technology_description_and_included_processes",
+    ]),
+    lang,
+  );
+  const parts = [applicability, description].filter(Boolean) as string[];
+  return parts.length ? parts.join("\n\n") : null;
+};
+
+const getMethodology = (dataset: any, lang = DEFAULT_LANG): string | null => {
+  if (!dataset) return null;
+  const modelling = pickProperty(dataset, [
+    "modellingAndValidation",
+    "modelling_and_validation",
+  ]);
+  const lci = modelling
+    ? pickProperty(modelling, [
+      "LCIMethodAndAllocation",
+      "lciMethodAndAllocation",
+      "lci_method_and_allocation",
+    ])
+    : null;
+  if (!lci) return null;
+
+  const dataSetType = toDisplayText(
+    pickProperty(lci, ["typeOfDataSet", "type_of_data_set"]),
+    lang,
+  );
+  const principle = toDisplayText(
+    pickProperty(lci, [
+      "LCIMethodPrinciple",
+      "lciMethodPrinciple",
+      "lci_method_principle",
+    ]),
+    lang,
+  );
+  const approach = toDisplayText(
+    pickProperty(lci, [
+      "LCIMethodApproaches",
+      "lciMethodApproaches",
+      "lci_method_approaches",
+    ]),
+    lang,
+  );
+
+  const parts: string[] = [];
+  if (dataSetType) parts.push(`**Data Set Type:** ${dataSetType}`);
+  if (principle) parts.push(`**LCI Method Principle:** ${principle}`);
+  if (approach) parts.push(`**LCI Method Approach:** ${approach}`);
+  return parts.length ? parts.join("\n") : null;
+};
+
+const getDataSources = (dataset: any, lang = DEFAULT_LANG): string | null => {
+  if (!dataset) return null;
+  const modelling = pickProperty(dataset, [
+    "modellingAndValidation",
+    "modelling_and_validation",
+  ]);
+  const dataSources = modelling
+    ? pickProperty(modelling, [
+      "dataSourcesTreatmentAndRepresentativeness",
+      "data_sources_treatment_and_representativeness",
+    ])
+    : null;
+  if (!dataSources) return null;
+
+  const sampling = joinTexts(
+    pickProperty(dataSources, ["samplingProcedure", "sampling_procedure"]),
+    lang,
+  );
+  const reference = pickProperty(dataSources, [
+    "referenceToDataSource",
+    "reference_to_data_source",
+  ]);
+  const referenceText = pickText(
+    reference
+      ? pickProperty(reference, [
+        "common:shortDescription",
+        "common_short_description",
+      ])
+      : null,
+    lang,
+  );
+
+  const parts: string[] = [];
+  if (sampling) parts.push(sampling);
+  if (referenceText) parts.push(referenceText);
+  return parts.length ? parts.join("\n\n") : null;
+};
+
+const getExchangeLists = (
+  dataset: any,
+  lang = DEFAULT_LANG,
+): { inputs: string[]; outputs: string[] } => {
+  if (!dataset) return { inputs: [], outputs: [] };
+  const exchangesObj = pickProperty(dataset, ["exchanges"]);
+  const items = ensureArray(
+    pickProperty(exchangesObj, ["exchange"]) ?? exchangesObj,
+  );
+  if (!items.length) return { inputs: [], outputs: [] };
+
+  const asFloat = (value: any): number | null => {
+    if (value === null || value === undefined) return null;
+    const parsed = Number(String(value));
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const label = (item: any): string => {
+    const ref = pickProperty(item, [
+      "referenceToFlowDataSet",
+      "reference_to_flow_data_set",
+    ]);
+    const text = pickShortDescription(ref, lang);
+    if (text) return text;
+    const internalId = pickProperty(item, [
+      "dataSetInternalID",
+      "data_set_internal_id",
+      "@dataSetInternalID",
+      "@data_set_internal_id",
+    ]);
+    const idText = internalId !== undefined && internalId !== null
+      ? String(internalId)
+      : "";
+    const labelText = `Flow ${idText}`.trim();
+    return labelText || "Flow";
+  };
+
+  const formatLine = (item: any): string => {
+    const amount = pickProperty(item, ["meanAmount", "mean_amount"]);
+    return `- ${label(item)}: ${formatNumber(amount)}`;
+  };
+
+  const sorted = items
+    .map((item, index) => ({
+      item,
+      index,
+      amount: asFloat(pickProperty(item, ["meanAmount", "mean_amount"])),
+    }))
+    .sort((a, b) => {
+      const aMissing = a.amount === null;
+      const bMissing = b.amount === null;
+      if (aMissing !== bMissing) return aMissing ? 1 : -1;
+      if (a.amount !== null && b.amount !== null && a.amount !== b.amount) {
+        return b.amount - a.amount;
+      }
+      return a.index - b.index;
+    })
+    .map((entry) => entry.item);
+
+  const inputs = sorted
+    .filter((item) =>
+      pickProperty(item, ["exchangeDirection", "exchange_direction"]) === "Input"
+    )
+    .map(formatLine)
+    .slice(0, 10);
+
+  const outputs = sorted
+    .filter((item) =>
+      pickProperty(item, ["exchangeDirection", "exchange_direction"]) === "Output"
+    )
+    .map(formatLine)
+    .slice(0, 10);
+
+  return { inputs, outputs };
 };
 
 const tidasProcessToMarkdown = (processJson: any, lang = DEFAULT_LANG) => {
@@ -209,17 +716,15 @@ const tidasProcessToMarkdown = (processJson: any, lang = DEFAULT_LANG) => {
     "dataSetInformation",
     "data_set_information",
   ]) ?? {};
+  const quantitativeReference = pickProperty(processInformation, [
+    "quantitativeReference",
+    "quantitative_reference",
+  ]);
 
-  const sections: string[] = [];
+  const title = composeProcessTitle(dataSetInformation, lang);
 
-  const nameObj = pickProperty(dataSetInformation, ["name"]);
-  const baseNameValue = nameObj
-    ? pickProperty(nameObj, ["baseName", "base_name", "basename"])
-    : undefined;
-  const baseName = getLangText(baseNameValue ?? nameObj, lang);
-  if (baseName) {
-    sections.push(`# ${baseName}`);
-  }
+  const lines: string[] = [`# ${title}`, ""];
+  lines.push("**Entity:** Process");
 
   const uuid = pickProperty(dataSetInformation, [
     "common:UUID",
@@ -230,58 +735,57 @@ const tidasProcessToMarkdown = (processJson: any, lang = DEFAULT_LANG) => {
     pickProperty(dataSetInformation, ["common:uuid"]);
   const uuidText = toDisplayText(uuid, lang);
   if (uuidText) {
-    sections.push(`**UUID:** \`${uuidText}\``);
+    lines.push(`**UUID:** \`${uuidText}\``);
   }
 
-  const quantitativeReference = pickProperty(processInformation, [
-    "quantitativeReference",
-    "quantitative_reference",
-  ]);
-  const refFlowId = quantitativeReference
-    ? pickProperty(quantitativeReference, [
-      "referenceToReferenceFlow",
-      "reference_to_reference_flow",
-      "@ref",
-    ])
-    : null;
-  const refFlow = getReferenceFlow(
+  const version = getDataSetVersion(processDataSet);
+  if (version) {
+    lines.push(`**Version:** ${version}`);
+  }
+
+  const { code: locCode } = getGeography(processInformation, lang);
+  if (locCode) {
+    lines.push(`**Location:** ${locCode}`);
+  }
+
+  const { name: refFlowName, amount: refAmount } = getReferenceFlowSummary(
     processDataSet,
-    refFlowId ? String(refFlowId) : null,
+    quantitativeReference,
     lang,
   );
-  if (refFlow && refFlow.name) {
-    const refParts = [`**Reference Flow:** ${refFlow.name}`];
-    const amountText = toDisplayText(refFlow.amount, lang);
-    if (amountText) {
-      refParts.push(`**Amount:** ${amountText}`);
-    }
-    sections.push(refParts.join("\n"));
+  if (refFlowName) {
+    lines.push(`**Reference Flow:** ${refFlowName}`);
+  }
+  if (refAmount) {
+    lines.push(`**Amount:** ${refAmount}`);
+  }
+  if (refFlowName || refAmount) {
+    lines.push("");
   }
 
-  const classificationInformation = pickProperty(dataSetInformation, [
-    "classificationInformation",
-    "classification_information",
-  ]);
-  const commonClassification = classificationInformation
-    ? pickProperty(classificationInformation, [
-      "common:classification",
-      "classification",
-      "common_classification",
-    ])
-    : undefined;
-  const classData = commonClassification
-    ? pickProperty(commonClassification, [
-      "common:class",
-      "class",
-      "common_class",
-    ])
-    : undefined;
-  const classText = classData ? getLangText(classData, lang) : null;
-  if (classText) {
-    sections.push(`**Classification:** ${classText}`);
+  const classification = getClassificationPath(dataSetInformation);
+  if (classification) {
+    lines.push(`**Classification:** ${classification}`);
+    lines.push("");
   }
 
-  const generalComment = getLangText(
+  const functionalUnit = joinTexts(
+    quantitativeReference
+      ? pickProperty(quantitativeReference, [
+        "functionalUnitOrOther",
+        "functional_unit_or_other",
+      ])
+      : null,
+    lang,
+  );
+  if (functionalUnit) {
+    lines.push(`**Functional Unit:** ${functionalUnit}`);
+  }
+  if (lines.length && lines[lines.length - 1] !== "") {
+    lines.push("");
+  }
+
+  const description = joinTexts(
     pickProperty(dataSetInformation, [
       "common:generalComment",
       "common_general_comment",
@@ -290,254 +794,47 @@ const tidasProcessToMarkdown = (processJson: any, lang = DEFAULT_LANG) => {
     ]),
     lang,
   );
-  if (generalComment) {
-    const comment = generalComment.length > 500
-      ? `${generalComment.slice(0, 500)}...`
-      : generalComment;
-    sections.push(`## Description\n\n${comment}`);
+  if (description) {
+    lines.push("## Description", "", description, "");
   }
 
-  const timeInfo = pickProperty(processInformation, ["time"]);
-  if (timeInfo) {
-    const timeParts: string[] = [];
-    const referenceYear = toDisplayText(
-      pickProperty(timeInfo, [
-        "common:referenceYear",
-        "common_reference_year",
-        "referenceYear",
-        "reference_year",
-      ]),
-      lang,
-    );
-    const validUntil = toDisplayText(
-      pickProperty(timeInfo, [
-        "common:dataSetValidUntil",
-        "common_data_set_valid_until",
-        "dataSetValidUntil",
-        "validUntil",
-        "valid_until",
-      ]),
-      lang,
-    );
-
-    if (referenceYear) timeParts.push(`Reference Year: ${referenceYear}`);
-    if (validUntil) timeParts.push(`Valid Until: ${validUntil}`);
-    if (timeParts.length) {
-      sections.push(`## Time Coverage\n\n${timeParts.join(" | ")}`);
-    }
+  const timeBlock = getTimeCoverage(processInformation, lang);
+  if (timeBlock) {
+    lines.push("## Time Coverage", "", timeBlock, "");
   }
 
-  const geography = pickProperty(processInformation, ["geography"]);
-  if (geography) {
-    const locationInfo = pickProperty(geography, [
-      "locationOfOperationSupplyOrProduction",
-      "location_of_operation_supply_or_production",
-    ]);
-    if (locationInfo) {
-      const geoText: string[] = [];
-      const location = toDisplayText(
-        pickProperty(locationInfo, ["location", "@location"]),
-        lang,
-      );
-      if (location) {
-        geoText.push(`**Location:** ${location}`);
-      }
-      const desc = getLangText(
-        pickProperty(locationInfo, [
-          "descriptionOfRestrictions",
-          "description_of_restrictions",
-        ]),
-        lang,
-      );
-      if (desc) {
-        geoText.push(`\n${desc}`);
-      }
-      if (geoText.length) {
-        sections.push(`## Geography\n\n${geoText.join("")}`);
-      }
-    }
+  const geographyDesc = getGeographyDescription(processInformation, lang);
+  if (geographyDesc) {
+    lines.push("## Geography", "", geographyDesc, "");
   }
 
-  const technology = pickProperty(processInformation, ["technology"]);
+  const technology = getTechnology(processInformation, lang);
   if (technology) {
-    let techDesc: string | null = null;
-    if (isObject(technology)) {
-      const techValue = pickProperty(technology, [
-        "technologyDescriptionAndIncludedProcesses",
-        "technology_description_and_included_processes",
-      ]);
-      techDesc = getLangText(techValue ?? technology, lang);
-    } else {
-      techDesc = getLangText(technology, lang);
-    }
-    if (techDesc) {
-      sections.push(`## Technology\n\n${techDesc}`);
-    }
+    lines.push("## Technology", "", technology, "");
   }
 
-  const modelling = pickProperty(processDataSet, [
-    "modellingAndValidation",
-    "modelling_and_validation",
-  ]);
-  if (modelling) {
-    const lciMethod = pickProperty(modelling, [
-      "LCIMethodAndAllocation",
-      "lciMethodAndAllocation",
-      "lci_method_and_allocation",
-    ]);
-    const methodParts: string[] = [];
-    const dataSetType = toDisplayText(
-      lciMethod
-        ? pickProperty(lciMethod, ["typeOfDataSet", "type_of_data_set"])
-        : null,
-      lang,
-    );
-    const lciPrinciple = toDisplayText(
-      lciMethod
-        ? pickProperty(lciMethod, [
-          "LCIMethodPrinciple",
-          "lciMethodPrinciple",
-          "lci_method_principle",
-        ])
-        : null,
-      lang,
-    );
-
-    if (dataSetType) methodParts.push(`**Data Set Type:** ${dataSetType}`);
-    if (lciPrinciple) methodParts.push(`**LCI Method:** ${lciPrinciple}`);
-    if (methodParts.length) {
-      sections.push(`## Methodology\n\n${methodParts.join("\n")}`);
-    }
-
-    const dataSources = pickProperty(modelling, [
-      "dataSourcesTreatmentAndRepresentativeness",
-      "data_sources_treatment_and_representativeness",
-    ]);
-    if (dataSources && isObject(dataSources)) {
-      const sampling = getLangText(
-        pickProperty(dataSources, ["samplingProcedure", "sampling_procedure"]),
-        lang,
-      );
-      if (sampling) {
-        sections.push(`## Data Sources\n\n**Sampling:** ${sampling}`);
-      }
-    }
+  const methodology = getMethodology(processDataSet, lang);
+  if (methodology) {
+    lines.push("## Methodology", "", methodology, "");
   }
 
-  const exchangesObj = pickProperty(processDataSet, ["exchanges"]);
-  const exchangeList = ensureArray(
-    pickProperty(exchangesObj, ["exchange"]) ?? exchangesObj,
-  );
-  if (exchangeList.length) {
-    const refFlowIdStr = refFlowId ? String(refFlowId) : null;
-    const inputsDict: Record<string, number> = {};
-    const outputsDict: Record<string, number> = {};
-
-    for (const ex of exchangeList) {
-      const exId = pickProperty(ex, [
-        "dataSetInternalID",
-        "data_set_internal_id",
-        "@dataSetInternalID",
-        "@data_set_internal_id",
-      ]);
-      if (
-        refFlowIdStr && exId !== undefined && exId !== null &&
-        String(exId) === refFlowIdStr
-      ) {
-        continue;
-      }
-
-      const flowName = getFlowName(
-        pickProperty(ex, [
-          "referenceToFlowDataSet",
-          "reference_to_flow_data_set",
-        ]),
-        lang,
-      );
-      const amountRaw = pickProperty(ex, [
-        "meanAmount",
-        "mean_amount",
-        "resultingAmount",
-        "resulting_amount",
-      ]);
-      const direction = pickProperty(ex, [
-        "exchangeDirection",
-        "exchange_direction",
-      ]);
-
-      if (flowName !== null && amountRaw !== undefined && amountRaw !== null) {
-        const amountSource = typeof amountRaw === "string"
-          ? amountRaw.trim()
-          : amountRaw;
-        if (amountSource === "") continue;
-        const amount = Number(amountSource);
-        if (Number.isFinite(amount)) {
-          if (String(direction).toLowerCase() === "input") {
-            inputsDict[flowName] = (inputsDict[flowName] ?? 0) + amount;
-          } else if (String(direction).toLowerCase() === "output") {
-            outputsDict[flowName] = (outputsDict[flowName] ?? 0) + amount;
-          }
-        }
-      }
-    }
-
-    const sortedInputs = Object.entries(inputsDict)
-      .filter(([, amt]) => amt >= 0.001)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10);
-
-    if (sortedInputs.length) {
-      sections.push(
-        `## Main Inputs\n\n${
-          sortedInputs
-            .map(([name, amt]) => `- ${name}: ${Number(amt).toPrecision(4)}`)
-            .join("\n")
-        }`,
-      );
-    }
-
-    const sortedOutputs = Object.entries(outputsDict)
-      .filter(([, amt]) => amt >= 0.001)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10);
-
-    if (sortedOutputs.length) {
-      sections.push(
-        `## Main Outputs\n\n${
-          sortedOutputs
-            .map(([name, amt]) => `- ${name}: ${Number(amt).toPrecision(4)}`)
-            .join("\n")
-        }`,
-      );
-    }
+  const dataSources = getDataSources(processDataSet, lang);
+  if (dataSources) {
+    lines.push("## Data Sources", "", dataSources, "");
   }
 
-  const administrative = pickProperty(processDataSet, [
-    "administrativeInformation",
-    "administrative_information",
-  ]);
-  const publicationOwnership = administrative
-    ? pickProperty(administrative, [
-      "publicationAndOwnership",
-      "publication_and_ownership",
-    ])
-    : undefined;
-  const version = publicationOwnership
-    ? toDisplayText(
-      pickProperty(publicationOwnership, [
-        "common:dataSetVersion",
-        "common_data_set_version",
-        "dataSetVersion",
-        "version",
-      ]),
-      lang,
-    )
-    : undefined;
-  if (version) {
-    sections.push(`**Version:** ${version}`);
+  const { inputs, outputs } = getExchangeLists(processDataSet, lang);
+  if (inputs.length) {
+    lines.push("## Main Inputs", "", ...inputs, "");
+  }
+  if (outputs.length) {
+    lines.push("## Main Outputs", "", ...outputs, "");
   }
 
-  return sections.join("\n\n").trim();
+  if (lines.length && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines.join("\n");
 };
 
 Deno.serve(async (req) => {
