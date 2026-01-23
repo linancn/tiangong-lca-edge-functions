@@ -654,58 +654,120 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const payload: WebhookPayload = await req.json();
-    const { type, record } = payload;
+    const rawPayload: unknown = await req.json();
+    const events: WebhookPayload[] = Array.isArray(rawPayload)
+      ? (rawPayload as WebhookPayload[])
+      : [rawPayload as WebhookPayload];
 
-    if (type !== "INSERT" && type !== "UPDATE") {
-      return new Response("Ignored operation type", {
-        status: 200,
-        headers: corsHeaders,
-      });
-    }
+    // console.log("[webhook_flow_embedding_ft] batch received", { size: events.length });
 
-    if (!record) {
-      throw new Error("No record data found");
-    }
+    const results: Array<{
+      index: number;
+      id?: string;
+      version?: string;
+      type?: string;
+      table?: string;
+      status: "success" | "ignored" | "skipped";
+      markdownLength?: number;
+    }> = [];
 
-    const { id, version } = record as { id?: string; version?: string };
-    if (!id || !version) {
-      throw new Error("Record is missing id or version");
-    }
+    for (const [index, payload] of events.entries()) {
+      const { type, record, table } = payload ?? {};
+      // console.log("[webhook_flow_embedding_ft] payload received", {
+      //   index,
+      //   type,
+      //   hasRecord: !!record,
+      //   recordKeys: record ? Object.keys(record as Record<string, unknown>) : [],
+      //   table,
+      // });
 
-    const jsonDataRaw = (record as Record<string, any>).json_ordered;
-    if (typeof jsonDataRaw === "string") {
-      try {
-        (record as Record<string, any>).json_ordered = JSON.parse(jsonDataRaw);
-      } catch (error) {
+      if (table && table !== "flows") {
+        throw new Error(`batch index ${index}: unexpected table ${table}, expect flows`);
+      }
+
+      if (type !== "INSERT" && type !== "UPDATE") {
+        console.error("[webhook_flow_embedding_ft] ignored type", { index, type });
+        results.push({ index, type, table, status: "ignored" });
+        continue;
+      }
+
+      if (!record) {
+        throw new Error(`batch index ${index}: No record data found`);
+      }
+
+      const { id, version } = record as { id?: string; version?: string };
+      if (!id || !version) {
+        throw new Error(`batch index ${index}: Record is missing id or version`);
+      }
+
+      const jsonDataRaw = (record as Record<string, any>).json_ordered;
+      // console.log("[webhook_flow_embedding_ft] json_ordered type", {
+      //   index,
+      //   type: typeof jsonDataRaw,
+      //   isString: typeof jsonDataRaw === "string",
+      // });
+      if (typeof jsonDataRaw === "string") {
+        try {
+          (record as Record<string, any>).json_ordered = JSON.parse(jsonDataRaw);
+        } catch (error) {
+          console.error("[webhook_flow_embedding_ft] json parse failed", {
+            index,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          throw new Error(
+            `batch index ${index}: Failed to parse json_ordered string: ${
+              error instanceof Error ? error.message : "unknown"
+            }`,
+          );
+        }
+      }
+      const jsonData = (record as Record<string, any>).json_ordered;
+      if (!jsonData) {
+        throw new Error(`batch index ${index}: No json_ordered data found in record`);
+      }
+
+      const markdown = tidasFlowToMarkdown(jsonData);
+      console.log(markdown);
+      // console.log("[webhook_flow_embedding_ft] markdown generated", {
+      //   index,
+      //   length: markdown?.length ?? 0,
+      // });
+      if (!markdown) throw new Error(`batch index ${index}: Empty extracted markdown`);
+
+      const { error: updateError } = await supabaseClient
+        .from("flows")
+        .update({
+          embedding_ft: markdown,
+        })
+        .eq("id", id)
+        .eq("version", version);
+
+      if (updateError) {
+        console.error("[webhook_flow_embedding_ft] supabase update error", updateError);
         throw new Error(
-          `Failed to parse json_ordered string: ${
-            error instanceof Error ? error.message : "unknown"
+          `batch index ${index}: ${
+            updateError instanceof Error ? updateError.message : String(updateError)
           }`,
         );
       }
-    }
-    const jsonData = (record as Record<string, any>).json_ordered;
-    if (!jsonData) {
-      throw new Error("No json_ordered data found in record");
+      console.log("md update success", {
+        index,
+        id,
+        version,
+        markdownLength: markdown.length,
+      });
+      results.push({
+        index,
+        id,
+        version,
+        type,
+        table,
+        status: "success",
+        markdownLength: markdown.length,
+      });
     }
 
-    const markdown = tidasFlowToMarkdown(jsonData);
-    if (!markdown) throw new Error("Empty extracted markdown");
-
-    const { error: updateError } = await supabaseClient
-      .from("flows")
-      .update({
-        embedding_ft: markdown,
-      })
-      .eq("id", id)
-      .eq("version", version);
-
-    if (updateError) {
-      throw updateError;
-    }
-    console.log(markdown);
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
@@ -713,7 +775,10 @@ Deno.serve(async (req) => {
     const errorMessage = error instanceof Error
       ? error.message
       : "Unknown error occurred";
-    console.error(errorMessage);
+    console.error("[webhook_flow_embedding_ft] caught error", {
+      error: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,

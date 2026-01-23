@@ -295,6 +295,44 @@ const findProcessDataSet = (data: any): any => {
   return null;
 };
 
+const findLifeCycleModelDataSet = (data: any): any => {
+  if (!isObject(data)) return null;
+
+  const direct = pickProperty(data, [
+    "lifeCycleModelDataSet",
+    "life_cycle_model_data_set",
+    "lifeCycleModelDataset",
+    "life_cycle_model_dataset",
+  ]);
+  if (direct) return direct;
+
+  if (
+    pickProperty(data, [
+      "lifeCycleModelInformation",
+      "life_cycle_model_information",
+    ])
+  ) {
+    return data;
+  }
+
+  for (const key of Object.keys(data)) {
+    const value = (data as any)[key];
+    if (isObject(value)) {
+      const found = findLifeCycleModelDataSet(value);
+      if (found) return found;
+    }
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        if (!isObject(entry)) continue;
+        const found = findLifeCycleModelDataSet(entry);
+        if (found) return found;
+      }
+    }
+  }
+
+  return null;
+};
+
 const composeProcessTitle = (dataInfo: any, lang = DEFAULT_LANG): string => {
   if (!dataInfo) return "Process";
   const nameObj = pickProperty(dataInfo, ["name"]);
@@ -310,6 +348,237 @@ const composeProcessTitle = (dataInfo: any, lang = DEFAULT_LANG): string => {
     if (part) parts.push(part);
   }
   return parts.length ? parts.join(" | ") : "Process";
+};
+
+const composeLifeCycleModelTitle = (
+  dataInfo: any,
+  lang = DEFAULT_LANG,
+): string => {
+  if (!dataInfo) return "Life Cycle Model";
+  const nameObj = pickProperty(dataInfo, ["name"]);
+  const parts: string[] = [];
+  const fields = [
+    ["baseName", "base_name", "basename"],
+    ["mixAndLocationTypes", "mix_and_location_types"],
+    ["treatmentStandardsRoutes", "treatment_standards_routes"],
+  ];
+  if (nameObj) {
+    for (const names of fields) {
+      const value = pickProperty(nameObj, names);
+      const part = joinTexts(value, lang, " | ");
+      if (part) parts.push(part);
+    }
+  }
+
+  if (parts.length) return parts.join(" | ");
+
+  const nameText = joinTexts(nameObj, lang, " | ");
+  if (nameText) return nameText;
+
+  const shortDesc = joinTexts(
+    pickProperty(dataInfo, [
+      "common:shortDescription",
+      "common_short_description",
+      "shortDescription",
+      "short_description",
+    ]),
+    lang,
+    " | ",
+  );
+  if (shortDesc) return shortDesc;
+
+  return "Life Cycle Model";
+};
+
+const getUseAdvice = (modelling: any, lang = DEFAULT_LANG): string | null => {
+  if (!modelling) return null;
+  const advice = pickProperty(modelling, [
+    "useAdviceForDataSet",
+    "use_advice_for_data_set",
+    "useAdvice",
+    "use_advice",
+    "common:useAdvice",
+    "common_use_advice",
+  ]);
+  return joinTexts(advice, lang);
+};
+
+const collectProcessInstances = (technology: any): any[] => {
+  if (!technology) return [];
+  const container = pickProperty(technology, [
+    "processes",
+    "processesInformation",
+    "processes_information",
+    "processInstances",
+    "process_instances",
+    "processList",
+    "process_list",
+  ]);
+  const items = ensureArray(
+    pickProperty(container, ["process", "processInstance", "process_instance"]) ??
+      container,
+  );
+  return items.filter((item) => item !== null && item !== undefined);
+};
+
+const getProcessInstanceId = (processInstance: any): string | null => {
+  if (!processInstance) return null;
+  let id: any = pickProperty(processInstance, [
+    "dataSetInternalID",
+    "data_set_internal_id",
+    "@dataSetInternalID",
+    "@data_set_internal_id",
+    "processInstanceId",
+    "process_instance_id",
+    "@ref",
+    "ref",
+  ]);
+  if (isObject(id)) {
+    id = pickProperty(id, ["@ref", "ref", "#text"]);
+  }
+  if (id === undefined || id === null) {
+    const reference = pickProperty(processInstance, [
+      "referenceToProcess",
+      "reference_to_process",
+      "referenceToProcessDataSet",
+      "reference_to_process_data_set",
+    ]);
+    if (reference) {
+      id = pickProperty(reference, [
+        "@ref",
+        "ref",
+        "#text",
+        "dataSetInternalID",
+        "data_set_internal_id",
+      ]);
+      if (isObject(id)) {
+        id = pickProperty(id, ["@ref", "ref", "#text"]);
+      }
+    }
+  }
+  if (id === undefined || id === null) return null;
+  return String(id);
+};
+
+const getProcessInstanceTitle = (
+  processInstance: any,
+  lang = DEFAULT_LANG,
+): string | null => {
+  if (!processInstance) return null;
+  const reference = pickProperty(processInstance, [
+    "referenceToProcess",
+    "reference_to_process",
+    "referenceToProcessDataSet",
+    "reference_to_process_data_set",
+  ]);
+  const refName = pickShortDescription(reference, lang);
+  if (refName) return refName;
+
+  const localName = pickShortDescription(processInstance, lang);
+  if (localName) return localName;
+
+  const nameText = joinTexts(
+    pickProperty(processInstance, ["name"]),
+    lang,
+    " | ",
+  );
+  if (nameText) return nameText;
+
+  const shortDesc = joinTexts(
+    pickProperty(processInstance, [
+      "common:shortDescription",
+      "common_short_description",
+      "shortDescription",
+      "short_description",
+    ]),
+    lang,
+    " | ",
+  );
+  return shortDesc;
+};
+
+const getReferenceProcessSummary = (
+  quantRef: any,
+  technology: any,
+  lang = DEFAULT_LANG,
+): { name: string | null; id: string | null } => {
+  if (!quantRef && !technology) {
+    return { name: null, id: null };
+  }
+
+  const refNode = quantRef
+    ? pickProperty(quantRef, [
+      "referenceToReferenceProcess",
+      "reference_to_reference_process",
+      "referenceToProcess",
+      "reference_to_process",
+    ])
+    : null;
+  let refId: any = quantRef
+    ? pickProperty(quantRef, [
+      "referenceToReferenceProcess",
+      "reference_to_reference_process",
+      "referenceToProcess",
+      "reference_to_process",
+      "referenceProcess",
+      "reference_process",
+      "@ref",
+      "ref",
+    ])
+    : null;
+  if (isObject(refId)) {
+    refId = pickProperty(refId, [
+      "@ref",
+      "ref",
+      "#text",
+      "dataSetInternalID",
+      "data_set_internal_id",
+    ]);
+  }
+  if (refId === undefined || refId === null) {
+    refId = refNode
+      ? pickProperty(refNode, [
+        "@ref",
+        "ref",
+        "#text",
+        "dataSetInternalID",
+        "data_set_internal_id",
+      ])
+      : null;
+    if (isObject(refId)) {
+      refId = pickProperty(refId, ["@ref", "ref", "#text"]);
+    }
+  }
+  const refIdText = refId !== undefined && refId !== null ? String(refId) : null;
+
+  let refName = pickShortDescription(refNode, lang);
+  if (!refName && technology) {
+    const instances = collectProcessInstances(technology);
+    const match = refIdText
+      ? instances.find((item) => getProcessInstanceId(item) === refIdText)
+      : null;
+    if (match) {
+      refName = getProcessInstanceTitle(match, lang);
+    }
+  }
+
+  return { name: refName ?? null, id: refIdText };
+};
+
+const getProcessLines = (
+  technology: any,
+  lang = DEFAULT_LANG,
+): string[] => {
+  const instances = collectProcessInstances(technology);
+  if (!instances.length) return [];
+  const lines: string[] = [];
+  for (const instance of instances) {
+    const name = getProcessInstanceTitle(instance, lang) ?? "Process";
+    const id = getProcessInstanceId(instance);
+    const suffix = id ? ` (ID ${id})` : "";
+    lines.push(`- ${name}${suffix}`);
+  }
+  return lines;
 };
 
 const getDataSetVersion = (dataset: any): string | null => {
@@ -837,6 +1106,152 @@ const tidasProcessToMarkdown = (processJson: any, lang = DEFAULT_LANG) => {
   return lines.join("\n");
 };
 
+const tidasLifeCycleModelToMarkdown = (
+  modelJson: any,
+  lang = DEFAULT_LANG,
+) => {
+  const dataset = findLifeCycleModelDataSet(modelJson);
+  if (!dataset) {
+    throw new Error("Invalid life cycle model JSON: missing data set");
+  }
+
+  const info = pickProperty(dataset, [
+    "lifeCycleModelInformation",
+    "life_cycle_model_information",
+  ]) ?? {};
+  const dataInfo = pickProperty(info, [
+    "dataSetInformation",
+    "data_set_information",
+  ]) ?? {};
+  const quantitativeReference = pickProperty(info, [
+    "quantitativeReference",
+    "quantitative_reference",
+  ]);
+  const technology = pickProperty(info, ["technology"]);
+  const modelling = pickProperty(dataset, [
+    "modellingAndValidation",
+    "modelling_and_validation",
+  ]);
+
+  const title = composeLifeCycleModelTitle(dataInfo, lang);
+
+  const lines: string[] = [`# ${title}`, ""];
+  lines.push("**Entity:** Life Cycle Model");
+
+  const uuid = pickProperty(dataInfo, [
+    "common:UUID",
+    "common_uuid",
+    "uuid",
+    "UUID",
+    "common:uuid",
+  ]);
+  const uuidText = toDisplayText(uuid, lang);
+  if (uuidText) {
+    lines.push(`**UUID:** \`${uuidText}\``);
+  }
+
+  const version = getDataSetVersion(dataset);
+  if (version) {
+    lines.push(`**Version:** ${version}`);
+  }
+
+  const { name: refName, id: refId } = getReferenceProcessSummary(
+    quantitativeReference,
+    technology,
+    lang,
+  );
+  if (refName || refId) {
+    const suffix = refId ? ` (ID ${refId})` : "";
+    lines.push(
+      `**Reference Process:** ${refName || "Reference process"}${suffix}`,
+    );
+  }
+
+  const resultingProcess = pickShortDescription(
+    pickProperty(dataInfo, [
+      "referenceToResultingProcess",
+      "reference_to_resulting_process",
+    ]),
+    lang,
+  );
+  if (resultingProcess) {
+    lines.push(`**Resulting Process:** ${resultingProcess}`);
+  }
+
+  const externalDoc = pickShortDescription(
+    pickProperty(dataInfo, [
+      "referenceToExternalDocumentation",
+      "reference_to_external_documentation",
+    ]),
+    lang,
+  );
+  if (externalDoc) {
+    lines.push(`**External Documentation:** ${externalDoc}`);
+  }
+
+  const classification = getClassificationPath(dataInfo);
+  if (classification) {
+    lines.push(`**Classification:** ${classification}`);
+  }
+
+  const synonyms = joinTexts(
+    pickProperty(dataInfo, [
+      "common:synonyms",
+      "common_synonyms",
+      "synonyms",
+    ]),
+    lang,
+  );
+  if (synonyms) {
+    lines.push(`**Synonyms:** ${synonyms}`);
+  }
+
+  if (lines.length && lines[lines.length - 1] !== "") {
+    lines.push("");
+  }
+
+  const description = joinTexts(
+    pickProperty(dataInfo, [
+      "common:generalComment",
+      "common_general_comment",
+      "generalComment",
+      "general_comment",
+    ]),
+    lang,
+  );
+  if (description) {
+    lines.push("## Description", "", description, "");
+  }
+
+  const useAdvice = getUseAdvice(modelling, lang);
+  if (useAdvice) {
+    lines.push("## Use Advice", "", useAdvice, "");
+  }
+
+  const processLines = getProcessLines(technology, lang);
+  if (processLines.length) {
+    lines.push("## Process Instances", "", ...processLines, "");
+  }
+
+  const diagram = technology
+    ? pickShortDescription(
+      pickProperty(technology, [
+        "referenceToDiagram",
+        "reference_to_diagram",
+      ]),
+      lang,
+    )
+    : null;
+  if (diagram) {
+    lines.push("## Technology", "", `Diagram: ${diagram}`, "");
+  }
+
+  if (lines.length && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+  return lines.join("\n");
+};
+
 Deno.serve(async (req) => {
   const authResult = await authenticateRequest(req, {
     supabase: supabaseClient,
@@ -854,7 +1269,7 @@ Deno.serve(async (req) => {
       ? (rawPayload as WebhookPayload[])
       : [rawPayload as WebhookPayload];
 
-    // console.log("[webhook_process_embedding_ft] batch received", { size: events.length });
+    // console.log("[webhook_model_embedding_ft] batch received", { size: events.length });
 
     const results: Array<{
       index: number;
@@ -868,7 +1283,7 @@ Deno.serve(async (req) => {
 
     for (const [index, payload] of events.entries()) {
       const { type, record, table } = payload ?? {};
-      // console.log("[webhook_process_embedding_ft] payload received", {
+      // console.log("[webhook_model_embedding_ft] payload received", {
       //   index,
       //   type,
       //   hasRecord: !!record,
@@ -876,12 +1291,12 @@ Deno.serve(async (req) => {
       //   table,
       // });
 
-      if (table && table !== "processes") {
-        throw new Error(`batch index ${index}: unexpected table ${table}, expect processes`);
+      if (table && table !== "lifecyclemodels") {
+        throw new Error(`batch index ${index}: unexpected table ${table}, expect lifecyclemodels`);
       }
 
       if (type !== "INSERT" && type !== "UPDATE") {
-        console.error("[webhook_process_embedding_ft] ignored type", { index, type });
+        console.error("[webhook_model_embedding_ft] ignored type", { index, type });
         results.push({ index, type, table, status: "ignored" });
         continue;
       }
@@ -896,7 +1311,7 @@ Deno.serve(async (req) => {
       }
 
       const jsonDataRaw = (record as Record<string, any>).json_ordered;
-      // console.log("[webhook_process_embedding_ft] json_ordered type", {
+      // console.log("[webhook_model_embedding_ft] json_ordered type", {
       //   index,
       //   type: typeof jsonDataRaw,
       //   isString: typeof jsonDataRaw === "string",
@@ -905,7 +1320,7 @@ Deno.serve(async (req) => {
         try {
           (record as Record<string, any>).json_ordered = JSON.parse(jsonDataRaw);
         } catch (error) {
-          console.error("[webhook_process_embedding_ft] json parse failed", {
+          console.error("[webhook_model_embedding_ft] json parse failed", {
             index,
             message: error instanceof Error ? error.message : String(error),
           });
@@ -921,16 +1336,16 @@ Deno.serve(async (req) => {
         throw new Error(`batch index ${index}: No json_ordered data found in record`);
       }
 
-      const markdown = tidasProcessToMarkdown(jsonData);
+      const markdown = tidasLifeCycleModelToMarkdown(jsonData);
       console.log(markdown);
-      // console.log("[webhook_process_embedding_ft] markdown generated", {
+      // console.log("[webhook_model_embedding_ft] markdown generated", {
       //   index,
       //   length: markdown?.length ?? 0,
       // });
       if (!markdown) throw new Error(`batch index ${index}: Empty extracted markdown`);
 
       const { error: updateError } = await supabaseClient
-        .from("processes")
+        .from("lifecyclemodels")
         .update({
           extracted_md: markdown,
         })
@@ -938,7 +1353,7 @@ Deno.serve(async (req) => {
         .eq("version", version);
 
       if (updateError) {
-        console.error("[webhook_process_embedding_ft] supabase update error", updateError);
+        console.error("[webhook_model_embedding_ft] supabase update error", updateError);
         throw new Error(
           `batch index ${index}: ${
             updateError instanceof Error ? updateError.message : String(updateError)
@@ -970,7 +1385,7 @@ Deno.serve(async (req) => {
     const errorMessage = error instanceof Error
       ? error.message
       : "Unknown error occurred";
-    console.error("[webhook_process_embedding_ft] caught error", {
+    console.error("[webhook_model_embedding_ft] caught error", {
       error: errorMessage,
       stack: error instanceof Error ? error.stack : undefined,
     });

@@ -74,6 +74,8 @@ npx supabase functions deploy webhook_model_embedding --project-ref qgzvkongdjqi
 
 npx supabase functions deploy embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy webhook_process_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy webhook_model_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy webhook_flow_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
 ## Antchain Related Functions (Not yet used)
 # npx supabase functions deploy antchain_request_process_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
