@@ -5,14 +5,10 @@ import { z } from 'zod';
 
 // We'll make a direct Postgres connection to update the document
 import postgres from 'postgres';
-import { InvokeEndpointCommand, SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 
-const SAGEMAKER_ENDPOINT_NAME = Deno.env.get('SAGEMAKER_ENDPOINT_NAME');
-const AWS_REGION = 'us-east-1';
-const AWS_ACCESS_KEY_ID = Deno.env.get('AWS_ACCESS_KEY_ID');
-const AWS_SECRET_ACCESS_KEY = Deno.env.get('AWS_SECRET_ACCESS_KEY');
-const AWS_SESSION_TOKEN = Deno.env.get('AWS_SESSION_TOKEN');
-const textDecoder = new TextDecoder();
+const EMBEDDING_API_URL = Deno.env.get('EMBEDDING_API_URL');
+const EMBEDDING_API_KEY = Deno.env.get('EMBEDDING_API_KEY');
+const EMBEDDING_MODEL = Deno.env.get('EMBEDDING_MODEL');
 
 // Initialize Postgres client
 const sql = postgres(
@@ -45,69 +41,6 @@ type Row = {
 };
 
 const QUEUE_NAME = 'embedding_jobs';
-
-let sagemakerClient: SageMakerRuntimeClient | undefined;
-
-function getSageMakerClient() {
-  if (!sagemakerClient) {
-    sagemakerClient = new SageMakerRuntimeClient({
-      region: AWS_REGION,
-      credentials: {
-        accessKeyId: AWS_ACCESS_KEY_ID ?? '',
-        secretAccessKey: AWS_SECRET_ACCESS_KEY ?? '',
-        sessionToken: AWS_SESSION_TOKEN ?? undefined,
-      },
-    });
-  }
-
-  return sagemakerClient;
-}
-
-function isNumberArray(value: unknown): value is number[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'number');
-}
-
-function extractEmbedding(result: unknown): number[] | undefined {
-  if (isNumberArray(result)) {
-    return result;
-  }
-
-  if (Array.isArray(result) && result.length > 0 && isNumberArray(result[0])) {
-    return result[0];
-  }
-
-  if (result && typeof result === 'object') {
-    const candidate = result as {
-      embedding?: unknown;
-      embeddings?: unknown;
-      data?: Array<{ embedding?: unknown }> | unknown;
-    };
-
-    if (isNumberArray(candidate.embedding)) {
-      return candidate.embedding;
-    }
-
-    if (Array.isArray(candidate.embeddings)) {
-      if (isNumberArray(candidate.embeddings)) {
-        return candidate.embeddings;
-      }
-
-      const firstEmbedding = (candidate.embeddings as unknown[])[0];
-      if (isNumberArray(firstEmbedding)) {
-        return firstEmbedding;
-      }
-    }
-
-    if (Array.isArray(candidate.data) && candidate.data.length > 0) {
-      const firstData = (candidate.data as { embedding?: unknown }[])[0];
-      if (isNumberArray(firstData?.embedding)) {
-        return firstData.embedding;
-      }
-    }
-  }
-
-  return undefined;
-}
 
 // Listen for HTTP requests
 Deno.serve(async (req) => {
@@ -204,62 +137,47 @@ Deno.serve(async (req) => {
  * Generates an embedding for the given text.
  */
 async function generateEmbedding(text: string) {
-  if (!SAGEMAKER_ENDPOINT_NAME) {
-    throw new Error('missing SAGEMAKER_ENDPOINT_NAME environment variable');
+  if (!EMBEDDING_API_URL) {
+    throw new Error('missing EMBEDDING_API_URL environment variable');
   }
 
-  if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
-    throw new Error('missing AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY environment variable');
+  if (!EMBEDDING_API_KEY) {
+    throw new Error('missing EMBEDDING_API_KEY environment variable');
   }
 
-  const client = getSageMakerClient();
+  if (!EMBEDDING_MODEL) {
+    throw new Error('missing EMBEDDING_MODEL environment variable');
+  }
 
-  const command = new InvokeEndpointCommand({
-    EndpointName: SAGEMAKER_ENDPOINT_NAME,
-    ContentType: 'application/json',
-    Accept: 'application/json',
-    Body: JSON.stringify({ inputs: text }),
+  const response = await fetch(EMBEDDING_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${EMBEDDING_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: EMBEDDING_MODEL,
+      input: text,
+    }),
   });
+  // console.log('embedding API response:', response);
 
-  const response = await client.send(command);
 
-  const httpStatus = response.$metadata.httpStatusCode ?? 500;
-  if (httpStatus < 200 || httpStatus >= 300) {
-    throw new Error(`SageMaker endpoint request failed: ${httpStatus}`);
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(
+      `embedding API request failed: ${response.status} ${response.statusText} - ${errorBody}`,
+    );
   }
 
-  const rawBody = response.Body;
-
-  if (!rawBody) {
-    throw new Error('empty response body from SageMaker endpoint');
-  }
-
-  let bodyString: string;
-
-  if (typeof rawBody === 'string') {
-    bodyString = rawBody;
-  } else if (rawBody instanceof Uint8Array) {
-    bodyString = textDecoder.decode(rawBody);
-  } else if (
-    rawBody &&
-    typeof rawBody === 'object' &&
-    'transformToByteArray' in rawBody &&
-    typeof (rawBody as { transformToByteArray: () => Promise<Uint8Array> }).transformToByteArray ===
-      'function'
-  ) {
-    const bytes = await (
-      rawBody as unknown as { transformToByteArray: () => Promise<Uint8Array> }
-    ).transformToByteArray();
-    bodyString = textDecoder.decode(bytes);
-  } else {
-    throw new Error('unexpected response body type from SageMaker endpoint');
-  }
-
-  const parsed = JSON.parse(bodyString);
-  const embedding = extractEmbedding(parsed);
+  const result = await response.json();
+  const embedding =
+    Array.isArray(result?.data) && result.data.length > 0
+      ? result.data[0]?.embedding
+      : undefined;
 
   if (!embedding) {
-    throw new Error('failed to generate embedding from SageMaker response');
+    throw new Error('failed to generate embedding from response');
   }
 
   return embedding;
