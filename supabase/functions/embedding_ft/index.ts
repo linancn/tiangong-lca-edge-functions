@@ -67,46 +67,74 @@ function isNumberArray(value: unknown): value is number[] {
   return Array.isArray(value) && value.every((item) => typeof item === 'number');
 }
 
-function extractEmbedding(result: unknown): number[] | undefined {
-  if (isNumberArray(result)) {
-    return result;
+/**
+ * Attempts to parse a JSON string, returning undefined when parsing is not possible.
+ */
+function safeParseJsonString(value: string): unknown | undefined {
+  const trimmed = value.trim();
+
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+    return undefined;
   }
 
-  if (Array.isArray(result) && result.length > 0 && isNumberArray(result[0])) {
-    return result[0];
+  try {
+    return JSON.parse(trimmed);
+  } catch (error) {
+    console.warn('failed to parse JSON string from model response', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  }
+}
+
+function findFirstNumberArray(value: unknown): number[] | undefined {
+  if (typeof value === 'string') {
+    const parsed = safeParseJsonString(value);
+    if (parsed !== undefined) {
+      return findFirstNumberArray(parsed);
+    }
+    return undefined;
   }
 
-  if (result && typeof result === 'object') {
-    const candidate = result as {
-      embedding?: unknown;
-      embeddings?: unknown;
-      data?: Array<{ embedding?: unknown }> | unknown;
-    };
+  if (isNumberArray(value)) {
+    return value;
+  }
 
-    if (isNumberArray(candidate.embedding)) {
-      return candidate.embedding;
-    }
-
-    if (Array.isArray(candidate.embeddings)) {
-      if (isNumberArray(candidate.embeddings)) {
-        return candidate.embeddings;
-      }
-
-      const firstEmbedding = (candidate.embeddings as unknown[])[0];
-      if (isNumberArray(firstEmbedding)) {
-        return firstEmbedding;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findFirstNumberArray(item);
+      if (found) {
+        return found;
       }
     }
+    return undefined;
+  }
 
-    if (Array.isArray(candidate.data) && candidate.data.length > 0) {
-      const firstData = (candidate.data as { embedding?: unknown }[])[0];
-      if (isNumberArray(firstData?.embedding)) {
-        return firstData.embedding;
+  if (value && typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+
+    for (const key of ['embedding', 'embeddings', 'data']) {
+      if (key in obj) {
+        const found = findFirstNumberArray(obj[key]);
+        if (found) {
+          return found;
+        }
+      }
+    }
+
+    for (const candidate of Object.values(obj)) {
+      const found = findFirstNumberArray(candidate);
+      if (found) {
+        return found;
       }
     }
   }
 
   return undefined;
+}
+
+function extractEmbedding(result: unknown): number[] | undefined {
+  return findFirstNumberArray(result);
 }
 
 // Listen for HTTP requests
@@ -322,6 +350,8 @@ async function processJob(job: Job) {
 
     return;
   }
+
+  console.log('generating embedding for ', row.content );
 
   const embedding = await generateEmbedding(row.content);
 
