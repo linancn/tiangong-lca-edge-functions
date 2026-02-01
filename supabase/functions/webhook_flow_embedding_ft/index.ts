@@ -737,7 +737,7 @@ Deno.serve(async (req) => {
       const { error: updateError } = await supabaseClient
         .from("flows")
         .update({
-          embedding_ft: markdown,
+          extracted_md: markdown,
         })
         .eq("id", id)
         .eq("version", version);
@@ -746,7 +746,9 @@ Deno.serve(async (req) => {
         console.error("[webhook_flow_embedding_ft] supabase update error", updateError);
         throw new Error(
           `batch index ${index}: ${
-            updateError instanceof Error ? updateError.message : String(updateError)
+            updateError instanceof Error
+              ? updateError.message
+              : JSON.stringify(updateError)
           }`,
         );
       }
