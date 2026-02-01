@@ -1,25 +1,25 @@
 // Setup type definitions for built-in Supabase Runtime APIs
-import "@supabase/functions-js/edge-runtime.d.ts";
+import '@supabase/functions-js/edge-runtime.d.ts';
 
-import { authenticateRequest, AuthMethod } from "../_shared/auth.ts";
-import { corsHeaders } from "../_shared/cors.ts";
-import { supabaseClient } from "../_shared/supabase_client.ts";
+import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
+import { corsHeaders } from '../_shared/cors.ts';
+import { supabaseClient } from '../_shared/supabase_client.ts';
 
 interface WebhookPayload {
-  type: "INSERT" | "UPDATE" | "DELETE";
+  type: 'INSERT' | 'UPDATE' | 'DELETE';
   table: string;
   schema: string;
   record: Record<string, unknown> | null;
   old_record: Record<string, unknown> | null;
 }
 
-const DEFAULT_LANG = "en";
+const DEFAULT_LANG = 'en';
 
 const isObject = (value: unknown): value is Record<string, any> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const pickProperty = (obj: any, names: string[]) => {
-  if (!obj || typeof obj !== "object") return undefined;
+  if (!obj || typeof obj !== 'object') return undefined;
   for (const name of names) {
     const value = (obj as any)[name];
     if (value !== undefined && value !== null) return value;
@@ -34,13 +34,13 @@ const ensureArray = <T>(obj: T | T[] | null | undefined): T[] => {
 
 const getTextFromDict = (data: any): string | null => {
   if (data === null || data === undefined) return null;
-  if (typeof data === "string" || typeof data === "number") {
+  if (typeof data === 'string' || typeof data === 'number') {
     const text = String(data).trim();
     return text || null;
   }
   if (isObject(data)) {
-    const text = data["#text"] ?? data["text"] ?? data["_text"];
-    if (typeof text === "string") {
+    const text = data['#text'] ?? data['text'] ?? data['_text'];
+    if (typeof text === 'string') {
       const trimmed = text.trim();
       return trimmed || null;
     }
@@ -51,15 +51,14 @@ const getTextFromDict = (data: any): string | null => {
 const getLangText = (value: any, lang = DEFAULT_LANG): string | null => {
   if (value === null || value === undefined) return null;
 
-  if (typeof value === "string" || typeof value === "number") {
+  if (typeof value === 'string' || typeof value === 'number') {
     const text = String(value).trim();
     return text || null;
   }
 
   if (Array.isArray(value)) {
     const exact = value.find(
-      (item) =>
-        isObject(item) && item["@xml:lang"] && item["@xml:lang"] === lang,
+      (item) => isObject(item) && item['@xml:lang'] && item['@xml:lang'] === lang,
     );
     if (exact !== undefined) {
       const text = getLangText(exact, lang);
@@ -73,7 +72,7 @@ const getLangText = (value: any, lang = DEFAULT_LANG): string | null => {
   }
 
   if (isObject(value)) {
-    if (typeof (value as any).get_text === "function") {
+    if (typeof (value as any).get_text === 'function') {
       const text = (value as any).get_text(lang);
       if (text) {
         const trimmed = String(text).trim();
@@ -83,7 +82,7 @@ const getLangText = (value: any, lang = DEFAULT_LANG): string | null => {
     const text = getTextFromDict(value);
     if (text) return text;
     for (const key of Object.keys(value)) {
-      if (key.toLowerCase().includes("text")) {
+      if (key.toLowerCase().includes('text')) {
         const nestedText = getLangText((value as any)[key], lang);
         if (nestedText) return nestedText;
       }
@@ -95,10 +94,7 @@ const getLangText = (value: any, lang = DEFAULT_LANG): string | null => {
 
 const toDisplayText = (value: any, lang = DEFAULT_LANG): string | null => {
   if (value === null || value === undefined) return null;
-  if (
-    typeof value === "string" || typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     const text = String(value).trim();
     return text || null;
   }
@@ -108,10 +104,7 @@ const toDisplayText = (value: any, lang = DEFAULT_LANG): string | null => {
 const collectTexts = (value: any, lang = DEFAULT_LANG): string[] => {
   if (value === null || value === undefined) return [];
 
-  if (
-    typeof value === "string" || typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     const text = String(value).trim();
     return text ? [text] : [];
   }
@@ -131,21 +124,13 @@ const collectTexts = (value: any, lang = DEFAULT_LANG): string[] => {
     if (entry === null || entry === undefined) {
       continue;
     }
-    if (
-      typeof entry === "string" || typeof entry === "number" ||
-      typeof entry === "boolean"
-    ) {
+    if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') {
       const text = String(entry).trim();
       if (text) fallback.push(text);
       continue;
     }
     if (!isObject(entry)) continue;
-    const entryLang = pickProperty(entry, [
-      "@xml:lang",
-      "xml:lang",
-      "xml_lang",
-      "lang",
-    ]);
+    const entryLang = pickProperty(entry, ['@xml:lang', 'xml:lang', 'xml_lang', 'lang']);
     const text = getTextFromDict(entry);
     if (!text) continue;
     if (lang && entryLang === lang) {
@@ -165,16 +150,13 @@ const pickText = (value: any, lang = DEFAULT_LANG): string | null => {
     return texts.length ? texts[0] : null;
   }
 
-  if (
-    typeof value === "string" || typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     const text = String(value).trim();
     return text || null;
   }
 
   if (isObject(value)) {
-    if (typeof (value as any).get_text === "function") {
+    if (typeof (value as any).get_text === 'function') {
       const text = (value as any).get_text(lang);
       if (text) {
         const trimmed = String(text).trim();
@@ -188,11 +170,7 @@ const pickText = (value: any, lang = DEFAULT_LANG): string | null => {
   return null;
 };
 
-const joinTexts = (
-  value: any,
-  lang = DEFAULT_LANG,
-  sep = "\n\n",
-): string | null => {
+const joinTexts = (value: any, lang = DEFAULT_LANG, sep = '\n\n'): string | null => {
   const texts = collectTexts(value, lang)
     .map((text) => text.trim())
     .filter((text) => text);
@@ -200,8 +178,8 @@ const joinTexts = (
 };
 
 const formatNumber = (value: any): string => {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number") {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'number') {
     return Number.isFinite(value) ? value.toString() : String(value);
   }
   try {
@@ -213,10 +191,7 @@ const formatNumber = (value: any): string => {
   return String(value);
 };
 
-const pickShortDescription = (
-  ref: any,
-  lang = DEFAULT_LANG,
-): string | null => {
+const pickShortDescription = (ref: any, lang = DEFAULT_LANG): string | null => {
   if (ref === null || ref === undefined) return null;
   if (Array.isArray(ref)) {
     for (const entry of ref) {
@@ -227,20 +202,17 @@ const pickShortDescription = (
   }
   if (isObject(ref)) {
     const shortDesc = pickProperty(ref, [
-      "common:shortDescription",
-      "common_short_description",
-      "shortDescription",
-      "short_description",
+      'common:shortDescription',
+      'common_short_description',
+      'shortDescription',
+      'short_description',
     ]);
     const text = pickText(shortDesc, lang);
     if (text) return text;
     const direct = getTextFromDict(ref);
     if (direct) return direct;
   }
-  if (
-    typeof ref === "string" || typeof ref === "number" ||
-    typeof ref === "boolean"
-  ) {
+  if (typeof ref === 'string' || typeof ref === 'number' || typeof ref === 'boolean') {
     const text = String(ref).trim();
     return text || null;
   }
@@ -250,11 +222,12 @@ const pickShortDescription = (
 const findFlowDataSet = (data: any): any => {
   if (!isObject(data)) return null;
 
-  const direct = pickProperty(data, ["flowDataSet", "flow_data_set"]) ??
-    pickProperty(data, ["flowdataset", "flow_dataset"]);
+  const direct =
+    pickProperty(data, ['flowDataSet', 'flow_data_set']) ??
+    pickProperty(data, ['flowdataset', 'flow_dataset']);
   if (direct) return direct;
 
-  if (pickProperty(data, ["flowInformation", "flow_information"])) {
+  if (pickProperty(data, ['flowInformation', 'flow_information'])) {
     return data;
   }
 
@@ -270,20 +243,20 @@ const findFlowDataSet = (data: any): any => {
 };
 
 const composeFlowTitle = (dataInfo: any, lang = DEFAULT_LANG): string => {
-  if (!dataInfo) return "Flow";
-  const nameObj = pickProperty(dataInfo, ["name"]);
+  if (!dataInfo) return 'Flow';
+  const nameObj = pickProperty(dataInfo, ['name']);
   const parts: string[] = [];
   const fields = [
-    ["baseName", "base_name", "basename"],
-    ["mixAndLocationTypes", "mix_and_location_types"],
-    ["treatmentStandardsRoutes", "treatment_standards_routes"],
+    ['baseName', 'base_name', 'basename'],
+    ['mixAndLocationTypes', 'mix_and_location_types'],
+    ['treatmentStandardsRoutes', 'treatment_standards_routes'],
   ];
   for (const names of fields) {
     const value = nameObj ? pickProperty(nameObj, names) : undefined;
-    const part = joinTexts(value, lang, " | ");
+    const part = joinTexts(value, lang, ' | ');
     if (part) parts.push(part);
   }
-  return parts.length ? parts.join(" | ") : "Flow";
+  return parts.length ? parts.join(' | ') : 'Flow';
 };
 
 const getReferencePropertySummary = (
@@ -292,27 +265,21 @@ const getReferencePropertySummary = (
 ): { name: string | null; value: string | null } => {
   if (!dataset) return { name: null, value: null };
 
-  const flowInfo = pickProperty(dataset, [
-    "flowInformation",
-    "flow_information",
-  ]);
+  const flowInfo = pickProperty(dataset, ['flowInformation', 'flow_information']);
   const quantitativeReference = flowInfo
-    ? pickProperty(flowInfo, [
-      "quantitativeReference",
-      "quantitative_reference",
-    ])
+    ? pickProperty(flowInfo, ['quantitativeReference', 'quantitative_reference'])
     : null;
   const refId = quantitativeReference
     ? pickProperty(quantitativeReference, [
-      "referenceToReferenceFlowProperty",
-      "reference_to_reference_flow_property",
-      "@ref",
-    ])
+        'referenceToReferenceFlowProperty',
+        'reference_to_reference_flow_property',
+        '@ref',
+      ])
     : null;
 
-  const properties = pickProperty(dataset, ["flowProperties", "flow_properties"]);
+  const properties = pickProperty(dataset, ['flowProperties', 'flow_properties']);
   const propItems = ensureArray(
-    pickProperty(properties, ["flowProperty", "flow_property"]) ?? properties,
+    pickProperty(properties, ['flowProperty', 'flow_property']) ?? properties,
   );
   if (!propItems.length || refId === null || refId === undefined) {
     return { name: null, value: null };
@@ -321,14 +288,12 @@ const getReferencePropertySummary = (
   let refItem: any = null;
   for (const item of propItems) {
     const itemId = pickProperty(item, [
-      "dataSetInternalID",
-      "data_set_internal_id",
-      "@dataSetInternalID",
-      "@data_set_internal_id",
+      'dataSetInternalID',
+      'data_set_internal_id',
+      '@dataSetInternalID',
+      '@data_set_internal_id',
     ]);
-    if (
-      itemId !== undefined && itemId !== null && String(itemId) === String(refId)
-    ) {
+    if (itemId !== undefined && itemId !== null && String(itemId) === String(refId)) {
       refItem = item;
       break;
     }
@@ -339,14 +304,12 @@ const getReferencePropertySummary = (
   }
 
   const refInfo = pickProperty(refItem, [
-    "referenceToFlowPropertyDataSet",
-    "reference_to_flow_property_data_set",
+    'referenceToFlowPropertyDataSet',
+    'reference_to_flow_property_data_set',
   ]);
-  const meanValue = pickProperty(refItem, ["meanValue", "mean_value"]);
+  const meanValue = pickProperty(refItem, ['meanValue', 'mean_value']);
   const name = pickShortDescription(refInfo, lang);
-  const value = meanValue !== undefined && meanValue !== null
-    ? formatNumber(meanValue)
-    : null;
+  const value = meanValue !== undefined && meanValue !== null ? formatNumber(meanValue) : null;
   return { name, value };
 };
 
@@ -354,35 +317,35 @@ const getClassificationPath = (dataInfo: any): string | null => {
   if (!dataInfo) return null;
 
   const classification = pickProperty(dataInfo, [
-    "classificationInformation",
-    "classification_information",
+    'classificationInformation',
+    'classification_information',
   ]);
   if (!classification) return null;
 
   const container = pickProperty(classification, [
-    "common:elementaryFlowCategorization",
-    "common:classification",
-    "elementaryFlowCategorization",
-    "classification",
-    "common_elementary_flow_categorization",
-    "common_classification",
+    'common:elementaryFlowCategorization',
+    'common:classification',
+    'elementaryFlowCategorization',
+    'classification',
+    'common_elementary_flow_categorization',
+    'common_classification',
   ]);
   if (!container) return null;
 
   const categories = ensureArray(
     pickProperty(container, [
-      "common:category",
-      "common:class",
-      "category",
-      "class",
-      "common_category",
-      "common_class",
+      'common:category',
+      'common:class',
+      'category',
+      'class',
+      'common_category',
+      'common_class',
     ]),
   );
   if (!categories.length) return null;
 
   const getLevel = (item: any): number | null => {
-    const level = isObject(item) ? pickProperty(item, ["@level", "level"]) : null;
+    const level = isObject(item) ? pickProperty(item, ['@level', 'level']) : null;
     if (level === undefined || level === null) return null;
     const parsed = Number(level);
     return Number.isFinite(parsed) ? parsed : null;
@@ -402,24 +365,20 @@ const getClassificationPath = (dataInfo: any): string | null => {
     const text = getTextFromDict(entry);
     if (text) parts.push(text);
   }
-  return parts.length ? parts.join(" > ") : null;
+  return parts.length ? parts.join(' > ') : null;
 };
 
 const getEcNumber = (dataInfo: any): string | null => {
   if (!dataInfo) return null;
-  const other = pickProperty(dataInfo, [
-    "common:other",
-    "common_other",
-    "other",
-  ]);
+  const other = pickProperty(dataInfo, ['common:other', 'common_other', 'other']);
   if (!other || !isObject(other)) return null;
   const ecContainer = pickProperty(other, [
-    "ecn:ECNumber",
-    "ECNumber",
-    "ecn_ec_number",
-    "ec_number",
+    'ecn:ECNumber',
+    'ECNumber',
+    'ecn_ec_number',
+    'ec_number',
   ]);
-  if (typeof ecContainer === "string" || typeof ecContainer === "number") {
+  if (typeof ecContainer === 'string' || typeof ecContainer === 'number') {
     const text = String(ecContainer).trim();
     return text || null;
   }
@@ -432,66 +391,46 @@ const getEcNumber = (dataInfo: any): string | null => {
 
 const getDataSetVersion = (dataset: any): string | null => {
   if (!dataset) return null;
-  const admin = pickProperty(dataset, [
-    "administrativeInformation",
-    "administrative_information",
-  ]);
+  const admin = pickProperty(dataset, ['administrativeInformation', 'administrative_information']);
   const publication = admin
-    ? pickProperty(admin, [
-      "publicationAndOwnership",
-      "publication_and_ownership",
-    ])
+    ? pickProperty(admin, ['publicationAndOwnership', 'publication_and_ownership'])
     : null;
   const version = publication
     ? pickProperty(publication, [
-      "common:dataSetVersion",
-      "common_data_set_version",
-      "dataSetVersion",
-      "data_set_version",
-      "version",
-    ])
+        'common:dataSetVersion',
+        'common_data_set_version',
+        'dataSetVersion',
+        'data_set_version',
+        'version',
+      ])
     : null;
   return version ? toDisplayText(version, DEFAULT_LANG) : null;
 };
 
 const getMethodology = (dataset: any): string | null => {
   if (!dataset) return null;
-  const modelling = pickProperty(dataset, [
-    "modellingAndValidation",
-    "modelling_and_validation",
-  ]);
-  const lci = modelling
-    ? pickProperty(modelling, ["LCIMethod", "lciMethod", "lci_method"])
-    : null;
-  const dataSetType = lci
-    ? pickProperty(lci, ["typeOfDataSet", "type_of_data_set"])
-    : null;
+  const modelling = pickProperty(dataset, ['modellingAndValidation', 'modelling_and_validation']);
+  const lci = modelling ? pickProperty(modelling, ['LCIMethod', 'lciMethod', 'lci_method']) : null;
+  const dataSetType = lci ? pickProperty(lci, ['typeOfDataSet', 'type_of_data_set']) : null;
   const typeText = dataSetType ? toDisplayText(dataSetType, DEFAULT_LANG) : null;
   return typeText ? `**Data Set Type:** ${typeText}` : null;
 };
 
 const getGeography = (flowInfo: any, lang = DEFAULT_LANG): string | null => {
-  const geography = flowInfo ? pickProperty(flowInfo, ["geography"]) : null;
+  const geography = flowInfo ? pickProperty(flowInfo, ['geography']) : null;
   if (!geography) return null;
-  const location = pickProperty(geography, [
-    "locationOfSupply",
-    "location_of_supply",
-    "location",
-  ]);
+  const location = pickProperty(geography, ['locationOfSupply', 'location_of_supply', 'location']);
   const locationText = toDisplayText(location, lang);
   if (!locationText) return null;
   return `**Location of Supply:** ${locationText}`;
 };
 
 const getTechnology = (flowInfo: any, lang = DEFAULT_LANG): string | null => {
-  const technology = flowInfo ? pickProperty(flowInfo, ["technology"]) : null;
+  const technology = flowInfo ? pickProperty(flowInfo, ['technology']) : null;
   if (!technology) return null;
   if (isObject(technology)) {
     const applicability = joinTexts(
-      pickProperty(technology, [
-        "technologicalApplicability",
-        "technological_applicability",
-      ]),
+      pickProperty(technology, ['technologicalApplicability', 'technological_applicability']),
       lang,
     );
     return applicability;
@@ -501,18 +440,16 @@ const getTechnology = (flowInfo: any, lang = DEFAULT_LANG): string | null => {
 
 const getFlowProperties = (dataset: any, lang = DEFAULT_LANG): string[] => {
   if (!dataset) return [];
-  const props = pickProperty(dataset, ["flowProperties", "flow_properties"]);
-  const items = ensureArray(
-    pickProperty(props, ["flowProperty", "flow_property"]) ?? props,
-  );
+  const props = pickProperty(dataset, ['flowProperties', 'flow_properties']);
+  const items = ensureArray(pickProperty(props, ['flowProperty', 'flow_property']) ?? props);
   const lines: string[] = [];
   for (const item of items) {
     const ref = pickProperty(item, [
-      "referenceToFlowPropertyDataSet",
-      "reference_to_flow_property_data_set",
+      'referenceToFlowPropertyDataSet',
+      'reference_to_flow_property_data_set',
     ]);
-    const meanValue = pickProperty(item, ["meanValue", "mean_value"]);
-    const name = pickShortDescription(ref, lang) || "Flow property";
+    const meanValue = pickProperty(item, ['meanValue', 'mean_value']);
+    const name = pickShortDescription(ref, lang) || 'Flow property';
     lines.push(`- ${name}: ${formatNumber(meanValue)}`);
   }
   return lines;
@@ -521,30 +458,21 @@ const getFlowProperties = (dataset: any, lang = DEFAULT_LANG): string[] => {
 const tidasFlowToMarkdown = (flowJson: any, lang = DEFAULT_LANG) => {
   const flowDataSet = findFlowDataSet(flowJson);
   if (!flowDataSet) {
-    throw new Error("Invalid flow JSON: missing flow data set");
+    throw new Error('Invalid flow JSON: missing flow data set');
   }
 
-  const flowInformation = pickProperty(flowDataSet, [
-    "flowInformation",
-    "flow_information",
-  ]) ?? {};
-  const dataSetInformation = pickProperty(flowInformation, [
-    "dataSetInformation",
-    "data_set_information",
-  ]) ?? {};
+  const flowInformation = pickProperty(flowDataSet, ['flowInformation', 'flow_information']) ?? {};
+  const dataSetInformation =
+    pickProperty(flowInformation, ['dataSetInformation', 'data_set_information']) ?? {};
 
   const title = composeFlowTitle(dataSetInformation, lang);
 
-  const lines: string[] = [`# ${title}`, ""];
-  lines.push("**Entity:** Flow");
+  const lines: string[] = [`# ${title}`, ''];
+  lines.push('**Entity:** Flow');
 
-  const uuid = pickProperty(dataSetInformation, [
-    "common:UUID",
-    "common_uuid",
-    "uuid",
-    "UUID",
-  ]) ??
-    pickProperty(dataSetInformation, ["common:uuid"]);
+  const uuid =
+    pickProperty(dataSetInformation, ['common:UUID', 'common_uuid', 'uuid', 'UUID']) ??
+    pickProperty(dataSetInformation, ['common:uuid']);
   const uuidText = toDisplayText(uuid, lang);
   if (uuidText) {
     lines.push(`**UUID:** \`${uuidText}\``);
@@ -555,10 +483,9 @@ const tidasFlowToMarkdown = (flowJson: any, lang = DEFAULT_LANG) => {
     lines.push(`**Version:** ${version}`);
   }
 
-  const { name: refPropName, value: refPropValue } =
-    getReferencePropertySummary(flowDataSet, lang);
+  const { name: refPropName, value: refPropValue } = getReferencePropertySummary(flowDataSet, lang);
   if (refPropName || refPropValue) {
-    lines.push(`**Reference Property:** ${refPropName || "N/A"}`);
+    lines.push(`**Reference Property:** ${refPropName || 'N/A'}`);
   }
   if (refPropValue) {
     lines.push(`**Property Mean:** ${refPropValue}`);
@@ -570,11 +497,7 @@ const tidasFlowToMarkdown = (flowJson: any, lang = DEFAULT_LANG) => {
   }
 
   const casNumber = toDisplayText(
-    pickProperty(dataSetInformation, [
-      "CASNumber",
-      "casNumber",
-      "cas_number",
-    ]),
+    pickProperty(dataSetInformation, ['CASNumber', 'casNumber', 'cas_number']),
     lang,
   );
   if (casNumber) {
@@ -589,57 +512,53 @@ const tidasFlowToMarkdown = (flowJson: any, lang = DEFAULT_LANG) => {
   const classification = getClassificationPath(dataSetInformation);
   if (classification) {
     lines.push(`**Classification:** ${classification}`);
-    lines.push("");
+    lines.push('');
   }
 
   const synonyms = joinTexts(
-    pickProperty(dataSetInformation, [
-      "common:synonyms",
-      "common_synonyms",
-      "synonyms",
-    ]),
+    pickProperty(dataSetInformation, ['common:synonyms', 'common_synonyms', 'synonyms']),
     lang,
   );
   if (synonyms) {
     lines.push(`**Synonyms:** ${synonyms}`);
   }
 
-  if (lines.length && lines[lines.length - 1] !== "") {
-    lines.push("");
+  if (lines.length && lines[lines.length - 1] !== '') {
+    lines.push('');
   }
 
   const description = joinTexts(
     pickProperty(dataSetInformation, [
-      "common:generalComment",
-      "common_general_comment",
-      "generalComment",
-      "general_comment",
+      'common:generalComment',
+      'common_general_comment',
+      'generalComment',
+      'general_comment',
     ]),
     lang,
   );
   if (description) {
-    lines.push("## Description", "", description, "");
+    lines.push('## Description', '', description, '');
   }
 
   const geography = getGeography(flowInformation, lang);
   if (geography) {
-    lines.push("## Geography", "", geography, "");
+    lines.push('## Geography', '', geography, '');
   }
 
   const technology = getTechnology(flowInformation, lang);
   if (technology) {
-    lines.push("## Technology", "", technology, "");
+    lines.push('## Technology', '', technology, '');
   }
 
   const flowProperties = getFlowProperties(flowDataSet, lang);
   if (flowProperties.length) {
-    lines.push("## Flow Properties", "", ...flowProperties, "");
+    lines.push('## Flow Properties', '', ...flowProperties, '');
   }
 
-  if (lines.length && lines[lines.length - 1] === "") {
+  if (lines.length && lines[lines.length - 1] === '') {
     lines.pop();
   }
-  return lines.join("\n");
+  return lines.join('\n');
 };
 
 Deno.serve(async (req) => {
@@ -667,7 +586,7 @@ Deno.serve(async (req) => {
       version?: string;
       type?: string;
       table?: string;
-      status: "success" | "ignored" | "skipped";
+      status: 'success' | 'ignored' | 'skipped';
       markdownLength?: number;
     }> = [];
 
@@ -681,13 +600,13 @@ Deno.serve(async (req) => {
       //   table,
       // });
 
-      if (table && table !== "flows") {
+      if (table && table !== 'flows') {
         throw new Error(`batch index ${index}: unexpected table ${table}, expect flows`);
       }
 
-      if (type !== "INSERT" && type !== "UPDATE") {
-        console.error("[webhook_flow_embedding_ft] ignored type", { index, type });
-        results.push({ index, type, table, status: "ignored" });
+      if (type !== 'INSERT' && type !== 'UPDATE') {
+        console.error('[webhook_flow_embedding_ft] ignored type', { index, type });
+        results.push({ index, type, table, status: 'ignored' });
         continue;
       }
 
@@ -706,17 +625,17 @@ Deno.serve(async (req) => {
       //   type: typeof jsonDataRaw,
       //   isString: typeof jsonDataRaw === "string",
       // });
-      if (typeof jsonDataRaw === "string") {
+      if (typeof jsonDataRaw === 'string') {
         try {
           (record as Record<string, any>).json_ordered = JSON.parse(jsonDataRaw);
         } catch (error) {
-          console.error("[webhook_flow_embedding_ft] json parse failed", {
+          console.error('[webhook_flow_embedding_ft] json parse failed', {
             index,
             message: error instanceof Error ? error.message : String(error),
           });
           throw new Error(
             `batch index ${index}: Failed to parse json_ordered string: ${
-              error instanceof Error ? error.message : "unknown"
+              error instanceof Error ? error.message : 'unknown'
             }`,
           );
         }
@@ -735,24 +654,22 @@ Deno.serve(async (req) => {
       if (!markdown) throw new Error(`batch index ${index}: Empty extracted markdown`);
 
       const { error: updateError } = await supabaseClient
-        .from("flows")
+        .from('flows')
         .update({
           extracted_md: markdown,
         })
-        .eq("id", id)
-        .eq("version", version);
+        .eq('id', id)
+        .eq('version', version);
 
       if (updateError) {
-        console.error("[webhook_flow_embedding_ft] supabase update error", updateError);
+        console.error('[webhook_flow_embedding_ft] supabase update error', updateError);
         throw new Error(
           `batch index ${index}: ${
-            updateError instanceof Error
-              ? updateError.message
-              : JSON.stringify(updateError)
+            updateError instanceof Error ? updateError.message : JSON.stringify(updateError)
           }`,
         );
       }
-      console.log("md update success", {
+      console.log('md update success', {
         index,
         id,
         version,
@@ -764,25 +681,23 @@ Deno.serve(async (req) => {
         version,
         type,
         table,
-        status: "success",
+        status: 'success',
         markdownLength: markdown.length,
       });
     }
 
     return new Response(JSON.stringify({ success: true, results }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
   } catch (error) {
-    const errorMessage = error instanceof Error
-      ? error.message
-      : "Unknown error occurred";
-    console.error("[webhook_flow_embedding_ft] caught error", {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    console.error('[webhook_flow_embedding_ft] caught error', {
       error: errorMessage,
       stack: error instanceof Error ? error.stack : undefined,
     });
     return new Response(JSON.stringify({ error: errorMessage }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });
   }

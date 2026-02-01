@@ -162,7 +162,6 @@ async function generateEmbedding(text: string) {
   });
   // console.log('embedding API response:', response);
 
-
   if (!response.ok) {
     const errorBody = await response.text();
     throw new Error(
@@ -172,9 +171,7 @@ async function generateEmbedding(text: string) {
 
   const result = await response.json();
   const embedding =
-    Array.isArray(result?.data) && result.data.length > 0
-      ? result.data[0]?.embedding
-      : undefined;
+    Array.isArray(result?.data) && result.data.length > 0 ? result.data[0]?.embedding : undefined;
 
   if (!embedding) {
     throw new Error('failed to generate embedding from response');
