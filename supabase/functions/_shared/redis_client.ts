@@ -1,5 +1,5 @@
 import { Redis as UpstashRedis } from '@upstash/redis';
-import { createClient, RedisClientType as StandardRedisClient } from 'redis';
+import { createClient } from 'redis';
 
 /**
  * Support Upstash and Standard Redis Client
@@ -9,6 +9,7 @@ import { createClient, RedisClientType as StandardRedisClient } from 'redis';
  * If REDIS_CLIENT_TYPE is not set, the default is 'upstash'
  */
 type RedisClientTypeOption = 'upstash' | 'standard';
+type StandardRedisClient = ReturnType<typeof createClient>;
 type RedisClient = UpstashRedis | StandardRedisClient;
 
 function getRedisClientType(): RedisClientTypeOption {
