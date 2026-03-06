@@ -14,7 +14,6 @@ PROCESS_INDEX="${PROCESS_INDEX:-0}"
 AMOUNT="${AMOUNT:-1}"
 TIMEOUT_SEC="${TIMEOUT_SEC:-120}"
 POLL_INTERVAL_SEC="${POLL_INTERVAL_SEC:-1}"
-INCLUDE_PAYLOAD="${INCLUDE_PAYLOAD:-false}"
 IDEMPOTENCY_KEY="${IDEMPOTENCY_KEY:-lca-smoke-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM}"
 
 if [[ -z "${USER_JWT}" && -z "${USER_API_KEY}" ]]; then
@@ -148,11 +147,7 @@ result_resp="$(
     --data "$(
       jq -n \
         --arg result_id "${result_id}" \
-        --arg include_payload "${INCLUDE_PAYLOAD}" \
-        '{
-          result_id: $result_id,
-          include_payload: ($include_payload == "true")
-        }'
+        '{result_id: $result_id}'
     )"
 )"
 ensure_json "${result_resp}" "result_fetch"

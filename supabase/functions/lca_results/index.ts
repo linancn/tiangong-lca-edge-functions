@@ -7,7 +7,7 @@ import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseClient } from '../_shared/supabase_client.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type ResultLookupBody = { result_id?: string; include_payload?: boolean };
+type ResultLookupBody = { result_id?: string };
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -49,12 +49,10 @@ Deno.serve(async (req) => {
     return json({ error: 'invalid_result_id' }, 400);
   }
 
-  const includePayload = shouldIncludePayload(req.url, body);
-
   const { data: resultRow, error: resultError } = await supabaseClient
     .from('lca_results')
     .select(
-      'id,job_id,snapshot_id,payload,diagnostics,artifact_url,artifact_format,artifact_byte_size,artifact_sha256,created_at',
+      'id,job_id,snapshot_id,diagnostics,artifact_url,artifact_format,artifact_byte_size,artifact_sha256,created_at',
     )
     .eq('id', resultId)
     .maybeSingle();
@@ -100,9 +98,6 @@ Deno.serve(async (req) => {
     result_id: String(resultRow.id),
     snapshot_id: String(resultRow.snapshot_id),
     created_at: resultRow.created_at,
-    include_payload: includePayload,
-    has_inline_payload: resultRow.payload !== null,
-    payload: includePayload ? resultRow.payload : null,
     diagnostics: resultRow.diagnostics,
     artifact: {
       artifact_url: resultRow.artifact_url,
@@ -157,16 +152,6 @@ function resolveResultId(rawUrl: string, body: ResultLookupBody | null): string 
   }
 
   return null;
-}
-
-function shouldIncludePayload(rawUrl: string, body: ResultLookupBody | null): boolean {
-  if (typeof body?.include_payload === 'boolean') {
-    return body.include_payload;
-  }
-
-  const url = new URL(rawUrl);
-  const v = (url.searchParams.get('include_payload') ?? '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes';
 }
 
 function json(body: unknown, status = 200): Response {

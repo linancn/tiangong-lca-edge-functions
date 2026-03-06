@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
   const { data: resultRow, error: resultError } = await supabaseClient
     .from('lca_results')
     .select(
-      'id,artifact_url,artifact_format,artifact_byte_size,artifact_sha256,payload,diagnostics,created_at',
+      'id,artifact_url,artifact_format,artifact_byte_size,artifact_sha256,diagnostics,created_at',
     )
     .eq('job_id', jobId)
     .order('created_at', { ascending: false })
@@ -109,7 +109,6 @@ Deno.serve(async (req) => {
       ? {
           result_id: String(resultRow.id),
           created_at: resultRow.created_at,
-          has_inline_payload: resultRow.payload !== null,
           artifact_url: resultRow.artifact_url,
           artifact_format: resultRow.artifact_format,
           artifact_byte_size: resultRow.artifact_byte_size,

@@ -218,8 +218,8 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_jobs' \
 curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_results/{{$dotenv LCA_RESULT_ID}}' \
     --header 'Authorization: Bearer {{$dotenv USER_JWT}}'
 
-### @name LCA_Result：Local (query param, include payload)
-curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_results?result_id={{$dotenv LCA_RESULT_ID}}&include_payload=true' \
+### @name LCA_Result：Local (query param)
+curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_results?result_id={{$dotenv LCA_RESULT_ID}}' \
     --header 'Authorization: Bearer {{$dotenv USER_JWT}}'
 
 ### @name LCA_Result：Local (POST body, for supabase.functions.invoke)
@@ -227,6 +227,5 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_results' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{
-      "result_id": "{{$dotenv LCA_RESULT_ID}}",
-      "include_payload": true
+      "result_id": "{{$dotenv LCA_RESULT_ID}}"
     }'
