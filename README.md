@@ -1,66 +1,132 @@
 # TianGong-LCA-Edge-Functions
 
-## Env Preparing (Docker Engine MUST be Running)
+## Overview
+
+Supabase Edge Functions for LCA search, embedding, and solving workflows.
+
+- Runtime: Supabase Edge Runtime (Deno 2.1.x)
+- Functions root: `supabase/functions`
+- Local serve command: `npm start`
+
+## Prerequisites
+
+- Node.js 22
+- Docker Engine (required if you run local Supabase stack)
+- `npm install` completed
+
+## Environment Setup
+
+### 1. Function runtime env (`supabase/.env.local`)
+
+Use the template under `supabase`:
 
 ```bash
-
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-nvm install 22
-nvm use
-
-curl -fsSL https://deno.land/install.sh | sh -s v2.1.4
-
-# Install dependencies (first run)
-npm install
-
-# Update dependencies
-npm update && npm ci
-
-npm start
-
+cp supabase/.env.example supabase/.env.local
 ```
 
-Rename the `.env.example` to `.env.local` and fill in the the values before the `npx supabase start` command.
+Required keys are managed in this file, for example:
+
+- `OPENAI_API_KEY`
+- `OPENAI_CHAT_MODEL`
+- `REMOTE_SUPABASE_URL`
+- `REMOTE_SERVICE_API_KEY`
+- `UPSTASH_REDIS_URL`
+- `UPSTASH_REDIS_TOKEN`
+
+### 2. HTTP test env (repo root `.env`)
+
+`test.example.http` reads variables from repository root `.env`:
+
+- `LOCAL_ENDPOINT` (for local function URL)
+- `REMOTE_ENDPOINT` (for remote function URL)
+- `USER_API_KEY`
+- `X_REGION`
+- and other request-only values like `X_KEY`, `SECRET_VALUE`
 
 ## Local Development
 
-````bash
-
-Started supabase local development setup.
+### Serve Edge Functions
 
 ```bash
-         API URL: http://127.0.0.1:54321
-     GraphQL URL: http://127.0.0.1:54321/graphql/v1
-  S3 Storage URL: http://127.0.0.1:54321/storage/v1/s3
-          DB URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-      Studio URL: http://127.0.0.1:54323
-    Inbucket URL: http://127.0.0.1:54324
-      JWT secret: super-secret-jwt-token-with-at-least-32-characters-long
-service_role key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
-   S3 Access Key: 625729a08b95bf1b7ff351a663f3a23c
-   S3 Secret Key: 850181e4652dd023b7a98c58ae0d2d34bd487ee0cc3254aed6eda37307425907
-       S3 Region: local
-````
+npm start
+```
+
+`npm start` is equivalent to:
+
+```bash
+supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt
+```
+
+### Optional: Start full local Supabase stack
+
+```bash
+npx supabase start
+```
+
+Typical endpoints:
+
+- API URL: `http://127.0.0.1:54321`
+- Studio URL: `http://127.0.0.1:54323`
+- DB URL: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
 
 ## Local Test
 
+### Quick smoke test
+
 ```bash
-
-npm start
-npx supabase functions serve --env-file ./supabase/.env.local
-
 curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/embedding' \
   --header 'Content-Type: application/json' \
   --data '{"query":["Hello", "World"]}'
 ```
 
-### LCA Queue RPC Prerequisite
+### Request collection
 
-`lca_solve` does **not** use direct `postgres` connections anymore. It enqueues jobs via Supabase RPC:
+See `test.example.http` for local and remote examples, including:
+
+- `flow_hybrid_search`
+- `process_hybrid_search`
+- `lifecyclemodel_hybrid_search`
+- `ai_suggest`
+- `lca_solve` / `lca_jobs` / `lca_results`
+
+## OpenAI Integration Baseline
+
+- No LangChain dependency in active path.
+- OpenAI SDK mapping is in `supabase/functions/deno.json`:
+  - `@openai/openai -> npm:openai@6.27.0`
+- Shared wrappers:
+  - `supabase/functions/_shared/openai_structured.ts`
+  - `supabase/functions/_shared/openai_chat.ts`
+- Default model fallback in code is `gpt-4.1-mini` when env/model option is not provided.
+
+## Required Development Workflow
+
+After any code or document update:
+
+1. Run lint/format:
+
+```bash
+npm run lint
+```
+
+2. Run minimal checks for affected files:
+
+```bash
+deno check --config supabase/functions/deno.json <changed-file>
+```
+
+3. Keep docs synced:
+
+- Update `README.md` for human-facing workflow changes.
+- Update `AGENTS.md` for AI workflow/dependency/process changes.
+
+## LCA Queue RPC Prerequisite
+
+`lca_solve` does not use direct `postgres` connections. It enqueues jobs via Supabase RPC:
 
 - `public.lca_enqueue_job(p_queue_name text, p_message jsonb)`
 
-Ensure this function exists in your database (example):
+Ensure this function exists in your database:
 
 ```sql
 create or replace function public.lca_enqueue_job(p_queue_name text, p_message jsonb)
@@ -82,17 +148,17 @@ revoke execute on function public.lca_enqueue_job(text, jsonb) from anon, authen
 grant execute on function public.lca_enqueue_job(text, jsonb) to service_role;
 ```
 
-### LCA Function Call Patterns
+## LCA Function Call Patterns
 
 - `lca_solve`: `POST` only.
 - `lca_jobs`: supports `GET` and `POST`.
   - `GET`: `/functions/v1/lca_jobs/{jobId}` or `?job_id=...`
-  - `POST`: body `{ "job_id": "<uuid>" }` (useful for `supabase.functions.invoke`)
+  - `POST`: body `{ "job_id": "<uuid>" }`
 - `lca_results`: supports `GET` and `POST`.
   - `GET`: `/functions/v1/lca_results/{resultId}` or `?result_id=...`
   - `POST`: body `{ "result_id": "<uuid>" }`
 
-### LCA Minimal Integration Script (submit -> poll -> fetch)
+## LCA Minimal Integration Script (submit -> poll -> fetch)
 
 ```bash
 USER_JWT="<your-user-jwt>" \
@@ -114,53 +180,76 @@ Optional envs:
 - `TIMEOUT_SEC` (default `120`)
 - `POLL_INTERVAL_SEC` (default `1`)
 - `IDEMPOTENCY_KEY` (optional; auto-generated by default)
-- auth: set one of `USER_JWT` / `USER_API_KEY`
+- auth: set one of `USER_JWT` or `USER_API_KEY`
 
 ## Remote Config
 
 ```bash
+PROJECT_REF=qgzvkongdjqiiamzbbts
+
 npx supabase login
+npx supabase secrets set --env-file ./supabase/.env.local --project-ref "$PROJECT_REF"
+```
 
-npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
+### Search Functions
 
-## Search Functions
-npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lifecyclemodel_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+```bash
+npx supabase functions deploy flow_hybrid_search --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy process_hybrid_search --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy lifecyclemodel_hybrid_search --project-ref "$PROJECT_REF" --no-verify-jwt
+```
 
-npx supabase functions deploy lca_solve --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_jobs --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+### LCA Functions
 
-## Embedding Functions
-npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_model_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+```bash
+npx supabase functions deploy lca_solve --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy lca_jobs --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy lca_results --project-ref "$PROJECT_REF" --no-verify-jwt
+```
 
-npx supabase functions deploy embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+### Embedding Functions
 
-npx supabase functions deploy webhook_process_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_model_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_flow_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+```bash
+npx supabase functions deploy embedding --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy webhook_flow_embedding --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy webhook_process_embedding --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy webhook_model_embedding --project-ref "$PROJECT_REF" --no-verify-jwt
 
-## Antchain Related Functions (Not yet used)
-# npx supabase functions deploy antchain_request_process_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_sign_request --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_run_antchain_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_get_local_ip --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_create_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_query_calculation_status --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_query_calculation_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy embedding_ft --project-ref "$PROJECT_REF" --no-verify-jwt
 
-## Data Operation Functions
-npx supabase functions deploy update_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy webhook_process_embedding_ft --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy webhook_model_embedding_ft --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy webhook_flow_embedding_ft --project-ref "$PROJECT_REF" --no-verify-jwt
+```
 
-## Cognito Functions
-npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy change_email_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+### Data Operation Functions
 
-## AI Related Functions
-npx supabase functions deploy ai_suggest --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+```bash
+npx supabase functions deploy update_data --project-ref "$PROJECT_REF" --no-verify-jwt
+```
+
+### Cognito Functions
+
+```bash
+npx supabase functions deploy sign_up_cognito --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy change_password_cognito --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy change_email_cognito --project-ref "$PROJECT_REF" --no-verify-jwt
+```
+
+### AI Related Functions
+
+```bash
+npx supabase functions deploy ai_suggest --project-ref "$PROJECT_REF" --no-verify-jwt
+```
+
+### Antchain Related Functions (not enabled)
+
+```bash
+# npx supabase functions deploy antchain_request_process_data --project-ref "$PROJECT_REF" --no-verify-jwt
+# npx supabase functions deploy antchain_sign_request --project-ref "$PROJECT_REF" --no-verify-jwt
+# npx supabase functions deploy antchain_run_antchain_calculation --project-ref "$PROJECT_REF" --no-verify-jwt
+# npx supabase functions deploy antchain_get_local_ip --project-ref "$PROJECT_REF" --no-verify-jwt
+# npx supabase functions deploy antchain_create_calculation --project-ref "$PROJECT_REF" --no-verify-jwt
+# npx supabase functions deploy antchain_query_calculation_status --project-ref "$PROJECT_REF" --no-verify-jwt
+# npx supabase functions deploy antchain_query_calculation_results --project-ref "$PROJECT_REF" --no-verify-jwt
 ```
