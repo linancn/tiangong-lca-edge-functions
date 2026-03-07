@@ -210,10 +210,10 @@ npx supabase functions deploy lca_results --project-ref qgzvkongdjqiiamzbbts --n
 ### Embedding Functions
 
 ```bash
-npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_model_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy webhook_model_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
 npx supabase functions deploy embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
