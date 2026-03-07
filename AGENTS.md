@@ -13,6 +13,7 @@
 - 项目类型：Supabase Edge Functions（Deno 2.1.x）+ Node 工具链。
 - 入口目录：`supabase/functions/*/index.ts`。
 - 共享模块：`supabase/functions/_shared/*`。
+- 依赖锁定：`supabase/functions/deno.json` 的 `imports` 使用精确版本（exact pin），避免无版本映射。
 - 本地启动：
   - `npm install`
   - `npm start`（等价于 `supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt`）
@@ -38,6 +39,8 @@
 
 - 当前统一依赖映射在 `supabase/functions/deno.json`：
   - `@openai/openai -> npm:openai@6.27.0`
+  - `@supabase/functions-js/edge-runtime.d.ts -> jsr:@supabase/functions-js@2.98.0/edge-runtime.d.ts`
+  - `@supabase/supabase-js@2 -> jsr:@supabase/supabase-js@2.98.0`
 - 代码中统一使用：
   - `import OpenAI from "@openai/openai";`
 - 默认优先 `responses.create`；若需要兼容，允许在共享层做回退逻辑。
