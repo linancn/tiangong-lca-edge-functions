@@ -12,7 +12,12 @@ Supabase Edge Functions for LCA search, embedding, and solving workflows.
 
 - Node.js 22
 - Docker Engine (required if you run local Supabase stack)
-- `npm install` completed
+
+Initialize/refresh Node dependencies:
+
+```bash
+npm update && npm ci
+```
 
 ## Environment Setup
 
