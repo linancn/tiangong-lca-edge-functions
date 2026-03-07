@@ -185,71 +185,71 @@ Optional envs:
 ## Remote Config
 
 ```bash
-PROJECT_REF=qgzvkongdjqiiamzbbts
-
 npx supabase login
-npx supabase secrets set --env-file ./supabase/.env.local --project-ref "$PROJECT_REF"
+
+## Dangerous: make sure you are in the correct project context before running the following command, as it will overwrite secrets in the target project.
+npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
 
 ### Search Functions
 
 ```bash
-npx supabase functions deploy flow_hybrid_search --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy process_hybrid_search --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy lifecyclemodel_hybrid_search --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy lifecyclemodel_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
 
 ### LCA Functions
 
 ```bash
-npx supabase functions deploy lca_solve --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy lca_jobs --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy lca_results --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy lca_solve --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy lca_jobs --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy lca_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
 
 ### Embedding Functions
 
 ```bash
-npx supabase functions deploy embedding --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy webhook_flow_embedding --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy webhook_process_embedding --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy webhook_model_embedding --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy webhook_model_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
-npx supabase functions deploy embedding_ft --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
-npx supabase functions deploy webhook_process_embedding_ft --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy webhook_model_embedding_ft --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy webhook_flow_embedding_ft --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy webhook_process_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy webhook_model_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy webhook_flow_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
 
 ### Data Operation Functions
 
 ```bash
-npx supabase functions deploy update_data --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy update_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
 
 ### Cognito Functions
 
 ```bash
-npx supabase functions deploy sign_up_cognito --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy change_password_cognito --project-ref "$PROJECT_REF" --no-verify-jwt
-npx supabase functions deploy change_email_cognito --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy change_email_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
 
 ### AI Related Functions
 
 ```bash
-npx supabase functions deploy ai_suggest --project-ref "$PROJECT_REF" --no-verify-jwt
+npx supabase functions deploy ai_suggest --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
 
 ### Antchain Related Functions (not enabled)
 
 ```bash
-# npx supabase functions deploy antchain_request_process_data --project-ref "$PROJECT_REF" --no-verify-jwt
-# npx supabase functions deploy antchain_sign_request --project-ref "$PROJECT_REF" --no-verify-jwt
-# npx supabase functions deploy antchain_run_antchain_calculation --project-ref "$PROJECT_REF" --no-verify-jwt
-# npx supabase functions deploy antchain_get_local_ip --project-ref "$PROJECT_REF" --no-verify-jwt
-# npx supabase functions deploy antchain_create_calculation --project-ref "$PROJECT_REF" --no-verify-jwt
-# npx supabase functions deploy antchain_query_calculation_status --project-ref "$PROJECT_REF" --no-verify-jwt
-# npx supabase functions deploy antchain_query_calculation_results --project-ref "$PROJECT_REF" --no-verify-jwt
+# npx supabase functions deploy antchain_request_process_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_sign_request --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_run_antchain_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_get_local_ip --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_create_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_query_calculation_status --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npx supabase functions deploy antchain_query_calculation_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
