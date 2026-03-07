@@ -7,6 +7,7 @@
 - 保证修改可执行、可验证、可回溯。
 - 降低上下文切换成本，让 AI 能快速接手。
 - 保持代码、文档、运行方式同步。
+- 仅维护最终状态，不记录历史变更过程（历史记录由 Git/PR 承载）。
 
 ## 2. Project Snapshot
 
@@ -54,6 +55,7 @@
 1. 运行格式与规范脚本：
    - `npm run lint`
 2. 运行最小必要校验（按影响范围）：
+   - `deno check` 属于强制步骤：凡涉及 `supabase/functions` 下代码改动（`.ts`/`.js`），必须执行，不可跳过。
    - 单函数改动：`deno check --config supabase/functions/deno.json <changed-file>`
    - 共享模块改动：至少覆盖所有直接依赖该模块的函数。
 3. 同步文档：
