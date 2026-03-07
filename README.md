@@ -161,6 +161,6 @@ npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts
 npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy change_email_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 
-## Langgraph AI Related Functions
+## AI Related Functions
 npx supabase functions deploy ai_suggest --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
