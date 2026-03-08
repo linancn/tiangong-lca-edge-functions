@@ -196,6 +196,22 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
       "print_level": 0
     }'
 
+### @name LCA_Solve：Local (all_unit)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --header 'X-Idempotency-Key: local-debug-all-unit-001' \
+    --data '{
+      "scope": "prod",
+      "demand_mode": "all_unit",
+      "solve": {
+        "return_x": false,
+        "return_g": false,
+        "return_h": true
+      },
+      "print_level": 0
+    }'
+
 
 ### @name LCA_Job_Status：Local (path param)
 curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_jobs/{{$dotenv LCA_JOB_ID}}' \

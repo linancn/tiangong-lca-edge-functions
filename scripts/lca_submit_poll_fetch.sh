@@ -10,8 +10,10 @@ BASE_URL="${BASE_URL:-http://127.0.0.1:54321/functions/v1}"
 USER_JWT="${USER_JWT:-}"
 USER_API_KEY="${USER_API_KEY:-}"
 SCOPE="${SCOPE:-prod}"
+DEMAND_MODE="${DEMAND_MODE:-single}"
 PROCESS_INDEX="${PROCESS_INDEX:-0}"
 AMOUNT="${AMOUNT:-1}"
+UNIT_BATCH_SIZE="${UNIT_BATCH_SIZE:-}"
 TIMEOUT_SEC="${TIMEOUT_SEC:-120}"
 POLL_INTERVAL_SEC="${POLL_INTERVAL_SEC:-1}"
 IDEMPOTENCY_KEY="${IDEMPOTENCY_KEY:-lca-smoke-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM}"
@@ -30,6 +32,11 @@ fi
 
 AUTH_BEARER="${USER_JWT:-$USER_API_KEY}"
 
+if [[ "${DEMAND_MODE}" != "single" && "${DEMAND_MODE}" != "all_unit" ]]; then
+  echo "error: DEMAND_MODE must be single|all_unit"
+  exit 1
+fi
+
 ensure_json() {
   local raw="$1"
   local stage="$2"
@@ -40,25 +47,65 @@ ensure_json() {
   fi
 }
 
-submit_payload="$(
-  jq -n \
-    --arg scope "${SCOPE}" \
-    --argjson process_index "${PROCESS_INDEX}" \
-    --argjson amount "${AMOUNT}" \
-    '{
-      scope: $scope,
-      demand: {
-        process_index: $process_index,
-        amount: $amount
-      },
-      solve: {
-        return_x: false,
-        return_g: true,
-        return_h: true
-      },
-      print_level: 0
-    }'
-)"
+if [[ "${DEMAND_MODE}" == "single" ]]; then
+  submit_payload="$(
+    jq -n \
+      --arg scope "${SCOPE}" \
+      --arg demand_mode "${DEMAND_MODE}" \
+      --argjson process_index "${PROCESS_INDEX}" \
+      --argjson amount "${AMOUNT}" \
+      '{
+        scope: $scope,
+        demand_mode: $demand_mode,
+        demand: {
+          process_index: $process_index,
+          amount: $amount
+        },
+        solve: {
+          return_x: false,
+          return_g: true,
+          return_h: true
+        },
+        print_level: 0
+      }'
+  )"
+else
+  if [[ -n "${UNIT_BATCH_SIZE}" ]]; then
+    submit_payload="$(
+      jq -n \
+        --arg scope "${SCOPE}" \
+        --arg demand_mode "${DEMAND_MODE}" \
+        --argjson unit_batch_size "${UNIT_BATCH_SIZE}" \
+        '{
+          scope: $scope,
+          demand_mode: $demand_mode,
+          solve: {
+            return_x: false,
+            return_g: false,
+            return_h: true
+          },
+          unit_batch_size: $unit_batch_size,
+          print_level: 0
+        }'
+    )"
+  else
+    submit_payload="$(
+      jq -n \
+        --arg scope "${SCOPE}" \
+        --arg demand_mode "${DEMAND_MODE}" \
+        '{
+          scope: $scope,
+          demand_mode: $demand_mode,
+          solve: {
+            return_x: false,
+            return_g: false,
+            return_h: true
+          },
+          print_level: 0
+        }'
+    )"
+  fi
+fi
 
 echo "== submit =="
 submit_resp="$(

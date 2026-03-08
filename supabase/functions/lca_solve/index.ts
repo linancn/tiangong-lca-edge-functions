@@ -9,6 +9,7 @@ import { supabaseClient } from '../_shared/supabase_client.ts';
 type SolveRequest = {
   scope?: string;
   snapshot_id?: string;
+  demand_mode?: string;
   demand?: {
     process_index?: number;
     amount?: number;
@@ -19,6 +20,7 @@ type SolveRequest = {
     return_h?: boolean;
   };
   print_level?: number;
+  unit_batch_size?: number;
 };
 
 type SolveResponse = {
@@ -43,7 +45,7 @@ type ResultCacheRow = {
 };
 
 const QUEUE_NAME = 'lca_jobs';
-const REQUEST_VERSION = 'lca_solve_v1';
+const REQUEST_VERSION = 'lca_solve_v2';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -79,27 +81,15 @@ Deno.serve(async (req) => {
   }
 
   const scope = (body.scope ?? 'prod').trim() || 'prod';
-  const demandIndex = body.demand?.process_index;
-  const demandAmount = body.demand?.amount ?? 1.0;
+  const demandMode = body.demand_mode ?? 'single';
   const printLevel = body.print_level ?? 0.0;
 
-  const solve = {
-    return_x: body.solve?.return_x ?? true,
-    return_g: body.solve?.return_g ?? true,
-    return_h: body.solve?.return_h ?? true,
-  };
-
-  if (!Number.isInteger(demandIndex) || (demandIndex as number) < 0) {
-    return json({ error: 'invalid_process_index' }, 400);
-  }
-  if (!Number.isFinite(demandAmount)) {
-    return json({ error: 'invalid_amount' }, 400);
+  if (demandMode !== 'single' && demandMode !== 'all_unit') {
+    return json({ error: 'invalid_demand_mode' }, 400);
   }
   if (!Number.isFinite(printLevel)) {
     return json({ error: 'invalid_print_level' }, 400);
   }
-
-  const processIndex = Number(demandIndex);
 
   const snapshotMeta = await resolveReadySnapshot(scope, body.snapshot_id);
   if (!snapshotMeta.ok) {
@@ -107,31 +97,128 @@ Deno.serve(async (req) => {
   }
 
   const { snapshot_id: snapshotId, process_count: processCount } = snapshotMeta.data;
+  const newJobId = crypto.randomUUID();
+  let jobType: 'solve_one' | 'solve_all_unit' = 'solve_one';
+  let payload:
+    | {
+        type: 'solve_one';
+        job_id: string;
+        snapshot_id: string;
+        rhs: number[];
+        solve: { return_x: boolean; return_g: boolean; return_h: boolean };
+        print_level: number;
+      }
+    | {
+        type: 'solve_all_unit';
+        job_id: string;
+        snapshot_id: string;
+        solve: { return_x: boolean; return_g: boolean; return_h: boolean };
+        unit_batch_size?: number;
+        print_level: number;
+      };
+  let normalizedRequest:
+    | {
+        version: string;
+        scope: string;
+        snapshot_id: string;
+        demand_mode: 'single';
+        demand: { process_index: number; amount: number };
+        solve: { return_x: boolean; return_g: boolean; return_h: boolean };
+        print_level: number;
+      }
+    | {
+        version: string;
+        scope: string;
+        snapshot_id: string;
+        demand_mode: 'all_unit';
+        solve: { return_x: boolean; return_g: boolean; return_h: boolean };
+        print_level: number;
+      };
 
-  if (processIndex >= processCount) {
-    return json(
-      {
-        error: 'process_index_out_of_range',
+  if (demandMode === 'single') {
+    const demandIndex = body.demand?.process_index;
+    const demandAmount = body.demand?.amount ?? 1.0;
+    const solve = {
+      return_x: body.solve?.return_x ?? true,
+      return_g: body.solve?.return_g ?? true,
+      return_h: body.solve?.return_h ?? true,
+    };
+
+    if (!Number.isInteger(demandIndex) || (demandIndex as number) < 0) {
+      return json({ error: 'invalid_process_index' }, 400);
+    }
+    if (!Number.isFinite(demandAmount)) {
+      return json({ error: 'invalid_amount' }, 400);
+    }
+
+    const processIndex = Number(demandIndex);
+
+    if (processIndex >= processCount) {
+      return json(
+        {
+          error: 'process_index_out_of_range',
+          process_index: processIndex,
+          process_count: processCount,
+        },
+        400,
+      );
+    }
+
+    const rhs = buildRhs(processCount, processIndex, demandAmount);
+    payload = {
+      type: 'solve_one',
+      job_id: newJobId,
+      snapshot_id: snapshotId,
+      rhs,
+      solve,
+      print_level: printLevel,
+    };
+    normalizedRequest = {
+      version: REQUEST_VERSION,
+      scope,
+      snapshot_id: snapshotId,
+      demand_mode: 'single',
+      demand: {
         process_index: processIndex,
-        process_count: processCount,
+        amount: demandAmount,
       },
-      400,
-    );
+      solve,
+      print_level: printLevel,
+    };
+    jobType = 'solve_one';
+  } else {
+    const solve = {
+      return_x: body.solve?.return_x ?? false,
+      return_g: body.solve?.return_g ?? false,
+      return_h: body.solve?.return_h ?? true,
+    };
+    if (solve.return_x || solve.return_g || !solve.return_h) {
+      return json({ error: 'invalid_solve_options_for_all_unit' }, 400);
+    }
+
+    const unitBatchSize = body.unit_batch_size;
+    if (unitBatchSize !== undefined && (!Number.isInteger(unitBatchSize) || unitBatchSize < 1)) {
+      return json({ error: 'invalid_unit_batch_size' }, 400);
+    }
+
+    payload = {
+      type: 'solve_all_unit',
+      job_id: newJobId,
+      snapshot_id: snapshotId,
+      solve,
+      unit_batch_size: unitBatchSize === undefined ? undefined : Number(unitBatchSize),
+      print_level: printLevel,
+    };
+    normalizedRequest = {
+      version: REQUEST_VERSION,
+      scope,
+      snapshot_id: snapshotId,
+      demand_mode: 'all_unit',
+      solve,
+      print_level: printLevel,
+    };
+    jobType = 'solve_all_unit';
   }
-
-  const rhs = buildRhs(processCount, processIndex, demandAmount);
-
-  const normalizedRequest = {
-    version: REQUEST_VERSION,
-    scope,
-    snapshot_id: snapshotId,
-    demand: {
-      process_index: processIndex,
-      amount: demandAmount,
-    },
-    solve,
-    print_level: printLevel,
-  };
 
   const requestKey = await sha256Hex(JSON.stringify(normalizedRequest));
   const idempotencyHeader = req.headers.get('x-idempotency-key')?.trim();
@@ -177,19 +264,9 @@ Deno.serve(async (req) => {
     }
   }
 
-  const newJobId = crypto.randomUUID();
-  const payload = {
-    type: 'solve_one',
-    job_id: newJobId,
-    snapshot_id: snapshotId,
-    rhs,
-    solve,
-    print_level: printLevel,
-  };
-
   const { error: insertJobError } = await supabaseClient.from('lca_jobs').insert({
     id: newJobId,
-    job_type: 'solve_one',
+    job_type: jobType,
     snapshot_id: snapshotId,
     status: 'queued',
     payload,
