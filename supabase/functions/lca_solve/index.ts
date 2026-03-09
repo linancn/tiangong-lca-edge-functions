@@ -12,6 +12,8 @@ type SolveRequest = {
   demand_mode?: string;
   demand?: {
     process_index?: number;
+    process_id?: string;
+    process_version?: string;
     amount?: number;
   };
   solve?: {
@@ -34,6 +36,18 @@ type SolveResponse = {
 type ReadySnapshotMeta = {
   snapshot_id: string;
   process_count: number;
+  artifact_url: string;
+};
+
+type SnapshotIndexProcessEntry = {
+  process_id: string;
+  process_index: number;
+  process_version?: string;
+};
+
+type SnapshotIndexDocument = {
+  snapshot_id: string;
+  process_map: SnapshotIndexProcessEntry[];
 };
 
 type UserScopedSnapshotResolution =
@@ -55,6 +69,7 @@ const SNAPSHOT_BUILD_REQUEST_VERSION = 'lca_snapshot_build_v1';
 const DEFAULT_PROCESS_STATES = [100];
 const ACTIVE_BUILD_MAX_QUEUED_MS = 10 * 60 * 1000;
 const ACTIVE_BUILD_MAX_RUNNING_MS = 2 * 60 * 60 * 1000;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -164,6 +179,8 @@ Deno.serve(async (req) => {
 
   if (demandMode === 'single') {
     const demandIndex = body.demand?.process_index;
+    const demandProcessId = body.demand?.process_id?.trim();
+    const demandProcessVersion = body.demand?.process_version?.trim();
     const demandAmount = body.demand?.amount ?? 1.0;
     const solve = {
       return_x: body.solve?.return_x ?? true,
@@ -171,14 +188,40 @@ Deno.serve(async (req) => {
       return_h: body.solve?.return_h ?? true,
     };
 
-    if (!Number.isInteger(demandIndex) || (demandIndex as number) < 0) {
-      return json({ error: 'invalid_process_index' }, 400);
-    }
     if (!Number.isFinite(demandAmount)) {
       return json({ error: 'invalid_amount' }, 400);
     }
 
-    const processIndex = Number(demandIndex);
+    const hasIndexDemand = demandIndex !== undefined && demandIndex !== null;
+    const hasProcessIdDemand = !!demandProcessId;
+    if (!hasIndexDemand && !hasProcessIdDemand) {
+      return json({ error: 'process_index_or_process_id_required' }, 400);
+    }
+    if (hasIndexDemand && hasProcessIdDemand) {
+      return json({ error: 'provide_process_index_or_process_id' }, 400);
+    }
+
+    let processIndex: number;
+    if (hasProcessIdDemand) {
+      if (!UUID_RE.test(demandProcessId)) {
+        return json({ error: 'invalid_process_id' }, 400);
+      }
+      const resolved = await resolveProcessIndexFromSnapshot({
+        snapshot_id: snapshotId,
+        artifact_url: snapshotMeta.data.artifact_url,
+        process_id: demandProcessId,
+        process_version: demandProcessVersion || undefined,
+      });
+      if (!resolved.ok) {
+        return json(resolved.body, resolved.status);
+      }
+      processIndex = resolved.process_index;
+    } else {
+      if (!Number.isInteger(demandIndex) || (demandIndex as number) < 0) {
+        return json({ error: 'invalid_process_index' }, 400);
+      }
+      processIndex = Number(demandIndex);
+    }
 
     if (processIndex >= processCount) {
       return json(
@@ -517,7 +560,7 @@ async function resolveReadySnapshot(
 
   const { data: latestRows, error: latestErr } = await supabaseClient
     .from('lca_snapshot_artifacts')
-    .select('snapshot_id,process_count,status,created_at')
+    .select('snapshot_id,process_count,artifact_url,status,created_at')
     .eq('status', 'ready')
     .order('created_at', { ascending: false })
     .limit(1);
@@ -537,6 +580,7 @@ async function resolveReadySnapshot(
     data: {
       snapshot_id: String(latest.snapshot_id),
       process_count: Number(latest.process_count),
+      artifact_url: String((latest as { artifact_url?: unknown }).artifact_url ?? ''),
     },
   };
 }
@@ -595,7 +639,7 @@ async function fetchUserScopedReadySnapshot(
 async function fetchReadySnapshotMeta(snapshotId: string): Promise<ReadySnapshotMeta | null> {
   const { data, error } = await supabaseClient
     .from('lca_snapshot_artifacts')
-    .select('snapshot_id,process_count,status,created_at')
+    .select('snapshot_id,process_count,artifact_url,status,created_at')
     .eq('snapshot_id', snapshotId)
     .eq('status', 'ready')
     .order('created_at', { ascending: false })
@@ -614,6 +658,7 @@ async function fetchReadySnapshotMeta(snapshotId: string): Promise<ReadySnapshot
   return {
     snapshot_id: String(row.snapshot_id),
     process_count: Number(row.process_count),
+    artifact_url: String(row.artifact_url ?? ''),
   };
 }
 
@@ -940,6 +985,214 @@ async function findActiveBuildJob(
   }
 
   return { ok: true, job_id: null, snapshot_id: null };
+}
+
+async function resolveProcessIndexFromSnapshot(input: {
+  snapshot_id: string;
+  artifact_url?: string;
+  process_id: string;
+  process_version?: string;
+}): Promise<
+  { ok: true; process_index: number } | { ok: false; status: number; body: Record<string, unknown> }
+> {
+  const snapshotIndex = await fetchSnapshotIndex(input.snapshot_id, input.artifact_url);
+  if (!snapshotIndex.ok) {
+    return {
+      ok: false,
+      status: 502,
+      body: {
+        error: 'snapshot_index_fetch_failed',
+        detail: snapshotIndex.error,
+      },
+    };
+  }
+
+  if (snapshotIndex.data.snapshot_id !== input.snapshot_id) {
+    return {
+      ok: false,
+      status: 500,
+      body: { error: 'snapshot_index_mismatch' },
+    };
+  }
+
+  const candidates = snapshotIndex.data.process_map.filter(
+    (entry) => entry.process_id === input.process_id,
+  );
+  if (candidates.length === 0) {
+    return {
+      ok: false,
+      status: 404,
+      body: { error: 'process_not_in_snapshot', process_id: input.process_id },
+    };
+  }
+
+  let selected: SnapshotIndexProcessEntry | null = null;
+  if (input.process_version) {
+    selected =
+      candidates.find(
+        (entry) => String(entry.process_version ?? '').trim() === input.process_version,
+      ) ?? null;
+    if (!selected) {
+      return {
+        ok: false,
+        status: 404,
+        body: {
+          error: 'process_version_not_in_snapshot',
+          process_id: input.process_id,
+          process_version: input.process_version,
+        },
+      };
+    }
+  } else if (candidates.length > 1) {
+    const candidateVersions = [
+      ...new Set(candidates.map((entry) => String(entry.process_version ?? ''))),
+    ]
+      .map((version) => version.trim())
+      .filter((version) => version.length > 0);
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: 'process_version_required',
+        process_id: input.process_id,
+        process_versions: candidateVersions,
+      },
+    };
+  } else {
+    selected = candidates[0];
+  }
+
+  if (!selected || !Number.isInteger(selected.process_index) || selected.process_index < 0) {
+    return {
+      ok: false,
+      status: 500,
+      body: {
+        error: 'snapshot_index_invalid',
+        process_id: input.process_id,
+      },
+    };
+  }
+
+  return { ok: true, process_index: selected.process_index };
+}
+
+async function fetchSnapshotIndex(
+  snapshotId: string,
+  artifactUrl?: string,
+): Promise<{ ok: true; data: SnapshotIndexDocument } | { ok: false; error: string }> {
+  let resolvedArtifactUrl = (artifactUrl ?? '').trim();
+
+  if (!resolvedArtifactUrl) {
+    const { data, error } = await supabaseClient
+      .from('lca_snapshot_artifacts')
+      .select('artifact_url')
+      .eq('snapshot_id', snapshotId)
+      .eq('status', 'ready')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      return { ok: false, error: `snapshot_artifact_lookup_failed:${error.message}` };
+    }
+
+    resolvedArtifactUrl = String(
+      (data as { artifact_url?: unknown } | null)?.artifact_url ?? '',
+    ).trim();
+  }
+
+  if (!resolvedArtifactUrl) {
+    return { ok: false, error: 'snapshot_artifact_missing' };
+  }
+
+  const snapshotIndexUrl = deriveSnapshotIndexUrl(resolvedArtifactUrl);
+  return await fetchArtifactJson<SnapshotIndexDocument>(snapshotIndexUrl);
+}
+
+function deriveSnapshotIndexUrl(snapshotArtifactUrl: string): string {
+  const slash = snapshotArtifactUrl.lastIndexOf('/');
+  if (slash < 0) {
+    return `${snapshotArtifactUrl}/snapshot-index-v1.json`;
+  }
+  return `${snapshotArtifactUrl.slice(0, slash + 1)}snapshot-index-v1.json`;
+}
+
+async function fetchArtifactJson<T>(
+  artifactUrl: string,
+): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  const storagePath = parseStoragePathFromArtifactUrl(artifactUrl);
+  let storageError: string | null = null;
+  if (storagePath) {
+    const downloaded = await supabaseClient.storage
+      .from(storagePath.bucket)
+      .download(storagePath.objectPath);
+    if (!downloaded.error) {
+      try {
+        const parsed = JSON.parse(await downloaded.data.text()) as T;
+        return { ok: true, data: parsed };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error ? `json_parse_failed:${error.message}` : 'json_parse_failed',
+        };
+      }
+    } else {
+      storageError = `storage_download_failed:${downloaded.error.message}`;
+    }
+  }
+
+  const httpResult = await fetchJsonByHttp<T>(artifactUrl);
+  if (!httpResult.ok && storageError) {
+    return { ok: false, error: `${storageError};${httpResult.error}` };
+  }
+  return httpResult;
+}
+
+function parseStoragePathFromArtifactUrl(
+  artifactUrl: string,
+): { bucket: string; objectPath: string } | null {
+  try {
+    const url = new URL(artifactUrl);
+    const marker = '/storage/v1/s3/';
+    const markerIndex = url.pathname.indexOf(marker);
+    if (markerIndex < 0) {
+      return null;
+    }
+    const remainder = url.pathname.slice(markerIndex + marker.length);
+    const splitIndex = remainder.indexOf('/');
+    if (splitIndex <= 0 || splitIndex >= remainder.length - 1) {
+      return null;
+    }
+    const bucket = decodeURIComponent(remainder.slice(0, splitIndex));
+    const objectPath = decodeURIComponent(remainder.slice(splitIndex + 1));
+    if (!bucket || !objectPath) {
+      return null;
+    }
+    return { bucket, objectPath };
+  } catch (_error) {
+    return null;
+  }
+}
+
+async function fetchJsonByHttp<T>(
+  url: string,
+): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+    if (!response.ok) {
+      return { ok: false, error: `http_${response.status}` };
+    }
+    const parsed = (await response.json()) as T;
+    return { ok: true, data: parsed };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'fetch_failed' };
+  }
 }
 
 function buildRhs(processCount: number, processIndex: number, amount: number): number[] {

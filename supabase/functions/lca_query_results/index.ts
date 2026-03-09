@@ -17,6 +17,7 @@ type QueryRequest = {
   snapshot_id?: string;
   mode?: QueryMode;
   process_id?: string;
+  process_version?: string;
   process_ids?: string[];
   impact_id?: string;
   allow_fallback?: boolean;
@@ -76,6 +77,16 @@ type LatestAllUnitRow = {
   query_artifact_url: string;
   query_artifact_format: string;
 };
+
+type LatestSingleSolveRow = {
+  result_id: string;
+  computed_at: string;
+  amount: number;
+};
+
+type ProcessIndexResolution =
+  | { ok: true; process_index: number }
+  | { ok: false; status: number; body: Record<string, unknown> };
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -176,10 +187,15 @@ Deno.serve(async (req) => {
       return json({ error: 'invalid_process_id' }, 400);
     }
 
-    const processIndex = processIndexOf(snapshotIndex.data, processId);
-    if (processIndex === null) {
-      return json({ error: 'process_not_in_snapshot', process_id: processId }, 404);
+    const processVersion = body.process_version?.trim();
+    const processIndexResolution = resolveProcessIndex(snapshotIndex.data, {
+      process_id: processId,
+      process_version: processVersion || undefined,
+    });
+    if (!processIndexResolution.ok) {
+      return json(processIndexResolution.body, processIndexResolution.status);
     }
+    const processIndex = processIndexResolution.process_index;
 
     const hRow = queryArtifact.data.h_matrix[processIndex];
     if (!Array.isArray(hRow)) {
@@ -190,20 +206,38 @@ Deno.serve(async (req) => {
       (a, b) => a.impact_index - b.impact_index,
     );
 
+    let source: 'all_unit' | 'fallback_solve_one' = 'all_unit';
+    let resultId = latestAllUnit.row.result_id;
+    let computedAt = latestAllUnit.row.computed_at;
+    let scale = 1;
+    const latestSingle = await fetchLatestSingleSolveForProcess(snapshotId, userId, processIndex);
+    if (latestSingle.ok && latestSingle.row) {
+      const allUnitTs = Date.parse(latestAllUnit.row.computed_at);
+      const singleTs = Date.parse(latestSingle.row.computed_at);
+      const preferSingle =
+        Number.isFinite(singleTs) && (!Number.isFinite(allUnitTs) || singleTs >= allUnitTs);
+      if (preferSingle) {
+        source = 'fallback_solve_one';
+        resultId = latestSingle.row.result_id;
+        computedAt = latestSingle.row.computed_at;
+        scale = latestSingle.row.amount;
+      }
+    }
+
     const values = impacts.map((impact) => ({
       impact_id: impact.impact_id,
       impact_index: impact.impact_index,
       impact_key: impact.impact_key,
       impact_name: impact.impact_name,
       unit: impact.unit,
-      value: Number(hRow[impact.impact_index] ?? 0),
+      value: Number(hRow[impact.impact_index] ?? 0) * scale,
     }));
 
     return json(
       {
         snapshot_id: snapshotId,
-        result_id: latestAllUnit.row.result_id,
-        source: 'all_unit',
+        result_id: resultId,
+        source,
         mode,
         data: {
           process_id: processId,
@@ -211,8 +245,14 @@ Deno.serve(async (req) => {
         },
         meta: {
           cache_hit: false,
-          computed_at: latestAllUnit.row.computed_at,
+          computed_at: computedAt,
           query_artifact_format: latestAllUnit.row.query_artifact_format,
+          ...(source === 'fallback_solve_one'
+            ? {
+                scaled_from_all_unit_result_id: latestAllUnit.row.result_id,
+                scaled_amount: scale,
+              }
+            : {}),
         },
       },
       200,
@@ -595,12 +635,177 @@ async function fetchLatestAllUnit(
   };
 }
 
+async function fetchLatestSingleSolveForProcess(
+  snapshotId: string,
+  userId: string,
+  processIndex: number,
+): Promise<{ ok: true; row: LatestSingleSolveRow | null } | { ok: false; error: string }> {
+  const { data: jobs, error: jobsError } = await supabaseClient
+    .from('lca_jobs')
+    .select('id,payload,created_at')
+    .eq('snapshot_id', snapshotId)
+    .eq('job_type', 'solve_one')
+    .eq('status', 'completed')
+    .eq('requested_by', userId)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (jobsError) {
+    console.warn('query latest solve_one jobs failed', {
+      error: jobsError.message,
+      snapshot_id: snapshotId,
+      user_id: userId,
+    });
+    return { ok: false, error: 'latest_single_lookup_failed' };
+  }
+
+  for (const row of jobs ?? []) {
+    const jobId = String((row as { id?: unknown }).id ?? '').trim();
+    if (!jobId) {
+      continue;
+    }
+
+    const amount = amountForProcessIndex((row as { payload?: unknown }).payload, processIndex);
+    if (amount === null) {
+      continue;
+    }
+
+    const { data: resultRow, error: resultError } = await supabaseClient
+      .from('lca_results')
+      .select('id,created_at')
+      .eq('job_id', jobId)
+      .maybeSingle();
+
+    if (resultError) {
+      console.warn('query result by solve_one job failed', {
+        error: resultError.message,
+        snapshot_id: snapshotId,
+        user_id: userId,
+        job_id: jobId,
+      });
+      continue;
+    }
+    if (!resultRow) {
+      continue;
+    }
+
+    return {
+      ok: true,
+      row: {
+        result_id: String(resultRow.id),
+        computed_at: String(resultRow.created_at),
+        amount,
+      },
+    };
+  }
+
+  return { ok: true, row: null };
+}
+
+function amountForProcessIndex(payload: unknown, processIndex: number): number | null {
+  const obj = (payload ?? {}) as {
+    demand?: unknown;
+    rhs?: unknown;
+  };
+
+  const demand = obj.demand as { process_index?: unknown; amount?: unknown } | undefined;
+  if (
+    demand &&
+    Number.isInteger(demand.process_index) &&
+    Number(demand.process_index) === processIndex
+  ) {
+    const amount = Number(demand.amount ?? 1);
+    if (Number.isFinite(amount) && amount !== 0) {
+      return amount;
+    }
+  }
+
+  if (!Array.isArray(obj.rhs)) {
+    return null;
+  }
+  if (!Number.isInteger(processIndex) || processIndex < 0 || processIndex >= obj.rhs.length) {
+    return null;
+  }
+  const amount = Number(obj.rhs[processIndex]);
+  if (!Number.isFinite(amount) || amount === 0) {
+    return null;
+  }
+  return amount;
+}
+
 function processIndexOf(snapshotIndex: SnapshotIndexDocument, processId: string): number | null {
   const hit = snapshotIndex.process_map.find((entry) => entry.process_id === processId);
   if (!hit || !Number.isInteger(hit.process_index) || hit.process_index < 0) {
     return null;
   }
   return hit.process_index;
+}
+
+function resolveProcessIndex(
+  snapshotIndex: SnapshotIndexDocument,
+  demand: { process_id: string; process_version?: string },
+): ProcessIndexResolution {
+  const processId = demand.process_id.trim();
+  const processVersion = (demand.process_version ?? '').trim();
+  const candidates = snapshotIndex.process_map.filter((entry) => entry.process_id === processId);
+  if (candidates.length === 0) {
+    return {
+      ok: false,
+      status: 404,
+      body: { error: 'process_not_in_snapshot', process_id: processId },
+    };
+  }
+
+  let selected: SnapshotIndexProcessEntry | null = null;
+  if (processVersion) {
+    selected =
+      candidates.find((entry) => String(entry.process_version ?? '').trim() === processVersion) ??
+      null;
+    if (!selected) {
+      const processVersions = [
+        ...new Set(candidates.map((entry) => String(entry.process_version ?? ''))),
+      ]
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+      return {
+        ok: false,
+        status: 404,
+        body: {
+          error: 'process_version_not_in_snapshot',
+          process_id: processId,
+          process_version: processVersion,
+          process_versions: processVersions,
+        },
+      };
+    }
+  } else if (candidates.length > 1) {
+    const processVersions = [
+      ...new Set(candidates.map((entry) => String(entry.process_version ?? ''))),
+    ]
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        error: 'process_version_required',
+        process_id: processId,
+        process_versions: processVersions,
+      },
+    };
+  } else {
+    selected = candidates[0];
+  }
+
+  if (!selected || !Number.isInteger(selected.process_index) || selected.process_index < 0) {
+    return {
+      ok: false,
+      status: 500,
+      body: { error: 'snapshot_index_invalid', process_id: processId },
+    };
+  }
+
+  return { ok: true, process_index: selected.process_index };
 }
 
 function impactIndexOf(snapshotIndex: SnapshotIndexDocument, impactId: string): number | null {
