@@ -162,6 +162,9 @@ grant execute on function public.lca_enqueue_job(text, jsonb) to service_role;
 - `lca_results`: supports `GET` and `POST`.
   - `GET`: `/functions/v1/lca_results/{resultId}` or `?result_id=...`
   - `POST`: body `{ "result_id": "<uuid>" }`
+- `lca_query_results`: `POST` only.
+  - mode `process_all_impacts`: body `{ "mode": "process_all_impacts", "process_id": "<uuid>" }`
+  - mode `processes_one_impact`: body `{ "mode": "processes_one_impact", "process_ids": ["<uuid>"], "impact_id": "<uuid>" }`
 
 ## LCA Minimal Integration Script (submit -> poll -> fetch)
 
@@ -221,6 +224,7 @@ npx supabase functions deploy lifecyclemodel_hybrid_search --project-ref qgzvkon
 npx supabase functions deploy lca_solve --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy lca_jobs --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy lca_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy lca_query_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
 
 ### Embedding Functions

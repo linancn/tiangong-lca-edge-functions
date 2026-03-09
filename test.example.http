@@ -245,3 +245,25 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_results' \
     --data '{
       "result_id": "{{$dotenv LCA_RESULT_ID}}"
     }'
+
+
+### @name LCA_Query_Results：Local (single process -> all impacts)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_query_results' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --data '{
+      "scope": "prod",
+      "mode": "process_all_impacts",
+      "process_id": "{{$dotenv LCA_PROCESS_ID}}"
+    }'
+
+### @name LCA_Query_Results：Local (multi process -> one impact)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_query_results' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --data '{
+      "scope": "prod",
+      "mode": "processes_one_impact",
+      "process_ids": ["{{$dotenv LCA_PROCESS_ID}}"],
+      "impact_id": "{{$dotenv LCA_IMPACT_ID}}"
+    }'
