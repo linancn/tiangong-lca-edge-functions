@@ -13,18 +13,28 @@ const SNAPSHOT_BUILD_REQUEST_VERSION = 'lca_snapshot_build_v1';
 const DEFAULT_PROCESS_STATES = [100];
 const ACTIVE_BUILD_MAX_QUEUED_MS = 10 * 60 * 1000;
 const ACTIVE_BUILD_MAX_RUNNING_MS = 2 * 60 * 60 * 1000;
+const DEFAULT_HOTSPOT_LIMIT = 20;
+const MAX_HOTSPOT_LIMIT = 200;
 
 type QueryMode = 'process_all_impacts' | 'processes_one_impact';
+type HotspotSortBy = 'absolute_value' | 'value' | 'process_index';
+type SortDirection = 'asc' | 'desc';
+type QueryDataScope = 'current_user' | 'open_data' | 'all_data';
 
 type QueryRequest = {
   scope?: string;
   snapshot_id?: string;
+  data_scope?: QueryDataScope;
   mode?: QueryMode;
   process_id?: string;
   process_version?: string;
   process_ids?: string[];
   impact_id?: string;
   allow_fallback?: boolean;
+  top_n?: number;
+  offset?: number;
+  sort_by?: HotspotSortBy;
+  sort_direction?: SortDirection;
 };
 
 type SnapshotIndexProcessEntry = {
@@ -96,6 +106,19 @@ type ProcessIndexResolution =
   | { ok: true; process_index: number }
   | { ok: false; status: number; body: Record<string, unknown> };
 
+type RankedProcessValue = {
+  process_id: string;
+  process_version: string;
+  process_index: number;
+  value: number;
+  absolute_value: number;
+};
+
+type ProcessScopeMeta = {
+  state_code: number | null;
+  user_id: string | null;
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -133,6 +156,7 @@ Deno.serve(async (req) => {
   }
 
   const scope = (body.scope ?? 'prod').trim() || 'prod';
+  const dataScope = parseDataScope(body.data_scope);
   const mode = body.mode;
   const allowFallback = body.allow_fallback ?? true;
 
@@ -140,9 +164,10 @@ Deno.serve(async (req) => {
     return json({ error: 'invalid_mode' }, 400);
   }
 
-  const snapshotMeta = await resolveReadySnapshot(scope, body.snapshot_id, userId);
+  const snapshotMeta = await resolveReadySnapshot(scope, body.snapshot_id, userId, dataScope);
   if (!snapshotMeta.ok) {
     const shouldQueueBuild =
+      dataScope === 'current_user' &&
       !body.snapshot_id &&
       (snapshotMeta.error === 'no_ready_snapshot' ||
         snapshotMeta.error === 'snapshot_stale_rebuild_required');
@@ -296,13 +321,129 @@ Deno.serve(async (req) => {
   }
 
   const processIds = (body.process_ids ?? []).map((id) => id.trim()).filter(Boolean);
-  if (processIds.length === 0) {
+  const rankingRequested =
+    body.top_n !== undefined ||
+    body.offset !== undefined ||
+    body.sort_by !== undefined ||
+    body.sort_direction !== undefined;
+
+  if (processIds.length === 0 && !rankingRequested) {
     return json({ error: 'process_ids_required' }, 400);
   }
 
   const invalidProcessIds = processIds.filter((id) => !UUID_RE.test(id));
   if (invalidProcessIds.length > 0) {
     return json({ error: 'invalid_process_ids', process_ids: invalidProcessIds }, 400);
+  }
+
+  if (processIds.length === 0) {
+    let processScopeLookup: Map<string, ProcessScopeMeta> | null = null;
+    if (dataScope !== 'all_data') {
+      const scopeMeta = await fetchProcessScopeLookup(snapshotIndex.data.process_map);
+      if (!scopeMeta.ok) {
+        return json({ error: scopeMeta.error }, 500);
+      }
+      processScopeLookup = scopeMeta.data;
+    }
+
+    const topN = parseHotspotLimit(body.top_n);
+    if (!topN.ok) {
+      return json({ error: 'invalid_top_n' }, 400);
+    }
+
+    const offset = parseHotspotOffset(body.offset);
+    if (!offset.ok) {
+      return json({ error: 'invalid_offset' }, 400);
+    }
+
+    const sortBy = parseHotspotSortBy(body.sort_by);
+    if (!sortBy.ok) {
+      return json({ error: 'invalid_sort_by' }, 400);
+    }
+
+    const sortDirection = parseSortDirection(body.sort_direction);
+    if (!sortDirection.ok) {
+      return json({ error: 'invalid_sort_direction' }, 400);
+    }
+
+    const rankedValues: RankedProcessValue[] = [];
+    let totalAbsoluteValue = 0;
+
+    for (const entry of snapshotIndex.data.process_map) {
+      if (
+        processScopeLookup &&
+        !matchesProcessDataScope(
+          processScopeLookup.get(processScopeLookupKey(entry.process_id, entry.process_version)),
+          dataScope,
+          userId,
+        )
+      ) {
+        continue;
+      }
+
+      if (!Number.isInteger(entry.process_index) || entry.process_index < 0) {
+        return json({ error: 'snapshot_index_invalid', process_id: entry.process_id }, 500);
+      }
+
+      const hRow = queryArtifact.data.h_matrix[entry.process_index];
+      if (!Array.isArray(hRow)) {
+        return json({ error: 'query_artifact_shape_invalid' }, 500);
+      }
+
+      const value = Number(hRow[impactIndex] ?? 0);
+      const absoluteValue = Math.abs(value);
+      totalAbsoluteValue += absoluteValue;
+
+      rankedValues.push({
+        process_id: entry.process_id,
+        process_version: String(entry.process_version ?? '').trim(),
+        process_index: entry.process_index,
+        value,
+        absolute_value: absoluteValue,
+      });
+    }
+
+    rankedValues.sort((left, right) =>
+      compareRankedProcessValues(left, right, sortBy.value, sortDirection.value),
+    );
+
+    const offsetValue = offset.value;
+    const limitValue = topN.value;
+    const slicedValues = rankedValues.slice(offsetValue, offsetValue + limitValue).map((item) => ({
+      process_id: item.process_id,
+      process_version: item.process_version,
+      process_index: item.process_index,
+      value: item.value,
+      absolute_value: item.absolute_value,
+    }));
+
+    return json(
+      {
+        snapshot_id: snapshotId,
+        result_id: latestAllUnit.row.result_id,
+        source: 'all_unit',
+        mode,
+        data: {
+          kind: 'ranked_processes',
+          impact_id: impactId,
+          impact_index: impactIndex,
+          sort_by: sortBy.value,
+          sort_direction: sortDirection.value,
+          offset: offsetValue,
+          limit: limitValue,
+          returned_count: slicedValues.length,
+          total_process_count: rankedValues.length,
+          total_absolute_value: totalAbsoluteValue,
+          values: slicedValues,
+        },
+        meta: {
+          cache_hit: false,
+          computed_at: latestAllUnit.row.computed_at,
+          query_artifact_format: latestAllUnit.row.query_artifact_format,
+        },
+      },
+      200,
+    );
   }
 
   const missingProcessIds: string[] = [];
@@ -337,6 +478,7 @@ Deno.serve(async (req) => {
       source: 'all_unit',
       mode,
       data: {
+        kind: 'selected_processes',
         impact_id: impactId,
         impact_index: impactIndex,
         values,
@@ -355,6 +497,7 @@ async function resolveReadySnapshot(
   scope: string,
   requestedSnapshotId?: string,
   userId?: string,
+  dataScope: QueryDataScope = 'current_user',
 ): Promise<{ ok: true; data: ReadySnapshotMeta } | { ok: false; error: string; status: number }> {
   const explicit = requestedSnapshotId?.trim();
 
@@ -370,11 +513,11 @@ async function resolveReadySnapshot(
   }
 
   if (userId) {
-    const userScopedReady = await fetchUserScopedReadySnapshot(scope, userId);
-    if (userScopedReady.kind === 'fresh') {
-      return { ok: true, data: userScopedReady.data };
+    const scopedReady = await fetchReadySnapshotForDataScope(scope, userId, dataScope);
+    if (scopedReady.kind === 'fresh') {
+      return { ok: true, data: scopedReady.data };
     }
-    if (userScopedReady.kind === 'stale') {
+    if (scopedReady.kind === 'stale') {
       return { ok: false, error: 'snapshot_stale_rebuild_required', status: 409 };
     }
     return { ok: false, error: 'no_ready_snapshot', status: 404 };
@@ -421,43 +564,82 @@ async function resolveReadySnapshot(
   };
 }
 
-async function fetchUserScopedReadySnapshot(
+function parseDataScope(raw: unknown): QueryDataScope {
+  if (raw === 'open_data' || raw === 'all_data' || raw === 'current_user') {
+    return raw;
+  }
+  return 'current_user';
+}
+
+function hasSameIntegerSet(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const rightSet = new Set(right);
+  return left.every((value) => rightSet.has(value));
+}
+
+function matchesDataScopeFilter(
+  filter: ParsedProcessFilter,
+  dataScope: QueryDataScope,
+  userId: string,
+): boolean {
+  if (dataScope === 'all_data') {
+    return filter.allStates === true;
+  }
+
+  const matchesDefaultStates = hasSameIntegerSet(filter.processStates, DEFAULT_PROCESS_STATES);
+  if (!matchesDefaultStates || filter.allStates) {
+    return false;
+  }
+
+  if (dataScope === 'open_data') {
+    return filter.includeUserId === null;
+  }
+
+  return filter.includeUserId === userId;
+}
+
+async function fetchReadySnapshotForDataScope(
   scope: string,
   userId: string,
+  dataScope: QueryDataScope,
 ): Promise<UserScopedSnapshotResolution> {
   const { data, error } = await supabaseClient
     .from('lca_network_snapshots')
     .select('id,created_at,process_filter')
     .eq('status', 'ready')
     .in('scope', scope === 'full_library' ? ['full_library'] : ['full_library', scope])
-    .contains('process_filter', {
-      all_states: false,
-      process_states: DEFAULT_PROCESS_STATES,
-      include_user_id: userId,
-    })
     .order('created_at', { ascending: false })
-    .limit(20);
+    .limit(50);
 
   if (error) {
-    console.warn('read user scoped snapshots failed', {
+    console.warn('read scoped snapshots failed', {
       error: error.message,
       scope,
       user_id: userId,
+      data_scope: dataScope,
     });
     return { kind: 'none' };
   }
 
+  const fallbackUserId = dataScope === 'current_user' ? userId : '';
   let latestStaleSnapshotId: string | null = null;
   for (const row of data ?? []) {
     const snapshotId = String((row as { id?: unknown }).id ?? '').trim();
     if (!snapshotId) {
       continue;
     }
+    const processFilter = (row as { process_filter?: unknown }).process_filter;
+    const parsedFilter = parseProcessFilter(processFilter, fallbackUserId);
+    if (!matchesDataScopeFilter(parsedFilter, dataScope, userId)) {
+      continue;
+    }
+
     const ready = await fetchSnapshotArtifactMeta(snapshotId);
     if (ready.ok) {
       const snapshotCreatedAt = String((row as { created_at?: unknown }).created_at ?? '');
-      const processFilter = (row as { process_filter?: unknown }).process_filter;
-      const freshness = await isSnapshotFresh(snapshotCreatedAt, processFilter, userId);
+      const freshness = await isSnapshotFresh(snapshotCreatedAt, processFilter, fallbackUserId);
       if (freshness === 'fresh') {
         return { kind: 'fresh', data: { snapshot_id: ready.data.snapshot_id } };
       }
@@ -1066,6 +1248,152 @@ function impactIndexOf(snapshotIndex: SnapshotIndexDocument, impactId: string): 
     return null;
   }
   return hit.impact_index;
+}
+
+function parseHotspotLimit(input: unknown): { ok: true; value: number } | { ok: false } {
+  if (input === undefined || input === null) {
+    return { ok: true, value: DEFAULT_HOTSPOT_LIMIT };
+  }
+  const parsed = Number(input);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > MAX_HOTSPOT_LIMIT) {
+    return { ok: false };
+  }
+  return { ok: true, value: parsed };
+}
+
+function parseHotspotOffset(input: unknown): { ok: true; value: number } | { ok: false } {
+  if (input === undefined || input === null) {
+    return { ok: true, value: 0 };
+  }
+  const parsed = Number(input);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return { ok: false };
+  }
+  return { ok: true, value: parsed };
+}
+
+function parseHotspotSortBy(input: unknown): { ok: true; value: HotspotSortBy } | { ok: false } {
+  if (input === undefined || input === null || input === '') {
+    return { ok: true, value: 'absolute_value' };
+  }
+  if (input === 'absolute_value' || input === 'value' || input === 'process_index') {
+    return { ok: true, value: input };
+  }
+  return { ok: false };
+}
+
+function parseSortDirection(input: unknown): { ok: true; value: SortDirection } | { ok: false } {
+  if (input === undefined || input === null || input === '') {
+    return { ok: true, value: 'desc' };
+  }
+  if (input === 'asc' || input === 'desc') {
+    return { ok: true, value: input };
+  }
+  return { ok: false };
+}
+
+function compareRankedProcessValues(
+  left: RankedProcessValue,
+  right: RankedProcessValue,
+  sortBy: HotspotSortBy,
+  sortDirection: SortDirection,
+): number {
+  const primary =
+    sortBy === 'value'
+      ? left.value - right.value
+      : sortBy === 'process_index'
+        ? left.process_index - right.process_index
+        : left.absolute_value - right.absolute_value;
+
+  if (primary !== 0) {
+    return sortDirection === 'asc' ? primary : -primary;
+  }
+
+  if (left.process_index !== right.process_index) {
+    return left.process_index - right.process_index;
+  }
+
+  return left.process_id.localeCompare(right.process_id);
+}
+
+function processScopeLookupKey(processId: string, processVersion: string): string {
+  return `${processId}:${processVersion}`;
+}
+
+function matchesProcessDataScope(
+  meta: ProcessScopeMeta | undefined,
+  dataScope: QueryDataScope,
+  userId: string,
+): boolean {
+  if (dataScope === 'all_data') {
+    return true;
+  }
+
+  if (!meta) {
+    return false;
+  }
+
+  if (dataScope === 'open_data') {
+    return meta.state_code !== null && DEFAULT_PROCESS_STATES.includes(meta.state_code);
+  }
+
+  return meta.user_id === userId;
+}
+
+async function fetchProcessScopeLookup(
+  entries: SnapshotIndexProcessEntry[],
+): Promise<{ ok: true; data: Map<string, ProcessScopeMeta> } | { ok: false; error: string }> {
+  const uniqueIds = [...new Set(entries.map((entry) => entry.process_id).filter(Boolean))];
+  if (uniqueIds.length === 0) {
+    return { ok: true, data: new Map<string, ProcessScopeMeta>() };
+  }
+
+  const lookup = new Map<string, ProcessScopeMeta>();
+  const chunkSize = 500;
+
+  for (let index = 0; index < uniqueIds.length; index += chunkSize) {
+    const chunk = uniqueIds.slice(index, index + chunkSize);
+    const { data, error } = await supabaseClient
+      .from('processes')
+      .select('id,version,state_code,user_id')
+      .in('id', chunk);
+
+    if (error) {
+      console.error('fetch process scope metadata failed', {
+        error: error.message,
+        code: error.code,
+      });
+      return { ok: false, error: 'process_scope_lookup_failed' };
+    }
+
+    for (const row of data ?? []) {
+      const processId = String((row as { id?: unknown }).id ?? '').trim();
+      const processVersion = String((row as { version?: unknown }).version ?? '').trim();
+      if (!processId || !processVersion) {
+        continue;
+      }
+
+      const stateCodeRaw = (row as { state_code?: unknown }).state_code;
+      const stateCodeCandidate =
+        typeof stateCodeRaw === 'number'
+          ? stateCodeRaw
+          : typeof stateCodeRaw === 'string' && stateCodeRaw.trim().length > 0
+            ? Number(stateCodeRaw)
+            : Number.NaN;
+      const stateCode = Number.isInteger(stateCodeCandidate) ? stateCodeCandidate : null;
+      const userId =
+        typeof (row as { user_id?: unknown }).user_id === 'string'
+          ? String((row as { user_id?: unknown }).user_id).trim() || null
+          : null;
+
+      lookup.set(processScopeLookupKey(processId, processVersion), {
+        state_code: stateCode,
+        user_id: userId,
+      });
+    }
+  }
+
+  return { ok: true, data: lookup };
 }
 
 function deriveSnapshotIndexUrl(snapshotArtifactUrl: string): string {

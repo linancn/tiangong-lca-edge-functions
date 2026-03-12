@@ -253,6 +253,7 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_query_results'
     --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{
       "scope": "prod",
+      "data_scope": "current_user",
       "mode": "process_all_impacts",
       "process_id": "{{$dotenv LCA_PROCESS_ID}}"
     }'
@@ -263,7 +264,22 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_query_results'
     --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{
       "scope": "prod",
+      "data_scope": "current_user",
       "mode": "processes_one_impact",
       "process_ids": ["{{$dotenv LCA_PROCESS_ID}}"],
       "impact_id": "{{$dotenv LCA_IMPACT_ID}}"
+    }'
+
+### @name LCA_Query_Results：Local (snapshot hotspot ranking -> one impact)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_query_results' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --data '{
+      "scope": "prod",
+      "data_scope": "all_data",
+      "mode": "processes_one_impact",
+      "impact_id": "{{$dotenv LCA_IMPACT_ID}}",
+      "top_n": 20,
+      "sort_by": "absolute_value",
+      "sort_direction": "desc"
     }'
