@@ -31,6 +31,18 @@
   - 嵌入与 webhook 处理链路。
 - `supabase/functions/lca_*`
   - LCA 求解、任务查询、结果查询。
+  - `lca_query_results` 当前同时支持：
+    - `process_all_impacts`
+    - `processes_one_impact` 显式 `process_ids` 对比
+    - `processes_one_impact` 通过 `top_n/offset/sort_by/sort_direction` 做 snapshot 级热点排名
+    - `data_scope` 可选 `current_user` / `open_data` / `all_data`
+    - 仅 `current_user` 会在缺少 ready snapshot 时自动触发构建；其余 scope 只读取已有 ready snapshot
+  - `lca_contribution_path`
+    - 提交某个 `process + impact` 的路径分析异步作业
+    - 复用 `lca_jobs + lca_result_cache + lca_results`
+    - `data_scope` 规则与 `lca_query_results` 一致
+  - `lca_contribution_path_result`
+    - 读取 `contribution-path:v1` JSON artifact 并返回解析结果
 - `supabase/functions/_shared`
   - 认证、OpenAI、Redis、Supabase client、通用工具。
 - `scripts/lca_submit_poll_fetch.sh`

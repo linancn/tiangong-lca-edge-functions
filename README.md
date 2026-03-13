@@ -93,6 +93,8 @@ See `test.example.http` for local and remote examples, including:
 - `lifecyclemodel_hybrid_search`
 - `ai_suggest`
 - `lca_solve` / `lca_jobs` / `lca_results`
+- `lca_query_results`
+- `lca_contribution_path` / `lca_contribution_path_result`
 
 ## OpenAI Integration Baseline
 
@@ -163,8 +165,19 @@ grant execute on function public.lca_enqueue_job(text, jsonb) to service_role;
   - `GET`: `/functions/v1/lca_results/{resultId}` or `?result_id=...`
   - `POST`: body `{ "result_id": "<uuid>" }`
 - `lca_query_results`: `POST` only.
-  - mode `process_all_impacts`: body `{ "mode": "process_all_impacts", "process_id": "<uuid>" }`
-  - mode `processes_one_impact`: body `{ "mode": "processes_one_impact", "process_ids": ["<uuid>"], "impact_id": "<uuid>" }`
+  - optional `data_scope`: `"current_user"` (default), `"open_data"`, `"all_data"`
+  - mode `process_all_impacts`: body `{ "mode": "process_all_impacts", "data_scope": "current_user", "process_id": "<uuid>" }`
+  - mode `processes_one_impact`: body `{ "mode": "processes_one_impact", "data_scope": "current_user", "process_ids": ["<uuid>"], "impact_id": "<uuid>" }`
+  - mode `processes_one_impact` hotspot ranking: body `{ "mode": "processes_one_impact", "data_scope": "all_data", "impact_id": "<uuid>", "top_n": 20, "sort_by": "absolute_value", "sort_direction": "desc" }`
+  - snapshot auto-build is only attempted for `data_scope: "current_user"`; `open_data` and `all_data` require an already ready snapshot
+- `lca_contribution_path`: `POST` only.
+  - optional `data_scope`: `"current_user"` (default), `"open_data"`, `"all_data"`
+  - body `{ "process_id": "<uuid>", "impact_id": "<uuid>", "amount": 1.0, "options": { "max_depth": 4, "top_k_children": 5, "cutoff_share": 0.01, "max_nodes": 200 } }`
+  - returns `queued | in_progress | cache_hit`
+  - snapshot auto-build is only attempted for `data_scope: "current_user"`
+- `lca_contribution_path_result`: supports `GET` and `POST`.
+  - `GET`: `/functions/v1/lca_contribution_path_result/{resultId}` or `?result_id=...`
+  - `POST`: body `{ "result_id": "<uuid>" }`
 
 ## LCA Minimal Integration Script (submit -> poll -> fetch)
 
@@ -225,6 +238,8 @@ npx supabase functions deploy lca_solve --project-ref qgzvkongdjqiiamzbbts --no-
 npx supabase functions deploy lca_jobs --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy lca_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 npx supabase functions deploy lca_query_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy lca_contribution_path --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npx supabase functions deploy lca_contribution_path_result --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
 ```
 
 ### Embedding Functions
