@@ -165,6 +165,7 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
     --header 'X-Idempotency-Key: local-debug-001' \
     --data '{
       "scope": "prod",
+      "data_scope": "current_user",
       "demand": {
         "process_index": 0,
         "amount": 1.0
@@ -184,6 +185,7 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
     --header 'X-Idempotency-Key: local-debug-api-key-001' \
     --data '{
       "scope": "prod",
+      "data_scope": "current_user",
       "demand": {
         "process_index": 0,
         "amount": 1.0
@@ -203,6 +205,7 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
     --header 'X-Idempotency-Key: local-debug-all-unit-001' \
     --data '{
       "scope": "prod",
+      "data_scope": "current_user",
       "demand_mode": "all_unit",
       "solve": {
         "return_x": false,

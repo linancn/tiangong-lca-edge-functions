@@ -31,12 +31,19 @@
   - 嵌入与 webhook 处理链路。
 - `supabase/functions/lca_*`
   - LCA 求解、任务查询、结果查询。
+  - `lca_solve`
+    - `data_scope` 可选 `current_user` / `open_data` / `all_data`
+    - 三个 scope 都复用同一类用户增强 snapshot（公开数据 + 当前用户数据）
+    - 请求时仍按根过程语义区分：`current_user = 当前用户过程`，`open_data = 公开过程`，`all_data = 当前用户 + 公开过程`
+    - 三个 scope 在缺少 ready snapshot 时都可自动触发构建
   - `lca_query_results` 当前同时支持：
     - `process_all_impacts`
     - `processes_one_impact` 显式 `process_ids` 对比
     - `processes_one_impact` 通过 `top_n/offset/sort_by/sort_direction` 做 snapshot 级热点排名
     - `data_scope` 可选 `current_user` / `open_data` / `all_data`
-    - 仅 `current_user` 会在缺少 ready snapshot 时自动触发构建；其余 scope 只读取已有 ready snapshot
+    - 三个 scope 都复用同一类用户增强 snapshot（公开数据 + 当前用户数据）
+    - 请求时仍按过程 scope 过滤：`current_user = 当前用户过程`，`open_data = 公开过程`，`all_data = 当前用户 + 公开过程`
+    - 三个 scope 在缺少 ready snapshot 时都可自动触发构建
   - `lca_contribution_path`
     - 提交某个 `process + impact` 的路径分析异步作业
     - 复用 `lca_jobs + lca_result_cache + lca_results`

@@ -158,6 +158,11 @@ grant execute on function public.lca_enqueue_job(text, jsonb) to service_role;
 ## LCA Function Call Patterns
 
 - `lca_solve`: `POST` only.
+  - optional `data_scope`: `"current_user"` (default), `"open_data"`, `"all_data"`
+  - body can combine `data_scope` with normal solve payload, for example `{ "data_scope": "current_user", "demand": { "process_index": 0, "amount": 1.0 } }`
+  - snapshot family semantics: all three scopes reuse the same user-enhanced snapshot family, i.e. published data plus the current user's private data
+  - root-process semantics stay distinct: `current_user` only accepts current-user processes, `open_data` only accepts published processes, `all_data` accepts published plus current-user processes
+  - missing snapshot auto-build is attempted for every `data_scope`
 - `lca_jobs`: supports `GET` and `POST`.
   - `GET`: `/functions/v1/lca_jobs/{jobId}` or `?job_id=...`
   - `POST`: body `{ "job_id": "<uuid>" }`
@@ -169,12 +174,16 @@ grant execute on function public.lca_enqueue_job(text, jsonb) to service_role;
   - mode `process_all_impacts`: body `{ "mode": "process_all_impacts", "data_scope": "current_user", "process_id": "<uuid>" }`
   - mode `processes_one_impact`: body `{ "mode": "processes_one_impact", "data_scope": "current_user", "process_ids": ["<uuid>"], "impact_id": "<uuid>" }`
   - mode `processes_one_impact` hotspot ranking: body `{ "mode": "processes_one_impact", "data_scope": "all_data", "impact_id": "<uuid>", "top_n": 20, "sort_by": "absolute_value", "sort_direction": "desc" }`
-  - snapshot auto-build is only attempted for `data_scope: "current_user"`; `open_data` and `all_data` require an already ready snapshot
+  - all three scopes reuse the same user-enhanced snapshot family
+  - request-time process filtering stays distinct: `current_user = current-user processes`, `open_data = published processes`, `all_data = published + current-user processes`
+  - missing snapshot auto-build is attempted for every `data_scope`
 - `lca_contribution_path`: `POST` only.
   - optional `data_scope`: `"current_user"` (default), `"open_data"`, `"all_data"`
   - body `{ "process_id": "<uuid>", "impact_id": "<uuid>", "amount": 1.0, "options": { "max_depth": 4, "top_k_children": 5, "cutoff_share": 0.01, "max_nodes": 200 } }`
   - returns `queued | in_progress | cache_hit`
-  - snapshot auto-build is only attempted for `data_scope: "current_user"`
+  - all three scopes reuse the same user-enhanced snapshot family
+  - request-time root-process filtering stays distinct: `current_user = current-user processes`, `open_data = published processes`, `all_data = published + current-user processes`
+  - missing snapshot auto-build is attempted for every `data_scope`
 - `lca_contribution_path_result`: supports `GET` and `POST`.
   - `GET`: `/functions/v1/lca_contribution_path_result/{resultId}` or `?result_id=...`
   - `POST`: body `{ "result_id": "<uuid>" }`
