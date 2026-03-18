@@ -6,6 +6,7 @@ import {
   json,
   mapRpcError,
   normalizeSaveRpcPayload,
+  permissionErrorStatusCode,
   validateSavePlan,
 } from '../_shared/lifecyclemodel_bundle.ts';
 import { supabaseClient } from '../_shared/supabase_client.ts';
@@ -78,12 +79,18 @@ Deno.serve(async (req) => {
       plan.version!,
     );
     if (!permission.ok) {
-      return json(permission.error, permission.error.code === 'FORBIDDEN' ? 403 : 404);
+      return json(permission.error, permissionErrorStatusCode(permission.error));
     }
   }
 
+  // The RPC runs with service_role, so ownership must be forwarded explicitly.
+  const rpcPlan = {
+    ...plan,
+    actorUserId: userId,
+  };
+
   const { data, error } = await supabaseClient.rpc('save_lifecycle_model_bundle', {
-    p_plan: plan,
+    p_plan: rpcPlan,
   });
 
   if (error) {

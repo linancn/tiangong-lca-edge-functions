@@ -273,10 +273,23 @@ export function normalizeLifecycleModelRow(row: any) {
   return {
     id: String(row?.id ?? ''),
     version: String(row?.version ?? ''),
-    json: row?.json ?? null,
+    json: row?.json ?? row?.json_ordered ?? null,
     json_tg: row?.json_tg ?? null,
     ruleVerification: Boolean(row?.rule_verification),
   };
+}
+
+export function permissionErrorStatusCode(error: { code?: string }) {
+  switch (error.code) {
+    case 'FORBIDDEN':
+      return 403;
+    case 'MODEL_NOT_FOUND':
+      return 404;
+    case 'MODEL_LOOKUP_FAILED':
+      return 500;
+    default:
+      return 400;
+  }
 }
 
 function normalizeRpcErrorCode(error: { message?: string; code?: string }) {

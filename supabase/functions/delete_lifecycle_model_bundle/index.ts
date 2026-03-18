@@ -6,6 +6,7 @@ import {
   json,
   mapRpcError,
   normalizeDeleteRpcPayload,
+  permissionErrorStatusCode,
   validateDeleteBody,
 } from '../_shared/lifecyclemodel_bundle.ts';
 import { supabaseClient } from '../_shared/supabase_client.ts';
@@ -77,7 +78,7 @@ Deno.serve(async (req) => {
     payload.version,
   );
   if (!permission.ok) {
-    return json(permission.error, permission.error.code === 'FORBIDDEN' ? 403 : 404);
+    return json(permission.error, permissionErrorStatusCode(permission.error));
   }
 
   const { data, error } = await supabaseClient.rpc('delete_lifecycle_model_bundle', {
