@@ -1,4 +1,11 @@
-export const DEFAULT_PUBLISHED_PROCESS_STATES: readonly number[] = [100];
+export const DEFAULT_PUBLISHED_PROCESS_STATE_START = 100;
+export const DEFAULT_PUBLISHED_PROCESS_STATE_END = 199;
+export const DEFAULT_PUBLISHED_PROCESS_STATES: readonly number[] = Array.from(
+  {
+    length: DEFAULT_PUBLISHED_PROCESS_STATE_END - DEFAULT_PUBLISHED_PROCESS_STATE_START + 1,
+  },
+  (_, index) => DEFAULT_PUBLISHED_PROCESS_STATE_START + index,
+);
 
 export type LcaDataScope = 'current_user' | 'open_data' | 'all_data';
 
@@ -32,7 +39,8 @@ export function buildSnapshotProcessFilter(
     default:
       // Business semantics: open_data, all_data, and current_user all reuse the same
       // snapshot family for solving, i.e. published data plus the current user's
-      // private data. The root-process scope is validated separately per request.
+      // private data. Published data currently covers state_code 100..199, while
+      // root-process scope is validated separately per request.
       return {
         all_states: false,
         process_states: [...DEFAULT_PUBLISHED_PROCESS_STATES],
