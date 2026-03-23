@@ -50,6 +50,17 @@
     - `data_scope` 规则与 `lca_query_results` 一致
   - `lca_contribution_path_result`
     - 读取 `contribution-path:v1` JSON artifact 并返回解析结果
+- `supabase/functions/import_tidas_package`
+  - TIDAS ZIP 导入入口。
+  - `POST` only。
+  - 支持 `AuthMethod.JWT` 与 `AuthMethod.USER_API_KEY`。
+  - JWT 请求不应依赖 Redis；Redis 仅用于 `USER_API_KEY` 鉴权缓存。
+  - action `prepare_upload` 负责创建 import job / source artifact 并返回 signed upload URL。
+  - action `enqueue` 负责将 source artifact 标记为 ready 并触发 `lca_package_enqueue_job`。
+- `supabase/functions/tidas_package_jobs`
+  - 查询 package job 与关联 artifact。
+  - 支持 `GET`/`POST`。
+  - 支持 `AuthMethod.JWT` 与 `AuthMethod.USER_API_KEY`。
 - `supabase/functions/_shared`
   - 认证、OpenAI、Redis、Supabase client、通用工具。
 - `scripts/lca_submit_poll_fetch.sh`
@@ -105,6 +116,11 @@
   - 至少验证 `responses.create` 可用（`deno eval` 或实际函数调用）。
 - LCA 链路改动：
   - 优先用 `scripts/lca_submit_poll_fetch.sh` 验证端到端（本地需 `jq`）。
+- TIDAS package import 改动：
+  - `npm run lint`
+  - `deno check --config supabase/functions/deno.json supabase/functions/import_tidas_package/index.ts`
+  - 如果改动触及 `_shared/auth.ts` / `_shared/tidas_package.ts` / `_shared/redis_client.ts`，至少补跑所有直接依赖这些共享模块的 package 相关函数
+  - 用 `test.example.http` 中的 `import_tidas_package` / `tidas_package_jobs` 示例至少验证一组本地或远程请求
 
 ## 8. Environment & Secrets
 

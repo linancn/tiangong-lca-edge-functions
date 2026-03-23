@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
+import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseClient } from '../_shared/supabase_client.ts';
 import {
   enqueueImportTidasPackage,
@@ -8,6 +9,19 @@ import {
   prepareImportTidasPackageUpload,
   TidasPackageError,
 } from '../_shared/tidas_package.ts';
+
+function resolveBearerToken(req: Request): string {
+  return (
+    req.headers
+      .get('Authorization')
+      ?.replace(/^Bearer\s+/i, '')
+      .trim() ?? ''
+  );
+}
+
+function looksLikeJwtToken(token: string): boolean {
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -25,22 +39,31 @@ Deno.serve(async (req) => {
     );
   }
 
+  const bearerToken = resolveBearerToken(req);
+  const shouldTryUserApiKey = bearerToken.length > 0 && !looksLikeJwtToken(bearerToken);
+  const redis = shouldTryUserApiKey ? await getRedisClient() : undefined;
   const authResult = await authenticateRequest(req, {
     supabase: supabaseClient,
-    allowedMethods: [AuthMethod.JWT],
+    redis,
+    allowedMethods: shouldTryUserApiKey
+      ? [AuthMethod.USER_API_KEY, AuthMethod.JWT]
+      : [AuthMethod.JWT],
   });
 
-  const userId = authResult.user?.id;
-  if (!authResult.isAuthenticated || !userId) {
-    return json(
-      {
-        ok: false,
-        code: 'AUTH_REQUIRED',
-        message: 'Authentication required',
-      },
-      401,
+  if (!authResult.isAuthenticated || !authResult.user?.id) {
+    return (
+      authResult.response ??
+      json(
+        {
+          ok: false,
+          code: 'AUTH_REQUIRED',
+          message: 'Authentication required',
+        },
+        401,
+      )
     );
   }
+  const userId = authResult.user.id;
 
   let body: unknown = {};
   try {

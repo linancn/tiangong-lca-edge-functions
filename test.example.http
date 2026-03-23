@@ -249,6 +249,93 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_results' \
       "result_id": "{{$dotenv LCA_RESULT_ID}}"
     }'
 
+============================================================
+TIDAS Package Import
+============================================================
+### @name TIDAS_Import_Prepare_Upload：Local (USER_API_KEY)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/import_tidas_package' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'X-Idempotency-Key: tidas-import-local-prepare-001' \
+    --data '{
+      "action": "prepare_upload",
+      "filename": "example-package.zip",
+      "byte_size": 123456,
+      "content_type": "application/zip"
+    }'
+
+### @name TIDAS_Import_Prepare_Upload：Remote (USER_API_KEY)
+curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/import_tidas_package' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'X-Idempotency-Key: tidas-import-remote-prepare-001' \
+    --data '{
+      "action": "prepare_upload",
+      "filename": "example-package.zip",
+      "byte_size": 123456,
+      "content_type": "application/zip"
+    }'
+
+### @name TIDAS_Import_Prepare_Upload：Local (USER_JWT)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/import_tidas_package' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --header 'X-Idempotency-Key: tidas-import-local-jwt-prepare-001' \
+    --data '{
+      "action": "prepare_upload",
+      "filename": "example-package.zip",
+      "byte_size": 123456,
+      "content_type": "application/zip"
+    }'
+
+### @name TIDAS_Import_Enqueue：Local (USER_API_KEY)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/import_tidas_package' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --data '{
+      "action": "enqueue",
+      "job_id": "{{$dotenv TIDAS_IMPORT_JOB_ID}}",
+      "source_artifact_id": "{{$dotenv TIDAS_IMPORT_SOURCE_ARTIFACT_ID}}",
+      "artifact_sha256": "{{$dotenv TIDAS_IMPORT_ARTIFACT_SHA256}}",
+      "artifact_byte_size": {{$dotenv TIDAS_IMPORT_ARTIFACT_BYTE_SIZE}},
+      "filename": "example-package.zip",
+      "content_type": "application/zip"
+    }'
+
+### @name TIDAS_Import_Enqueue：Remote (USER_API_KEY)
+curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/import_tidas_package' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --data '{
+      "action": "enqueue",
+      "job_id": "{{$dotenv TIDAS_IMPORT_JOB_ID}}",
+      "source_artifact_id": "{{$dotenv TIDAS_IMPORT_SOURCE_ARTIFACT_ID}}",
+      "artifact_sha256": "{{$dotenv TIDAS_IMPORT_ARTIFACT_SHA256}}",
+      "artifact_byte_size": {{$dotenv TIDAS_IMPORT_ARTIFACT_BYTE_SIZE}},
+      "filename": "example-package.zip",
+      "content_type": "application/zip"
+    }'
+
+### @name TIDAS_Package_Job_Status：Local (path param, USER_API_KEY)
+curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/tidas_package_jobs/{{$dotenv TIDAS_IMPORT_JOB_ID}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}'
+
+### @name TIDAS_Package_Job_Status：Remote (query param, USER_API_KEY)
+curl -i --location --request GET '{{$dotenv REMOTE_ENDPOINT}}/tidas_package_jobs?job_id={{$dotenv TIDAS_IMPORT_JOB_ID}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}'
+
+### @name TIDAS_Package_Job_Status：Local (POST body, USER_API_KEY)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/tidas_package_jobs' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --data '{
+      "job_id": "{{$dotenv TIDAS_IMPORT_JOB_ID}}"
+    }'
+
+### @name TIDAS_Package_Job_Status：Local (path param, USER_JWT)
+curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/tidas_package_jobs/{{$dotenv TIDAS_IMPORT_JOB_ID}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}'
+
 
 ### @name LCA_Query_Results：Local (single process -> all impacts)
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_query_results' \
