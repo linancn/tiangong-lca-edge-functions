@@ -95,6 +95,7 @@ See `test.example.http` for local and remote examples, including:
 - `lca_solve` / `lca_jobs` / `lca_results`
 - `lca_query_results`
 - `lca_contribution_path` / `lca_contribution_path_result`
+- `import_tidas_package` / `tidas_package_jobs`
 
 ## OpenAI Integration Baseline
 
@@ -187,6 +188,85 @@ grant execute on function public.lca_enqueue_job(text, jsonb) to service_role;
 - `lca_contribution_path_result`: supports `GET` and `POST`.
   - `GET`: `/functions/v1/lca_contribution_path_result/{resultId}` or `?result_id=...`
   - `POST`: body `{ "result_id": "<uuid>" }`
+- `import_tidas_package`: `POST` only.
+  - auth: supports both `Authorization: Bearer <USER_JWT>` and `Authorization: Bearer <USER_API_KEY>`
+  - action `prepare_upload`: body `{ "action": "prepare_upload", "filename": "example.zip", "byte_size": 123, "content_type": "application/zip" }`
+  - action `enqueue`: body `{ "action": "enqueue", "job_id": "<uuid>", "source_artifact_id": "<uuid>", "artifact_sha256": "<sha256-or-null>", "artifact_byte_size": 123, "filename": "example.zip", "content_type": "application/zip" }`
+- `tidas_package_jobs`: supports `GET` and `POST`.
+  - auth: supports both `Authorization: Bearer <USER_JWT>` and `Authorization: Bearer <USER_API_KEY>`
+  - `GET`: `/functions/v1/tidas_package_jobs/{jobId}` or `?job_id=...`
+  - `POST`: body `{ "job_id": "<uuid>" }`
+
+## TIDAS Package Import API
+
+The async TIDAS package import flow uses the edge-function base URL:
+
+- local: `http://127.0.0.1:54321/functions/v1`
+- remote: `<your-edge-functions-url>/functions/v1`
+
+The supported auth headers are:
+
+- browser JWT: `Authorization: Bearer <USER_JWT>`
+- user API key: `Authorization: Bearer <USER_API_KEY>`
+
+Recommended flow:
+
+1. Call `POST /import_tidas_package` with `{"action":"prepare_upload", ...}` to create the import job and receive a signed upload target.
+2. Upload the ZIP bytes directly to the returned `upload.signed_url`.
+3. Call `POST /import_tidas_package` with `{"action":"enqueue", ...}` to mark the source artifact ready and enqueue the async worker job.
+4. Poll `GET /tidas_package_jobs/{job_id}` until the job reaches `completed` or `failed`.
+
+Example `prepare_upload` request:
+
+```bash
+curl -i --location --request POST "${BASE_URL}/import_tidas_package" \
+  --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer ${USER_API_KEY}" \
+  --header 'X-Idempotency-Key: tidas-import-demo-prepare-001' \
+  --data '{
+    "action": "prepare_upload",
+    "filename": "example-package.zip",
+    "byte_size": 123456,
+    "content_type": "application/zip"
+  }'
+```
+
+Example direct upload to the returned signed URL:
+
+```bash
+curl -i --request PUT "${SIGNED_URL}" \
+  --header 'Content-Type: application/zip' \
+  --data-binary @./example-package.zip
+```
+
+Example `enqueue` request:
+
+```bash
+curl -i --location --request POST "${BASE_URL}/import_tidas_package" \
+  --header 'Content-Type: application/json' \
+  --header "Authorization: Bearer ${USER_API_KEY}" \
+  --data '{
+    "action": "enqueue",
+    "job_id": "<job-id-from-prepare-upload>",
+    "source_artifact_id": "<source-artifact-id-from-prepare-upload>",
+    "artifact_sha256": "<optional-sha256>",
+    "artifact_byte_size": 123456,
+    "filename": "example-package.zip",
+    "content_type": "application/zip"
+  }'
+```
+
+Example job polling:
+
+```bash
+curl -i --location --request GET "${BASE_URL}/tidas_package_jobs/<job-id>" \
+  --header "Authorization: Bearer ${USER_API_KEY}"
+```
+
+Notes:
+
+- The edge function keeps the existing browser JWT flow unchanged; API-key clients use the same prepare-upload, direct-upload, enqueue, and poll contract.
+- Import validation now happens asynchronously in the calculator worker after enqueue, and validation failures are surfaced through the import report artifact linked from `tidas_package_jobs`.
 
 ## LCA Minimal Integration Script (submit -> poll -> fetch)
 

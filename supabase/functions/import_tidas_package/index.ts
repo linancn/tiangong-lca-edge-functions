@@ -1,6 +1,7 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
+import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseClient } from '../_shared/supabase_client.ts';
 import {
   enqueueImportTidasPackage,
@@ -25,22 +26,27 @@ Deno.serve(async (req) => {
     );
   }
 
+  const redis = await getRedisClient();
   const authResult = await authenticateRequest(req, {
     supabase: supabaseClient,
-    allowedMethods: [AuthMethod.JWT],
+    redis,
+    allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
   });
 
-  const userId = authResult.user?.id;
-  if (!authResult.isAuthenticated || !userId) {
-    return json(
-      {
-        ok: false,
-        code: 'AUTH_REQUIRED',
-        message: 'Authentication required',
-      },
-      401,
+  if (!authResult.isAuthenticated || !authResult.user?.id) {
+    return (
+      authResult.response ??
+      json(
+        {
+          ok: false,
+          code: 'AUTH_REQUIRED',
+          message: 'Authentication required',
+        },
+        401,
+      )
     );
   }
+  const userId = authResult.user.id;
 
   let body: unknown = {};
   try {
