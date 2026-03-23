@@ -13,7 +13,14 @@ export const SUPPORTED_TIDAS_TABLES = [
 
 export type SupportedTidasTable = (typeof SUPPORTED_TIDAS_TABLES)[number];
 
-export const OPEN_DATA_STATE_CODES = [99, 100] as const;
+export const OPEN_DATA_STATE_CODE_START = 100;
+export const OPEN_DATA_STATE_CODE_END = 199;
+export const OPEN_DATA_STATE_CODES = Array.from(
+  {
+    length: OPEN_DATA_STATE_CODE_END - OPEN_DATA_STATE_CODE_START + 1,
+  },
+  (_, index) => OPEN_DATA_STATE_CODE_START + index,
+) as readonly number[];
 
 export type TidasPackageScope = 'current_user' | 'open_data' | 'current_user_and_open_data';
 export type TidasPackageManifestScope = TidasPackageScope | 'selected_roots';
@@ -60,6 +67,51 @@ type ExportRequestCacheRow = {
 };
 
 export type ExportCacheAction = 'cache_hit' | 'in_progress' | 'retry';
+
+type PackageArtifactResponse = {
+  artifact_id: string;
+  artifact_kind: TidasPackageArtifactKind;
+  status: string;
+  artifact_format: string;
+  content_type: string;
+  artifact_sha256: string | null;
+  artifact_byte_size: number | null;
+  artifact_url: string;
+  storage_bucket: string | null;
+  storage_object_path: string | null;
+  signed_download_url: string | null;
+  signed_download_expires_in_seconds: number | null;
+  metadata: JsonRecord;
+  expires_at: string | null;
+  is_pinned: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+type PackageRequestCacheResponse = {
+  id: string;
+  status: string;
+  error_code: string | null;
+  error_message: string | null;
+  hit_count: number;
+  last_accessed_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  export_artifact_id: string | null;
+  report_artifact_id: string | null;
+};
+
+export type PackageJobDiagnosticsSummary = {
+  error_code: string | null;
+  message: string | null;
+  stage: string | null;
+  upload_mode: string | null;
+  artifact_byte_size: number | null;
+  http_status: number | null;
+  storage_error_code: string | null;
+  is_oversize: boolean;
+  source: 'diagnostics' | 'request_cache' | 'derived' | 'none';
+};
 
 type PackageJobRow = {
   id: string;
@@ -641,6 +693,31 @@ export async function lookupTidasPackageJob(
     artifacts.map((artifact) => [artifact.artifact_kind, artifact]),
   );
 
+  const requestCache: PackageRequestCacheResponse | null = cacheRow
+    ? {
+        id: String(cacheRow.id),
+        status: String(cacheRow.status),
+        error_code: cacheRow.error_code ? String(cacheRow.error_code) : null,
+        error_message: cacheRow.error_message ? String(cacheRow.error_message) : null,
+        hit_count: Number(cacheRow.hit_count ?? 0),
+        last_accessed_at: cacheRow.last_accessed_at ?? null,
+        created_at: cacheRow.created_at ?? null,
+        updated_at: cacheRow.updated_at ?? null,
+        export_artifact_id: cacheRow.export_artifact_id
+          ? String(cacheRow.export_artifact_id)
+          : null,
+        report_artifact_id: cacheRow.report_artifact_id
+          ? String(cacheRow.report_artifact_id)
+          : null,
+      }
+    : null;
+  const diagnosticsSummary = buildPackageJobDiagnosticsSummary({
+    status: job.status,
+    diagnostics: job.diagnostics,
+    artifactsByKind,
+    requestCache,
+  });
+
   return {
     ok: true,
     job_id: job.id,
@@ -657,26 +734,10 @@ export async function lookupTidasPackageJob(
     },
     payload: job.payload,
     diagnostics: job.diagnostics,
+    diagnostics_summary: diagnosticsSummary,
     artifacts,
     artifacts_by_kind: artifactsByKind,
-    request_cache: cacheRow
-      ? {
-          id: String(cacheRow.id),
-          status: String(cacheRow.status),
-          error_code: cacheRow.error_code ? String(cacheRow.error_code) : null,
-          error_message: cacheRow.error_message ? String(cacheRow.error_message) : null,
-          hit_count: Number(cacheRow.hit_count ?? 0),
-          last_accessed_at: cacheRow.last_accessed_at ?? null,
-          created_at: cacheRow.created_at ?? null,
-          updated_at: cacheRow.updated_at ?? null,
-          export_artifact_id: cacheRow.export_artifact_id
-            ? String(cacheRow.export_artifact_id)
-            : null,
-          report_artifact_id: cacheRow.report_artifact_id
-            ? String(cacheRow.report_artifact_id)
-            : null,
-        }
-      : null,
+    request_cache: requestCache,
   };
 }
 
@@ -691,6 +752,96 @@ function normalizeString(value: unknown): string {
 function normalizeNullableString(value: unknown): string | null {
   const normalized = normalizeString(value);
   return normalized ? normalized : null;
+}
+
+function normalizeNullableNumber(value: unknown): number | null {
+  const normalized = Number(value);
+  return Number.isFinite(normalized) ? normalized : null;
+}
+
+function normalizeErrorCode(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  return value
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[\s-]+/g, '_');
+}
+
+function looksLikeOversizeError(value: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+
+  const lowered = value.toLowerCase();
+  return (
+    lowered.includes('artifact_too_large') ||
+    lowered.includes('entitytoolarge') ||
+    lowered.includes('payload too large') ||
+    lowered.includes('oversize') ||
+    lowered.includes('too large') ||
+    lowered.includes('upload size limit')
+  );
+}
+
+export function buildPackageJobDiagnosticsSummary(args: {
+  status: TidasPackageJobStatus;
+  diagnostics: unknown;
+  artifactsByKind: Record<string, PackageArtifactResponse>;
+  requestCache: PackageRequestCacheResponse | null;
+}): PackageJobDiagnosticsSummary {
+  const diagnostics = asRecord(args.diagnostics);
+  const exportArtifact = asRecord(args.artifactsByKind.export_zip);
+  const requestErrorCode = normalizeNullableString(args.requestCache?.error_code);
+  const requestErrorMessage = normalizeNullableString(args.requestCache?.error_message);
+  const diagnosticsErrorCode = normalizeNullableString(diagnostics.error_code);
+  const storageErrorCode = normalizeNullableString(diagnostics.storage_error_code);
+  const rawMessage =
+    normalizeNullableString(diagnostics.message) ??
+    normalizeNullableString(diagnostics.error) ??
+    requestErrorMessage;
+  const normalizedErrorCode =
+    looksLikeOversizeError(diagnosticsErrorCode) ||
+    looksLikeOversizeError(storageErrorCode) ||
+    looksLikeOversizeError(rawMessage) ||
+    looksLikeOversizeError(requestErrorCode)
+      ? 'artifact_too_large'
+      : (normalizeErrorCode(diagnosticsErrorCode) ?? normalizeErrorCode(requestErrorCode));
+  const artifactByteSize =
+    normalizeNullableNumber(diagnostics.artifact_byte_size) ??
+    normalizeNullableNumber(exportArtifact.artifact_byte_size);
+  const stage = normalizeNullableString(diagnostics.stage ?? diagnostics.phase);
+  const uploadMode = normalizeNullableString(diagnostics.upload_mode);
+  const httpStatus = normalizeNullableNumber(diagnostics.http_status);
+  const isOversize = normalizedErrorCode === 'artifact_too_large';
+  const message =
+    normalizeNullableString(diagnostics.message) ??
+    (isOversize
+      ? 'The export package exceeded the object storage upload size limit.'
+      : (requestErrorMessage ?? normalizeNullableString(diagnostics.error)));
+
+  let source: PackageJobDiagnosticsSummary['source'] = 'none';
+  if (diagnosticsErrorCode || diagnostics.message || diagnostics.error) {
+    source = 'diagnostics';
+  } else if (requestErrorCode || requestErrorMessage) {
+    source = 'request_cache';
+  } else if (args.status === 'failed' && (normalizedErrorCode || message)) {
+    source = 'derived';
+  }
+
+  return {
+    error_code: normalizedErrorCode,
+    message,
+    stage,
+    upload_mode: uploadMode,
+    artifact_byte_size: artifactByteSize,
+    http_status: httpStatus,
+    storage_error_code: storageErrorCode,
+    is_oversize: isOversize,
+    source,
+  };
 }
 
 function normalizeScope(value: unknown): TidasPackageScope {

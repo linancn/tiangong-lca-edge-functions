@@ -1,12 +1,14 @@
 import { assertEquals } from 'jsr:@std/assert';
 import {
+  OPEN_DATA_STATE_CODES,
   buildImportSourceObjectPath,
+  buildPackageJobDiagnosticsSummary,
   buildStorageObjectUrl,
   normalizeExportRequestBody,
   normalizeVersionString,
   parseStoragePathFromArtifactUrl,
   resolveExportCacheAction,
-} from './tidas_package.ts';
+} from '../supabase/functions/_shared/tidas_package.ts';
 
 Deno.test('normalizeVersionString pads dotted numeric versions', () => {
   assertEquals(normalizeVersionString('1.1.0'), '01.01.000');
@@ -153,4 +155,89 @@ Deno.test('resolveExportCacheAction retries stale, failed, or orphaned cache row
     ),
     'retry',
   );
+});
+
+Deno.test('buildPackageJobDiagnosticsSummary preserves structured upload diagnostics', () => {
+  const summary = buildPackageJobDiagnosticsSummary({
+    status: 'failed',
+    diagnostics: {
+      error_code: 'artifact_too_large',
+      message: 'The export package exceeded the object storage upload size limit.',
+      stage: 'upload_object',
+      upload_mode: 'multipart',
+      artifact_byte_size: 123456,
+      http_status: 413,
+      storage_error_code: 'EntityTooLarge',
+    },
+    artifactsByKind: {},
+    requestCache: null,
+  });
+
+  assertEquals(summary.error_code, 'artifact_too_large');
+  assertEquals(
+    summary.message,
+    'The export package exceeded the object storage upload size limit.',
+  );
+  assertEquals(summary.stage, 'upload_object');
+  assertEquals(summary.upload_mode, 'multipart');
+  assertEquals(summary.artifact_byte_size, 123456);
+  assertEquals(summary.is_oversize, true);
+  assertEquals(summary.source, 'diagnostics');
+});
+
+Deno.test(
+  'buildPackageJobDiagnosticsSummary classifies legacy oversize strings from request cache',
+  () => {
+    const summary = buildPackageJobDiagnosticsSummary({
+      status: 'failed',
+      diagnostics: {
+        error: 'object upload failed status=413 Payload Too Large <Code>EntityTooLarge</Code>',
+      },
+      artifactsByKind: {
+        export_zip: {
+          artifact_id: 'artifact-1',
+          artifact_kind: 'export_zip',
+          status: 'failed',
+          artifact_format: 'tidas-package-zip:v1',
+          content_type: 'application/zip',
+          artifact_sha256: null,
+          artifact_byte_size: 99,
+          artifact_url: 'https://example.com/export.zip',
+          storage_bucket: null,
+          storage_object_path: null,
+          signed_download_url: null,
+          signed_download_expires_in_seconds: null,
+          metadata: {},
+          expires_at: null,
+          is_pinned: false,
+          created_at: null,
+          updated_at: null,
+        },
+      },
+      requestCache: {
+        id: 'cache-1',
+        status: 'failed',
+        error_code: 'job_execution_failed',
+        error_message: 'object upload failed status=413 Payload Too Large',
+        hit_count: 1,
+        last_accessed_at: null,
+        created_at: null,
+        updated_at: null,
+        export_artifact_id: null,
+        report_artifact_id: null,
+      },
+    });
+
+    assertEquals(summary.error_code, 'artifact_too_large');
+    assertEquals(summary.is_oversize, true);
+    assertEquals(summary.artifact_byte_size, 99);
+    assertEquals(summary.source, 'diagnostics');
+  },
+);
+
+Deno.test('OPEN_DATA_STATE_CODES covers the published 100..199 range', () => {
+  assertEquals(OPEN_DATA_STATE_CODES[0], 100);
+  assertEquals(OPEN_DATA_STATE_CODES.at(-1), 199);
+  assertEquals(OPEN_DATA_STATE_CODES.includes(150), true);
+  assertEquals(OPEN_DATA_STATE_CODES.includes(99), false);
 });
