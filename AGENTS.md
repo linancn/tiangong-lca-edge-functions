@@ -61,6 +61,7 @@
   - 查询 package job 与关联 artifact。
   - 支持 `GET`/`POST`。
   - 支持 `AuthMethod.JWT` 与 `AuthMethod.USER_API_KEY`。
+  - 成功响应在保留原始 `diagnostics` 的同时，额外返回 `diagnostics_summary`，用于稳定暴露 `error_code`、`message`、`stage`、`upload_mode`、`artifact_byte_size`、`http_status`、`storage_error_code`、`is_oversize`
 - `supabase/functions/_shared`
   - 认证、OpenAI、Redis、Supabase client、通用工具。
 - `scripts/lca_submit_poll_fetch.sh`
