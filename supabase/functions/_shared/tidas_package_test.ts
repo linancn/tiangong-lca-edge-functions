@@ -1,5 +1,6 @@
 import { assertEquals } from 'jsr:@std/assert';
 import {
+  OPEN_DATA_STATE_CODES,
   buildImportSourceObjectPath,
   buildPackageJobDiagnosticsSummary,
   buildStorageObjectUrl,
@@ -233,3 +234,10 @@ Deno.test(
     assertEquals(summary.source, 'diagnostics');
   },
 );
+
+Deno.test('OPEN_DATA_STATE_CODES covers the published 100..199 range', () => {
+  assertEquals(OPEN_DATA_STATE_CODES[0], 100);
+  assertEquals(OPEN_DATA_STATE_CODES.at(-1), 199);
+  assertEquals(OPEN_DATA_STATE_CODES.includes(150), true);
+  assertEquals(OPEN_DATA_STATE_CODES.includes(99), false);
+});

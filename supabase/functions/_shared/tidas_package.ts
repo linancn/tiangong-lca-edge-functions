@@ -13,7 +13,14 @@ export const SUPPORTED_TIDAS_TABLES = [
 
 export type SupportedTidasTable = (typeof SUPPORTED_TIDAS_TABLES)[number];
 
-export const OPEN_DATA_STATE_CODES = [99, 100] as const;
+export const OPEN_DATA_STATE_CODE_START = 100;
+export const OPEN_DATA_STATE_CODE_END = 199;
+export const OPEN_DATA_STATE_CODES = Array.from(
+  {
+    length: OPEN_DATA_STATE_CODE_END - OPEN_DATA_STATE_CODE_START + 1,
+  },
+  (_, index) => OPEN_DATA_STATE_CODE_START + index,
+) as readonly number[];
 
 export type TidasPackageScope = 'current_user' | 'open_data' | 'current_user_and_open_data';
 export type TidasPackageManifestScope = TidasPackageScope | 'selected_roots';
