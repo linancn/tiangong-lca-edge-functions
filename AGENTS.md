@@ -14,6 +14,7 @@
 - 项目类型：Supabase Edge Functions（Deno 2.1.x）+ Node 工具链。
 - 入口目录：`supabase/functions/*/index.ts`。
 - 共享模块：`supabase/functions/_shared/*`。
+- Deno 测试文件统一放在仓库根目录 `test/*`，不要放在 `supabase/functions/**` 下。
 - 依赖锁定：`supabase/functions/deno.json` 的 `imports` 使用精确版本（exact pin），避免无版本映射。
 - 本地启动：
   - `npm install`
@@ -65,6 +66,8 @@
   - package export `open_data` scope 现在按 `state_code` `100..199` 识别公开数据，不再把旧的 `99` 视作公开数据
 - `supabase/functions/_shared`
   - 认证、OpenAI、Redis、Supabase client、通用工具。
+- `test/*`
+  - 仓库级 Deno 测试文件；共享模块和函数相关测试也放这里，通过相对路径引用 `supabase/functions/**` 代码。
 - `scripts/lca_submit_poll_fetch.sh`
   - LCA submit/poll/fetch 联调脚本（依赖 `jq`）。
 

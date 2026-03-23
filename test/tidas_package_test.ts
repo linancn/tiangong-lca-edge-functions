@@ -8,7 +8,7 @@ import {
   normalizeVersionString,
   parseStoragePathFromArtifactUrl,
   resolveExportCacheAction,
-} from './tidas_package.ts';
+} from '../supabase/functions/_shared/tidas_package.ts';
 
 Deno.test('normalizeVersionString pads dotted numeric versions', () => {
   assertEquals(normalizeVersionString('1.1.0'), '01.01.000');
