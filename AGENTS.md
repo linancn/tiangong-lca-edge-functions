@@ -54,6 +54,7 @@
   - TIDAS ZIP 导入入口。
   - `POST` only。
   - 支持 `AuthMethod.JWT` 与 `AuthMethod.USER_API_KEY`。
+  - JWT 请求不应依赖 Redis；Redis 仅用于 `USER_API_KEY` 鉴权缓存。
   - action `prepare_upload` 负责创建 import job / source artifact 并返回 signed upload URL。
   - action `enqueue` 负责将 source artifact 标记为 ready 并触发 `lca_package_enqueue_job`。
 - `supabase/functions/tidas_package_jobs`

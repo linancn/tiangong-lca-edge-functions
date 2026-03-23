@@ -212,7 +212,9 @@ The supported auth headers are:
 Recommended flow:
 
 1. Call `POST /import_tidas_package` with `{"action":"prepare_upload", ...}` to create the import job and receive a signed upload target.
-2. Upload the ZIP bytes directly to the returned `upload.signed_url`.
+2. Upload the ZIP bytes with the returned signed-upload fields.
+   - Preferred: use `upload.bucket`, `upload.path`, and `upload.token` with the Supabase Storage signed-upload helper.
+   - Optional convenience: if `upload.signed_url` is non-null, clients may upload directly to that URL.
 3. Call `POST /import_tidas_package` with `{"action":"enqueue", ...}` to mark the source artifact ready and enqueue the async worker job.
 4. Poll `GET /tidas_package_jobs/{job_id}` until the job reaches `completed` or `failed`.
 
@@ -231,7 +233,18 @@ curl -i --location --request POST "${BASE_URL}/import_tidas_package" \
   }'
 ```
 
-Example direct upload to the returned signed URL:
+Example upload with the Supabase Storage signed-upload helper:
+
+```ts
+const { error } = await supabase.storage
+  .from(upload.bucket)
+  .uploadToSignedUrl(upload.path, upload.token, file, {
+    contentType: upload.content_type,
+    upsert: true,
+  });
+```
+
+Optional direct upload when `upload.signed_url` is present:
 
 ```bash
 curl -i --request PUT "${SIGNED_URL}" \
@@ -266,6 +279,7 @@ curl -i --location --request GET "${BASE_URL}/tidas_package_jobs/<job-id>" \
 Notes:
 
 - The edge function keeps the existing browser JWT flow unchanged; API-key clients use the same prepare-upload, direct-upload, enqueue, and poll contract.
+- JWT callers do not require Redis; the Redis-backed path is only used for `USER_API_KEY` bearer authentication.
 - Import validation now happens asynchronously in the calculator worker after enqueue, and validation failures are surfaced through the import report artifact linked from `tidas_package_jobs`.
 
 ## LCA Minimal Integration Script (submit -> poll -> fetch)

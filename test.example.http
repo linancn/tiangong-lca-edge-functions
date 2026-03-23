@@ -276,6 +276,18 @@ curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/import_tidas_pack
       "content_type": "application/zip"
     }'
 
+### @name TIDAS_Import_Prepare_Upload：Local (USER_JWT)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/import_tidas_package' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --header 'X-Idempotency-Key: tidas-import-local-jwt-prepare-001' \
+    --data '{
+      "action": "prepare_upload",
+      "filename": "example-package.zip",
+      "byte_size": 123456,
+      "content_type": "application/zip"
+    }'
+
 ### @name TIDAS_Import_Enqueue：Local (USER_API_KEY)
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/import_tidas_package' \
     --header 'Content-Type: application/json' \
@@ -319,6 +331,10 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/tidas_package_jobs
     --data '{
       "job_id": "{{$dotenv TIDAS_IMPORT_JOB_ID}}"
     }'
+
+### @name TIDAS_Package_Job_Status：Local (path param, USER_JWT)
+curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/tidas_package_jobs/{{$dotenv TIDAS_IMPORT_JOB_ID}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}'
 
 
 ### @name LCA_Query_Results：Local (single process -> all impacts)

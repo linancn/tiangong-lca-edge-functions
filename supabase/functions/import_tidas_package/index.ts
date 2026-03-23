@@ -10,6 +10,19 @@ import {
   TidasPackageError,
 } from '../_shared/tidas_package.ts';
 
+function resolveBearerToken(req: Request): string {
+  return (
+    req.headers
+      .get('Authorization')
+      ?.replace(/^Bearer\s+/i, '')
+      .trim() ?? ''
+  );
+}
+
+function looksLikeJwtToken(token: string): boolean {
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return json('ok');
@@ -26,11 +39,15 @@ Deno.serve(async (req) => {
     );
   }
 
-  const redis = await getRedisClient();
+  const bearerToken = resolveBearerToken(req);
+  const shouldTryUserApiKey = bearerToken.length > 0 && !looksLikeJwtToken(bearerToken);
+  const redis = shouldTryUserApiKey ? await getRedisClient() : undefined;
   const authResult = await authenticateRequest(req, {
     supabase: supabaseClient,
     redis,
-    allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
+    allowedMethods: shouldTryUserApiKey
+      ? [AuthMethod.USER_API_KEY, AuthMethod.JWT]
+      : [AuthMethod.JWT],
   });
 
   if (!authResult.isAuthenticated || !authResult.user?.id) {
