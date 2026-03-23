@@ -2,8 +2,6 @@ import { assert, assertEquals, assertMatch } from 'jsr:@std/assert';
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import { type AuthResult, AuthMethod } from '../supabase/functions/_shared/auth.ts';
-import { createImportTidasPackageHandler } from '../supabase/functions/import_tidas_package/handler.ts';
-import { createTidasPackageJobsHandler } from '../supabase/functions/tidas_package_jobs/handler.ts';
 
 type JsonRecord = Record<string, unknown>;
 type Filter = {
@@ -15,6 +13,8 @@ type TableName = 'lca_package_artifacts' | 'lca_package_jobs' | 'lca_package_req
 
 const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
 const TEST_JWT = 'header.payload.signature';
+const TEST_SUPABASE_URL = 'https://example.supabase.co';
+const TEST_SERVICE_API_KEY = 'service-role-key-for-tests';
 const EMPTY_ZIP_BYTES = Uint8Array.from([
   0x50, 0x4b, 0x05, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -255,18 +255,47 @@ function createAuthResult(userId = TEST_USER_ID): AuthResult {
   };
 }
 
+type TidasHandlersModule = {
+  createImportTidasPackageHandler: typeof import('../supabase/functions/import_tidas_package/handler.ts').createImportTidasPackageHandler;
+  createTidasPackageJobsHandler: typeof import('../supabase/functions/tidas_package_jobs/handler.ts').createTidasPackageJobsHandler;
+};
+
+let handlersModulePromise: Promise<TidasHandlersModule> | undefined;
+
+async function loadTidasHandlers(): Promise<TidasHandlersModule> {
+  handlersModulePromise ??= (async () => {
+    const [importModule, jobsModule] = await Promise.all([
+      import('../supabase/functions/import_tidas_package/handler.ts'),
+      import('../supabase/functions/tidas_package_jobs/handler.ts'),
+    ]);
+
+    return {
+      createImportTidasPackageHandler: importModule.createImportTidasPackageHandler,
+      createTidasPackageJobsHandler: jobsModule.createTidasPackageJobsHandler,
+    };
+  })();
+
+  return await handlersModulePromise;
+}
+
 function withPackageStorageEnv<T>(fn: () => Promise<T>): Promise<T> {
   const previous = {
+    REMOTE_SUPABASE_URL: Deno.env.get('REMOTE_SUPABASE_URL'),
+    REMOTE_SERVICE_API_KEY: Deno.env.get('REMOTE_SERVICE_API_KEY'),
     S3_ENDPOINT: Deno.env.get('S3_ENDPOINT'),
     S3_BUCKET: Deno.env.get('S3_BUCKET'),
     S3_PREFIX: Deno.env.get('S3_PREFIX'),
   };
 
+  Deno.env.set('REMOTE_SUPABASE_URL', TEST_SUPABASE_URL);
+  Deno.env.set('REMOTE_SERVICE_API_KEY', TEST_SERVICE_API_KEY);
   Deno.env.set('S3_ENDPOINT', 'https://example.storage.supabase.co/storage/v1/s3');
   Deno.env.set('S3_BUCKET', 'lca_results');
   Deno.env.set('S3_PREFIX', 'lca-results');
 
   return fn().finally(() => {
+    restoreEnvVar('REMOTE_SUPABASE_URL', previous.REMOTE_SUPABASE_URL);
+    restoreEnvVar('REMOTE_SERVICE_API_KEY', previous.REMOTE_SERVICE_API_KEY);
     restoreEnvVar('S3_ENDPOINT', previous.S3_ENDPOINT);
     restoreEnvVar('S3_BUCKET', previous.S3_BUCKET);
     restoreEnvVar('S3_PREFIX', previous.S3_PREFIX);
@@ -284,6 +313,8 @@ function restoreEnvVar(name: string, value: string | undefined): void {
 
 Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup flow', async () => {
   await withPackageStorageEnv(async () => {
+    const { createImportTidasPackageHandler, createTidasPackageJobsHandler } =
+      await loadTidasHandlers();
     const supabase = new FakeSupabase();
     const importAuthCalls: AuthMethod[][] = [];
     const jobsAuthCalls: AuthMethod[][] = [];
@@ -484,6 +515,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
 
 Deno.test('import_tidas_package handler only resolves Redis for opaque bearer tokens', async () => {
   await withPackageStorageEnv(async () => {
+    const { createImportTidasPackageHandler } = await loadTidasHandlers();
     const supabase = new FakeSupabase();
     const authCalls: AuthMethod[][] = [];
     let redisCalls = 0;
@@ -534,26 +566,29 @@ Deno.test('import_tidas_package handler only resolves Redis for opaque bearer to
 });
 
 Deno.test('tidas_package_jobs rejects missing job identifiers', async () => {
-  const handler = createTidasPackageJobsHandler({
-    supabase: new FakeSupabase() as unknown as SupabaseClient,
-    authenticateRequest: async () => createAuthResult(),
-    getRedisClient: async () => undefined,
-  });
+  await withPackageStorageEnv(async () => {
+    const { createTidasPackageJobsHandler } = await loadTidasHandlers();
+    const handler = createTidasPackageJobsHandler({
+      supabase: new FakeSupabase() as unknown as SupabaseClient,
+      authenticateRequest: async () => createAuthResult(),
+      getRedisClient: async () => undefined,
+    });
 
-  const response = await handler(
-    new Request('https://example.com/functions/v1/tidas_package_jobs', {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${TEST_JWT}`,
-      },
-    }),
-  );
+    const response = await handler(
+      new Request('https://example.com/functions/v1/tidas_package_jobs', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${TEST_JWT}`,
+        },
+      }),
+    );
 
-  assertEquals(response.status, 400);
-  assertEquals(await response.json(), {
-    ok: false,
-    code: 'MISSING_JOB_ID',
-    message: 'A package job id is required',
+    assertEquals(response.status, 400);
+    assertEquals(await response.json(), {
+      ok: false,
+      code: 'MISSING_JOB_ID',
+      message: 'A package job id is required',
+    });
+    assert(response.headers.get('content-type')?.includes('application/json'));
   });
-  assert(response.headers.get('content-type')?.includes('application/json'));
 });

@@ -1,8 +1,7 @@
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import { authenticateRequest, AuthMethod, type AuthResult } from '../_shared/auth.ts';
 import { getRedisClient, type RedisClient } from '../_shared/redis_client.ts';
-import { getSupabaseClient } from '../_shared/supabase_client.ts';
 import {
   enqueueImportTidasPackage,
   json,
@@ -23,6 +22,8 @@ export type ImportTidasPackageHandlerDeps = {
   supabase: SupabaseClient;
 };
 
+let cachedSupabaseClient: SupabaseClient | undefined;
+
 function resolveBearerToken(req: Request): string {
   return (
     req.headers
@@ -36,15 +37,24 @@ function looksLikeJwtToken(token: string): boolean {
   return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
 }
 
+function getDefaultSupabaseClient(): SupabaseClient {
+  if (!cachedSupabaseClient) {
+    cachedSupabaseClient = createClient(
+      Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('REMOTE_SERVICE_API_KEY') ?? Deno.env.get('SERVICE_API_KEY') ?? '',
+    );
+  }
+
+  return cachedSupabaseClient;
+}
+
 export function createImportTidasPackageHandler(
-  deps?: ImportTidasPackageHandlerDeps,
-): (req: Request) => Promise<Response> {
-  const resolvedDeps = deps ?? {
+  deps: ImportTidasPackageHandlerDeps = {
     authenticateRequest,
     getRedisClient,
-    supabase: getSupabaseClient(),
-  };
-
+    supabase: getDefaultSupabaseClient(),
+  },
+): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     if (req.method === 'OPTIONS') {
       return json('ok');
@@ -63,9 +73,9 @@ export function createImportTidasPackageHandler(
 
     const bearerToken = resolveBearerToken(req);
     const shouldTryUserApiKey = bearerToken.length > 0 && !looksLikeJwtToken(bearerToken);
-    const redis = shouldTryUserApiKey ? await resolvedDeps.getRedisClient() : undefined;
-    const authResult = await resolvedDeps.authenticateRequest(req, {
-      supabase: resolvedDeps.supabase,
+    const redis = shouldTryUserApiKey ? await deps.getRedisClient() : undefined;
+    const authResult = await deps.authenticateRequest(req, {
+      supabase: deps.supabase,
       redis,
       allowedMethods: shouldTryUserApiKey
         ? [AuthMethod.USER_API_KEY, AuthMethod.JWT]
@@ -99,17 +109,12 @@ export function createImportTidasPackageHandler(
       const action = typeof record.action === 'string' ? record.action : 'prepare_upload';
 
       if (action === 'prepare_upload') {
-        const response = await prepareImportTidasPackageUpload(
-          resolvedDeps.supabase,
-          userId,
-          body,
-          req,
-        );
+        const response = await prepareImportTidasPackageUpload(deps.supabase, userId, body, req);
         return json(response, 200);
       }
 
       if (action === 'enqueue') {
-        const response = await enqueueImportTidasPackage(resolvedDeps.supabase, userId, body);
+        const response = await enqueueImportTidasPackage(deps.supabase, userId, body);
         return json(response, response.mode === 'queued' ? 202 : 200);
       }
 

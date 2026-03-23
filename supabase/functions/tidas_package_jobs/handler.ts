@@ -1,8 +1,7 @@
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import { authenticateRequest, AuthMethod, type AuthResult } from '../_shared/auth.ts';
 import { getRedisClient, type RedisClient } from '../_shared/redis_client.ts';
-import { getSupabaseClient } from '../_shared/supabase_client.ts';
 import { json, lookupTidasPackageJob, TidasPackageError } from '../_shared/tidas_package.ts';
 
 type JobLookupBody = {
@@ -21,6 +20,8 @@ export type TidasPackageJobsHandlerDeps = {
   getRedisClient: () => Promise<RedisClient | undefined>;
   supabase: SupabaseClient;
 };
+
+let cachedSupabaseClient: SupabaseClient | undefined;
 
 async function parseLookupBody(req: Request): Promise<JobLookupBody | null> {
   try {
@@ -55,15 +56,24 @@ function resolveJobId(rawUrl: string, body: JobLookupBody | null): string | null
   return null;
 }
 
+function getDefaultSupabaseClient(): SupabaseClient {
+  if (!cachedSupabaseClient) {
+    cachedSupabaseClient = createClient(
+      Deno.env.get('REMOTE_SUPABASE_URL') ?? Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('REMOTE_SERVICE_API_KEY') ?? Deno.env.get('SERVICE_API_KEY') ?? '',
+    );
+  }
+
+  return cachedSupabaseClient;
+}
+
 export function createTidasPackageJobsHandler(
-  deps?: TidasPackageJobsHandlerDeps,
-): (req: Request) => Promise<Response> {
-  const resolvedDeps = deps ?? {
+  deps: TidasPackageJobsHandlerDeps = {
     authenticateRequest,
     getRedisClient,
-    supabase: getSupabaseClient(),
-  };
-
+    supabase: getDefaultSupabaseClient(),
+  },
+): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     if (req.method === 'OPTIONS') {
       return json('ok');
@@ -80,9 +90,9 @@ export function createTidasPackageJobsHandler(
       );
     }
 
-    const redis = await resolvedDeps.getRedisClient();
-    const authResult = await resolvedDeps.authenticateRequest(req, {
-      supabase: resolvedDeps.supabase,
+    const redis = await deps.getRedisClient();
+    const authResult = await deps.authenticateRequest(req, {
+      supabase: deps.supabase,
       redis,
       allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
     });
@@ -119,11 +129,7 @@ export function createTidasPackageJobsHandler(
     }
 
     try {
-      const response = await lookupTidasPackageJob(
-        resolvedDeps.supabase,
-        authResult.user.id,
-        jobId,
-      );
+      const response = await lookupTidasPackageJob(deps.supabase, authResult.user.id, jobId);
       return json(response, 200);
     } catch (error) {
       console.error('tidas_package_jobs failed', error);
