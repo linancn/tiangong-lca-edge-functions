@@ -897,7 +897,6 @@ async function ensureSnapshotBuildQueued(
     snapshot_id: snapshotId,
     scope,
     ...buildSnapshotBuildPayloadFields(processFilter),
-    provider_rule: 'strict_unique_provider',
     reference_normalization_mode: 'lenient',
     allocation_fraction_mode: 'lenient',
     self_loop_cutoff: 0.999999,
@@ -917,7 +916,6 @@ async function ensureSnapshotBuildQueued(
     id: snapshotId,
     scope: 'full_library',
     process_filter: processFilter,
-    provider_matching_rule: 'strict_unique_provider',
     status: 'draft',
     created_by: userId,
   });
