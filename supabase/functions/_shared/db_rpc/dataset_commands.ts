@@ -1,0 +1,118 @@
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
+
+import type { CommandAuditPayload } from '../command_runtime/audit_log.ts';
+import type {
+  AssignTeamRequest,
+  DatasetCommandFailure,
+  PublishRequest,
+  SaveDraftRequest,
+} from '../commands/dataset/types.ts';
+
+type RpcClient = Pick<SupabaseClient, 'rpc'>;
+
+export type DatasetRpcResult = { ok: true; data: unknown } | DatasetCommandFailure;
+
+function mapRpcError(error: { code?: string; message?: string; details?: unknown }) {
+  const code = error.code ?? 'RPC_ERROR';
+  const status =
+    code === '42501' ? 403 : code === 'PGRST116' ? 404 : code === 'AUTH_REQUIRED' ? 401 : 400;
+
+  return {
+    ok: false as const,
+    code,
+    status,
+    message: error.message ?? 'Dataset command RPC failed',
+    details: error.details ?? null,
+  };
+}
+
+async function callDatasetRpc(
+  supabase: RpcClient,
+  fn: string,
+  args: Record<string, unknown>,
+): Promise<DatasetRpcResult> {
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) {
+    return mapRpcError(error);
+  }
+
+  return {
+    ok: true,
+    data,
+  };
+}
+
+export function buildDatasetSaveDraftRpcArgs(
+  request: SaveDraftRequest,
+  audit: CommandAuditPayload,
+): Record<string, unknown> {
+  return {
+    p_table: request.table,
+    p_id: request.id,
+    p_version: request.version,
+    p_json_ordered: request.jsonOrdered,
+    p_model_id: request.modelId ?? null,
+    p_audit: audit,
+  };
+}
+
+export function buildDatasetAssignTeamRpcArgs(
+  request: AssignTeamRequest,
+  audit: CommandAuditPayload,
+): Record<string, unknown> {
+  return {
+    p_table: request.table,
+    p_id: request.id,
+    p_version: request.version,
+    p_team_id: request.teamId,
+    p_audit: audit,
+  };
+}
+
+export function buildDatasetPublishRpcArgs(
+  request: PublishRequest,
+  audit: CommandAuditPayload,
+): Record<string, unknown> {
+  return {
+    p_table: request.table,
+    p_id: request.id,
+    p_version: request.version,
+    p_audit: audit,
+  };
+}
+
+export function callDatasetSaveDraftRpc(
+  supabase: RpcClient,
+  request: SaveDraftRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDatasetRpc(
+    supabase,
+    'cmd_dataset_save_draft',
+    buildDatasetSaveDraftRpcArgs(request, audit),
+  );
+}
+
+export function callDatasetAssignTeamRpc(
+  supabase: RpcClient,
+  request: AssignTeamRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDatasetRpc(
+    supabase,
+    'cmd_dataset_assign_team',
+    buildDatasetAssignTeamRpcArgs(request, audit),
+  );
+}
+
+export function callDatasetPublishRpc(
+  supabase: RpcClient,
+  request: PublishRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDatasetRpc(
+    supabase,
+    'cmd_dataset_publish',
+    buildDatasetPublishRpcArgs(request, audit),
+  );
+}

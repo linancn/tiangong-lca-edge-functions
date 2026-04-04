@@ -66,6 +66,15 @@
   - package export `open_data` scope 现在按 `state_code` `100..199` 识别公开数据，不再把旧的 `99` 视作公开数据
 - `supabase/functions/_shared`
   - 认证、OpenAI、Redis、Supabase client、通用工具。
+- `supabase/functions/app_dataset_save_draft`、`app_dataset_assign_team`、`app_dataset_publish`
+  - 数据集命令入口。
+  - 统一走 command runtime + request-scoped Supabase client，不再让 repository 隐式回退到 service-role client。
+- `supabase/functions/_shared/command_runtime`
+  - 命令式函数的 HTTP、JSON 解析、actor context、审计 payload、公用 handler 骨架。
+- `supabase/functions/_shared/db_rpc`
+  - Edge 到数据库 command/query RPC 的薄封装。
+- `supabase/functions/_shared/commands/dataset`
+  - 数据集命令的类型、校验、policy、repository 和执行器。
 - `test/*`
   - 仓库级 Deno 测试文件；共享模块和函数相关测试也放这里，通过相对路径引用 `supabase/functions/**` 代码。
 - `scripts/lca_submit_poll_fetch.sh`
@@ -132,6 +141,7 @@
 - 环境文件：
   - 本地函数运行：`supabase/.env.local`
   - HTTP 调试变量：仓库根目录 `.env`
+- 如果本地 serve 需要把 `app_dataset_*` 请求转发到远端 Supabase 项目并保留用户 JWT 语义，补充 `REMOTE_SUPABASE_PUBLISHABLE_KEY`（或 `REMOTE_SUPABASE_ANON_KEY`）供 request-scoped client 使用。
 - 严禁在提交、日志、回答中泄露密钥、token、完整连接串。
 - 展示命令输出时，默认对敏感字段脱敏。
 

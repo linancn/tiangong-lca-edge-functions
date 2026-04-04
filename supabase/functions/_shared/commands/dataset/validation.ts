@@ -1,0 +1,82 @@
+import { z } from 'zod';
+
+import type { CommandParseResult } from '../../command_runtime/command.ts';
+import {
+  DATASET_TABLES,
+  type AssignTeamRequest,
+  type PublishRequest,
+  type SaveDraftRequest,
+} from './types.ts';
+
+const versionPattern = /^\d{2}\.\d{2}\.\d{3}$/;
+
+const datasetTableSchema = z.enum(DATASET_TABLES);
+const datasetIdSchema = z.string().uuid();
+const versionSchema = z.string().regex(versionPattern, 'version must be in 00.00.000 format');
+
+const datasetBaseRequestSchema = z
+  .object({
+    table: datasetTableSchema,
+    id: datasetIdSchema,
+    version: versionSchema,
+  })
+  .strict();
+
+export const saveDraftRequestSchema = datasetBaseRequestSchema
+  .extend({
+    jsonOrdered: z.unknown(),
+    modelId: z.string().uuid().optional(),
+  })
+  .strict();
+
+export const assignTeamRequestSchema = datasetBaseRequestSchema
+  .extend({
+    teamId: z.string().uuid(),
+  })
+  .strict();
+
+export const publishRequestSchema = datasetBaseRequestSchema.strict();
+
+function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResult<T> {
+  return {
+    ok: false,
+    message,
+    details: error.flatten(),
+  };
+}
+
+export function parseSaveDraftRequest(body: unknown): CommandParseResult<SaveDraftRequest> {
+  const parsed = saveDraftRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload('Invalid dataset save draft payload', parsed.error);
+  }
+
+  return {
+    ok: true,
+    value: parsed.data,
+  };
+}
+
+export function parseAssignTeamRequest(body: unknown): CommandParseResult<AssignTeamRequest> {
+  const parsed = assignTeamRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload('Invalid dataset assign-team payload', parsed.error);
+  }
+
+  return {
+    ok: true,
+    value: parsed.data,
+  };
+}
+
+export function parsePublishRequest(body: unknown): CommandParseResult<PublishRequest> {
+  const parsed = publishRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload('Invalid dataset publish payload', parsed.error);
+  }
+
+  return {
+    ok: true,
+    value: parsed.data,
+  };
+}
