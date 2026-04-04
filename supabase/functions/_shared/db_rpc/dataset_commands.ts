@@ -26,6 +26,20 @@ function mapRpcError(error: { code?: string; message?: string; details?: unknown
   };
 }
 
+function isDatasetCommandFailure(data: unknown): data is DatasetCommandFailure {
+  if (!data || typeof data !== 'object') {
+    return false;
+  }
+
+  const candidate = data as Partial<DatasetCommandFailure> & { ok?: unknown };
+  return (
+    candidate.ok === false &&
+    typeof candidate.code === 'string' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.status === 'number'
+  );
+}
+
 async function callDatasetRpc(
   supabase: RpcClient,
   fn: string,
@@ -34,6 +48,23 @@ async function callDatasetRpc(
   const { data, error } = await supabase.rpc(fn, args);
   if (error) {
     return mapRpcError(error);
+  }
+
+  if (isDatasetCommandFailure(data)) {
+    return data;
+  }
+
+  if (
+    data &&
+    typeof data === 'object' &&
+    !Array.isArray(data) &&
+    (data as { ok?: unknown }).ok === true &&
+    'data' in (data as Record<string, unknown>)
+  ) {
+    return {
+      ok: true,
+      data: (data as Record<string, unknown>).data,
+    };
   }
 
   return {
