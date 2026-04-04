@@ -35,6 +35,7 @@ Required keys are managed in this file, for example:
 - `OPENAI_CHAT_MODEL`
 - `REMOTE_SUPABASE_URL`
 - `REMOTE_SERVICE_API_KEY`
+- `REMOTE_SUPABASE_PUBLISHABLE_KEY` (or `REMOTE_SUPABASE_ANON_KEY`) when a function must call Supabase as the end user instead of service-role
 - `UPSTASH_REDIS_URL`
 - `UPSTASH_REDIS_TOKEN`
 
