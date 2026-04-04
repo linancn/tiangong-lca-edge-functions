@@ -6,6 +6,7 @@ import {
   type AssignTeamRequest,
   type PublishRequest,
   type SaveDraftRequest,
+  type SubmitReviewRequest,
 } from './types.ts';
 
 const versionPattern = /^\d{2}\.\d{2}\.\d{3}$/;
@@ -36,6 +37,7 @@ export const assignTeamRequestSchema = datasetBaseRequestSchema
   .strict();
 
 export const publishRequestSchema = datasetBaseRequestSchema.strict();
+export const submitReviewRequestSchema = datasetBaseRequestSchema.strict();
 
 function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResult<T> {
   return {
@@ -73,6 +75,18 @@ export function parsePublishRequest(body: unknown): CommandParseResult<PublishRe
   const parsed = publishRequestSchema.safeParse(body);
   if (!parsed.success) {
     return invalidPayload('Invalid dataset publish payload', parsed.error);
+  }
+
+  return {
+    ok: true,
+    value: parsed.data,
+  };
+}
+
+export function parseSubmitReviewRequest(body: unknown): CommandParseResult<SubmitReviewRequest> {
+  const parsed = submitReviewRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload('Invalid dataset submit-review payload', parsed.error);
   }
 
   return {

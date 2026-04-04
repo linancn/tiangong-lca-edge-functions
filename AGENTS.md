@@ -66,7 +66,7 @@
   - package export `open_data` scope 现在按 `state_code` `100..199` 识别公开数据，不再把旧的 `99` 视作公开数据
 - `supabase/functions/_shared`
   - 认证、OpenAI、Redis、Supabase client、通用工具。
-- `supabase/functions/app_dataset_save_draft`、`app_dataset_assign_team`、`app_dataset_publish`
+- `supabase/functions/app_dataset_save_draft`、`app_dataset_assign_team`、`app_dataset_publish`、`app_dataset_submit_review`
   - 数据集命令入口。
   - 统一走 command runtime + request-scoped Supabase client，不再让 repository 隐式回退到 service-role client。
 - `supabase/functions/_shared/command_runtime`

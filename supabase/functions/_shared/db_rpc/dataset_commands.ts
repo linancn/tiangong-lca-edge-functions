@@ -6,6 +6,7 @@ import type {
   DatasetCommandFailure,
   PublishRequest,
   SaveDraftRequest,
+  SubmitReviewRequest,
 } from '../commands/dataset/types.ts';
 
 type RpcClient = Pick<SupabaseClient, 'rpc'>;
@@ -112,6 +113,18 @@ export function buildDatasetPublishRpcArgs(
   };
 }
 
+export function buildDatasetSubmitReviewRpcArgs(
+  request: SubmitReviewRequest,
+  audit: CommandAuditPayload,
+): Record<string, unknown> {
+  return {
+    p_table: request.table,
+    p_id: request.id,
+    p_version: request.version,
+    p_audit: audit,
+  };
+}
+
 export function callDatasetSaveDraftRpc(
   supabase: RpcClient,
   request: SaveDraftRequest,
@@ -145,5 +158,17 @@ export function callDatasetPublishRpc(
     supabase,
     'cmd_dataset_publish',
     buildDatasetPublishRpcArgs(request, audit),
+  );
+}
+
+export function callDatasetSubmitReviewRpc(
+  supabase: RpcClient,
+  request: SubmitReviewRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDatasetRpc(
+    supabase,
+    'cmd_review_submit',
+    buildDatasetSubmitReviewRpcArgs(request, audit),
   );
 }

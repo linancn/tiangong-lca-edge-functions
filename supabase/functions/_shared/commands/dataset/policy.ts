@@ -3,6 +3,7 @@ import type {
   DatasetCommandFailure,
   PublishRequest,
   SaveDraftRequest,
+  SubmitReviewRequest,
 } from './types.ts';
 
 function invalidInput(code: string, message: string): DatasetCommandFailure {
@@ -39,6 +40,12 @@ export function assertAssignTeamPolicy(
 
 export function assertPublishPolicy(
   _request: PublishRequest,
+): { ok: true } | DatasetCommandFailure {
+  return { ok: true };
+}
+
+export function assertSubmitReviewPolicy(
+  _request: SubmitReviewRequest,
 ): { ok: true } | DatasetCommandFailure {
   return { ok: true };
 }

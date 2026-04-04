@@ -31,6 +31,12 @@ export type PublishRequest = {
   version: string;
 };
 
+export type SubmitReviewRequest = {
+  table: DatasetTable;
+  id: string;
+  version: string;
+};
+
 export type DatasetCommandFailure = {
   ok: false;
   code: string;
