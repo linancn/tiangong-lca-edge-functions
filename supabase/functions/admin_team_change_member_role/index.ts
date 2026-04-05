@@ -1,14 +1,14 @@
-import "@supabase/functions-js/edge-runtime.d.ts";
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import {
   type CommandHandlerOptions,
   createCommandHandler,
-} from "../_shared/command_runtime/command.ts";
+} from '../_shared/command_runtime/command.ts';
 import {
   executeTeamChangeMemberRoleCommand,
   parseTeamChangeMemberRoleCommand,
-} from "../_shared/commands/membership/change_role.ts";
-import type { TeamChangeMemberRoleRequest } from "../_shared/commands/membership/types.ts";
+} from '../_shared/commands/membership/change_role.ts';
+import type { TeamChangeMemberRoleRequest } from '../_shared/commands/membership/types.ts';
 
 export function createAdminTeamChangeMemberRoleHandler(
   overrides: Partial<CommandHandlerOptions<TeamChangeMemberRoleRequest>> = {},
@@ -20,8 +20,7 @@ export function createAdminTeamChangeMemberRoleHandler(
   });
 }
 
-export const handleAdminTeamChangeMemberRole =
-  createAdminTeamChangeMemberRoleHandler();
+export const handleAdminTeamChangeMemberRole = createAdminTeamChangeMemberRoleHandler();
 
 if (import.meta.main) {
   Deno.serve(handleAdminTeamChangeMemberRole);
