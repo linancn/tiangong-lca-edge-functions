@@ -1,14 +1,11 @@
-import "@supabase/functions-js/edge-runtime.d.ts";
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import {
   type CommandHandlerOptions,
   createCommandHandler,
-} from "../_shared/command_runtime/command.ts";
-import {
-  executeCreateCommand,
-  parseCreateCommand,
-} from "../_shared/commands/dataset/create.ts";
-import type { CreateRequest } from "../_shared/commands/dataset/types.ts";
+} from '../_shared/command_runtime/command.ts';
+import { executeCreateCommand, parseCreateCommand } from '../_shared/commands/dataset/create.ts';
+import type { CreateRequest } from '../_shared/commands/dataset/types.ts';
 
 export function createAppDatasetCreateHandler(
   overrides: Partial<CommandHandlerOptions<CreateRequest>> = {},
