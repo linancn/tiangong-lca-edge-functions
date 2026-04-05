@@ -1,5 +1,8 @@
 export type NotificationSendValidationIssueRequest = {
   recipientUserId: string;
+  sourceDatasetType: string;
+  sourceDatasetId: string;
+  sourceDatasetVersion: string;
   datasetType: string;
   datasetId: string;
   datasetVersion: string;

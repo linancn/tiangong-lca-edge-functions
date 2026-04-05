@@ -18,21 +18,23 @@ const legacyHandlers = [
 ] as const;
 
 for (const [name, handler] of legacyHandlers) {
-  Deno.test(`${name} returns 410 Gone for legacy callers`, async () => {
-    const response = await handler(
-      new Request(`http://localhost/functions/v1/${name}`, {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer legacy-token",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      }),
-    );
+  for (const method of ["GET", "POST", "PUT"] as const) {
+    Deno.test(`${name} returns 410 Gone for legacy ${method} callers`, async () => {
+      const response = await handler(
+        new Request(`http://localhost/functions/v1/${name}`, {
+          method,
+          headers: {
+            Authorization: "Bearer legacy-token",
+            "Content-Type": "application/json",
+          },
+          body: method === "GET" ? undefined : JSON.stringify({}),
+        }),
+      );
 
-    assertEquals(response.status, 410);
-    assertEquals(await response.json(), LEGACY_ENDPOINT_REMOVED_RESPONSE);
-  });
+      assertEquals(response.status, 410);
+      assertEquals(await response.json(), LEGACY_ENDPOINT_REMOVED_RESPONSE);
+    });
+  }
 
   Deno.test(`${name} still responds to OPTIONS preflight`, async () => {
     const response = await handler(

@@ -1,4 +1,4 @@
-import "@supabase/functions-js/edge-runtime.d.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 import { createLegacyEndpointRemovedHandler } from "../_shared/legacy_endpoint_removed.ts";
 
