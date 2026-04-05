@@ -1,24 +1,34 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-import type { CommandParseResult } from '../../command_runtime/command.ts';
+import type { CommandParseResult } from "../../command_runtime/command.ts";
 import {
-  DATASET_TABLES,
   type AssignTeamRequest,
+  type CreateRequest,
+  DATASET_TABLES,
+  type DeleteRequest,
   type PublishRequest,
   type SaveDraftRequest,
   type SubmitReviewRequest,
-} from './types.ts';
+} from "./types.ts";
 
 const versionPattern = /^\d{2}\.\d{2}\.\d{3}$/;
 
 const datasetTableSchema = z.enum(DATASET_TABLES);
 const datasetIdSchema = z.string().uuid();
-const versionSchema = z.string().regex(versionPattern, 'version must be in 00.00.000 format');
+const versionSchema = z.string().regex(
+  versionPattern,
+  "version must be in 00.00.000 format",
+);
 
-const datasetBaseRequestSchema = z
+const datasetIdTableSchema = z
   .object({
     table: datasetTableSchema,
     id: datasetIdSchema,
+  })
+  .strict();
+
+const datasetBaseRequestSchema = datasetIdTableSchema
+  .extend({
     version: versionSchema,
   })
   .strict();
@@ -30,6 +40,16 @@ export const saveDraftRequestSchema = datasetBaseRequestSchema
   })
   .strict();
 
+export const createRequestSchema = datasetIdTableSchema
+  .extend({
+    jsonOrdered: z.unknown(),
+    modelId: z.string().uuid().nullable().optional(),
+    ruleVerification: z.boolean().nullable().optional(),
+  })
+  .strict();
+
+export const deleteRequestSchema = datasetBaseRequestSchema.strict();
+
 export const assignTeamRequestSchema = datasetBaseRequestSchema
   .extend({
     teamId: z.string().uuid(),
@@ -39,7 +59,10 @@ export const assignTeamRequestSchema = datasetBaseRequestSchema
 export const publishRequestSchema = datasetBaseRequestSchema.strict();
 export const submitReviewRequestSchema = datasetBaseRequestSchema.strict();
 
-function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResult<T> {
+function invalidPayload<T>(
+  message: string,
+  error: z.ZodError,
+): CommandParseResult<T> {
   return {
     ok: false,
     message,
@@ -47,10 +70,12 @@ function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResu
   };
 }
 
-export function parseSaveDraftRequest(body: unknown): CommandParseResult<SaveDraftRequest> {
+export function parseSaveDraftRequest(
+  body: unknown,
+): CommandParseResult<SaveDraftRequest> {
   const parsed = saveDraftRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload('Invalid dataset save draft payload', parsed.error);
+    return invalidPayload("Invalid dataset save draft payload", parsed.error);
   }
 
   return {
@@ -59,10 +84,40 @@ export function parseSaveDraftRequest(body: unknown): CommandParseResult<SaveDra
   };
 }
 
-export function parseAssignTeamRequest(body: unknown): CommandParseResult<AssignTeamRequest> {
+export function parseCreateRequest(
+  body: unknown,
+): CommandParseResult<CreateRequest> {
+  const parsed = createRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload("Invalid dataset create payload", parsed.error);
+  }
+
+  return {
+    ok: true,
+    value: parsed.data,
+  };
+}
+
+export function parseDeleteRequest(
+  body: unknown,
+): CommandParseResult<DeleteRequest> {
+  const parsed = deleteRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload("Invalid dataset delete payload", parsed.error);
+  }
+
+  return {
+    ok: true,
+    value: parsed.data,
+  };
+}
+
+export function parseAssignTeamRequest(
+  body: unknown,
+): CommandParseResult<AssignTeamRequest> {
   const parsed = assignTeamRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload('Invalid dataset assign-team payload', parsed.error);
+    return invalidPayload("Invalid dataset assign-team payload", parsed.error);
   }
 
   return {
@@ -71,10 +126,12 @@ export function parseAssignTeamRequest(body: unknown): CommandParseResult<Assign
   };
 }
 
-export function parsePublishRequest(body: unknown): CommandParseResult<PublishRequest> {
+export function parsePublishRequest(
+  body: unknown,
+): CommandParseResult<PublishRequest> {
   const parsed = publishRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload('Invalid dataset publish payload', parsed.error);
+    return invalidPayload("Invalid dataset publish payload", parsed.error);
   }
 
   return {
@@ -83,10 +140,15 @@ export function parsePublishRequest(body: unknown): CommandParseResult<PublishRe
   };
 }
 
-export function parseSubmitReviewRequest(body: unknown): CommandParseResult<SubmitReviewRequest> {
+export function parseSubmitReviewRequest(
+  body: unknown,
+): CommandParseResult<SubmitReviewRequest> {
   const parsed = submitReviewRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload('Invalid dataset submit-review payload', parsed.error);
+    return invalidPayload(
+      "Invalid dataset submit-review payload",
+      parsed.error,
+    );
   }
 
   return {

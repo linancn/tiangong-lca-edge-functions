@@ -1,11 +1,11 @@
 export const DATASET_TABLES = [
-  'contacts',
-  'sources',
-  'unitgroups',
-  'flowproperties',
-  'flows',
-  'processes',
-  'lifecyclemodels',
+  "contacts",
+  "sources",
+  "unitgroups",
+  "flowproperties",
+  "flows",
+  "processes",
+  "lifecyclemodels",
 ] as const;
 
 export type DatasetTable = (typeof DATASET_TABLES)[number];
@@ -16,6 +16,20 @@ export type SaveDraftRequest = {
   version: string;
   jsonOrdered: unknown;
   modelId?: string;
+};
+
+export type CreateRequest = {
+  table: DatasetTable;
+  id: string;
+  jsonOrdered: unknown;
+  modelId?: string | null;
+  ruleVerification?: boolean | null;
+};
+
+export type DeleteRequest = {
+  table: DatasetTable;
+  id: string;
+  version: string;
 };
 
 export type AssignTeamRequest = {
