@@ -69,3 +69,22 @@ Deno.test("shared Supabase client falls back when remote env vars are blank", as
     },
   );
 });
+
+Deno.test("shared Supabase client never uses SERVICE_API_KEY as the Supabase service-role key", async () => {
+  await withSupabaseEnv(
+    {
+      REMOTE_SUPABASE_URL: TEST_SUPABASE_URL,
+      REMOTE_SUPABASE_SERVICE_ROLE_KEY: undefined,
+      REMOTE_SERVICE_API_KEY: "custom-service-auth-key",
+      SERVICE_API_KEY: "custom-service-auth-key",
+      SUPABASE_URL: TEST_SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY: TEST_SERVICE_ROLE_KEY,
+      SUPABASE_ANON_KEY: TEST_PUBLISHABLE_KEY,
+    },
+    async () => {
+      const module = await importSupabaseClientModule();
+
+      assertEquals(module.getServiceRoleKey(), TEST_SERVICE_ROLE_KEY);
+    },
+  );
+});

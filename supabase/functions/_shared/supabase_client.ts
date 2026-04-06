@@ -31,9 +31,7 @@ export function getSupabaseUrl(): string {
 
 export function getServiceRoleKey(): string {
   return (
-    readEnv("REMOTE_SERVICE_API_KEY") ??
-      readEnv("SERVICE_API_KEY") ??
-      readEnv("REMOTE_SUPABASE_SERVICE_ROLE_KEY") ??
+    readEnv("REMOTE_SUPABASE_SERVICE_ROLE_KEY") ??
       readEnv("SUPABASE_SERVICE_ROLE_KEY") ??
       FALLBACK_SUPABASE_KEY
   );

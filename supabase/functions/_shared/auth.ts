@@ -55,6 +55,21 @@ function isSupabasePublishableApiKey(
   return apiKey.startsWith("sb_publishable_");
 }
 
+const JWT_PATTERN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
+
+function extractBearerToken(authHeader: string | null): string | undefined {
+  if (!authHeader) {
+    return undefined;
+  }
+
+  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  return token.length > 0 ? token : undefined;
+}
+
+function isJwtLikeToken(token: string): boolean {
+  return JWT_PATTERN.test(token);
+}
+
 export interface AuthedUser extends User {
   role?: string;
 }
@@ -154,6 +169,8 @@ export async function authenticateRequest(
   }
 
   const authHeader = req.headers.get("Authorization");
+  const bearerToken = extractBearerToken(authHeader);
+  const bearerLooksLikeJwt = bearerToken ? isJwtLikeToken(bearerToken) : false;
   const apiKey = req.headers.get("apikey");
 
   // Collect all possible authentication results
@@ -175,19 +192,22 @@ export async function authenticateRequest(
   // Check User API key
   if (
     allowedMethods.includes(AuthMethod.USER_API_KEY) && supabase && redis &&
-    authHeader
+    bearerToken && !bearerLooksLikeJwt
   ) {
     console.log("Checking User API key authentication");
-    const apiKeyValue = authHeader.replace("Bearer ", "");
-    const result = authenticateUserApiKey(apiKeyValue, redis);
+    const result = authenticateUserApiKey(bearerToken, redis);
     authResults.push({ method: AuthMethod.USER_API_KEY, result });
   }
 
   // Check Supabase JWT
-  if (allowedMethods.includes(AuthMethod.JWT) && supabase && authHeader) {
+  if (
+    allowedMethods.includes(AuthMethod.JWT) &&
+    supabase &&
+    bearerToken &&
+    (bearerLooksLikeJwt || !allowedMethods.includes(AuthMethod.USER_API_KEY))
+  ) {
     console.log("Checking Supabase JWT authentication");
-    const token = authHeader.replace("Bearer ", "");
-    const result = authenticateSupabaseJWT(token, supabase);
+    const result = authenticateSupabaseJWT(bearerToken, supabase);
     authResults.push({ method: AuthMethod.JWT, result });
   }
 
@@ -253,9 +273,7 @@ export async function authenticateRequest(
  * @returns Token type: 'cognito' or 'supabase'
  */
 function getTokenType(bearerKey: string): "cognito" | "supabase" {
-  const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-
-  if (jwtPattern.test(bearerKey)) {
+  if (isJwtLikeToken(bearerKey)) {
     try {
       const payload = JSON.parse(atob(bearerKey.split(".")[1]));
       if (payload.iss && payload.iss.includes("cognito")) {

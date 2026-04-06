@@ -101,3 +101,38 @@ Deno.test(
     );
   },
 );
+
+Deno.test(
+  "jwt-like bearer tokens use JWT auth instead of user API key auth when both are allowed",
+  async () => {
+    await withEnv(
+      {
+        SERVICE_API_KEY: "service-secret",
+        SUPABASE_ANON_KEY: "sb_publishable_test_key",
+      },
+      async () => {
+        const module = await importAuthModule();
+        const req = new Request("https://example.com", {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer header.payload.signature",
+          },
+        });
+
+        const result = await module.authenticateRequest(req, {
+          supabase: {
+            auth: {
+              getUser: async () => ({ data: { user: null } }),
+            },
+          } as any,
+          redis: {} as any,
+          allowedMethods: [module.AuthMethod.JWT, module.AuthMethod.USER_API_KEY],
+        });
+
+        assertEquals(result.isAuthenticated, false);
+        assertEquals(result.response?.status, 401);
+        assertEquals(await result.response?.text(), "User Not Found");
+      },
+    );
+  },
+);
