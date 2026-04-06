@@ -34,10 +34,17 @@ Required keys are managed in this file, for example:
 - `OPENAI_API_KEY`
 - `OPENAI_CHAT_MODEL`
 - `REMOTE_SUPABASE_URL`
-- `REMOTE_SERVICE_API_KEY`
-- `REMOTE_SUPABASE_PUBLISHABLE_KEY` (or `REMOTE_SUPABASE_ANON_KEY`) when a function must call Supabase as the end user instead of service-role
+- `REMOTE_SUPABASE_SERVICE_ROLE_KEY` (or `REMOTE_SUPABASE_SECRET_KEY`) for privileged RPC / database execution
+- `REMOTE_SUPABASE_PUBLISHABLE_KEY` (or `REMOTE_SUPABASE_ANON_KEY`) for JWT validation and request-scoped user clients
+- `REMOTE_SERVICE_API_KEY` only for `AuthMethod.SERVICE_API_KEY` request authentication
 - `UPSTASH_REDIS_URL`
 - `UPSTASH_REDIS_TOKEN`
+
+Credential contract:
+
+- `REMOTE_SERVICE_API_KEY` / `SERVICE_API_KEY` are custom function-level shared secrets. They are not Supabase client credentials.
+- JWT validation and user-api-key sign-in flows must use publishable / anon keys.
+- Service-role or secret keys are reserved for privileged Supabase execution paths.
 
 ### 2. HTTP test env (repo root `.env`)
 
