@@ -96,6 +96,7 @@ export function buildDatasetSaveDraftRpcArgs(
     p_json_ordered: request.jsonOrdered,
     p_model_id: request.modelId ?? null,
     p_audit: audit,
+    p_rule_verification: request.ruleVerification ?? null,
   };
 }
 

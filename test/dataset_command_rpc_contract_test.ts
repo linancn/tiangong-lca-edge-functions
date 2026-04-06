@@ -14,16 +14,16 @@ import {
   type DatasetRpcResult,
 } from "../supabase/functions/_shared/db_rpc/dataset_commands.ts";
 
-Deno.test("saveDraftRequestSchema rejects server-owned ruleVerification input", () => {
+Deno.test("saveDraftRequestSchema accepts optional ruleVerification metadata", () => {
   const parsed = saveDraftRequestSchema.safeParse({
     table: "flows",
     id: "11111111-1111-4111-8111-111111111111",
     version: "01.00.000",
     jsonOrdered: {},
-    ruleVerification: true,
+    ruleVerification: false,
   });
 
-  assertEquals(parsed.success, false);
+  assertEquals(parsed.success, true);
 });
 
 Deno.test("submitReviewRequestSchema rejects unexpected payload fields", () => {
