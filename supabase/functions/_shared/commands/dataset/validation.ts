@@ -37,6 +37,7 @@ export const saveDraftRequestSchema = datasetBaseRequestSchema
   .extend({
     jsonOrdered: z.unknown(),
     modelId: z.string().uuid().optional(),
+    ruleVerification: z.boolean().nullable().optional(),
   })
   .strict();
 

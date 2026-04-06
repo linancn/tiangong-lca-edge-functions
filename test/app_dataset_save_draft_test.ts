@@ -45,6 +45,7 @@ Deno.test(
         version: "01.00.000",
         jsonOrdered: { foo: "bar" },
         modelId: TEST_MODEL_ID,
+        ruleVerification: false,
       },
       buildActor(supabase),
     );
@@ -59,6 +60,7 @@ Deno.test(
           p_version: "01.00.000",
           p_json_ordered: { foo: "bar" },
           p_model_id: TEST_MODEL_ID,
+          p_rule_verification: false,
           p_audit: {
             command: "dataset_save_draft",
             actorUserId: TEST_USER_ID,
@@ -97,6 +99,7 @@ Deno.test("executeSaveDraftCommand allows process drafts without modelId", async
         p_version: "01.00.000",
         p_json_ordered: { foo: "bar" },
         p_model_id: null,
+        p_rule_verification: null,
         p_audit: {
           command: "dataset_save_draft",
           actorUserId: TEST_USER_ID,

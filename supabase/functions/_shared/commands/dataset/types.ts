@@ -16,6 +16,7 @@ export type SaveDraftRequest = {
   version: string;
   jsonOrdered: unknown;
   modelId?: string;
+  ruleVerification?: boolean | null;
 };
 
 export type CreateRequest = {
