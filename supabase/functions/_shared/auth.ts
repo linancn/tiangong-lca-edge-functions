@@ -33,6 +33,28 @@ function readOptionalEnv(name: string): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function readPublishableApiKey(): string | undefined {
+  return readOptionalEnv("REMOTE_SUPABASE_PUBLISHABLE_KEY") ??
+    readOptionalEnv("REMOTE_SUPABASE_ANON_KEY") ??
+    readOptionalEnv("SUPABASE_PUBLISHABLE_KEY") ??
+    readOptionalEnv("SUPABASE_ANON_KEY");
+}
+
+function isSupabasePublishableApiKey(
+  apiKey: string,
+  publishableApiKey?: string,
+): boolean {
+  if (!apiKey) {
+    return false;
+  }
+
+  if (publishableApiKey && apiKey === publishableApiKey) {
+    return true;
+  }
+
+  return apiKey.startsWith("sb_publishable_");
+}
+
 export interface AuthedUser extends User {
   role?: string;
 }
@@ -123,6 +145,7 @@ export async function authenticateRequest(
   const resolvedServiceApiKey = serviceApiKey ??
     readOptionalEnv("REMOTE_SERVICE_API_KEY") ??
     readOptionalEnv("SERVICE_API_KEY");
+  const resolvedPublishableApiKey = readPublishableApiKey();
 
   // If authentication is not required, return success
   if (!requireAuth) {
@@ -139,7 +162,11 @@ export async function authenticateRequest(
   > = [];
 
   // Check Service API key
-  if (allowedMethods.includes(AuthMethod.SERVICE_API_KEY) && apiKey) {
+  if (
+    allowedMethods.includes(AuthMethod.SERVICE_API_KEY) &&
+    apiKey &&
+    !isSupabasePublishableApiKey(apiKey, resolvedPublishableApiKey)
+  ) {
     console.log("Checking Service API key authentication");
     const result = authenticateServiceApiKey(apiKey, resolvedServiceApiKey);
     authResults.push({ method: AuthMethod.SERVICE_API_KEY, result });
