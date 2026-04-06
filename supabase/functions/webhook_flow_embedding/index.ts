@@ -17,7 +17,6 @@ interface WebhookPayload {
 Deno.serve(async (req) => {
   // Authenticate the request by apikey
   const authResult = await authenticateRequest(req, {
-    supabase: supabaseClient,
     allowedMethods: [AuthMethod.SERVICE_API_KEY],
   });
 

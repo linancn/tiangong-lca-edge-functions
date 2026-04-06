@@ -3,25 +3,25 @@ import type {
   User,
   UserAppMetadata,
   UserMetadata,
-} from "jsr:@supabase/supabase-js@2.98.0";
-import { createClient } from "jsr:@supabase/supabase-js@2.98.0";
+} from 'jsr:@supabase/supabase-js@2.98.0';
 // import { Redis } from '@upstash/redis';
-import { authenticateCognitoToken } from "./cognito_auth.ts";
-import { corsHeaders } from "./cors.ts";
-import decodeApiKey from "./decode_api_key.ts";
-import { type RedisClient, redisGet, redisSet } from "./redis_client.ts";
+import { authenticateCognitoToken } from './cognito_auth.ts';
+import { corsHeaders } from './cors.ts';
+import decodeApiKey from './decode_api_key.ts';
+import { type RedisClient, redisGet, redisSet } from './redis_client.ts';
+import { createSupabaseAuthClient } from './supabase_client.ts';
 
 const _defaultAppMetadata: UserAppMetadata = {
-  provider: "",
+  provider: '',
 };
 
 const _defaultUserMetadata: UserMetadata = {
-  provider: "",
+  provider: '',
 };
 
-const _defaultAud = "";
+const _defaultAud = '';
 
-const _defaultCreatedAt = "";
+const _defaultCreatedAt = '';
 
 function readOptionalEnv(name: string): string | undefined {
   const value = Deno.env.get(name);
@@ -34,16 +34,15 @@ function readOptionalEnv(name: string): string | undefined {
 }
 
 function readPublishableApiKey(): string | undefined {
-  return readOptionalEnv("REMOTE_SUPABASE_PUBLISHABLE_KEY") ??
-    readOptionalEnv("REMOTE_SUPABASE_ANON_KEY") ??
-    readOptionalEnv("SUPABASE_PUBLISHABLE_KEY") ??
-    readOptionalEnv("SUPABASE_ANON_KEY");
+  return (
+    readOptionalEnv('REMOTE_SUPABASE_PUBLISHABLE_KEY') ??
+    readOptionalEnv('REMOTE_SUPABASE_ANON_KEY') ??
+    readOptionalEnv('SUPABASE_PUBLISHABLE_KEY') ??
+    readOptionalEnv('SUPABASE_ANON_KEY')
+  );
 }
 
-function isSupabasePublishableApiKey(
-  apiKey: string,
-  publishableApiKey?: string,
-): boolean {
+function isSupabasePublishableApiKey(apiKey: string, publishableApiKey?: string): boolean {
   if (!apiKey) {
     return false;
   }
@@ -52,7 +51,7 @@ function isSupabasePublishableApiKey(
     return true;
   }
 
-  return apiKey.startsWith("sb_publishable_");
+  return apiKey.startsWith('sb_publishable_');
 }
 
 const JWT_PATTERN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
@@ -62,7 +61,7 @@ function extractBearerToken(authHeader: string | null): string | undefined {
     return undefined;
   }
 
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   return token.length > 0 ? token : undefined;
 }
 
@@ -87,8 +86,8 @@ export interface AuthResult {
  * Authentication configuration
  */
 export interface AuthConfig {
-  /** Supabase client instance */
-  supabase?: SupabaseClient;
+  /** Supabase auth client instance used for JWT validation */
+  authClient?: SupabaseClient;
   /** Redis client instance for caching */
   redis?: RedisClient;
   /** Whether to require authentication (default: true) */
@@ -104,11 +103,11 @@ export interface AuthConfig {
  */
 export enum AuthMethod {
   /** Supabase JWT token via Authorization header, used in TianGong LCA Web App. */
-  JWT = "jwt",
+  JWT = 'jwt',
   /** User API key via Authorization header, used in openAPI Service and MCP Service. */
-  USER_API_KEY = "user_api_key",
+  USER_API_KEY = 'user_api_key',
   /** Service API key via apiKey header, used in database webhooks, backend services, etc. */
-  SERVICE_API_KEY = "service_api_key",
+  SERVICE_API_KEY = 'service_api_key',
 }
 
 /**
@@ -124,13 +123,13 @@ export enum AuthMethod {
  * ```typescript
  * // Basic usage with Supabase JWT
  * const authResult = await authenticateRequest(req, {
- *   supabase: supabaseClient,
+ *   authClient: supabaseAuthClient,
  *   allowedMethods: [AuthMethod.JWT]
  * });
  *
  * // With User API key support and Redis caching
  * const authResult = await authenticateRequest(req, {
- *   supabase: supabaseClient,
+ *   authClient: supabaseAuthClient,
  *   redis: redisClient,
  *   allowedMethods: [AuthMethod.USER_API_KEY]
  * });
@@ -146,37 +145,32 @@ export async function authenticateRequest(
   config: AuthConfig = {},
 ): Promise<AuthResult> {
   const {
-    supabase,
+    authClient,
     redis,
     requireAuth = true,
-    allowedMethods = [
-      AuthMethod.JWT,
-      AuthMethod.USER_API_KEY,
-      AuthMethod.SERVICE_API_KEY,
-    ],
+    allowedMethods = [AuthMethod.JWT, AuthMethod.USER_API_KEY, AuthMethod.SERVICE_API_KEY],
     serviceApiKey,
   } = config;
 
-  const resolvedServiceApiKey = serviceApiKey ??
-    readOptionalEnv("REMOTE_SERVICE_API_KEY") ??
-    readOptionalEnv("SERVICE_API_KEY");
+  const resolvedServiceApiKey =
+    serviceApiKey ??
+    readOptionalEnv('REMOTE_SERVICE_API_KEY') ??
+    readOptionalEnv('SERVICE_API_KEY');
   const resolvedPublishableApiKey = readPublishableApiKey();
 
   // If authentication is not required, return success
   if (!requireAuth) {
-    console.log("Authentication is not required");
+    console.log('Authentication is not required');
     return { isAuthenticated: true };
   }
 
-  const authHeader = req.headers.get("Authorization");
+  const authHeader = req.headers.get('Authorization');
   const bearerToken = extractBearerToken(authHeader);
   const bearerLooksLikeJwt = bearerToken ? isJwtLikeToken(bearerToken) : false;
-  const apiKey = req.headers.get("apikey");
+  const apiKey = req.headers.get('apikey');
 
   // Collect all possible authentication results
-  const authResults: Array<
-    { method: AuthMethod; result: AuthResult | Promise<AuthResult> }
-  > = [];
+  const authResults: Array<{ method: AuthMethod; result: AuthResult | Promise<AuthResult> }> = [];
 
   // Check Service API key
   if (
@@ -184,17 +178,19 @@ export async function authenticateRequest(
     apiKey &&
     !isSupabasePublishableApiKey(apiKey, resolvedPublishableApiKey)
   ) {
-    console.log("Checking Service API key authentication");
+    console.log('Checking Service API key authentication');
     const result = authenticateServiceApiKey(apiKey, resolvedServiceApiKey);
     authResults.push({ method: AuthMethod.SERVICE_API_KEY, result });
   }
 
   // Check User API key
   if (
-    allowedMethods.includes(AuthMethod.USER_API_KEY) && supabase && redis &&
-    bearerToken && !bearerLooksLikeJwt
+    allowedMethods.includes(AuthMethod.USER_API_KEY) &&
+    redis &&
+    bearerToken &&
+    !bearerLooksLikeJwt
   ) {
-    console.log("Checking User API key authentication");
+    console.log('Checking User API key authentication');
     const result = authenticateUserApiKey(bearerToken, redis);
     authResults.push({ method: AuthMethod.USER_API_KEY, result });
   }
@@ -202,28 +198,40 @@ export async function authenticateRequest(
   // Check Supabase JWT
   if (
     allowedMethods.includes(AuthMethod.JWT) &&
-    supabase &&
     bearerToken &&
     (bearerLooksLikeJwt || !allowedMethods.includes(AuthMethod.USER_API_KEY))
   ) {
-    console.log("Checking Supabase JWT authentication");
-    const result = authenticateSupabaseJWT(bearerToken, supabase);
-    authResults.push({ method: AuthMethod.JWT, result });
+    if (!authClient) {
+      authResults.push({
+        method: AuthMethod.JWT,
+        result: authClientNotConfiguredResult(),
+      });
+    } else {
+      console.log('Checking Supabase JWT authentication');
+      const result = authenticateSupabaseJWT(bearerToken, authClient);
+      authResults.push({ method: AuthMethod.JWT, result });
+    }
   }
 
   // If no authentication method is found, return unauthorized
   if (authResults.length === 0) {
-    console.log("No valid authentication method found");
+    console.log('No valid authentication method found');
     return {
       isAuthenticated: false,
-      response: new Response("Unauthorized Request", {
+      response: new Response('Unauthorized Request', {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }),
     };
   }
 
   // Await all asynchronous authentication results
+  return await finalizeAuthResults(authResults);
+}
+
+async function finalizeAuthResults(
+  authResults: Array<{ method: AuthMethod; result: AuthResult | Promise<AuthResult> }>,
+): Promise<AuthResult> {
   const resolvedResults = await Promise.all(
     authResults.map(async ({ method, result }) => ({
       method,
@@ -232,9 +240,7 @@ export async function authenticateRequest(
   );
 
   // Count successful and failed authentication methods
-  const successfulAuths = resolvedResults.filter((r) =>
-    r.result.isAuthenticated
-  );
+  const successfulAuths = resolvedResults.filter((r) => r.result.isAuthenticated);
   const failedAuths = resolvedResults.filter((r) => !r.result.isAuthenticated);
 
   console.log(
@@ -243,14 +249,12 @@ export async function authenticateRequest(
 
   // If multiple methods succeed, return error (only one method is allowed)
   if (successfulAuths.length > 1) {
-    console.log(
-      "Multiple authentication methods succeeded, which is not allowed",
-    );
+    console.log('Multiple authentication methods succeeded, which is not allowed');
     return {
       isAuthenticated: false,
-      response: new Response("Multiple authentication methods provided", {
+      response: new Response('Multiple authentication methods provided', {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }),
     };
   }
@@ -263,8 +267,18 @@ export async function authenticateRequest(
   }
 
   // If all methods fail, return the first failed result
-  console.log("All authentication methods failed");
+  console.log('All authentication methods failed');
   return failedAuths[0].result;
+}
+
+function authClientNotConfiguredResult(): AuthResult {
+  return {
+    isAuthenticated: false,
+    response: new Response('Auth client not configured', {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    }),
+  };
 }
 
 /**
@@ -272,19 +286,19 @@ export async function authenticateRequest(
  * @param bearerKey - The bearer token to analyze
  * @returns Token type: 'cognito' or 'supabase'
  */
-function getTokenType(bearerKey: string): "cognito" | "supabase" {
+function getTokenType(bearerKey: string): 'cognito' | 'supabase' {
   if (isJwtLikeToken(bearerKey)) {
     try {
-      const payload = JSON.parse(atob(bearerKey.split(".")[1]));
-      if (payload.iss && payload.iss.includes("cognito")) {
-        return "cognito";
+      const payload = JSON.parse(atob(bearerKey.split('.')[1]));
+      if (payload.iss && payload.iss.includes('cognito')) {
+        return 'cognito';
       }
     } catch (_error) {
       // If parsing fails, we assume it's not a Cognito token
-      return "supabase";
+      return 'supabase';
     }
   }
-  return "supabase";
+  return 'supabase';
 }
 
 /**
@@ -297,30 +311,30 @@ async function authenticateSupabaseJWT(
   token: string,
   supabase: SupabaseClient,
 ): Promise<AuthResult> {
-  if (getTokenType(token) === "cognito") {
-    console.log("Detected Cognito token, delegating to Cognito authentication");
+  if (getTokenType(token) === 'cognito') {
+    console.log('Detected Cognito token, delegating to Cognito authentication');
     return await authenticateCognitoToken(token);
   }
 
   const { data: authData } = await supabase.auth.getUser(token);
-  console.log("Supabase JWT authentication result:", authData);
+  console.log('Supabase JWT authentication result:', authData);
 
   if (!authData?.user) {
     return {
       isAuthenticated: false,
-      response: new Response("User Not Found", {
+      response: new Response('User Not Found', {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }),
     };
   }
 
-  if (authData.user.role !== "authenticated") {
+  if (authData.user.role !== 'authenticated') {
     return {
       isAuthenticated: false,
-      response: new Response("Forbidden", {
+      response: new Response('Forbidden', {
         status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }),
     };
   }
@@ -337,25 +351,19 @@ async function authenticateSupabaseJWT(
  * @param redis - The Redis client
  * @returns The authentication result
  */
-async function authenticateUserApiKey(
-  apiKey: string,
-  redis: RedisClient,
-): Promise<AuthResult> {
+async function authenticateUserApiKey(apiKey: string, redis: RedisClient): Promise<AuthResult> {
   const credentials = decodeApiKey(apiKey);
   if (!credentials) {
     return {
       isAuthenticated: false,
-      response: new Response(
-        JSON.stringify({ error: "The Credentials from user are invalid." }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      ),
+      response: new Response(JSON.stringify({ error: 'The Credentials from user are invalid.' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }),
     };
   }
 
-  const { email = "", password = "" } = credentials;
+  const { email = '', password = '' } = credentials;
   const cacheKey = `lca_${email}`;
   const cachedUserId = await redisGet(redis, cacheKey);
 
@@ -377,9 +385,9 @@ async function authenticateUserApiKey(
   if (!authClient) {
     return {
       isAuthenticated: false,
-      response: new Response("Auth client not configured", {
+      response: new Response('Auth client not configured', {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }),
     };
   }
@@ -392,19 +400,19 @@ async function authenticateUserApiKey(
   if (error || !data.user) {
     return {
       isAuthenticated: false,
-      response: new Response("Unauthorized", {
+      response: new Response('Unauthorized', {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }),
     };
   }
 
-  if (data.user.role !== "authenticated") {
+  if (data.user.role !== 'authenticated') {
     return {
       isAuthenticated: false,
-      response: new Response("You are not an authenticated user.", {
+      response: new Response('You are not an authenticated user.', {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }),
     };
   }
@@ -426,22 +434,15 @@ async function authenticateUserApiKey(
 }
 
 function createAuthClientForUserApiKey(): SupabaseClient | null {
-  const supabaseUrl = readOptionalEnv("REMOTE_SUPABASE_URL") ??
-    readOptionalEnv("SUPABASE_URL") ?? "";
-  const serviceApiKey = readOptionalEnv("REMOTE_SERVICE_API_KEY") ??
-    readOptionalEnv("SERVICE_API_KEY") ?? "";
+  const supabaseUrl =
+    readOptionalEnv('REMOTE_SUPABASE_URL') ?? readOptionalEnv('SUPABASE_URL') ?? '';
+  const publishableApiKey = readPublishableApiKey() ?? '';
 
-  if (!supabaseUrl || !serviceApiKey) {
+  if (!supabaseUrl || !publishableApiKey) {
     return null;
   }
 
-  return createClient(supabaseUrl, serviceApiKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
-    },
-  });
+  return createSupabaseAuthClient();
 }
 
 /**
@@ -450,16 +451,13 @@ function createAuthClientForUserApiKey(): SupabaseClient | null {
  * @param expectedKey - The expected API key
  * @returns The authentication result
  */
-function authenticateServiceApiKey(
-  providedKey: string,
-  expectedKey?: string,
-): AuthResult {
+function authenticateServiceApiKey(providedKey: string, expectedKey?: string): AuthResult {
   if (!expectedKey) {
     return {
       isAuthenticated: false,
-      response: new Response("Service API key not configured", {
+      response: new Response('Service API key not configured', {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }),
     };
   }
@@ -467,9 +465,9 @@ function authenticateServiceApiKey(
   if (providedKey !== expectedKey) {
     return {
       isAuthenticated: false,
-      response: new Response("Invalid service API key", {
+      response: new Response('Invalid service API key', {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }),
     };
   }
@@ -478,8 +476,8 @@ function authenticateServiceApiKey(
     isAuthenticated: true,
     // Service requests don't have a specific user
     user: {
-      id: "service",
-      role: "service",
+      id: 'service',
+      role: 'service',
       app_metadata: _defaultAppMetadata,
       user_metadata: _defaultUserMetadata,
       aud: _defaultAud,
@@ -492,8 +490,8 @@ function authenticateServiceApiKey(
  * Helper function to handle CORS preflight requests
  */
 export function handleCors(req: Request): Response | null {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
   }
   return null;
 }
@@ -502,11 +500,9 @@ export function handleCors(req: Request): Response | null {
  * Create an authenticated Supabase client using webhook API key
  * Used for webhook endpoints that need to perform database operations
  */
-export async function createAuthenticatedSupabaseClient(
-  apiKey: string,
-): Promise<SupabaseClient> {
-  const { createClient } = await import("jsr:@supabase/supabase-js@2.98.0");
-  const supabaseUrl = readOptionalEnv("REMOTE_SUPABASE_URL") ??
-    readOptionalEnv("SUPABASE_URL") ?? "";
+export async function createAuthenticatedSupabaseClient(apiKey: string): Promise<SupabaseClient> {
+  const { createClient } = await import('jsr:@supabase/supabase-js@2.98.0');
+  const supabaseUrl =
+    readOptionalEnv('REMOTE_SUPABASE_URL') ?? readOptionalEnv('SUPABASE_URL') ?? '';
   return createClient(supabaseUrl, apiKey);
 }

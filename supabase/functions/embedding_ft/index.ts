@@ -8,7 +8,7 @@ import { InvokeEndpointCommand, SageMakerRuntimeClient } from '@aws-sdk/client-s
 import postgres from 'postgres';
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
-import { supabaseClient as supabase } from '../_shared/supabase_client.ts';
+import { supabaseAuthClient } from '../_shared/supabase_client.ts';
 
 const SAGEMAKER_ENDPOINT_NAME = Deno.env.get('SAGEMAKER_ENDPOINT_NAME');
 const AWS_REGION = 'us-east-1';
@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
   const redis = await getRedisClient();
 
   const authResult = await authenticateRequest(req, {
-    supabase: supabase,
+    authClient: supabaseAuthClient,
     redis: redis,
     allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY, AuthMethod.SERVICE_API_KEY],
   });

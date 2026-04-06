@@ -17,7 +17,7 @@ import {
   type SnapshotProcessFilter,
 } from '../_shared/lca_snapshot_scope.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
-import { supabaseClient } from '../_shared/supabase_client.ts';
+import { supabaseAuthClient, supabaseClient } from '../_shared/supabase_client.ts';
 
 type SolveRequest = {
   scope?: string;
@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
   const redis = await getRedisClient();
 
   const authResult = await authenticateRequest(req, {
-    supabase: supabaseClient,
+    authClient: supabaseAuthClient,
     redis,
     allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
   });
