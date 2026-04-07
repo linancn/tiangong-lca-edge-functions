@@ -8,6 +8,16 @@ Supabase Edge Functions for LCA search, embedding, and solving workflows.
 - Functions root: `supabase/functions`
 - Local serve command: `npm start`
 
+## Branch & Deployment Contract
+
+- 本仓库采用以下分支规则：Git `dev` 是日常 trunk，routine PR 默认回 `dev`，`dev -> main` 是 promote 路径，hotfix 从 `main` 起并在合并后回合并到 `dev`。
+- GitHub default branch 继续保持 `main`，这是平台层例外，不代表日常 trunk 改回 `main`。
+- 远端环境映射：
+  - `main` project ref：`qgzvkongdjqiiamzbbts`
+  - `dev` project ref：`culgbbvzltdodcpykupc`
+- 远端 `main` 与 `dev` 的函数部署都统一使用 `--no-verify-jwt`。这是正式仓库规则，不是临时口头 workaround。
+- 安全边界在函数运行时：gateway 不做 JWT 校验，不等于函数可以匿名执行。新函数不得假设 gateway `verify_jwt=true` 已经帮你兜底，必须继续显式做认证与授权。
+
 ## Prerequisites
 
 - Node.js 22
@@ -67,7 +77,7 @@ npm start
 `npm start` is equivalent to:
 
 ```bash
-supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt
+./node_modules/.bin/supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt
 ```
 
 ### Optional: Start full local Supabase stack
@@ -125,13 +135,21 @@ After any code or document update:
 npm run lint
 ```
 
-2. Run minimal checks for affected files:
+2. Run the repo baseline Deno checks:
+
+```bash
+npm run check
+```
+
+This baseline intentionally skips the currently disabled `antchain_*` functions and the legacy non-`*_ft` embedding/webhook entrypoints (`embedding`, `webhook_flow_embedding`, `webhook_process_embedding`, `webhook_model_embedding`). If you reactivate any of them, bring them back into the baseline and fix their type-check state in the same change.
+
+3. Run minimal checks for affected files when you need scoped verification during iteration:
 
 ```bash
 deno check --config supabase/functions/deno.json <changed-file>
 ```
 
-3. Keep docs synced:
+4. Keep docs synced:
 
 - Update `README.md` for human-facing workflow changes.
 - Update `AGENTS.md` for AI workflow/dependency/process changes.
@@ -325,77 +343,76 @@ Optional envs:
 - `UNIT_BATCH_SIZE` (optional; used only when `DEMAND_MODE=all_unit`)
 - auth: set one of `USER_JWT` or `USER_API_KEY`
 
-## Remote Config
+## Remote Config & Deploy
+
+### CLI baseline
+
+- 标准 CLI 版本固定为 `supabase@2.85.0`。
+- 远端部署统一使用仓库脚本，不要直接依赖裸 `npx supabase` 的隐式版本解析。
+- 标准部署入口：
+  - `npm run deploy:dev -- <function-name> [more-function-names...]`
+  - `npm run deploy:main -- <function-name> [more-function-names...]`
+- 这两个脚本都会自动：
+  - 使用固定的 `supabase@2.85.0`
+  - 读取仓库内登记的 `dev` / `main` project ref
+  - 固定追加 `--no-verify-jwt`
+
+部署前需要先满足以下其一：
+
+- 已执行 `npx --yes supabase@2.85.0 login`
+- 或已显式提供 `SUPABASE_ACCESS_TOKEN`
+
+### Push secrets
 
 ```bash
-npx supabase login
-
-## Dangerous: make sure you are in the correct project context before running the following command, as it will overwrite secrets in the target project.
-npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
+# Dangerous: make sure you are targeting the correct project before overwriting secrets.
+npx --yes supabase@2.85.0 secrets set --env-file ./supabase/.env.local --project-ref culgbbvzltdodcpykupc
+npx --yes supabase@2.85.0 secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
 
-### Search Functions
+### Deploy examples
+
+把同一批函数部署到 `dev` 时，把下面命令里的 `deploy:main` 改成 `deploy:dev` 即可。
+
+#### Search Functions
 
 ```bash
-npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lifecyclemodel_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
 ```
 
-### LCA Functions
+#### LCA Functions
 
 ```bash
-npx supabase functions deploy lca_solve --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_jobs --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_query_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_contribution_path --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_contribution_path_result --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- lca_solve lca_jobs lca_results lca_query_results lca_contribution_path lca_contribution_path_result
 ```
 
-### Embedding Functions
+#### Embedding Functions
 
 ```bash
-# npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy webhook_model_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-
-npx supabase functions deploy embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-
-npx supabase functions deploy webhook_process_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_model_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_flow_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- embedding_ft webhook_process_embedding_ft webhook_model_embedding_ft webhook_flow_embedding_ft
 ```
 
-### Data Operation Functions
+#### Data Operation Functions
 
 ```bash
-npx supabase functions deploy update_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- update_data
 ```
 
-### Cognito Functions
+#### Cognito Functions
 
 ```bash
-npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy change_email_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- sign_up_cognito change_password_cognito change_email_cognito
 ```
 
-### AI Related Functions
+#### AI Related Functions
 
 ```bash
-npx supabase functions deploy ai_suggest --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- ai_suggest
 ```
 
-### Antchain Related Functions (not enabled)
+#### Antchain Related Functions (not enabled)
 
 ```bash
-# npx supabase functions deploy antchain_request_process_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_sign_request --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_run_antchain_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_get_local_ip --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_create_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_query_calculation_status --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_query_calculation_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+# npm run deploy:main -- antchain_request_process_data antchain_sign_request antchain_run_antchain_calculation
+# npm run deploy:main -- antchain_get_local_ip antchain_create_calculation antchain_query_calculation_status antchain_query_calculation_results
 ```
