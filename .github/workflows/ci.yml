@@ -23,7 +23,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          cache: npm
+          package-manager-cache: false
 
       - name: Setup Deno
         uses: denoland/setup-deno@v1
@@ -31,7 +31,7 @@ jobs:
           deno-version: 2.1.x
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install --no-package-lock
 
       - name: Lint docs and config
         run: npm run lint
