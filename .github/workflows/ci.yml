@@ -26,7 +26,7 @@ jobs:
           package-manager-cache: false
 
       - name: Setup Deno
-        uses: denoland/setup-deno@v1
+        uses: denoland/setup-deno@v2
         with:
           deno-version: 2.1.x
 
