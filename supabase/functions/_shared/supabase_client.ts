@@ -14,8 +14,6 @@ function readEnv(name: string): string | undefined {
   }
 }
 
-const FALLBACK_SUPABASE_URL = 'http://127.0.0.1:54321';
-const FALLBACK_SUPABASE_KEY = 'placeholder-key';
 const SHARED_CLIENT_OPTIONS = {
   auth: {
     autoRefreshToken: false,
@@ -24,27 +22,60 @@ const SHARED_CLIENT_OPTIONS = {
   },
 };
 
+const SUPABASE_URL_ENV_NAMES = ['REMOTE_SUPABASE_URL', 'SUPABASE_URL'];
+const SUPABASE_SERVICE_KEY_ENV_NAMES = [
+  'REMOTE_SUPABASE_SERVICE_ROLE_KEY',
+  'REMOTE_SUPABASE_SECRET_KEY',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_SECRET_KEY',
+];
+const SUPABASE_PUBLISHABLE_KEY_ENV_NAMES = [
+  'REMOTE_SUPABASE_PUBLISHABLE_KEY',
+  'REMOTE_SUPABASE_ANON_KEY',
+  'SUPABASE_PUBLISHABLE_KEY',
+  'SUPABASE_ANON_KEY',
+];
+
+function requireFirstDefinedEnv(candidates: string[], label: string): string {
+  for (const name of candidates) {
+    const value = readEnv(name);
+    if (value) {
+      return value;
+    }
+  }
+
+  throw new Error(`Missing ${label}. Set one of: ${candidates.join(', ')}`);
+}
+
+// Avoid silently targeting localhost or placeholder credentials when runtime env is missing.
+// Some unit tests import handlers before injecting deps, so delay client construction until first use.
+function createDeferredClient(factory: () => SupabaseClient): SupabaseClient {
+  let client: SupabaseClient | undefined;
+
+  return new Proxy({} as SupabaseClient, {
+    get(_target, property) {
+      client ??= factory();
+      const value = Reflect.get(client as unknown as object, property);
+      return typeof value === 'function' ? value.bind(client) : value;
+    },
+  });
+}
+
 export function getSupabaseUrl(): string {
-  return readEnv('REMOTE_SUPABASE_URL') ?? readEnv('SUPABASE_URL') ?? FALLBACK_SUPABASE_URL;
+  return requireFirstDefinedEnv(SUPABASE_URL_ENV_NAMES, 'Supabase URL');
 }
 
 export function getSupabaseServiceRoleKey(): string {
-  return (
-    readEnv('REMOTE_SUPABASE_SERVICE_ROLE_KEY') ??
-    readEnv('REMOTE_SUPABASE_SECRET_KEY') ??
-    readEnv('SUPABASE_SERVICE_ROLE_KEY') ??
-    readEnv('SUPABASE_SECRET_KEY') ??
-    FALLBACK_SUPABASE_KEY
+  return requireFirstDefinedEnv(
+    SUPABASE_SERVICE_KEY_ENV_NAMES,
+    'Supabase service-role or secret key',
   );
 }
 
 export function getSupabasePublishableKey(): string {
-  return (
-    readEnv('REMOTE_SUPABASE_PUBLISHABLE_KEY') ??
-    readEnv('REMOTE_SUPABASE_ANON_KEY') ??
-    readEnv('SUPABASE_PUBLISHABLE_KEY') ??
-    readEnv('SUPABASE_ANON_KEY') ??
-    FALLBACK_SUPABASE_KEY
+  return requireFirstDefinedEnv(
+    SUPABASE_PUBLISHABLE_KEY_ENV_NAMES,
+    'Supabase publishable or anon key',
   );
 }
 
@@ -69,8 +100,8 @@ export function createRequestSupabaseClient(accessToken?: string): SupabaseClien
   });
 }
 
-export const supabaseAuthClient = createSupabaseAuthClient();
-export const supabaseServiceClient = createSupabaseServiceClient();
+export const supabaseAuthClient = createDeferredClient(createSupabaseAuthClient);
+export const supabaseServiceClient = createDeferredClient(createSupabaseServiceClient);
 
 // Backward-compatible aliases for existing service-role call sites.
 export const getServiceRoleKey = getSupabaseServiceRoleKey;

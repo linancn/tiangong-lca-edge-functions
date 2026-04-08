@@ -115,6 +115,55 @@ See `test.example.http` for local and remote examples, including:
 - `lca_contribution_path` / `lca_contribution_path_result`
 - `import_tidas_package` / `tidas_package_jobs`
 
+### Auth / connectivity probe
+
+当你怀疑远端出现“函数通了，但 auth 行为漂移”这类问题时，优先跑仓库内的统一探测脚本：
+
+```bash
+npm run probe:auth -- --remote
+```
+
+脚本会自动读取：
+
+- 根目录 `.env` 中的 `REMOTE_ENDPOINT` / `LOCAL_ENDPOINT`
+- `USER_JWT`
+- `USER_API_KEY`
+- `supabase/.env.local` 或 shell env 里的 `REMOTE_SERVICE_API_KEY` / `SERVICE_API_KEY`
+
+也可以显式覆盖：
+
+```bash
+EDGE_BASE_URL="https://<project-ref>.supabase.co/functions/v1" \
+USER_JWT="<your-user-jwt>" \
+npm run probe:auth -- --base-url "$EDGE_BASE_URL"
+```
+
+默认行为：
+
+- 默认跳过仓库中标记为 disabled 的 `antchain_*` 和 legacy 非 `*_ft` embedding / webhook 入口
+- 默认跳过仅供本地辅助使用的 `embedding_ft_local`
+- 对其余函数至少发一轮无鉴权最小请求，并在有对应凭据时继续发 JWT / user API key / service API key 探测
+- 结果会区分：
+  - `gateway_invalid_jwt`：大概率是请求在进入函数前就被平台层拦住
+  - `function_auth_failed`：请求已进入函数，但函数内鉴权拒绝了该凭据
+  - `reachable_but_payload_invalid`：连通性和鉴权大概率没问题，只是最小 probe body 不满足业务校验
+
+常用参数：
+
+```bash
+# 只看 lca_* 这组
+npm run probe:auth -- --remote --only lca_
+
+# 把默认跳过的 disabled / local-only 入口也带上
+npm run probe:auth -- --remote --include-disabled --include-local-only
+
+# 输出 JSON 报告，方便留存对比
+npm run probe:auth -- --remote --json-out ./tmp/edge-probe-report.json
+
+# 不发请求，只看当前脚本会如何分类和选择鉴权方式
+npm run probe:auth -- --dry-run
+```
+
 ## OpenAI Integration Baseline
 
 - No LangChain dependency in active path.
@@ -373,6 +422,27 @@ npx --yes supabase@2.85.0 secrets set --env-file ./supabase/.env.local --project
 ### Deploy examples
 
 把同一批函数部署到 `dev` 时，把下面命令里的 `deploy:main` 改成 `deploy:dev` 即可。
+
+### Redeply
+
+整体重新部署
+
+```shell
+set -euo pipefail && \
+for fn in $(find supabase/functions -mindepth 1 -maxdepth 1 -type d \
+  ! -name '_shared' \
+  ! -name 'antchain_get_local_ip' \
+  ! -name 'antchain_sign_request' \
+  ! -name 'embedding_ft_local' \
+  -exec basename {} \; | sort); do
+  echo "==> deploy $fn"
+  supabase functions deploy "$fn" \
+    --project-ref culgbbvzltdodcpykupc \
+    --no-verify-jwt \
+    --use-api \
+    --import-map supabase/functions/deno.json
+done
+```
 
 #### Search Functions
 

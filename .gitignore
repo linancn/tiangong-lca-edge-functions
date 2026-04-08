@@ -9,3 +9,5 @@ deno.lock
 sqls
 
 .DS_Store
+
+tmp
