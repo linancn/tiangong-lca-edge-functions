@@ -9,7 +9,6 @@ import {
 
 const TEST_ACTOR_ID = '11111111-1111-4111-8111-111111111111';
 const TEST_RECIPIENT_ID = '22222222-2222-4222-8222-222222222222';
-const TEST_SOURCE_DATASET_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TEST_DATASET_ID = '33333333-3333-4333-8333-333333333333';
 
 class FakeRpcSupabase {
@@ -41,17 +40,14 @@ function buildActor(supabase: FakeRpcSupabase) {
   };
 }
 
-Deno.test('notification validation-issue payload parser is strict', () => {
+Deno.test('notification validation-issue payload parser rejects removed source dataset fields', () => {
   const parsed = parseNotificationSendValidationIssueCommand({
     recipientUserId: TEST_RECIPIENT_ID,
-    sourceDatasetType: 'process data set',
-    sourceDatasetId: TEST_SOURCE_DATASET_ID,
-    sourceDatasetVersion: '01.00.000',
     datasetType: 'process data set',
     datasetId: TEST_DATASET_ID,
     datasetVersion: '01.00.000',
     issueCodes: ['ruleVerificationFailed'],
-    extra: 'nope',
+    sourceDatasetType: 'process data set',
   });
 
   assertEquals(parsed.ok, false);
@@ -73,9 +69,6 @@ Deno.test(
     const result = await executeNotificationSendValidationIssueCommand(
       {
         recipientUserId: TEST_RECIPIENT_ID,
-        sourceDatasetType: 'process data set',
-        sourceDatasetId: TEST_SOURCE_DATASET_ID,
-        sourceDatasetVersion: '01.00.000',
         datasetType: 'process data set',
         datasetId: TEST_DATASET_ID,
         datasetVersion: '01.00.000',
@@ -93,9 +86,6 @@ Deno.test(
         fn: 'cmd_notification_send_validation_issue',
         args: {
           p_recipient_user_id: TEST_RECIPIENT_ID,
-          p_source_dataset_type: 'process data set',
-          p_source_dataset_id: TEST_SOURCE_DATASET_ID,
-          p_source_dataset_version: '01.00.000',
           p_dataset_type: 'process data set',
           p_dataset_id: TEST_DATASET_ID,
           p_dataset_version: '01.00.000',
@@ -111,9 +101,6 @@ Deno.test(
             targetVersion: '01.00.000',
             payload: {
               recipientUserId: TEST_RECIPIENT_ID,
-              sourceDatasetType: 'process data set',
-              sourceDatasetId: TEST_SOURCE_DATASET_ID,
-              sourceDatasetVersion: '01.00.000',
               datasetType: 'process data set',
               issueCount: 2,
             },

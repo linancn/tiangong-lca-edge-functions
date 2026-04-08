@@ -27,9 +27,6 @@ export async function executeNotificationSendValidationIssueCommand(
     targetVersion: request.datasetVersion,
     payload: {
       recipientUserId: request.recipientUserId,
-      sourceDatasetType: request.sourceDatasetType,
-      sourceDatasetId: request.sourceDatasetId,
-      sourceDatasetVersion: request.sourceDatasetVersion,
       datasetType: request.datasetType,
       issueCount: request.issueCount ?? 0,
     },
