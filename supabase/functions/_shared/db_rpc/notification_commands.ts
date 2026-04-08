@@ -79,9 +79,6 @@ export function buildNotificationSendValidationIssueRpcArgs(
 ): Record<string, unknown> {
   return {
     p_recipient_user_id: request.recipientUserId,
-    p_source_dataset_type: request.sourceDatasetType,
-    p_source_dataset_id: request.sourceDatasetId,
-    p_source_dataset_version: request.sourceDatasetVersion,
     p_dataset_type: request.datasetType,
     p_dataset_id: request.datasetId,
     p_dataset_version: request.datasetVersion,

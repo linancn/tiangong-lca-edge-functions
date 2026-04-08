@@ -9,9 +9,6 @@ const nonEmptyStringSchema = z.string().trim().min(1);
 export const notificationSendValidationIssueRequestSchema = z
   .object({
     recipientUserId: uuidSchema,
-    sourceDatasetType: nonEmptyStringSchema,
-    sourceDatasetId: uuidSchema,
-    sourceDatasetVersion: nonEmptyStringSchema,
     datasetType: nonEmptyStringSchema,
     datasetId: uuidSchema,
     datasetVersion: nonEmptyStringSchema,
