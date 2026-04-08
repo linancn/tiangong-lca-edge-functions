@@ -1,11 +1,11 @@
 export const DATASET_TABLES = [
-  "contacts",
-  "sources",
-  "unitgroups",
-  "flowproperties",
-  "flows",
-  "processes",
-  "lifecyclemodels",
+  'contacts',
+  'sources',
+  'unitgroups',
+  'flowproperties',
+  'flows',
+  'processes',
+  'lifecyclemodels',
 ] as const;
 
 export type DatasetTable = (typeof DATASET_TABLES)[number];

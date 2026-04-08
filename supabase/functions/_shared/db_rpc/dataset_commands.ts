@@ -1,6 +1,6 @@
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.98.0";
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import type { CommandAuditPayload } from "../command_runtime/audit_log.ts";
+import type { CommandAuditPayload } from '../command_runtime/audit_log.ts';
 import type {
   AssignTeamRequest,
   CreateRequest,
@@ -9,46 +9,37 @@ import type {
   PublishRequest,
   SaveDraftRequest,
   SubmitReviewRequest,
-} from "../commands/dataset/types.ts";
+} from '../commands/dataset/types.ts';
 
-type RpcClient = Pick<SupabaseClient, "rpc">;
+type RpcClient = Pick<SupabaseClient, 'rpc'>;
 
-export type DatasetRpcResult =
-  | { ok: true; data: unknown }
-  | DatasetCommandFailure;
+export type DatasetRpcResult = { ok: true; data: unknown } | DatasetCommandFailure;
 
-function mapRpcError(
-  error: { code?: string; message?: string; details?: unknown },
-) {
-  const code = error.code ?? "RPC_ERROR";
-  const status = code === "42501"
-    ? 403
-    : code === "PGRST116"
-    ? 404
-    : code === "AUTH_REQUIRED"
-    ? 401
-    : 400;
+function mapRpcError(error: { code?: string; message?: string; details?: unknown }) {
+  const code = error.code ?? 'RPC_ERROR';
+  const status =
+    code === '42501' ? 403 : code === 'PGRST116' ? 404 : code === 'AUTH_REQUIRED' ? 401 : 400;
 
   return {
     ok: false as const,
     code,
     status,
-    message: error.message ?? "Dataset command RPC failed",
+    message: error.message ?? 'Dataset command RPC failed',
     details: error.details ?? null,
   };
 }
 
 function isDatasetCommandFailure(data: unknown): data is DatasetCommandFailure {
-  if (!data || typeof data !== "object") {
+  if (!data || typeof data !== 'object') {
     return false;
   }
 
   const candidate = data as Partial<DatasetCommandFailure> & { ok?: unknown };
   return (
     candidate.ok === false &&
-    typeof candidate.code === "string" &&
-    typeof candidate.message === "string" &&
-    typeof candidate.status === "number"
+    typeof candidate.code === 'string' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.status === 'number'
   );
 }
 
@@ -68,10 +59,10 @@ async function callDatasetRpc(
 
   if (
     data &&
-    typeof data === "object" &&
+    typeof data === 'object' &&
     !Array.isArray(data) &&
     (data as { ok?: unknown }).ok === true &&
-    "data" in (data as Record<string, unknown>)
+    'data' in (data as Record<string, unknown>)
   ) {
     return {
       ok: true,
@@ -170,7 +161,7 @@ export function callDatasetSaveDraftRpc(
 ) {
   return callDatasetRpc(
     supabase,
-    "cmd_dataset_save_draft",
+    'cmd_dataset_save_draft',
     buildDatasetSaveDraftRpcArgs(request, audit),
   );
 }
@@ -180,11 +171,7 @@ export function callDatasetCreateRpc(
   request: CreateRequest,
   audit: CommandAuditPayload,
 ) {
-  return callDatasetRpc(
-    supabase,
-    "cmd_dataset_create",
-    buildDatasetCreateRpcArgs(request, audit),
-  );
+  return callDatasetRpc(supabase, 'cmd_dataset_create', buildDatasetCreateRpcArgs(request, audit));
 }
 
 export function callDatasetDeleteRpc(
@@ -192,11 +179,7 @@ export function callDatasetDeleteRpc(
   request: DeleteRequest,
   audit: CommandAuditPayload,
 ) {
-  return callDatasetRpc(
-    supabase,
-    "cmd_dataset_delete",
-    buildDatasetDeleteRpcArgs(request, audit),
-  );
+  return callDatasetRpc(supabase, 'cmd_dataset_delete', buildDatasetDeleteRpcArgs(request, audit));
 }
 
 export function callDatasetAssignTeamRpc(
@@ -206,7 +189,7 @@ export function callDatasetAssignTeamRpc(
 ) {
   return callDatasetRpc(
     supabase,
-    "cmd_dataset_assign_team",
+    'cmd_dataset_assign_team',
     buildDatasetAssignTeamRpcArgs(request, audit),
   );
 }
@@ -218,7 +201,7 @@ export function callDatasetPublishRpc(
 ) {
   return callDatasetRpc(
     supabase,
-    "cmd_dataset_publish",
+    'cmd_dataset_publish',
     buildDatasetPublishRpcArgs(request, audit),
   );
 }
@@ -230,7 +213,7 @@ export function callDatasetSubmitReviewRpc(
 ) {
   return callDatasetRpc(
     supabase,
-    "cmd_review_submit",
+    'cmd_review_submit',
     buildDatasetSubmitReviewRpcArgs(request, audit),
   );
 }

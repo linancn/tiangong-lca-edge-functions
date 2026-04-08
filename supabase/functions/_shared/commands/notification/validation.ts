@@ -1,7 +1,7 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-import type { CommandParseResult } from "../../command_runtime/command.ts";
-import type { NotificationSendValidationIssueRequest } from "./types.ts";
+import type { CommandParseResult } from '../../command_runtime/command.ts';
+import type { NotificationSendValidationIssueRequest } from './types.ts';
 
 const uuidSchema = z.string().uuid();
 const nonEmptyStringSchema = z.string().trim().min(1);
@@ -22,10 +22,7 @@ export const notificationSendValidationIssueRequestSchema = z
   })
   .strict();
 
-function invalidPayload<T>(
-  message: string,
-  error: z.ZodError,
-): CommandParseResult<T> {
+function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResult<T> {
   return {
     ok: false,
     message,
@@ -38,10 +35,7 @@ export function parseNotificationSendValidationIssueRequest(
 ): CommandParseResult<NotificationSendValidationIssueRequest> {
   const parsed = notificationSendValidationIssueRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload(
-      "Invalid notification send-validation-issue payload",
-      parsed.error,
-    );
+    return invalidPayload('Invalid notification send-validation-issue payload', parsed.error);
   }
 
   return {

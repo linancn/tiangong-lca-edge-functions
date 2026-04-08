@@ -1,6 +1,6 @@
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.98.0";
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import type { CommandAuditPayload } from "../command_runtime/audit_log.ts";
+import type { CommandAuditPayload } from '../command_runtime/audit_log.ts';
 import type {
   MembershipCommandFailure,
   ReviewChangeMemberRoleRequest,
@@ -12,39 +12,28 @@ import type {
   TeamSetRankRequest,
   TeamUpdateProfileRequest,
   UserUpdateContactRequest,
-} from "../commands/membership/types.ts";
+} from '../commands/membership/types.ts';
 
-type RpcClient = Pick<SupabaseClient, "rpc">;
+type RpcClient = Pick<SupabaseClient, 'rpc'>;
 
-export type MembershipRpcResult =
-  | { ok: true; data: unknown }
-  | MembershipCommandFailure;
+export type MembershipRpcResult = { ok: true; data: unknown } | MembershipCommandFailure;
 
-function mapRpcError(
-  error: { code?: string; message?: string; details?: unknown },
-) {
-  const code = error.code ?? "RPC_ERROR";
-  const status = code === "42501"
-    ? 403
-    : code === "PGRST116"
-    ? 404
-    : code === "AUTH_REQUIRED"
-    ? 401
-    : 400;
+function mapRpcError(error: { code?: string; message?: string; details?: unknown }) {
+  const code = error.code ?? 'RPC_ERROR';
+  const status =
+    code === '42501' ? 403 : code === 'PGRST116' ? 404 : code === 'AUTH_REQUIRED' ? 401 : 400;
 
   return {
     ok: false as const,
     code,
     status,
-    message: error.message ?? "Membership command RPC failed",
+    message: error.message ?? 'Membership command RPC failed',
     details: error.details ?? null,
   };
 }
 
-function isMembershipCommandFailure(
-  data: unknown,
-): data is MembershipCommandFailure {
-  if (!data || typeof data !== "object") {
+function isMembershipCommandFailure(data: unknown): data is MembershipCommandFailure {
+  if (!data || typeof data !== 'object') {
     return false;
   }
 
@@ -53,9 +42,9 @@ function isMembershipCommandFailure(
   };
   return (
     candidate.ok === false &&
-    typeof candidate.code === "string" &&
-    typeof candidate.message === "string" &&
-    typeof candidate.status === "number"
+    typeof candidate.code === 'string' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.status === 'number'
   );
 }
 
@@ -75,10 +64,10 @@ async function callMembershipRpc(
 
   if (
     data &&
-    typeof data === "object" &&
+    typeof data === 'object' &&
     !Array.isArray(data) &&
     (data as { ok?: unknown }).ok === true &&
-    "data" in (data as Record<string, unknown>)
+    'data' in (data as Record<string, unknown>)
   ) {
     return {
       ok: true,
@@ -147,7 +136,7 @@ export function buildTeamChangeMemberRoleRpcArgs(
     p_team_id: request.teamId,
     p_user_id: request.userId,
     p_role: request.role ?? null,
-    p_action: request.action ?? "set",
+    p_action: request.action ?? 'set',
     p_audit: audit,
   };
 }
@@ -159,7 +148,7 @@ export function buildSystemChangeMemberRoleRpcArgs(
   return {
     p_user_id: request.userId,
     p_role: request.role ?? null,
-    p_action: request.action ?? "set",
+    p_action: request.action ?? 'set',
     p_audit: audit,
   };
 }
@@ -171,7 +160,7 @@ export function buildReviewChangeMemberRoleRpcArgs(
   return {
     p_user_id: request.userId,
     p_role: request.role ?? null,
-    p_action: request.action ?? "set",
+    p_action: request.action ?? 'set',
     p_audit: audit,
   };
 }
@@ -202,11 +191,7 @@ export function callTeamCreateRpc(
   request: TeamCreateRequest,
   audit: CommandAuditPayload,
 ) {
-  return callMembershipRpc(
-    supabase,
-    "cmd_team_create",
-    buildTeamCreateRpcArgs(request, audit),
-  );
+  return callMembershipRpc(supabase, 'cmd_team_create', buildTeamCreateRpcArgs(request, audit));
 }
 
 export function callTeamUpdateProfileRpc(
@@ -216,7 +201,7 @@ export function callTeamUpdateProfileRpc(
 ) {
   return callMembershipRpc(
     supabase,
-    "cmd_team_update_profile",
+    'cmd_team_update_profile',
     buildTeamUpdateProfileRpcArgs(request, audit),
   );
 }
@@ -226,11 +211,7 @@ export function callTeamSetRankRpc(
   request: TeamSetRankRequest,
   audit: CommandAuditPayload,
 ) {
-  return callMembershipRpc(
-    supabase,
-    "cmd_team_set_rank",
-    buildTeamSetRankRpcArgs(request, audit),
-  );
+  return callMembershipRpc(supabase, 'cmd_team_set_rank', buildTeamSetRankRpcArgs(request, audit));
 }
 
 export function callUserUpdateContactRpc(
@@ -240,7 +221,7 @@ export function callUserUpdateContactRpc(
 ) {
   return callMembershipRpc(
     supabase,
-    "cmd_user_update_contact",
+    'cmd_user_update_contact',
     buildUserUpdateContactRpcArgs(request, audit),
   );
 }
@@ -252,7 +233,7 @@ export function callTeamChangeMemberRoleRpc(
 ) {
   return callMembershipRpc(
     supabase,
-    "cmd_team_change_member_role",
+    'cmd_team_change_member_role',
     buildTeamChangeMemberRoleRpcArgs(request, audit),
   );
 }
@@ -264,7 +245,7 @@ export function callSystemChangeMemberRoleRpc(
 ) {
   return callMembershipRpc(
     supabase,
-    "cmd_system_change_member_role",
+    'cmd_system_change_member_role',
     buildSystemChangeMemberRoleRpcArgs(request, audit),
   );
 }
@@ -276,7 +257,7 @@ export function callReviewChangeMemberRoleRpc(
 ) {
   return callMembershipRpc(
     supabase,
-    "cmd_review_change_member_role",
+    'cmd_review_change_member_role',
     buildReviewChangeMemberRoleRpcArgs(request, audit),
   );
 }
@@ -288,7 +269,7 @@ export function callTeamReinviteMemberRpc(
 ) {
   return callMembershipRpc(
     supabase,
-    "cmd_team_reinvite_member",
+    'cmd_team_reinvite_member',
     buildTeamReinviteMemberRpcArgs(request, audit),
   );
 }
@@ -300,7 +281,7 @@ export function callTeamAcceptInvitationRpc(
 ) {
   return callMembershipRpc(
     supabase,
-    "cmd_team_accept_invitation",
+    'cmd_team_accept_invitation',
     buildTeamInvitationDecisionRpcArgs(request, audit),
   );
 }
@@ -312,7 +293,7 @@ export function callTeamRejectInvitationRpc(
 ) {
   return callMembershipRpc(
     supabase,
-    "cmd_team_reject_invitation",
+    'cmd_team_reject_invitation',
     buildTeamInvitationDecisionRpcArgs(request, audit),
   );
 }

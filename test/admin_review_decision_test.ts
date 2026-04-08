@@ -1,11 +1,11 @@
-import { assertEquals } from "jsr:@std/assert";
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.98.0";
+import { assertEquals } from 'jsr:@std/assert';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import { executeApproveReviewCommand } from "../supabase/functions/_shared/commands/review/approve_review.ts";
-import { executeRejectReviewCommand } from "../supabase/functions/_shared/commands/review/reject_review.ts";
+import { executeApproveReviewCommand } from '../supabase/functions/_shared/commands/review/approve_review.ts';
+import { executeRejectReviewCommand } from '../supabase/functions/_shared/commands/review/reject_review.ts';
 
-const TEST_USER_ID = "11111111-1111-4111-8111-111111111111";
-const TEST_REVIEW_ID = "22222222-2222-4222-8222-222222222222";
+const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
+const TEST_REVIEW_ID = '22222222-2222-4222-8222-222222222222';
 
 class FakeRpcSupabase {
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
@@ -28,16 +28,16 @@ class FakeRpcSupabase {
 function buildActor(supabase: FakeRpcSupabase) {
   return {
     userId: TEST_USER_ID,
-    accessToken: "access-token",
+    accessToken: 'access-token',
     supabase: supabase as unknown as SupabaseClient,
   };
 }
 
-Deno.test("executeApproveReviewCommand forwards approvals to cmd_review_approve", async () => {
+Deno.test('executeApproveReviewCommand forwards approvals to cmd_review_approve', async () => {
   const supabase = new FakeRpcSupabase();
   const result = await executeApproveReviewCommand(
     {
-      table: "processes",
+      table: 'processes',
       reviewId: TEST_REVIEW_ID,
     },
     buildActor(supabase),
@@ -46,16 +46,16 @@ Deno.test("executeApproveReviewCommand forwards approvals to cmd_review_approve"
   assertEquals(result.ok, true);
   assertEquals(supabase.rpcCalls, [
     {
-      fn: "cmd_review_approve",
+      fn: 'cmd_review_approve',
       args: {
-        p_table: "processes",
+        p_table: 'processes',
         p_review_id: TEST_REVIEW_ID,
         p_audit: {
-          command: "review_approve",
+          command: 'review_approve',
           actorUserId: TEST_USER_ID,
-          targetTable: "processes",
+          targetTable: 'processes',
           targetId: TEST_REVIEW_ID,
-          targetVersion: "",
+          targetVersion: '',
           payload: {},
         },
       },
@@ -63,13 +63,13 @@ Deno.test("executeApproveReviewCommand forwards approvals to cmd_review_approve"
   ]);
 });
 
-Deno.test("executeRejectReviewCommand forwards rejections to cmd_review_reject", async () => {
+Deno.test('executeRejectReviewCommand forwards rejections to cmd_review_reject', async () => {
   const supabase = new FakeRpcSupabase();
   const result = await executeRejectReviewCommand(
     {
-      table: "lifecyclemodels",
+      table: 'lifecyclemodels',
       reviewId: TEST_REVIEW_ID,
-      reason: "Data quality issue",
+      reason: 'Data quality issue',
     },
     buildActor(supabase),
   );
@@ -77,19 +77,19 @@ Deno.test("executeRejectReviewCommand forwards rejections to cmd_review_reject",
   assertEquals(result.ok, true);
   assertEquals(supabase.rpcCalls, [
     {
-      fn: "cmd_review_reject",
+      fn: 'cmd_review_reject',
       args: {
-        p_table: "lifecyclemodels",
+        p_table: 'lifecyclemodels',
         p_review_id: TEST_REVIEW_ID,
-        p_reason: "Data quality issue",
+        p_reason: 'Data quality issue',
         p_audit: {
-          command: "review_reject",
+          command: 'review_reject',
           actorUserId: TEST_USER_ID,
-          targetTable: "lifecyclemodels",
+          targetTable: 'lifecyclemodels',
           targetId: TEST_REVIEW_ID,
-          targetVersion: "",
+          targetVersion: '',
           payload: {
-            reason: "Data quality issue",
+            reason: 'Data quality issue',
           },
         },
       },
@@ -97,20 +97,20 @@ Deno.test("executeRejectReviewCommand forwards rejections to cmd_review_reject",
   ]);
 });
 
-Deno.test("executeRejectReviewCommand rejects blank reason before RPC call", async () => {
+Deno.test('executeRejectReviewCommand rejects blank reason before RPC call', async () => {
   const supabase = new FakeRpcSupabase();
   const result = await executeRejectReviewCommand(
     {
-      table: "processes",
+      table: 'processes',
       reviewId: TEST_REVIEW_ID,
-      reason: "   ",
+      reason: '   ',
     },
     buildActor(supabase),
   );
 
   assertEquals(result.ok, false);
   if (!result.ok) {
-    assertEquals(result.code, "REASON_REQUIRED");
+    assertEquals(result.code, 'REASON_REQUIRED');
     assertEquals(result.status, 400);
   }
   assertEquals(supabase.rpcCalls.length, 0);

@@ -1,15 +1,9 @@
-import type { ActorContext } from "../../command_runtime/actor_context.ts";
-import { buildCommandAuditPayload } from "../../command_runtime/audit_log.ts";
-import { assertSaveCommentDraftPolicy } from "./policy.ts";
-import {
-  createReviewCommandRepository,
-  type ReviewCommandRepository,
-} from "./repository.ts";
-import type {
-  ReviewCommandExecutionResult,
-  SaveCommentDraftRequest,
-} from "./types.ts";
-import { parseSaveCommentDraftRequest } from "./validation.ts";
+import type { ActorContext } from '../../command_runtime/actor_context.ts';
+import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
+import { assertSaveCommentDraftPolicy } from './policy.ts';
+import { createReviewCommandRepository, type ReviewCommandRepository } from './repository.ts';
+import type { ReviewCommandExecutionResult, SaveCommentDraftRequest } from './types.ts';
+import { parseSaveCommentDraftRequest } from './validation.ts';
 
 export function parseSaveCommentDraftCommand(body: unknown) {
   return parseSaveCommentDraftRequest(body);
@@ -18,9 +12,7 @@ export function parseSaveCommentDraftCommand(body: unknown) {
 export async function executeSaveCommentDraftCommand(
   request: SaveCommentDraftRequest,
   actor: ActorContext,
-  repository: ReviewCommandRepository = createReviewCommandRepository(
-    actor.supabase,
-  ),
+  repository: ReviewCommandRepository = createReviewCommandRepository(actor.supabase),
 ): Promise<ReviewCommandExecutionResult> {
   const policy = assertSaveCommentDraftPolicy(request);
   if (!policy.ok) {
@@ -28,11 +20,11 @@ export async function executeSaveCommentDraftCommand(
   }
 
   const audit = buildCommandAuditPayload({
-    command: "review_save_comment_draft",
+    command: 'review_save_comment_draft',
     actorUserId: actor.userId,
-    targetTable: "reviews",
+    targetTable: 'reviews',
     targetId: request.reviewId,
-    targetVersion: "",
+    targetVersion: '',
     payload: {
       hasJson: request.json !== undefined,
     },
@@ -48,7 +40,7 @@ export async function executeSaveCommentDraftCommand(
     status: 200,
     body: {
       ok: true,
-      command: "review_save_comment_draft",
+      command: 'review_save_comment_draft',
       data: result.data,
     },
   };

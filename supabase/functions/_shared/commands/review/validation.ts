@@ -1,6 +1,6 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-import type { CommandParseResult } from "../../command_runtime/command.ts";
+import type { CommandParseResult } from '../../command_runtime/command.ts';
 import {
   type ApproveReviewRequest,
   type AssignReviewersRequest,
@@ -10,17 +10,14 @@ import {
   type SaveAssignmentDraftRequest,
   type SaveCommentDraftRequest,
   type SubmitCommentRequest,
-} from "./types.ts";
+} from './types.ts';
 
 const uuidSchema = z.string().uuid();
 const reviewerIdsSchema = z.array(uuidSchema);
 const commentStateSchema = z.union([z.literal(-3), z.literal(1)]);
 const isoDateTimeSchema = z
   .string()
-  .refine(
-    (value) => !Number.isNaN(Date.parse(value)),
-    "deadline must be an ISO datetime string",
-  );
+  .refine((value) => !Number.isNaN(Date.parse(value)), 'deadline must be an ISO datetime string');
 
 const reviewBaseSchema = z
   .object({
@@ -71,14 +68,11 @@ export const approveReviewRequestSchema = decisionBaseSchema.strict();
 
 export const rejectReviewRequestSchema = decisionBaseSchema
   .extend({
-    reason: z.string().trim().min(1, "reason is required"),
+    reason: z.string().trim().min(1, 'reason is required'),
   })
   .strict();
 
-function invalidPayload<T>(
-  message: string,
-  error: z.ZodError,
-): CommandParseResult<T> {
+function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResult<T> {
   return {
     ok: false,
     message,
@@ -91,10 +85,7 @@ export function parseSaveAssignmentDraftRequest(
 ): CommandParseResult<SaveAssignmentDraftRequest> {
   const parsed = saveAssignmentDraftRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload(
-      "Invalid review save-assignment-draft payload",
-      parsed.error,
-    );
+    return invalidPayload('Invalid review save-assignment-draft payload', parsed.error);
   }
 
   return { ok: true, value: parsed.data };
@@ -105,10 +96,7 @@ export function parseAssignReviewersRequest(
 ): CommandParseResult<AssignReviewersRequest> {
   const parsed = assignReviewersRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload(
-      "Invalid review assign-reviewers payload",
-      parsed.error,
-    );
+    return invalidPayload('Invalid review assign-reviewers payload', parsed.error);
   }
 
   return { ok: true, value: parsed.data };
@@ -119,10 +107,7 @@ export function parseRevokeReviewerRequest(
 ): CommandParseResult<RevokeReviewerRequest> {
   const parsed = revokeReviewerRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload(
-      "Invalid review revoke-reviewer payload",
-      parsed.error,
-    );
+    return invalidPayload('Invalid review revoke-reviewer payload', parsed.error);
   }
 
   return { ok: true, value: parsed.data };
@@ -133,46 +118,34 @@ export function parseSaveCommentDraftRequest(
 ): CommandParseResult<SaveCommentDraftRequest> {
   const parsed = saveCommentDraftRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload(
-      "Invalid review save-comment-draft payload",
-      parsed.error,
-    );
+    return invalidPayload('Invalid review save-comment-draft payload', parsed.error);
   }
 
   return { ok: true, value: parsed.data };
 }
 
-export function parseSubmitCommentRequest(
-  body: unknown,
-): CommandParseResult<SubmitCommentRequest> {
+export function parseSubmitCommentRequest(body: unknown): CommandParseResult<SubmitCommentRequest> {
   const parsed = submitCommentRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload(
-      "Invalid review submit-comment payload",
-      parsed.error,
-    );
+    return invalidPayload('Invalid review submit-comment payload', parsed.error);
   }
 
   return { ok: true, value: parsed.data };
 }
 
-export function parseApproveReviewRequest(
-  body: unknown,
-): CommandParseResult<ApproveReviewRequest> {
+export function parseApproveReviewRequest(body: unknown): CommandParseResult<ApproveReviewRequest> {
   const parsed = approveReviewRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload("Invalid review approve payload", parsed.error);
+    return invalidPayload('Invalid review approve payload', parsed.error);
   }
 
   return { ok: true, value: parsed.data };
 }
 
-export function parseRejectReviewRequest(
-  body: unknown,
-): CommandParseResult<RejectReviewRequest> {
+export function parseRejectReviewRequest(body: unknown): CommandParseResult<RejectReviewRequest> {
   const parsed = rejectReviewRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload("Invalid review reject payload", parsed.error);
+    return invalidPayload('Invalid review reject payload', parsed.error);
   }
 
   return { ok: true, value: parsed.data };

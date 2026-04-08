@@ -1,12 +1,9 @@
-import type { ActorContext } from "../../command_runtime/actor_context.ts";
-import { buildCommandAuditPayload } from "../../command_runtime/audit_log.ts";
-import { assertDeletePolicy } from "./policy.ts";
-import {
-  createDatasetCommandRepository,
-  type DatasetCommandRepository,
-} from "./repository.ts";
-import type { DatasetCommandExecutionResult, DeleteRequest } from "./types.ts";
-import { deleteRequestSchema, parseDeleteRequest } from "./validation.ts";
+import type { ActorContext } from '../../command_runtime/actor_context.ts';
+import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
+import { assertDeletePolicy } from './policy.ts';
+import { createDatasetCommandRepository, type DatasetCommandRepository } from './repository.ts';
+import type { DatasetCommandExecutionResult, DeleteRequest } from './types.ts';
+import { deleteRequestSchema, parseDeleteRequest } from './validation.ts';
 
 export { deleteRequestSchema };
 
@@ -17,9 +14,7 @@ export function parseDeleteCommand(body: unknown) {
 export async function executeDeleteCommand(
   request: DeleteRequest,
   actor: ActorContext,
-  repository: DatasetCommandRepository = createDatasetCommandRepository(
-    actor.supabase,
-  ),
+  repository: DatasetCommandRepository = createDatasetCommandRepository(actor.supabase),
 ): Promise<DatasetCommandExecutionResult> {
   const policy = assertDeletePolicy(request);
   if (!policy.ok) {
@@ -27,7 +22,7 @@ export async function executeDeleteCommand(
   }
 
   const audit = buildCommandAuditPayload({
-    command: "dataset_delete",
+    command: 'dataset_delete',
     actorUserId: actor.userId,
     targetTable: request.table,
     targetId: request.id,
@@ -45,7 +40,7 @@ export async function executeDeleteCommand(
     status: 200,
     body: {
       ok: true,
-      command: "dataset_delete",
+      command: 'dataset_delete',
       data: result.data,
     },
   };
