@@ -1,18 +1,18 @@
-import type { ActorContext } from "../../command_runtime/actor_context.ts";
-import { buildCommandAuditPayload } from "../../command_runtime/audit_log.ts";
+import type { ActorContext } from '../../command_runtime/actor_context.ts';
+import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
 import {
   createMembershipCommandRepository,
   type MembershipCommandRepository,
-} from "../membership/repository.ts";
+} from '../membership/repository.ts';
 import type {
   MembershipCommandExecutionResult,
   TeamSetRankRequest,
   TeamUpdateProfileRequest,
-} from "../membership/types.ts";
+} from '../membership/types.ts';
 import {
   parseTeamSetRankRequest,
   parseTeamUpdateProfileRequest,
-} from "../membership/validation.ts";
+} from '../membership/validation.ts';
 
 export function parseTeamUpdateProfileCommand(body: unknown) {
   return parseTeamUpdateProfileRequest(body);
@@ -25,16 +25,14 @@ export function parseTeamSetRankCommand(body: unknown) {
 export async function executeTeamUpdateProfileCommand(
   request: TeamUpdateProfileRequest,
   actor: ActorContext,
-  repository: MembershipCommandRepository = createMembershipCommandRepository(
-    actor.supabase,
-  ),
+  repository: MembershipCommandRepository = createMembershipCommandRepository(actor.supabase),
 ): Promise<MembershipCommandExecutionResult> {
   const audit = buildCommandAuditPayload({
-    command: "team_update_profile",
+    command: 'team_update_profile',
     actorUserId: actor.userId,
-    targetTable: "teams",
+    targetTable: 'teams',
     targetId: request.teamId,
-    targetVersion: "",
+    targetVersion: '',
     payload: {
       isPublic: request.isPublic,
     },
@@ -50,7 +48,7 @@ export async function executeTeamUpdateProfileCommand(
     status: 200,
     body: {
       ok: true,
-      command: "team_update_profile",
+      command: 'team_update_profile',
       data: result.data,
     },
   };
@@ -59,16 +57,14 @@ export async function executeTeamUpdateProfileCommand(
 export async function executeTeamSetRankCommand(
   request: TeamSetRankRequest,
   actor: ActorContext,
-  repository: MembershipCommandRepository = createMembershipCommandRepository(
-    actor.supabase,
-  ),
+  repository: MembershipCommandRepository = createMembershipCommandRepository(actor.supabase),
 ): Promise<MembershipCommandExecutionResult> {
   const audit = buildCommandAuditPayload({
-    command: "team_set_rank",
+    command: 'team_set_rank',
     actorUserId: actor.userId,
-    targetTable: "teams",
+    targetTable: 'teams',
     targetId: request.teamId,
-    targetVersion: "",
+    targetVersion: '',
     payload: {
       rank: request.rank,
     },
@@ -84,7 +80,7 @@ export async function executeTeamSetRankCommand(
     status: 200,
     body: {
       ok: true,
-      command: "team_set_rank",
+      command: 'team_set_rank',
       data: result.data,
     },
   };

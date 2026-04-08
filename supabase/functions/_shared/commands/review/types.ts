@@ -1,4 +1,4 @@
-export const REVIEW_DECISION_TABLES = ["processes", "lifecyclemodels"] as const;
+export const REVIEW_DECISION_TABLES = ['processes', 'lifecyclemodels'] as const;
 
 export type ReviewDecisionTable = (typeof REVIEW_DECISION_TABLES)[number];
 

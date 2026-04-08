@@ -7,7 +7,7 @@ import type {
   SaveAssignmentDraftRequest,
   SaveCommentDraftRequest,
   SubmitCommentRequest,
-} from "./types.ts";
+} from './types.ts';
 
 function invalidInput(code: string, message: string): ReviewCommandFailure {
   return {
@@ -50,10 +50,7 @@ export function assertSubmitCommentPolicy(
     request.commentState !== -3 &&
     request.commentState !== 1
   ) {
-    return invalidInput(
-      "INVALID_COMMENT_STATE",
-      "commentState must be 1 or -3",
-    );
+    return invalidInput('INVALID_COMMENT_STATE', 'commentState must be 1 or -3');
   }
 
   return { ok: true };
@@ -69,7 +66,7 @@ export function assertRejectReviewPolicy(
   request: RejectReviewRequest,
 ): { ok: true } | ReviewCommandFailure {
   if (!request.reason.trim()) {
-    return invalidInput("REASON_REQUIRED", "reason is required");
+    return invalidInput('REASON_REQUIRED', 'reason is required');
   }
 
   return { ok: true };

@@ -1,14 +1,14 @@
-import type { ActorContext } from "../../command_runtime/actor_context.ts";
-import { buildCommandAuditPayload } from "../../command_runtime/audit_log.ts";
+import type { ActorContext } from '../../command_runtime/actor_context.ts';
+import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
 import {
   createNotificationCommandRepository,
   type NotificationCommandRepository,
-} from "./repository.ts";
+} from './repository.ts';
 import type {
   NotificationCommandExecutionResult,
   NotificationSendValidationIssueRequest,
-} from "./types.ts";
-import { parseNotificationSendValidationIssueRequest } from "./validation.ts";
+} from './types.ts';
+import { parseNotificationSendValidationIssueRequest } from './validation.ts';
 
 export function parseNotificationSendValidationIssueCommand(body: unknown) {
   return parseNotificationSendValidationIssueRequest(body);
@@ -17,14 +17,12 @@ export function parseNotificationSendValidationIssueCommand(body: unknown) {
 export async function executeNotificationSendValidationIssueCommand(
   request: NotificationSendValidationIssueRequest,
   actor: ActorContext,
-  repository: NotificationCommandRepository = createNotificationCommandRepository(
-    actor.supabase,
-  ),
+  repository: NotificationCommandRepository = createNotificationCommandRepository(actor.supabase),
 ): Promise<NotificationCommandExecutionResult> {
   const audit = buildCommandAuditPayload({
-    command: "notification_send_validation_issue",
+    command: 'notification_send_validation_issue',
     actorUserId: actor.userId,
-    targetTable: "notifications",
+    targetTable: 'notifications',
     targetId: request.datasetId,
     targetVersion: request.datasetVersion,
     payload: {
@@ -47,7 +45,7 @@ export async function executeNotificationSendValidationIssueCommand(
     status: 200,
     body: {
       ok: true,
-      command: "notification_send_validation_issue",
+      command: 'notification_send_validation_issue',
       data: result.data,
     },
   };

@@ -1,12 +1,9 @@
-import type { ActorContext } from "../../command_runtime/actor_context.ts";
-import { buildCommandAuditPayload } from "../../command_runtime/audit_log.ts";
-import { assertCreatePolicy } from "./policy.ts";
-import {
-  createDatasetCommandRepository,
-  type DatasetCommandRepository,
-} from "./repository.ts";
-import type { CreateRequest, DatasetCommandExecutionResult } from "./types.ts";
-import { createRequestSchema, parseCreateRequest } from "./validation.ts";
+import type { ActorContext } from '../../command_runtime/actor_context.ts';
+import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
+import { assertCreatePolicy } from './policy.ts';
+import { createDatasetCommandRepository, type DatasetCommandRepository } from './repository.ts';
+import type { CreateRequest, DatasetCommandExecutionResult } from './types.ts';
+import { createRequestSchema, parseCreateRequest } from './validation.ts';
 
 export { createRequestSchema };
 
@@ -17,9 +14,7 @@ export function parseCreateCommand(body: unknown) {
 export async function executeCreateCommand(
   request: CreateRequest,
   actor: ActorContext,
-  repository: DatasetCommandRepository = createDatasetCommandRepository(
-    actor.supabase,
-  ),
+  repository: DatasetCommandRepository = createDatasetCommandRepository(actor.supabase),
 ): Promise<DatasetCommandExecutionResult> {
   const policy = assertCreatePolicy(request);
   if (!policy.ok) {
@@ -27,11 +22,11 @@ export async function executeCreateCommand(
   }
 
   const audit = buildCommandAuditPayload({
-    command: "dataset_create",
+    command: 'dataset_create',
     actorUserId: actor.userId,
     targetTable: request.table,
     targetId: request.id,
-    targetVersion: "",
+    targetVersion: '',
     payload: request.modelId ? { modelId: request.modelId } : {},
   });
 
@@ -45,7 +40,7 @@ export async function executeCreateCommand(
     status: 200,
     body: {
       ok: true,
-      command: "dataset_create",
+      command: 'dataset_create',
       data: result.data,
     },
   };

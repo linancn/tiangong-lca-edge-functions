@@ -1,11 +1,11 @@
-import { assertEquals } from "jsr:@std/assert";
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.98.0";
+import { assertEquals } from 'jsr:@std/assert';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import { executeSaveCommentDraftCommand } from "../supabase/functions/_shared/commands/review/save_comment_draft.ts";
-import { executeSubmitCommentCommand } from "../supabase/functions/_shared/commands/review/submit_comment.ts";
+import { executeSaveCommentDraftCommand } from '../supabase/functions/_shared/commands/review/save_comment_draft.ts';
+import { executeSubmitCommentCommand } from '../supabase/functions/_shared/commands/review/submit_comment.ts';
 
-const TEST_USER_ID = "11111111-1111-4111-8111-111111111111";
-const TEST_REVIEW_ID = "22222222-2222-4222-8222-222222222222";
+const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
+const TEST_REVIEW_ID = '22222222-2222-4222-8222-222222222222';
 
 class FakeRpcSupabase {
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
@@ -28,16 +28,16 @@ class FakeRpcSupabase {
 function buildActor(supabase: FakeRpcSupabase) {
   return {
     userId: TEST_USER_ID,
-    accessToken: "access-token",
+    accessToken: 'access-token',
     supabase: supabase as unknown as SupabaseClient,
   };
 }
 
 Deno.test(
-  "executeSaveCommentDraftCommand forwards comment draft save to cmd_review_save_comment_draft",
+  'executeSaveCommentDraftCommand forwards comment draft save to cmd_review_save_comment_draft',
   async () => {
     const supabase = new FakeRpcSupabase();
-    const json = { blocks: [{ type: "paragraph", text: "Needs adjustments" }] };
+    const json = { blocks: [{ type: 'paragraph', text: 'Needs adjustments' }] };
     const result = await executeSaveCommentDraftCommand(
       {
         reviewId: TEST_REVIEW_ID,
@@ -49,16 +49,16 @@ Deno.test(
     assertEquals(result.ok, true);
     assertEquals(supabase.rpcCalls, [
       {
-        fn: "cmd_review_save_comment_draft",
+        fn: 'cmd_review_save_comment_draft',
         args: {
           p_review_id: TEST_REVIEW_ID,
           p_json: json,
           p_audit: {
-            command: "review_save_comment_draft",
+            command: 'review_save_comment_draft',
             actorUserId: TEST_USER_ID,
-            targetTable: "reviews",
+            targetTable: 'reviews',
             targetId: TEST_REVIEW_ID,
-            targetVersion: "",
+            targetVersion: '',
             payload: {
               hasJson: true,
             },
@@ -70,10 +70,10 @@ Deno.test(
 );
 
 Deno.test(
-  "executeSubmitCommentCommand forwards comment submission to cmd_review_submit_comment",
+  'executeSubmitCommentCommand forwards comment submission to cmd_review_submit_comment',
   async () => {
     const supabase = new FakeRpcSupabase();
-    const json = { summary: "Approved with comments" };
+    const json = { summary: 'Approved with comments' };
     const result = await executeSubmitCommentCommand(
       {
         reviewId: TEST_REVIEW_ID,
@@ -85,17 +85,17 @@ Deno.test(
     assertEquals(result.ok, true);
     assertEquals(supabase.rpcCalls, [
       {
-        fn: "cmd_review_submit_comment",
+        fn: 'cmd_review_submit_comment',
         args: {
           p_review_id: TEST_REVIEW_ID,
           p_json: json,
           p_comment_state: 1,
           p_audit: {
-            command: "review_submit_comment",
+            command: 'review_submit_comment',
             actorUserId: TEST_USER_ID,
-            targetTable: "reviews",
+            targetTable: 'reviews',
             targetId: TEST_REVIEW_ID,
-            targetVersion: "",
+            targetVersion: '',
             payload: {
               hasJson: true,
               commentState: 1,
@@ -108,10 +108,10 @@ Deno.test(
 );
 
 Deno.test(
-  "executeSubmitCommentCommand forwards reviewer rejection through cmd_review_submit_comment",
+  'executeSubmitCommentCommand forwards reviewer rejection through cmd_review_submit_comment',
   async () => {
     const supabase = new FakeRpcSupabase();
-    const json = { summary: "Rejected by reviewer" };
+    const json = { summary: 'Rejected by reviewer' };
     const result = await executeSubmitCommentCommand(
       {
         reviewId: TEST_REVIEW_ID,
@@ -124,17 +124,17 @@ Deno.test(
     assertEquals(result.ok, true);
     assertEquals(supabase.rpcCalls, [
       {
-        fn: "cmd_review_submit_comment",
+        fn: 'cmd_review_submit_comment',
         args: {
           p_review_id: TEST_REVIEW_ID,
           p_json: json,
           p_comment_state: -3,
           p_audit: {
-            command: "review_submit_comment",
+            command: 'review_submit_comment',
             actorUserId: TEST_USER_ID,
-            targetTable: "reviews",
+            targetTable: 'reviews',
             targetId: TEST_REVIEW_ID,
-            targetVersion: "",
+            targetVersion: '',
             payload: {
               hasJson: true,
               commentState: -3,
@@ -146,24 +146,21 @@ Deno.test(
   },
 );
 
-Deno.test(
-  "executeSubmitCommentCommand rejects invalid commentState before RPC call",
-  async () => {
-    const supabase = new FakeRpcSupabase();
-    const result = await executeSubmitCommentCommand(
-      {
-        reviewId: TEST_REVIEW_ID,
-        json: { summary: "Invalid state" },
-        commentState: 0 as never,
-      },
-      buildActor(supabase),
-    );
+Deno.test('executeSubmitCommentCommand rejects invalid commentState before RPC call', async () => {
+  const supabase = new FakeRpcSupabase();
+  const result = await executeSubmitCommentCommand(
+    {
+      reviewId: TEST_REVIEW_ID,
+      json: { summary: 'Invalid state' },
+      commentState: 0 as never,
+    },
+    buildActor(supabase),
+  );
 
-    assertEquals(result.ok, false);
-    if (!result.ok) {
-      assertEquals(result.code, "INVALID_COMMENT_STATE");
-      assertEquals(result.status, 400);
-    }
-    assertEquals(supabase.rpcCalls.length, 0);
-  },
-);
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assertEquals(result.code, 'INVALID_COMMENT_STATE');
+    assertEquals(result.status, 400);
+  }
+  assertEquals(supabase.rpcCalls.length, 0);
+});

@@ -1,13 +1,13 @@
-import { assertEquals } from "jsr:@std/assert";
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.98.0";
+import { assertEquals } from 'jsr:@std/assert';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import {
   executeDeleteCommand,
   parseDeleteCommand,
-} from "../supabase/functions/_shared/commands/dataset/delete.ts";
+} from '../supabase/functions/_shared/commands/dataset/delete.ts';
 
-const TEST_USER_ID = "11111111-1111-4111-8111-111111111111";
-const TEST_DATASET_ID = "22222222-2222-4222-8222-222222222222";
+const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
+const TEST_DATASET_ID = '22222222-2222-4222-8222-222222222222';
 
 class FakeRpcSupabase {
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
@@ -38,18 +38,18 @@ class FakeRpcSupabase {
 function buildActor(supabase: FakeRpcSupabase) {
   return {
     userId: TEST_USER_ID,
-    accessToken: "access-token",
+    accessToken: 'access-token',
     supabase: supabase as unknown as SupabaseClient,
   };
 }
 
-Deno.test("executeDeleteCommand forwards dataset deletion to cmd_dataset_delete", async () => {
+Deno.test('executeDeleteCommand forwards dataset deletion to cmd_dataset_delete', async () => {
   const supabase = new FakeRpcSupabase();
   const result = await executeDeleteCommand(
     {
-      table: "flows",
+      table: 'flows',
       id: TEST_DATASET_ID,
-      version: "01.00.000",
+      version: '01.00.000',
     },
     buildActor(supabase),
   );
@@ -57,17 +57,17 @@ Deno.test("executeDeleteCommand forwards dataset deletion to cmd_dataset_delete"
   assertEquals(result.ok, true);
   assertEquals(supabase.rpcCalls, [
     {
-      fn: "cmd_dataset_delete",
+      fn: 'cmd_dataset_delete',
       args: {
-        p_table: "flows",
+        p_table: 'flows',
         p_id: TEST_DATASET_ID,
-        p_version: "01.00.000",
+        p_version: '01.00.000',
         p_audit: {
-          command: "dataset_delete",
+          command: 'dataset_delete',
           actorUserId: TEST_USER_ID,
-          targetTable: "flows",
+          targetTable: 'flows',
           targetId: TEST_DATASET_ID,
-          targetVersion: "01.00.000",
+          targetVersion: '01.00.000',
           payload: {},
         },
       },
@@ -75,39 +75,39 @@ Deno.test("executeDeleteCommand forwards dataset deletion to cmd_dataset_delete"
   ]);
 });
 
-Deno.test("parseDeleteCommand rejects invalid dataset delete payloads", () => {
+Deno.test('parseDeleteCommand rejects invalid dataset delete payloads', () => {
   const result = parseDeleteCommand({
-    table: "unknown",
-    id: "not-a-uuid",
-    version: "1",
+    table: 'unknown',
+    id: 'not-a-uuid',
+    version: '1',
   });
 
   assertEquals(result.ok, false);
 });
 
-Deno.test("executeDeleteCommand maps RPC permission errors to 403", async () => {
+Deno.test('executeDeleteCommand maps RPC permission errors to 403', async () => {
   const supabase = new FakeRpcSupabase({
     data: null,
     error: {
-      code: "42501",
-      message: "permission denied",
-      details: "actor lacks permission",
+      code: '42501',
+      message: 'permission denied',
+      details: 'actor lacks permission',
     },
   });
   const result = await executeDeleteCommand(
     {
-      table: "flows",
+      table: 'flows',
       id: TEST_DATASET_ID,
-      version: "01.00.000",
+      version: '01.00.000',
     },
     buildActor(supabase),
   );
 
   assertEquals(result, {
     ok: false,
-    code: "42501",
+    code: '42501',
     status: 403,
-    message: "permission denied",
-    details: "actor lacks permission",
+    message: 'permission denied',
+    details: 'actor lacks permission',
   });
 });

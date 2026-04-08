@@ -1,4 +1,4 @@
-export const MEMBER_ROLE_ACTIONS = ["set", "remove"] as const;
+export const MEMBER_ROLE_ACTIONS = ['set', 'remove'] as const;
 
 export type MemberRoleAction = (typeof MEMBER_ROLE_ACTIONS)[number];
 

@@ -1,14 +1,14 @@
-import type { ActorContext } from "../../command_runtime/actor_context.ts";
-import { buildCommandAuditPayload } from "../../command_runtime/audit_log.ts";
+import type { ActorContext } from '../../command_runtime/actor_context.ts';
+import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
 import {
   createMembershipCommandRepository,
   type MembershipCommandRepository,
-} from "../membership/repository.ts";
+} from '../membership/repository.ts';
 import type {
   MembershipCommandExecutionResult,
   UserUpdateContactRequest,
-} from "../membership/types.ts";
-import { parseUserUpdateContactRequest } from "../membership/validation.ts";
+} from '../membership/types.ts';
+import { parseUserUpdateContactRequest } from '../membership/validation.ts';
 
 export function parseUserUpdateContactCommand(body: unknown) {
   return parseUserUpdateContactRequest(body);
@@ -17,16 +17,14 @@ export function parseUserUpdateContactCommand(body: unknown) {
 export async function executeUserUpdateContactCommand(
   request: UserUpdateContactRequest,
   actor: ActorContext,
-  repository: MembershipCommandRepository = createMembershipCommandRepository(
-    actor.supabase,
-  ),
+  repository: MembershipCommandRepository = createMembershipCommandRepository(actor.supabase),
 ): Promise<MembershipCommandExecutionResult> {
   const audit = buildCommandAuditPayload({
-    command: "user_update_contact",
+    command: 'user_update_contact',
     actorUserId: actor.userId,
-    targetTable: "users",
+    targetTable: 'users',
     targetId: request.userId,
-    targetVersion: "",
+    targetVersion: '',
     payload: {
       hasContact: true,
     },
@@ -42,7 +40,7 @@ export async function executeUserUpdateContactCommand(
     status: 200,
     body: {
       ok: true,
-      command: "user_update_contact",
+      command: 'user_update_contact',
       data: result.data,
     },
   };
