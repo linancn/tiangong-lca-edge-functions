@@ -23,6 +23,7 @@
 - 本地启动：
   - `npm install`
   - `npm start`（等价于 `supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt`）
+  - `npm run probe:auth -- --remote`（远端 edge functions 连通性 / 鉴权探测；也可用 `--local` 或 `--base-url`）
 - 基线校验命令：
   - `npm run lint`
   - `npm run check`（依次对当前启用的 `supabase/functions/*/index.ts` 与 `test/*.ts` 执行 `deno check`；当前默认排除 README 中已标记为 not enabled 的 `antchain_*` 与 legacy 非 `*_ft` embedding/webhook 入口）
@@ -35,6 +36,7 @@
   - 函数运行时必须继续完成认证与授权
   - 新函数不得假设 gateway `verify_jwt=true` 已经帮你兜底
 - 主要测试样例：`test.example.http`
+- 鉴权排障脚本：`scripts/probe-functions-auth.cjs`
 - 主要说明文档：`README.md`
 
 ## 3. Directory Guide

@@ -10,6 +10,7 @@
     "check": "node ./scripts/deno-check-all.cjs",
     "deploy:dev": "node ./scripts/deploy-function.cjs dev",
     "deploy:main": "node ./scripts/deploy-function.cjs main",
+    "probe:auth": "node ./scripts/probe-functions-auth.cjs",
     "lint": "prettier -c --write \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\""
   },
   "devDependencies": {

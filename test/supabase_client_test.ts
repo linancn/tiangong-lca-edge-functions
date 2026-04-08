@@ -1,4 +1,4 @@
-import { assertEquals } from 'jsr:@std/assert';
+import { assertEquals, assertThrows } from 'jsr:@std/assert';
 
 const MODULE_PATH = '../supabase/functions/_shared/supabase_client.ts';
 const TEST_SUPABASE_URL = 'https://example.supabase.co';
@@ -70,6 +70,47 @@ Deno.test('shared Supabase client falls back when remote env vars are blank', as
       if (!module.createRequestSupabaseClient()) {
         throw new Error('expected request-scoped client to be created');
       }
+    },
+  );
+});
+
+Deno.test('shared Supabase client fails fast when all Supabase env vars are missing', async () => {
+  await withSupabaseEnv(
+    {
+      REMOTE_SUPABASE_URL: undefined,
+      SUPABASE_URL: undefined,
+      REMOTE_SUPABASE_SERVICE_ROLE_KEY: undefined,
+      REMOTE_SUPABASE_SECRET_KEY: undefined,
+      SUPABASE_SERVICE_ROLE_KEY: undefined,
+      SUPABASE_SECRET_KEY: undefined,
+      REMOTE_SUPABASE_PUBLISHABLE_KEY: undefined,
+      REMOTE_SUPABASE_ANON_KEY: undefined,
+      SUPABASE_PUBLISHABLE_KEY: undefined,
+      SUPABASE_ANON_KEY: undefined,
+    },
+    async () => {
+      const module = await importSupabaseClientModule();
+
+      assertThrows(() => module.getSupabaseUrl(), Error, 'Missing Supabase URL');
+      assertThrows(
+        () => module.getSupabaseServiceRoleKey(),
+        Error,
+        'Missing Supabase service-role or secret key',
+      );
+      assertThrows(
+        () => module.getSupabasePublishableKey(),
+        Error,
+        'Missing Supabase publishable or anon key',
+      );
+
+      assertThrows(() => module.createRequestSupabaseClient(), Error, 'Missing Supabase URL');
+      assertThrows(
+        () => {
+          void module.supabaseAuthClient.auth;
+        },
+        Error,
+        'Missing Supabase URL',
+      );
     },
   );
 });
