@@ -1,19 +1,17 @@
-import "@supabase/functions-js/edge-runtime.d.ts";
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import {
   type CommandHandlerOptions,
   createCommandHandler,
-} from "../_shared/command_runtime/command.ts";
+} from '../_shared/command_runtime/command.ts';
 import {
   executeNotificationSendValidationIssueCommand,
   parseNotificationSendValidationIssueCommand,
-} from "../_shared/commands/notification/send_validation_issue.ts";
-import type { NotificationSendValidationIssueRequest } from "../_shared/commands/notification/types.ts";
+} from '../_shared/commands/notification/send_validation_issue.ts';
+import type { NotificationSendValidationIssueRequest } from '../_shared/commands/notification/types.ts';
 
 export function createAppNotificationSendValidationIssueHandler(
-  overrides: Partial<
-    CommandHandlerOptions<NotificationSendValidationIssueRequest>
-  > = {},
+  overrides: Partial<CommandHandlerOptions<NotificationSendValidationIssueRequest>> = {},
 ) {
   return createCommandHandler<NotificationSendValidationIssueRequest>({
     parse: parseNotificationSendValidationIssueCommand,

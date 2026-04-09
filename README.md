@@ -8,6 +8,16 @@ Supabase Edge Functions for LCA search, embedding, and solving workflows.
 - Functions root: `supabase/functions`
 - Local serve command: `npm start`
 
+## Branch & Deployment Contract
+
+- 本仓库采用以下分支规则：Git `dev` 是日常 trunk，routine PR 默认回 `dev`，`dev -> main` 是 promote 路径，hotfix 从 `main` 起并在合并后回合并到 `dev`。
+- GitHub default branch 继续保持 `main`，这是平台层例外，不代表日常 trunk 改回 `main`。
+- 远端环境映射：
+  - `main` project ref：`qgzvkongdjqiiamzbbts`
+  - `dev` project ref：`culgbbvzltdodcpykupc`
+- 远端 `main` 与 `dev` 的函数部署都统一使用 `--no-verify-jwt`。这是正式仓库规则，不是临时口头 workaround。
+- 安全边界在函数运行时：gateway 不做 JWT 校验，不等于函数可以匿名执行。新函数不得假设 gateway `verify_jwt=true` 已经帮你兜底，必须继续显式做认证与授权。
+
 ## Prerequisites
 
 - Node.js 22
@@ -34,10 +44,17 @@ Required keys are managed in this file, for example:
 - `OPENAI_API_KEY`
 - `OPENAI_CHAT_MODEL`
 - `REMOTE_SUPABASE_URL`
-- `REMOTE_SERVICE_API_KEY`
-- `REMOTE_SUPABASE_PUBLISHABLE_KEY` (or `REMOTE_SUPABASE_ANON_KEY`) when a function must call Supabase as the end user instead of service-role
+- `REMOTE_SUPABASE_SERVICE_ROLE_KEY` (or `REMOTE_SUPABASE_SECRET_KEY`) for privileged RPC / database execution
+- `REMOTE_SUPABASE_PUBLISHABLE_KEY` (or `REMOTE_SUPABASE_ANON_KEY`) for JWT validation and request-scoped user clients
+- `REMOTE_SERVICE_API_KEY` only for `AuthMethod.SERVICE_API_KEY` request authentication
 - `UPSTASH_REDIS_URL`
 - `UPSTASH_REDIS_TOKEN`
+
+Credential contract:
+
+- `REMOTE_SERVICE_API_KEY` / `SERVICE_API_KEY` are custom function-level shared secrets. They are not Supabase client credentials.
+- JWT validation and user-api-key sign-in flows must use publishable / anon keys.
+- Service-role or secret keys are reserved for privileged Supabase execution paths.
 
 ### 2. HTTP test env (repo root `.env`)
 
@@ -60,7 +77,7 @@ npm start
 `npm start` is equivalent to:
 
 ```bash
-supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt
+./node_modules/.bin/supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt
 ```
 
 ### Optional: Start full local Supabase stack
@@ -98,6 +115,55 @@ See `test.example.http` for local and remote examples, including:
 - `lca_contribution_path` / `lca_contribution_path_result`
 - `import_tidas_package` / `tidas_package_jobs`
 
+### Auth / connectivity probe
+
+当你怀疑远端出现“函数通了，但 auth 行为漂移”这类问题时，优先跑仓库内的统一探测脚本：
+
+```bash
+npm run probe:auth -- --remote
+```
+
+脚本会自动读取：
+
+- 根目录 `.env` 中的 `REMOTE_ENDPOINT` / `LOCAL_ENDPOINT`
+- `USER_JWT`
+- `USER_API_KEY`
+- `supabase/.env.local` 或 shell env 里的 `REMOTE_SERVICE_API_KEY` / `SERVICE_API_KEY`
+
+也可以显式覆盖：
+
+```bash
+EDGE_BASE_URL="https://<project-ref>.supabase.co/functions/v1" \
+USER_JWT="<your-user-jwt>" \
+npm run probe:auth -- --base-url "$EDGE_BASE_URL"
+```
+
+默认行为：
+
+- 默认跳过仓库中标记为 disabled 的 `antchain_*` 和 legacy 非 `*_ft` embedding / webhook 入口
+- 默认跳过仅供本地辅助使用的 `embedding_ft_local`
+- 对其余函数至少发一轮无鉴权最小请求，并在有对应凭据时继续发 JWT / user API key / service API key 探测
+- 结果会区分：
+  - `gateway_invalid_jwt`：大概率是请求在进入函数前就被平台层拦住
+  - `function_auth_failed`：请求已进入函数，但函数内鉴权拒绝了该凭据
+  - `reachable_but_payload_invalid`：连通性和鉴权大概率没问题，只是最小 probe body 不满足业务校验
+
+常用参数：
+
+```bash
+# 只看 lca_* 这组
+npm run probe:auth -- --remote --only lca_
+
+# 把默认跳过的 disabled / local-only 入口也带上
+npm run probe:auth -- --remote --include-disabled --include-local-only
+
+# 输出 JSON 报告，方便留存对比
+npm run probe:auth -- --remote --json-out ./tmp/edge-probe-report.json
+
+# 不发请求，只看当前脚本会如何分类和选择鉴权方式
+npm run probe:auth -- --dry-run
+```
+
 ## OpenAI Integration Baseline
 
 - No LangChain dependency in active path.
@@ -118,13 +184,21 @@ After any code or document update:
 npm run lint
 ```
 
-2. Run minimal checks for affected files:
+2. Run the repo baseline Deno checks:
+
+```bash
+npm run check
+```
+
+This baseline intentionally skips the currently disabled `antchain_*` functions and the legacy non-`*_ft` embedding/webhook entrypoints (`embedding`, `webhook_flow_embedding`, `webhook_process_embedding`, `webhook_model_embedding`). If you reactivate any of them, bring them back into the baseline and fix their type-check state in the same change.
+
+3. Run minimal checks for affected files when you need scoped verification during iteration:
 
 ```bash
 deno check --config supabase/functions/deno.json <changed-file>
 ```
 
-3. Keep docs synced:
+4. Keep docs synced:
 
 - Update `README.md` for human-facing workflow changes.
 - Update `AGENTS.md` for AI workflow/dependency/process changes.
@@ -318,77 +392,97 @@ Optional envs:
 - `UNIT_BATCH_SIZE` (optional; used only when `DEMAND_MODE=all_unit`)
 - auth: set one of `USER_JWT` or `USER_API_KEY`
 
-## Remote Config
+## Remote Config & Deploy
+
+### CLI baseline
+
+- 标准 CLI 版本固定为 `supabase@2.85.0`。
+- 远端部署统一使用仓库脚本，不要直接依赖裸 `npx supabase` 的隐式版本解析。
+- 标准部署入口：
+  - `npm run deploy:dev -- <function-name> [more-function-names...]`
+  - `npm run deploy:main -- <function-name> [more-function-names...]`
+- 这两个脚本都会自动：
+  - 使用固定的 `supabase@2.85.0`
+  - 读取仓库内登记的 `dev` / `main` project ref
+  - 固定追加 `--no-verify-jwt`
+
+部署前需要先满足以下其一：
+
+- 已执行 `npx --yes supabase@2.85.0 login`
+- 或已显式提供 `SUPABASE_ACCESS_TOKEN`
+
+### Push secrets
 
 ```bash
-npx supabase login
-
-## Dangerous: make sure you are in the correct project context before running the following command, as it will overwrite secrets in the target project.
-npx supabase secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
+# Dangerous: make sure you are targeting the correct project before overwriting secrets.
+npx --yes supabase@2.85.0 secrets set --env-file ./supabase/.env.local --project-ref culgbbvzltdodcpykupc
+npx --yes supabase@2.85.0 secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
 
-### Search Functions
+### Deploy examples
 
-```bash
-npx supabase functions deploy flow_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy process_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lifecyclemodel_hybrid_search --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+把同一批函数部署到 `dev` 时，把下面命令里的 `deploy:main` 改成 `deploy:dev` 即可。
+
+### Redeply
+
+整体重新部署
+
+```shell
+set -euo pipefail && \
+for fn in $(find supabase/functions -mindepth 1 -maxdepth 1 -type d \
+  ! -name '_shared' \
+  ! -name 'antchain_get_local_ip' \
+  ! -name 'antchain_sign_request' \
+  ! -name 'embedding_ft_local' \
+  -exec basename {} \; | sort); do
+  echo "==> deploy $fn"
+  supabase functions deploy "$fn" \
+    --project-ref culgbbvzltdodcpykupc \
+    --no-verify-jwt \
+    --use-api \
+    --import-map supabase/functions/deno.json
+done
 ```
 
-### LCA Functions
+#### Search Functions
 
 ```bash
-npx supabase functions deploy lca_solve --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_jobs --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_query_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_contribution_path --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy lca_contribution_path_result --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
 ```
 
-### Embedding Functions
+#### LCA Functions
 
 ```bash
-# npx supabase functions deploy embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy webhook_flow_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy webhook_process_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy webhook_model_embedding --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-
-npx supabase functions deploy embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-
-npx supabase functions deploy webhook_process_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_model_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy webhook_flow_embedding_ft --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- lca_solve lca_jobs lca_results lca_query_results lca_contribution_path lca_contribution_path_result
 ```
 
-### Data Operation Functions
+#### Embedding Functions
 
 ```bash
-npx supabase functions deploy update_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- embedding_ft webhook_process_embedding_ft webhook_model_embedding_ft webhook_flow_embedding_ft
 ```
 
-### Cognito Functions
+#### Data Operation Functions
 
 ```bash
-npx supabase functions deploy sign_up_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy change_password_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-npx supabase functions deploy change_email_cognito --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- update_data
 ```
 
-### AI Related Functions
+#### Cognito Functions
 
 ```bash
-npx supabase functions deploy ai_suggest --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- sign_up_cognito change_password_cognito change_email_cognito
 ```
 
-### Antchain Related Functions (not enabled)
+#### AI Related Functions
 
 ```bash
-# npx supabase functions deploy antchain_request_process_data --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_sign_request --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_run_antchain_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_get_local_ip --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_create_calculation --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_query_calculation_status --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
-# npx supabase functions deploy antchain_query_calculation_results --project-ref qgzvkongdjqiiamzbbts --no-verify-jwt
+npm run deploy:main -- ai_suggest
+```
+
+#### Antchain Related Functions (not enabled)
+
+```bash
+# npm run deploy:main -- antchain_request_process_data antchain_sign_request antchain_run_antchain_calculation
+# npm run deploy:main -- antchain_get_local_ip antchain_create_calculation antchain_query_calculation_status antchain_query_calculation_results
 ```

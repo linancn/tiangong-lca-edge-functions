@@ -1,6 +1,8 @@
 import type {
   AssignTeamRequest,
+  CreateRequest,
   DatasetCommandFailure,
+  DeleteRequest,
   PublishRequest,
   SaveDraftRequest,
   SubmitReviewRequest,
@@ -18,10 +20,6 @@ function invalidInput(code: string, message: string): DatasetCommandFailure {
 export function assertSaveDraftPolicy(
   request: SaveDraftRequest,
 ): { ok: true } | DatasetCommandFailure {
-  if (request.table === 'processes' && !request.modelId) {
-    return invalidInput('MODEL_ID_REQUIRED', 'modelId is required for process dataset drafts');
-  }
-
   if (request.table !== 'processes' && request.modelId) {
     return invalidInput(
       'MODEL_ID_NOT_ALLOWED',
@@ -29,6 +27,21 @@ export function assertSaveDraftPolicy(
     );
   }
 
+  return { ok: true };
+}
+
+export function assertCreatePolicy(request: CreateRequest): { ok: true } | DatasetCommandFailure {
+  if (request.table !== 'processes' && request.modelId) {
+    return invalidInput(
+      'MODEL_ID_NOT_ALLOWED',
+      'modelId is only allowed for process dataset creates',
+    );
+  }
+
+  return { ok: true };
+}
+
+export function assertDeletePolicy(_request: DeleteRequest): { ok: true } | DatasetCommandFailure {
   return { ok: true };
 }
 

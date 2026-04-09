@@ -2,8 +2,10 @@ import { z } from 'zod';
 
 import type { CommandParseResult } from '../../command_runtime/command.ts';
 import {
-  DATASET_TABLES,
   type AssignTeamRequest,
+  type CreateRequest,
+  DATASET_TABLES,
+  type DeleteRequest,
   type PublishRequest,
   type SaveDraftRequest,
   type SubmitReviewRequest,
@@ -15,10 +17,15 @@ const datasetTableSchema = z.enum(DATASET_TABLES);
 const datasetIdSchema = z.string().uuid();
 const versionSchema = z.string().regex(versionPattern, 'version must be in 00.00.000 format');
 
-const datasetBaseRequestSchema = z
+const datasetIdTableSchema = z
   .object({
     table: datasetTableSchema,
     id: datasetIdSchema,
+  })
+  .strict();
+
+const datasetBaseRequestSchema = datasetIdTableSchema
+  .extend({
     version: versionSchema,
   })
   .strict();
@@ -27,8 +34,19 @@ export const saveDraftRequestSchema = datasetBaseRequestSchema
   .extend({
     jsonOrdered: z.unknown(),
     modelId: z.string().uuid().optional(),
+    ruleVerification: z.boolean().nullable().optional(),
   })
   .strict();
+
+export const createRequestSchema = datasetIdTableSchema
+  .extend({
+    jsonOrdered: z.unknown(),
+    modelId: z.string().uuid().nullable().optional(),
+    ruleVerification: z.boolean().nullable().optional(),
+  })
+  .strict();
+
+export const deleteRequestSchema = datasetBaseRequestSchema.strict();
 
 export const assignTeamRequestSchema = datasetBaseRequestSchema
   .extend({
@@ -51,6 +69,30 @@ export function parseSaveDraftRequest(body: unknown): CommandParseResult<SaveDra
   const parsed = saveDraftRequestSchema.safeParse(body);
   if (!parsed.success) {
     return invalidPayload('Invalid dataset save draft payload', parsed.error);
+  }
+
+  return {
+    ok: true,
+    value: parsed.data,
+  };
+}
+
+export function parseCreateRequest(body: unknown): CommandParseResult<CreateRequest> {
+  const parsed = createRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload('Invalid dataset create payload', parsed.error);
+  }
+
+  return {
+    ok: true,
+    value: parsed.data,
+  };
+}
+
+export function parseDeleteRequest(body: unknown): CommandParseResult<DeleteRequest> {
+  const parsed = deleteRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload('Invalid dataset delete payload', parsed.error);
   }
 
   return {

@@ -16,6 +16,21 @@ export type SaveDraftRequest = {
   version: string;
   jsonOrdered: unknown;
   modelId?: string;
+  ruleVerification?: boolean | null;
+};
+
+export type CreateRequest = {
+  table: DatasetTable;
+  id: string;
+  jsonOrdered: unknown;
+  modelId?: string | null;
+  ruleVerification?: boolean | null;
+};
+
+export type DeleteRequest = {
+  table: DatasetTable;
+  id: string;
+  version: string;
 };
 
 export type AssignTeamRequest = {

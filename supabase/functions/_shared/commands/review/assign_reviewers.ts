@@ -1,15 +1,9 @@
-import type { ActorContext } from "../../command_runtime/actor_context.ts";
-import { buildCommandAuditPayload } from "../../command_runtime/audit_log.ts";
-import { assertAssignReviewersPolicy } from "./policy.ts";
-import {
-  createReviewCommandRepository,
-  type ReviewCommandRepository,
-} from "./repository.ts";
-import type {
-  AssignReviewersRequest,
-  ReviewCommandExecutionResult,
-} from "./types.ts";
-import { parseAssignReviewersRequest } from "./validation.ts";
+import type { ActorContext } from '../../command_runtime/actor_context.ts';
+import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
+import { assertAssignReviewersPolicy } from './policy.ts';
+import { createReviewCommandRepository, type ReviewCommandRepository } from './repository.ts';
+import type { AssignReviewersRequest, ReviewCommandExecutionResult } from './types.ts';
+import { parseAssignReviewersRequest } from './validation.ts';
 
 export function parseAssignReviewersCommand(body: unknown) {
   return parseAssignReviewersRequest(body);
@@ -18,9 +12,7 @@ export function parseAssignReviewersCommand(body: unknown) {
 export async function executeAssignReviewersCommand(
   request: AssignReviewersRequest,
   actor: ActorContext,
-  repository: ReviewCommandRepository = createReviewCommandRepository(
-    actor.supabase,
-  ),
+  repository: ReviewCommandRepository = createReviewCommandRepository(actor.supabase),
 ): Promise<ReviewCommandExecutionResult> {
   const policy = assertAssignReviewersPolicy(request);
   if (!policy.ok) {
@@ -28,11 +20,11 @@ export async function executeAssignReviewersCommand(
   }
 
   const audit = buildCommandAuditPayload({
-    command: "review_assign_reviewers",
+    command: 'review_assign_reviewers',
     actorUserId: actor.userId,
-    targetTable: "reviews",
+    targetTable: 'reviews',
     targetId: request.reviewId,
-    targetVersion: "",
+    targetVersion: '',
     payload: {
       reviewerIds: request.reviewerIds,
       deadline: request.deadline ?? null,
@@ -49,7 +41,7 @@ export async function executeAssignReviewersCommand(
     status: 200,
     body: {
       ok: true,
-      command: "review_assign_reviewers",
+      command: 'review_assign_reviewers',
       data: result.data,
     },
   };

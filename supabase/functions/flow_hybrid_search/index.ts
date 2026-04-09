@@ -11,7 +11,7 @@ import {
 } from '../_shared/hybrid_query_utils.ts';
 import { openaiStructuredOutput } from '../_shared/openai_structured.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
-import { supabaseClient as supabase } from '../_shared/supabase_client.ts';
+import { supabaseClient as supabase, supabaseAuthClient } from '../_shared/supabase_client.ts';
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? 'gpt-4.1-mini';
 const SAGEMAKER_ENDPOINT_NAME = Deno.env.get('SAGEMAKER_ENDPOINT_NAME');
 const AWS_REGION = 'us-east-1';
@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
   const redis = await getRedisClient();
 
   const authResult = await authenticateRequest(req, {
-    supabase: supabase,
+    authClient: supabaseAuthClient,
     redis: redis,
     allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY, AuthMethod.SERVICE_API_KEY],
   });

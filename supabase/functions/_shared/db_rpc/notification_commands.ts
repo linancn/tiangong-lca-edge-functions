@@ -1,42 +1,31 @@
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.98.0";
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import type { CommandAuditPayload } from "../command_runtime/audit_log.ts";
+import type { CommandAuditPayload } from '../command_runtime/audit_log.ts';
 import type {
   NotificationCommandFailure,
   NotificationSendValidationIssueRequest,
-} from "../commands/notification/types.ts";
+} from '../commands/notification/types.ts';
 
-type RpcClient = Pick<SupabaseClient, "rpc">;
+type RpcClient = Pick<SupabaseClient, 'rpc'>;
 
-export type NotificationRpcResult =
-  | { ok: true; data: unknown }
-  | NotificationCommandFailure;
+export type NotificationRpcResult = { ok: true; data: unknown } | NotificationCommandFailure;
 
-function mapRpcError(
-  error: { code?: string; message?: string; details?: unknown },
-) {
-  const code = error.code ?? "RPC_ERROR";
-  const status = code === "42501"
-    ? 403
-    : code === "PGRST116"
-    ? 404
-    : code === "AUTH_REQUIRED"
-    ? 401
-    : 400;
+function mapRpcError(error: { code?: string; message?: string; details?: unknown }) {
+  const code = error.code ?? 'RPC_ERROR';
+  const status =
+    code === '42501' ? 403 : code === 'PGRST116' ? 404 : code === 'AUTH_REQUIRED' ? 401 : 400;
 
   return {
     ok: false as const,
     code,
     status,
-    message: error.message ?? "Notification command RPC failed",
+    message: error.message ?? 'Notification command RPC failed',
     details: error.details ?? null,
   };
 }
 
-function isNotificationCommandFailure(
-  data: unknown,
-): data is NotificationCommandFailure {
-  if (!data || typeof data !== "object") {
+function isNotificationCommandFailure(data: unknown): data is NotificationCommandFailure {
+  if (!data || typeof data !== 'object') {
     return false;
   }
 
@@ -45,9 +34,9 @@ function isNotificationCommandFailure(
   };
   return (
     candidate.ok === false &&
-    typeof candidate.code === "string" &&
-    typeof candidate.message === "string" &&
-    typeof candidate.status === "number"
+    typeof candidate.code === 'string' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.status === 'number'
   );
 }
 
@@ -67,10 +56,10 @@ async function callNotificationRpc(
 
   if (
     data &&
-    typeof data === "object" &&
+    typeof data === 'object' &&
     !Array.isArray(data) &&
     (data as { ok?: unknown }).ok === true &&
-    "data" in (data as Record<string, unknown>)
+    'data' in (data as Record<string, unknown>)
   ) {
     return {
       ok: true,
@@ -108,7 +97,7 @@ export function callNotificationSendValidationIssueRpc(
 ) {
   return callNotificationRpc(
     supabase,
-    "cmd_notification_send_validation_issue",
+    'cmd_notification_send_validation_issue',
     buildNotificationSendValidationIssueRpcArgs(request, audit),
   );
 }

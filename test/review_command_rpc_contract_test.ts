@@ -1,12 +1,12 @@
-import { assertEquals, assertThrows } from "jsr:@std/assert";
+import { assertEquals, assertThrows } from 'jsr:@std/assert';
 
-import { buildCommandAuditPayload } from "../supabase/functions/_shared/command_runtime/audit_log.ts";
-import { createReviewCommandRepository } from "../supabase/functions/_shared/commands/review/repository.ts";
+import { buildCommandAuditPayload } from '../supabase/functions/_shared/command_runtime/audit_log.ts';
+import { createReviewCommandRepository } from '../supabase/functions/_shared/commands/review/repository.ts';
 import {
   rejectReviewRequestSchema,
   saveAssignmentDraftRequestSchema,
   submitCommentRequestSchema,
-} from "../supabase/functions/_shared/commands/review/validation.ts";
+} from '../supabase/functions/_shared/commands/review/validation.ts';
 import {
   buildReviewApproveRpcArgs,
   buildReviewRejectRpcArgs,
@@ -16,31 +16,31 @@ import {
   callReviewRejectRpc,
   callReviewSaveAssignmentDraftRpc,
   type ReviewRpcResult,
-} from "../supabase/functions/_shared/db_rpc/review_commands.ts";
+} from '../supabase/functions/_shared/db_rpc/review_commands.ts';
 
-Deno.test("saveAssignmentDraftRequestSchema rejects unexpected fields", () => {
+Deno.test('saveAssignmentDraftRequestSchema rejects unexpected fields', () => {
   const parsed = saveAssignmentDraftRequestSchema.safeParse({
-    reviewId: "11111111-1111-4111-8111-111111111111",
-    reviewerIds: ["22222222-2222-4222-8222-222222222222"],
-    deadline: "2026-04-10T12:00:00.000Z",
+    reviewId: '11111111-1111-4111-8111-111111111111',
+    reviewerIds: ['22222222-2222-4222-8222-222222222222'],
+    deadline: '2026-04-10T12:00:00.000Z',
   });
 
   assertEquals(parsed.success, false);
 });
 
-Deno.test("submitCommentRequestSchema rejects server-owned fields", () => {
+Deno.test('submitCommentRequestSchema rejects server-owned fields', () => {
   const parsed = submitCommentRequestSchema.safeParse({
-    reviewId: "11111111-1111-4111-8111-111111111111",
+    reviewId: '11111111-1111-4111-8111-111111111111',
     json: {},
-    submittedAt: "2026-04-10T12:00:00.000Z",
+    submittedAt: '2026-04-10T12:00:00.000Z',
   });
 
   assertEquals(parsed.success, false);
 });
 
-Deno.test("submitCommentRequestSchema rejects invalid commentState values", () => {
+Deno.test('submitCommentRequestSchema rejects invalid commentState values', () => {
   const parsed = submitCommentRequestSchema.safeParse({
-    reviewId: "11111111-1111-4111-8111-111111111111",
+    reviewId: '11111111-1111-4111-8111-111111111111',
     json: {},
     commentState: 0,
   });
@@ -48,21 +48,21 @@ Deno.test("submitCommentRequestSchema rejects invalid commentState values", () =
   assertEquals(parsed.success, false);
 });
 
-Deno.test("rejectReviewRequestSchema requires non-empty reason", () => {
+Deno.test('rejectReviewRequestSchema requires non-empty reason', () => {
   const parsed = rejectReviewRequestSchema.safeParse({
-    table: "processes",
-    reviewId: "11111111-1111-4111-8111-111111111111",
-    reason: "   ",
+    table: 'processes',
+    reviewId: '11111111-1111-4111-8111-111111111111',
+    reason: '   ',
   });
 
   assertEquals(parsed.success, false);
 });
 
-Deno.test("createReviewCommandRepository requires an explicit Supabase client", () => {
+Deno.test('createReviewCommandRepository requires an explicit Supabase client', () => {
   assertThrows(
     () => createReviewCommandRepository(undefined as never),
     Error,
-    "Review command repository requires an explicit Supabase client",
+    'Review command repository requires an explicit Supabase client',
   );
 });
 
@@ -75,43 +75,43 @@ class FakeRpcSupabase {
 }
 
 const saveAssignmentDraftRequest = {
-  reviewId: "11111111-1111-4111-8111-111111111111",
-  reviewerIds: ["22222222-2222-4222-8222-222222222222"],
+  reviewId: '11111111-1111-4111-8111-111111111111',
+  reviewerIds: ['22222222-2222-4222-8222-222222222222'],
 };
 
 const approveRequest = {
-  table: "processes" as const,
-  reviewId: "11111111-1111-4111-8111-111111111111",
+  table: 'processes' as const,
+  reviewId: '11111111-1111-4111-8111-111111111111',
 };
 
 const saveCommentDraftRequest = {
-  reviewId: "11111111-1111-4111-8111-111111111111",
+  reviewId: '11111111-1111-4111-8111-111111111111',
   json: { blocks: [] },
 };
 
 const submitCommentRequest = {
-  reviewId: "11111111-1111-4111-8111-111111111111",
-  json: { summary: "looks good" },
+  reviewId: '11111111-1111-4111-8111-111111111111',
+  json: { summary: 'looks good' },
   commentState: -3 as const,
 };
 
 const rejectRequest = {
-  table: "lifecyclemodels" as const,
-  reviewId: "11111111-1111-4111-8111-111111111111",
-  reason: "Insufficient evidence",
+  table: 'lifecyclemodels' as const,
+  reviewId: '11111111-1111-4111-8111-111111111111',
+  reason: 'Insufficient evidence',
 };
 
 const auditPayload = buildCommandAuditPayload({
-  command: "review_save_assignment_draft",
-  actorUserId: "33333333-3333-4333-8333-333333333333",
-  targetTable: "reviews",
-  targetId: "11111111-1111-4111-8111-111111111111",
-  targetVersion: "",
+  command: 'review_save_assignment_draft',
+  actorUserId: '33333333-3333-4333-8333-333333333333',
+  targetTable: 'reviews',
+  targetId: '11111111-1111-4111-8111-111111111111',
+  targetVersion: '',
   payload: {},
 });
 
 Deno.test(
-  "callReviewSaveAssignmentDraftRpc unwraps success envelopes returned by cmd_review_* RPCs",
+  'callReviewSaveAssignmentDraftRpc unwraps success envelopes returned by cmd_review_* RPCs',
   async () => {
     const result = (await callReviewSaveAssignmentDraftRpc(
       new FakeRpcSupabase({
@@ -139,15 +139,15 @@ Deno.test(
 );
 
 Deno.test(
-  "callReviewSaveAssignmentDraftRpc treats failure envelopes as command failures",
+  'callReviewSaveAssignmentDraftRpc treats failure envelopes as command failures',
   async () => {
     const result = (await callReviewSaveAssignmentDraftRpc(
       new FakeRpcSupabase({
         data: {
           ok: false,
-          code: "REVIEW_NOT_FOUND",
+          code: 'REVIEW_NOT_FOUND',
           status: 404,
-          message: "Review not found",
+          message: 'Review not found',
           details: {
             review_id: saveAssignmentDraftRequest.reviewId,
           },
@@ -160,9 +160,9 @@ Deno.test(
 
     assertEquals(result, {
       ok: false,
-      code: "REVIEW_NOT_FOUND",
+      code: 'REVIEW_NOT_FOUND',
       status: 404,
-      message: "Review not found",
+      message: 'Review not found',
       details: {
         review_id: saveAssignmentDraftRequest.reviewId,
       },
@@ -170,39 +170,42 @@ Deno.test(
   },
 );
 
-Deno.test("callReviewApproveRpc unwraps success envelopes returned by cmd_review_approve", async () => {
-  const result = (await callReviewApproveRpc(
-    new FakeRpcSupabase({
-      data: {
-        ok: true,
+Deno.test(
+  'callReviewApproveRpc unwraps success envelopes returned by cmd_review_approve',
+  async () => {
+    const result = (await callReviewApproveRpc(
+      new FakeRpcSupabase({
         data: {
-          review_id: approveRequest.reviewId,
-          approved: true,
+          ok: true,
+          data: {
+            review_id: approveRequest.reviewId,
+            approved: true,
+          },
         },
+        error: null,
+      }) as never,
+      approveRequest,
+      auditPayload,
+    )) as ReviewRpcResult;
+
+    assertEquals(result, {
+      ok: true,
+      data: {
+        review_id: approveRequest.reviewId,
+        approved: true,
       },
-      error: null,
-    }) as never,
-    approveRequest,
-    auditPayload,
-  )) as ReviewRpcResult;
+    });
+  },
+);
 
-  assertEquals(result, {
-    ok: true,
-    data: {
-      review_id: approveRequest.reviewId,
-      approved: true,
-    },
-  });
-});
-
-Deno.test("callReviewRejectRpc treats failure envelopes as command failures", async () => {
+Deno.test('callReviewRejectRpc treats failure envelopes as command failures', async () => {
   const result = (await callReviewRejectRpc(
     new FakeRpcSupabase({
       data: {
         ok: false,
-        code: "INVALID_STATE",
+        code: 'INVALID_STATE',
         status: 409,
-        message: "Review is not in an approvable state",
+        message: 'Review is not in an approvable state',
         details: {
           review_id: rejectRequest.reviewId,
           state_code: 10,
@@ -216,9 +219,9 @@ Deno.test("callReviewRejectRpc treats failure envelopes as command failures", as
 
   assertEquals(result, {
     ok: false,
-    code: "INVALID_STATE",
+    code: 'INVALID_STATE',
     status: 409,
-    message: "Review is not in an approvable state",
+    message: 'Review is not in an approvable state',
     details: {
       review_id: rejectRequest.reviewId,
       state_code: 10,
@@ -226,28 +229,22 @@ Deno.test("callReviewRejectRpc treats failure envelopes as command failures", as
   });
 });
 
-Deno.test("review comment RPC arg builders use the DB contract field names", () => {
-  assertEquals(
-    buildReviewSaveCommentDraftRpcArgs(saveCommentDraftRequest, auditPayload),
-    {
-      p_review_id: saveCommentDraftRequest.reviewId,
-      p_json: saveCommentDraftRequest.json,
-      p_audit: auditPayload,
-    },
-  );
+Deno.test('review comment RPC arg builders use the DB contract field names', () => {
+  assertEquals(buildReviewSaveCommentDraftRpcArgs(saveCommentDraftRequest, auditPayload), {
+    p_review_id: saveCommentDraftRequest.reviewId,
+    p_json: saveCommentDraftRequest.json,
+    p_audit: auditPayload,
+  });
 
-  assertEquals(
-    buildReviewSubmitCommentRpcArgs(submitCommentRequest, auditPayload),
-    {
-      p_review_id: submitCommentRequest.reviewId,
-      p_json: submitCommentRequest.json,
-      p_comment_state: -3,
-      p_audit: auditPayload,
-    },
-  );
+  assertEquals(buildReviewSubmitCommentRpcArgs(submitCommentRequest, auditPayload), {
+    p_review_id: submitCommentRequest.reviewId,
+    p_json: submitCommentRequest.json,
+    p_comment_state: -3,
+    p_audit: auditPayload,
+  });
 });
 
-Deno.test("review decision RPC arg builders forward table and reason fields", () => {
+Deno.test('review decision RPC arg builders forward table and reason fields', () => {
   assertEquals(buildReviewApproveRpcArgs(approveRequest, auditPayload), {
     p_table: approveRequest.table,
     p_review_id: approveRequest.reviewId,

@@ -1,14 +1,14 @@
-import "@supabase/functions-js/edge-runtime.d.ts";
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import {
   type CommandHandlerOptions,
   createCommandHandler,
-} from "../_shared/command_runtime/command.ts";
+} from '../_shared/command_runtime/command.ts';
 import {
   executeRejectReviewCommand,
   parseRejectReviewCommand,
-} from "../_shared/commands/review/reject_review.ts";
-import type { RejectReviewRequest } from "../_shared/commands/review/types.ts";
+} from '../_shared/commands/review/reject_review.ts';
+import type { RejectReviewRequest } from '../_shared/commands/review/types.ts';
 
 export function createAdminReviewRejectHandler(
   overrides: Partial<CommandHandlerOptions<RejectReviewRequest>> = {},

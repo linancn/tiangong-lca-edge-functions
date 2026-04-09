@@ -1,15 +1,9 @@
-import type { ActorContext } from "../../command_runtime/actor_context.ts";
-import { buildCommandAuditPayload } from "../../command_runtime/audit_log.ts";
-import { assertRevokeReviewerPolicy } from "./policy.ts";
-import {
-  createReviewCommandRepository,
-  type ReviewCommandRepository,
-} from "./repository.ts";
-import type {
-  ReviewCommandExecutionResult,
-  RevokeReviewerRequest,
-} from "./types.ts";
-import { parseRevokeReviewerRequest } from "./validation.ts";
+import type { ActorContext } from '../../command_runtime/actor_context.ts';
+import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
+import { assertRevokeReviewerPolicy } from './policy.ts';
+import { createReviewCommandRepository, type ReviewCommandRepository } from './repository.ts';
+import type { ReviewCommandExecutionResult, RevokeReviewerRequest } from './types.ts';
+import { parseRevokeReviewerRequest } from './validation.ts';
 
 export function parseRevokeReviewerCommand(body: unknown) {
   return parseRevokeReviewerRequest(body);
@@ -18,9 +12,7 @@ export function parseRevokeReviewerCommand(body: unknown) {
 export async function executeRevokeReviewerCommand(
   request: RevokeReviewerRequest,
   actor: ActorContext,
-  repository: ReviewCommandRepository = createReviewCommandRepository(
-    actor.supabase,
-  ),
+  repository: ReviewCommandRepository = createReviewCommandRepository(actor.supabase),
 ): Promise<ReviewCommandExecutionResult> {
   const policy = assertRevokeReviewerPolicy(request);
   if (!policy.ok) {
@@ -28,11 +20,11 @@ export async function executeRevokeReviewerCommand(
   }
 
   const audit = buildCommandAuditPayload({
-    command: "review_revoke_reviewer",
+    command: 'review_revoke_reviewer',
     actorUserId: actor.userId,
-    targetTable: "reviews",
+    targetTable: 'reviews',
     targetId: request.reviewId,
-    targetVersion: "",
+    targetVersion: '',
     payload: {
       reviewerId: request.reviewerId,
     },
@@ -48,7 +40,7 @@ export async function executeRevokeReviewerCommand(
     status: 200,
     body: {
       ok: true,
-      command: "review_revoke_reviewer",
+      command: 'review_revoke_reviewer',
       data: result.data,
     },
   };

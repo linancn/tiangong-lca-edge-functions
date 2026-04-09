@@ -12,14 +12,31 @@
 ## 2. Project Snapshot
 
 - 项目类型：Supabase Edge Functions（Deno 2.1.x）+ Node 工具链。
+- 分支模型：本仓库保持 GitHub default branch 为 `main` 这一平台层例外，但日常 trunk 是 Git `dev`；routine PR 默认回 `dev`，promote 路径是 `dev -> main`，hotfix 从 `main` 起并在合并后 `main -> dev` 回合并。
 - 入口目录：`supabase/functions/*/index.ts`。
 - 共享模块：`supabase/functions/_shared/*`。
 - Deno 测试文件统一放在仓库根目录 `test/*`，不要放在 `supabase/functions/**` 下。
 - 依赖锁定：`supabase/functions/deno.json` 的 `imports` 使用精确版本（exact pin），避免无版本映射。
+- 远端环境映射：
+  - Git `main` / 远端 `main` project ref：`qgzvkongdjqiiamzbbts`
+  - Git `dev` / 持久化远端 `dev` branch project ref：`culgbbvzltdodcpykupc`
 - 本地启动：
   - `npm install`
   - `npm start`（等价于 `supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt`）
+  - `npm run probe:auth -- --remote`（远端 edge functions 连通性 / 鉴权探测；也可用 `--local` 或 `--base-url`）
+- 基线校验命令：
+  - `npm run lint`
+  - `npm run check`（依次对当前启用的 `supabase/functions/*/index.ts` 与 `test/*.ts` 执行 `deno check`；当前默认排除 README 中已标记为 not enabled 的 `antchain_*` 与 legacy 非 `*_ft` embedding/webhook 入口）
+- 正式远端部署入口：
+  - `npm run deploy:dev -- <function-name> [more-function-names...]`
+  - `npm run deploy:main -- <function-name> [more-function-names...]`
+  - 两类远端部署都固定追加 `--no-verify-jwt`
+- 安全边界：
+  - 远端 `main` 与 `dev` gateway 都不负责 JWT 校验
+  - 函数运行时必须继续完成认证与授权
+  - 新函数不得假设 gateway `verify_jwt=true` 已经帮你兜底
 - 主要测试样例：`test.example.http`
+- 鉴权排障脚本：`scripts/probe-functions-auth.cjs`
 - 主要说明文档：`README.md`
 
 ## 3. Directory Guide
@@ -98,10 +115,12 @@
 
 1. 运行格式与规范脚本：
    - `npm run lint`
-2. 运行最小必要校验（按影响范围）：
-   - `deno check` 属于强制步骤：凡涉及 `supabase/functions` 下代码改动（`.ts`/`.js`），必须执行，不可跳过。
-   - 单函数改动：`deno check --config supabase/functions/deno.json <changed-file>`
-   - 共享模块改动：至少覆盖所有直接依赖该模块的函数。
+2. 运行校验脚本：
+   - `npm run check` 是默认基线，提交前 / PR 前应通过。
+   - 若涉及 `supabase/functions` 下代码改动（`.ts`/`.js`），`deno check` 属于强制步骤，不可跳过。
+   - scoped 迭代时仍按影响范围补跑针对性 `deno check`：
+     - 单函数改动：`deno check --config supabase/functions/deno.json <changed-file>`
+     - 共享模块改动：至少覆盖所有直接依赖该模块的函数。
 3. 同步文档：
    - 若改动影响开发流程、依赖版本、函数行为、验证方式，必须同步更新 `AGENTS.md`（必要时同时更新 `README.md`）。
 4. 输出结果时明确：
@@ -117,21 +136,25 @@
 - 变更核心依赖（如 OpenAI SDK、Supabase runtime 相关依赖）。
 - 变更统一开发命令、lint/format/test 命令。
 - 变更共享模块职责边界（`_shared` 下）。
-- 变更“必做流程”或发布流程。
+- 变更“必做流程”、分支模型或发布/部署流程。
 
 如果改动不涉及以上内容，可不改 `AGENTS.md`，但需要在最终说明中声明“本次无需更新 AGENTS.md”。
 
 ## 7. Validation Matrix
 
 - 混合检索相关改动（`flow/process/lifecyclemodel` 或其 shared 依赖）：
+  - `npm run check`
   - `deno check` 三个函数至少各跑一次。
   - 用 `test.example.http` 里的对应请求做 smoke test（本地或远程至少一端）。
 - OpenAI 共享层改动（`openai_structured.ts` / `openai_chat.ts`）：
+  - `npm run check`
   - 至少验证 `responses.create` 可用（`deno eval` 或实际函数调用）。
 - LCA 链路改动：
+  - `npm run check`
   - 优先用 `scripts/lca_submit_poll_fetch.sh` 验证端到端（本地需 `jq`）。
 - TIDAS package import 改动：
   - `npm run lint`
+  - `npm run check`
   - `deno check --config supabase/functions/deno.json supabase/functions/import_tidas_package/index.ts`
   - 如果改动触及 `_shared/auth.ts` / `_shared/tidas_package.ts` / `_shared/redis_client.ts`，至少补跑所有直接依赖这些共享模块的 package 相关函数
   - 用 `test.example.http` 中的 `import_tidas_package` / `tidas_package_jobs` 示例至少验证一组本地或远程请求

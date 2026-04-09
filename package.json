@@ -1,13 +1,22 @@
 {
+  "config": {
+    "supabaseCliVersion": "2.85.0",
+    "supabaseProjectRefDev": "culgbbvzltdodcpykupc",
+    "supabaseProjectRefMain": "qgzvkongdjqiiamzbbts"
+  },
   "scripts": {
     "prestart": "[ -x node_modules/.bin/supabase ] && node_modules/.bin/supabase --version >/dev/null 2>&1 || npm rebuild supabase --foreground-scripts || true",
-    "start": "supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt",
-    "lint": "prettier -c --write \"**/**.{js,jsx,tsx,ts,less,md,json}\""
+    "start": "node_modules/.bin/supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt",
+    "check": "node ./scripts/deno-check-all.cjs",
+    "deploy:dev": "node ./scripts/deploy-function.cjs dev",
+    "deploy:main": "node ./scripts/deploy-function.cjs main",
+    "probe:auth": "node ./scripts/probe-functions-auth.cjs",
+    "lint": "prettier -c --write \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\""
   },
   "devDependencies": {
     "prettier": "^3.8.1",
     "prettier-plugin-organize-imports": "^4.3.0",
-    "supabase": "^2.77.0",
+    "supabase": "2.85.0",
     "typescript": "^5.9.3"
   }
 }

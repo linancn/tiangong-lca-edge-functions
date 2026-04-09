@@ -1,18 +1,9 @@
-import type { ActorContext } from "../../command_runtime/actor_context.ts";
-import { buildCommandAuditPayload } from "../../command_runtime/audit_log.ts";
-import { assertSubmitCommentPolicy } from "./policy.ts";
-import {
-  createReviewCommandRepository,
-  type ReviewCommandRepository,
-} from "./repository.ts";
-import type {
-  ReviewCommandExecutionResult,
-  SubmitCommentRequest,
-} from "./types.ts";
-import {
-  parseSubmitCommentRequest,
-  submitCommentRequestSchema,
-} from "./validation.ts";
+import type { ActorContext } from '../../command_runtime/actor_context.ts';
+import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
+import { assertSubmitCommentPolicy } from './policy.ts';
+import { createReviewCommandRepository, type ReviewCommandRepository } from './repository.ts';
+import type { ReviewCommandExecutionResult, SubmitCommentRequest } from './types.ts';
+import { parseSubmitCommentRequest, submitCommentRequestSchema } from './validation.ts';
 
 export { submitCommentRequestSchema };
 
@@ -23,9 +14,7 @@ export function parseSubmitCommentCommand(body: unknown) {
 export async function executeSubmitCommentCommand(
   request: SubmitCommentRequest,
   actor: ActorContext,
-  repository: ReviewCommandRepository = createReviewCommandRepository(
-    actor.supabase,
-  ),
+  repository: ReviewCommandRepository = createReviewCommandRepository(actor.supabase),
 ): Promise<ReviewCommandExecutionResult> {
   const policy = assertSubmitCommentPolicy(request);
   if (!policy.ok) {
@@ -33,11 +22,11 @@ export async function executeSubmitCommentCommand(
   }
 
   const audit = buildCommandAuditPayload({
-    command: "review_submit_comment",
+    command: 'review_submit_comment',
     actorUserId: actor.userId,
-    targetTable: "reviews",
+    targetTable: 'reviews',
     targetId: request.reviewId,
-    targetVersion: "",
+    targetVersion: '',
     payload: {
       hasJson: request.json !== undefined,
       commentState: request.commentState ?? 1,
@@ -54,7 +43,7 @@ export async function executeSubmitCommentCommand(
     status: 200,
     body: {
       ok: true,
-      command: "review_submit_comment",
+      command: 'review_submit_comment',
       data: result.data,
     },
   };

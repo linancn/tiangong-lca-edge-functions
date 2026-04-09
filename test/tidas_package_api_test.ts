@@ -322,6 +322,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
     let jobsRedisCalls = 0;
 
     const importHandler = createImportTidasPackageHandler({
+      authClient: {} as SupabaseClient,
       supabase: supabase as unknown as SupabaseClient,
       authenticateRequest: async (_req, config) => {
         importAuthCalls.push([...config.allowedMethods]);
@@ -334,6 +335,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
     });
 
     const jobsHandler = createTidasPackageJobsHandler({
+      authClient: {} as SupabaseClient,
       supabase: supabase as unknown as SupabaseClient,
       authenticateRequest: async (_req, config) => {
         jobsAuthCalls.push([...config.allowedMethods]);
@@ -521,6 +523,7 @@ Deno.test('import_tidas_package handler only resolves Redis for opaque bearer to
     let redisCalls = 0;
 
     const handler = createImportTidasPackageHandler({
+      authClient: {} as SupabaseClient,
       supabase: supabase as unknown as SupabaseClient,
       authenticateRequest: async (_req, config) => {
         authCalls.push([...config.allowedMethods]);
@@ -569,6 +572,7 @@ Deno.test('tidas_package_jobs rejects missing job identifiers', async () => {
   await withPackageStorageEnv(async () => {
     const { createTidasPackageJobsHandler } = await loadTidasHandlers();
     const handler = createTidasPackageJobsHandler({
+      authClient: {} as SupabaseClient,
       supabase: new FakeSupabase() as unknown as SupabaseClient,
       authenticateRequest: async () => createAuthResult(),
       getRedisClient: async () => undefined,

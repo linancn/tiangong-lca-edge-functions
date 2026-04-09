@@ -1,6 +1,6 @@
-import type { SupabaseClient } from "jsr:@supabase/supabase-js@2.98.0";
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import type { CommandAuditPayload } from "../../command_runtime/audit_log.ts";
+import type { CommandAuditPayload } from '../../command_runtime/audit_log.ts';
 import {
   callReviewApproveRpc,
   callReviewAssignReviewersRpc,
@@ -10,7 +10,7 @@ import {
   callReviewSaveCommentDraftRpc,
   callReviewSubmitCommentRpc,
   type ReviewRpcResult,
-} from "../../db_rpc/review_commands.ts";
+} from '../../db_rpc/review_commands.ts';
 import type {
   ApproveReviewRequest,
   AssignReviewersRequest,
@@ -19,9 +19,9 @@ import type {
   SaveAssignmentDraftRequest,
   SaveCommentDraftRequest,
   SubmitCommentRequest,
-} from "./types.ts";
+} from './types.ts';
 
-type RpcClient = Pick<SupabaseClient, "rpc">;
+type RpcClient = Pick<SupabaseClient, 'rpc'>;
 
 export type ReviewCommandRepository = {
   saveAssignmentDraft: (
@@ -54,37 +54,25 @@ export type ReviewCommandRepository = {
   ) => Promise<ReviewRpcResult>;
 };
 
-function requireExplicitClient(
-  supabase: RpcClient | null | undefined,
-): RpcClient {
-  if (!supabase || typeof supabase.rpc !== "function") {
-    throw new Error(
-      "Review command repository requires an explicit Supabase client",
-    );
+function requireExplicitClient(supabase: RpcClient | null | undefined): RpcClient {
+  if (!supabase || typeof supabase.rpc !== 'function') {
+    throw new Error('Review command repository requires an explicit Supabase client');
   }
 
   return supabase;
 }
 
-export function createReviewCommandRepository(
-  supabase: RpcClient,
-): ReviewCommandRepository {
+export function createReviewCommandRepository(supabase: RpcClient): ReviewCommandRepository {
   const client = requireExplicitClient(supabase);
 
   return {
     saveAssignmentDraft: (request, audit) =>
       callReviewSaveAssignmentDraftRpc(client, request, audit),
-    assignReviewers: (request, audit) =>
-      callReviewAssignReviewersRpc(client, request, audit),
-    revokeReviewer: (request, audit) =>
-      callReviewRevokeReviewerRpc(client, request, audit),
-    saveCommentDraft: (request, audit) =>
-      callReviewSaveCommentDraftRpc(client, request, audit),
-    submitComment: (request, audit) =>
-      callReviewSubmitCommentRpc(client, request, audit),
-    approveReview: (request, audit) =>
-      callReviewApproveRpc(client, request, audit),
-    rejectReview: (request, audit) =>
-      callReviewRejectRpc(client, request, audit),
+    assignReviewers: (request, audit) => callReviewAssignReviewersRpc(client, request, audit),
+    revokeReviewer: (request, audit) => callReviewRevokeReviewerRpc(client, request, audit),
+    saveCommentDraft: (request, audit) => callReviewSaveCommentDraftRpc(client, request, audit),
+    submitComment: (request, audit) => callReviewSubmitCommentRpc(client, request, audit),
+    approveReview: (request, audit) => callReviewApproveRpc(client, request, audit),
+    rejectReview: (request, audit) => callReviewRejectRpc(client, request, audit),
   };
 }

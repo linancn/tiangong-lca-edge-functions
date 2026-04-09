@@ -49,7 +49,7 @@ export async function resolveActorContext(
     accessToken,
   );
   const authResult = await (options.authenticate ?? authenticateRequest)(req, {
-    supabase: requestSupabase,
+    authClient: requestSupabase,
     allowedMethods: [AuthMethod.JWT],
   });
 

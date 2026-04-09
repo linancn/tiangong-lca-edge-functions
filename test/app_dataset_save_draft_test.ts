@@ -45,6 +45,7 @@ Deno.test(
         version: '01.00.000',
         jsonOrdered: { foo: 'bar' },
         modelId: TEST_MODEL_ID,
+        ruleVerification: false,
       },
       buildActor(supabase),
     );
@@ -59,6 +60,7 @@ Deno.test(
           p_version: '01.00.000',
           p_json_ordered: { foo: 'bar' },
           p_model_id: TEST_MODEL_ID,
+          p_rule_verification: false,
           p_audit: {
             command: 'dataset_save_draft',
             actorUserId: TEST_USER_ID,
@@ -75,7 +77,7 @@ Deno.test(
   },
 );
 
-Deno.test('executeSaveDraftCommand rejects process drafts without modelId', async () => {
+Deno.test('executeSaveDraftCommand allows process drafts without modelId', async () => {
   const supabase = new FakeRpcSupabase();
   const result = await executeSaveDraftCommand(
     {
@@ -87,10 +89,26 @@ Deno.test('executeSaveDraftCommand rejects process drafts without modelId', asyn
     buildActor(supabase),
   );
 
-  assertEquals(result.ok, false);
-  if (!result.ok) {
-    assertEquals(result.code, 'MODEL_ID_REQUIRED');
-    assertEquals(result.status, 400);
-  }
-  assertEquals(supabase.rpcCalls.length, 0);
+  assertEquals(result.ok, true);
+  assertEquals(supabase.rpcCalls, [
+    {
+      fn: 'cmd_dataset_save_draft',
+      args: {
+        p_table: 'processes',
+        p_id: TEST_DATASET_ID,
+        p_version: '01.00.000',
+        p_json_ordered: { foo: 'bar' },
+        p_model_id: null,
+        p_rule_verification: null,
+        p_audit: {
+          command: 'dataset_save_draft',
+          actorUserId: TEST_USER_ID,
+          targetTable: 'processes',
+          targetId: TEST_DATASET_ID,
+          targetVersion: '01.00.000',
+          payload: {},
+        },
+      },
+    },
+  ]);
 });

@@ -3,7 +3,9 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 import type { CommandAuditPayload } from '../command_runtime/audit_log.ts';
 import type {
   AssignTeamRequest,
+  CreateRequest,
   DatasetCommandFailure,
+  DeleteRequest,
   PublishRequest,
   SaveDraftRequest,
   SubmitReviewRequest,
@@ -85,6 +87,33 @@ export function buildDatasetSaveDraftRpcArgs(
     p_json_ordered: request.jsonOrdered,
     p_model_id: request.modelId ?? null,
     p_audit: audit,
+    p_rule_verification: request.ruleVerification ?? null,
+  };
+}
+
+export function buildDatasetCreateRpcArgs(
+  request: CreateRequest,
+  audit: CommandAuditPayload,
+): Record<string, unknown> {
+  return {
+    p_table: request.table,
+    p_id: request.id,
+    p_json_ordered: request.jsonOrdered,
+    p_model_id: request.modelId ?? null,
+    p_rule_verification: request.ruleVerification ?? null,
+    p_audit: audit,
+  };
+}
+
+export function buildDatasetDeleteRpcArgs(
+  request: DeleteRequest,
+  audit: CommandAuditPayload,
+): Record<string, unknown> {
+  return {
+    p_table: request.table,
+    p_id: request.id,
+    p_version: request.version,
+    p_audit: audit,
   };
 }
 
@@ -135,6 +164,22 @@ export function callDatasetSaveDraftRpc(
     'cmd_dataset_save_draft',
     buildDatasetSaveDraftRpcArgs(request, audit),
   );
+}
+
+export function callDatasetCreateRpc(
+  supabase: RpcClient,
+  request: CreateRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDatasetRpc(supabase, 'cmd_dataset_create', buildDatasetCreateRpcArgs(request, audit));
+}
+
+export function callDatasetDeleteRpc(
+  supabase: RpcClient,
+  request: DeleteRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDatasetRpc(supabase, 'cmd_dataset_delete', buildDatasetDeleteRpcArgs(request, audit));
 }
 
 export function callDatasetAssignTeamRpc(

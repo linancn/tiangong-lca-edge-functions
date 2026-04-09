@@ -1,6 +1,6 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-import type { CommandParseResult } from "../../command_runtime/command.ts";
+import type { CommandParseResult } from '../../command_runtime/command.ts';
 import {
   MEMBER_ROLE_ACTIONS,
   type ReviewChangeMemberRoleRequest,
@@ -12,7 +12,7 @@ import {
   type TeamSetRankRequest,
   type TeamUpdateProfileRequest,
   type UserUpdateContactRequest,
-} from "./types.ts";
+} from './types.ts';
 
 const uuidSchema = z.string().uuid();
 const nonEmptyStringSchema = z.string().trim().min(1);
@@ -32,11 +32,9 @@ export const teamChangeMemberRoleRequestSchema = baseChangeMemberRoleSchema
   })
   .strict();
 
-export const systemChangeMemberRoleRequestSchema =
-  baseChangeMemberRoleSchema.strict();
+export const systemChangeMemberRoleRequestSchema = baseChangeMemberRoleSchema.strict();
 
-export const reviewChangeMemberRoleRequestSchema =
-  baseChangeMemberRoleSchema.strict();
+export const reviewChangeMemberRoleRequestSchema = baseChangeMemberRoleSchema.strict();
 
 export const teamReinviteMemberRequestSchema = z
   .object({
@@ -82,10 +80,7 @@ export const userUpdateContactRequestSchema = z
   })
   .strict();
 
-function invalidPayload<T>(
-  message: string,
-  error: z.ZodError,
-): CommandParseResult<T> {
+function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResult<T> {
   return {
     ok: false,
     message,
@@ -98,7 +93,7 @@ export function parseTeamChangeMemberRoleRequest(
 ): CommandParseResult<TeamChangeMemberRoleRequest> {
   const parsed = teamChangeMemberRoleRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload("Invalid team change-member-role payload", parsed.error);
+    return invalidPayload('Invalid team change-member-role payload', parsed.error);
   }
   return { ok: true, value: parsed.data };
 }
@@ -108,10 +103,7 @@ export function parseSystemChangeMemberRoleRequest(
 ): CommandParseResult<SystemChangeMemberRoleRequest> {
   const parsed = systemChangeMemberRoleRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload(
-      "Invalid system change-member-role payload",
-      parsed.error,
-    );
+    return invalidPayload('Invalid system change-member-role payload', parsed.error);
   }
   return { ok: true, value: parsed.data };
 }
@@ -121,10 +113,7 @@ export function parseReviewChangeMemberRoleRequest(
 ): CommandParseResult<ReviewChangeMemberRoleRequest> {
   const parsed = reviewChangeMemberRoleRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload(
-      "Invalid review change-member-role payload",
-      parsed.error,
-    );
+    return invalidPayload('Invalid review change-member-role payload', parsed.error);
   }
   return { ok: true, value: parsed.data };
 }
@@ -134,7 +123,7 @@ export function parseTeamReinviteMemberRequest(
 ): CommandParseResult<TeamReinviteMemberRequest> {
   const parsed = teamReinviteMemberRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload("Invalid team reinvite-member payload", parsed.error);
+    return invalidPayload('Invalid team reinvite-member payload', parsed.error);
   }
   return { ok: true, value: parsed.data };
 }
@@ -144,17 +133,15 @@ export function parseTeamInvitationDecisionRequest(
 ): CommandParseResult<TeamInvitationDecisionRequest> {
   const parsed = teamInvitationDecisionRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload("Invalid team invitation payload", parsed.error);
+    return invalidPayload('Invalid team invitation payload', parsed.error);
   }
   return { ok: true, value: parsed.data };
 }
 
-export function parseTeamCreateRequest(
-  body: unknown,
-): CommandParseResult<TeamCreateRequest> {
+export function parseTeamCreateRequest(body: unknown): CommandParseResult<TeamCreateRequest> {
   const parsed = teamCreateRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload("Invalid team create payload", parsed.error);
+    return invalidPayload('Invalid team create payload', parsed.error);
   }
   return { ok: true, value: parsed.data };
 }
@@ -164,17 +151,15 @@ export function parseTeamUpdateProfileRequest(
 ): CommandParseResult<TeamUpdateProfileRequest> {
   const parsed = teamUpdateProfileRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload("Invalid team update-profile payload", parsed.error);
+    return invalidPayload('Invalid team update-profile payload', parsed.error);
   }
   return { ok: true, value: parsed.data };
 }
 
-export function parseTeamSetRankRequest(
-  body: unknown,
-): CommandParseResult<TeamSetRankRequest> {
+export function parseTeamSetRankRequest(body: unknown): CommandParseResult<TeamSetRankRequest> {
   const parsed = teamSetRankRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload("Invalid team set-rank payload", parsed.error);
+    return invalidPayload('Invalid team set-rank payload', parsed.error);
   }
   return { ok: true, value: parsed.data };
 }
@@ -184,7 +169,7 @@ export function parseUserUpdateContactRequest(
 ): CommandParseResult<UserUpdateContactRequest> {
   const parsed = userUpdateContactRequestSchema.safeParse(body);
   if (!parsed.success) {
-    return invalidPayload("Invalid user update-contact payload", parsed.error);
+    return invalidPayload('Invalid user update-contact payload', parsed.error);
   }
   return { ok: true, value: parsed.data };
 }

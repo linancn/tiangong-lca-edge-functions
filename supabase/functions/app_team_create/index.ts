@@ -1,14 +1,14 @@
-import "@supabase/functions-js/edge-runtime.d.ts";
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import {
   type CommandHandlerOptions,
   createCommandHandler,
-} from "../_shared/command_runtime/command.ts";
+} from '../_shared/command_runtime/command.ts';
+import type { TeamCreateRequest } from '../_shared/commands/membership/types.ts';
 import {
   executeTeamCreateCommand,
   parseTeamCreateCommand,
-} from "../_shared/commands/team/create_team.ts";
-import type { TeamCreateRequest } from "../_shared/commands/membership/types.ts";
+} from '../_shared/commands/team/create_team.ts';
 
 export function createAppTeamCreateHandler(
   overrides: Partial<CommandHandlerOptions<TeamCreateRequest>> = {},

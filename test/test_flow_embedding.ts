@@ -18,6 +18,13 @@ interface EmbeddingResponse {
 }
 
 Deno.test('Flow Embedding Local Test', async () => {
+  if (!LOCAL_ENDPOINT || !X_KEY) {
+    console.log(
+      'Skipping flow embedding smoke test because LOCAL_ENDPOINT or X_KEY is not configured.',
+    );
+    return;
+  }
+
   console.log('Test data:', flowData);
   console.log('Endpoint:', LOCAL_ENDPOINT);
   console.log('X-Key:', X_KEY?.slice(0, 5) + '...'); // 只显示密钥的前5位

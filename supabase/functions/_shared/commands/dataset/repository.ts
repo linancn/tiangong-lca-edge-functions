@@ -2,14 +2,18 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import type { CommandAuditPayload } from '../../command_runtime/audit_log.ts';
 import {
-  type DatasetRpcResult,
   callDatasetAssignTeamRpc,
+  callDatasetCreateRpc,
+  callDatasetDeleteRpc,
   callDatasetPublishRpc,
   callDatasetSaveDraftRpc,
   callDatasetSubmitReviewRpc,
+  type DatasetRpcResult,
 } from '../../db_rpc/dataset_commands.ts';
 import type {
   AssignTeamRequest,
+  CreateRequest,
+  DeleteRequest,
   PublishRequest,
   SaveDraftRequest,
   SubmitReviewRequest,
@@ -18,6 +22,8 @@ import type {
 type RpcClient = Pick<SupabaseClient, 'rpc'>;
 
 export type DatasetCommandRepository = {
+  create: (request: CreateRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
+  delete: (request: DeleteRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
   saveDraft: (request: SaveDraftRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
   assignTeam: (request: AssignTeamRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
   publish: (request: PublishRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
@@ -39,6 +45,8 @@ export function createDatasetCommandRepository(supabase: RpcClient): DatasetComm
   const client = requireExplicitClient(supabase);
 
   return {
+    create: (request, audit) => callDatasetCreateRpc(client, request, audit),
+    delete: (request, audit) => callDatasetDeleteRpc(client, request, audit),
     saveDraft: (request, audit) => callDatasetSaveDraftRpc(client, request, audit),
     assignTeam: (request, audit) => callDatasetAssignTeamRpc(client, request, audit),
     publish: (request, audit) => callDatasetPublishRpc(client, request, audit),
