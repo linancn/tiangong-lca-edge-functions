@@ -19,7 +19,7 @@
 - 依赖锁定：`supabase/functions/deno.json` 的 `imports` 使用精确版本（exact pin），避免无版本映射。
 - 远端环境映射：
   - Git `main` / 远端 `main` project ref：`qgzvkongdjqiiamzbbts`
-  - Git `dev` / 持久化远端 `dev` branch project ref：`culgbbvzltdodcpykupc`
+  - Git `dev` / 持久化远端 `dev` branch project ref：`fotofiyqnuyvgtotswie`
 - 本地启动：
   - `npm install`
   - `npm start`（等价于 `supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt`）
