@@ -2,7 +2,7 @@
 # - GitHub default branch remains `main` as a platform exception.
 # - Daily trunk is Git `dev`; `dev -> main` is the promote path.
 # - Root config below is the `main` / production baseline that preview branches inherit.
-# - Persistent Git `dev` maps to the remote branch project `culgbbvzltdodcpykupc` via `[remotes.dev]`.
+# - Persistent Git `dev` maps to the remote branch project `fotofiyqnuyvgtotswie` via `[remotes.dev]`.
 # - The production / `main` project ref used by deploy scripts is `qgzvkongdjqiiamzbbts`.
 #
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
@@ -159,7 +159,7 @@ skip_nonce_check = false
 
 [remotes.dev]
 # Persistent Supabase branch project used by Git `dev`.
-project_id = "culgbbvzltdodcpykupc"
+project_id = "fotofiyqnuyvgtotswie"
 
 [analytics]
 enabled = false
