@@ -14,7 +14,7 @@ Supabase Edge Functions for LCA search, embedding, and solving workflows.
 - GitHub default branch 继续保持 `main`，这是平台层例外，不代表日常 trunk 改回 `main`。
 - 远端环境映射：
   - `main` project ref：`qgzvkongdjqiiamzbbts`
-  - `dev` project ref：`culgbbvzltdodcpykupc`
+  - `dev` project ref：`fotofiyqnuyvgtotswie`
 - 远端 `main` 与 `dev` 的函数部署都统一使用 `--no-verify-jwt`。这是正式仓库规则，不是临时口头 workaround。
 - 安全边界在函数运行时：gateway 不做 JWT 校验，不等于函数可以匿名执行。新函数不得假设 gateway `verify_jwt=true` 已经帮你兜底，必须继续显式做认证与授权。
 
@@ -415,7 +415,7 @@ Optional envs:
 
 ```bash
 # Dangerous: make sure you are targeting the correct project before overwriting secrets.
-npx --yes supabase@2.85.0 secrets set --env-file ./supabase/.env.local --project-ref culgbbvzltdodcpykupc
+npx --yes supabase@2.85.0 secrets set --env-file ./supabase/.env.local --project-ref fotofiyqnuyvgtotswie
 npx --yes supabase@2.85.0 secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
 ```
 
@@ -437,7 +437,7 @@ for fn in $(find supabase/functions -mindepth 1 -maxdepth 1 -type d \
   -exec basename {} \; | sort); do
   echo "==> deploy $fn"
   supabase functions deploy "$fn" \
-    --project-ref culgbbvzltdodcpykupc \
+    --project-ref fotofiyqnuyvgtotswie \
     --no-verify-jwt \
     --use-api \
     --import-map supabase/functions/deno.json
