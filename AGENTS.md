@@ -20,6 +20,7 @@
 - 远端环境映射：
   - Git `main` / 远端 `main` project ref：`qgzvkongdjqiiamzbbts`
   - Git `dev` / 持久化远端 `dev` branch project ref：`fotofiyqnuyvgtotswie`
+- 数据库 schema / migration / branch config 真相源位于 `tiangong-lca/database-engine`；本仓只负责 Edge Function 运行时代码与部署，不负责数据库真相源治理。
 - 本地启动：
   - `npm install`
   - `npm start`（等价于 `supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt`）
