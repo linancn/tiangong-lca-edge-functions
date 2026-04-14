@@ -1,9 +1,10 @@
-# Git / Supabase branch contract for this repo:
+# Runtime / deploy config for this repo:
 # - GitHub default branch remains `main` as a platform exception.
 # - Daily trunk is Git `dev`; `dev -> main` is the promote path.
-# - Root config below is the `main` / production baseline that preview branches inherit.
-# - Persistent Git `dev` maps to the remote branch project `culgbbvzltdodcpykupc` via `[remotes.dev]`.
-# - The production / `main` project ref used by deploy scripts is `qgzvkongdjqiiamzbbts`.
+# - This file is for Edge Function local serve and deploy configuration, not the database schema source of truth.
+# - Database schema / migration / branch config ownership lives in `tiangong-lca/database-engine`.
+# - Persistent Git `dev` deploy target maps to the remote project `fotofiyqnuyvgtotswie` via `[remotes.dev]`.
+# - The production / `main` deploy target used by scripts is `qgzvkongdjqiiamzbbts`.
 #
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
 # working directory name when running `supabase init`.
@@ -159,7 +160,7 @@ skip_nonce_check = false
 
 [remotes.dev]
 # Persistent Supabase branch project used by Git `dev`.
-project_id = "culgbbvzltdodcpykupc"
+project_id = "fotofiyqnuyvgtotswie"
 
 [analytics]
 enabled = false
