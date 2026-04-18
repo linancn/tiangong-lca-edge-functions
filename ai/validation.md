@@ -72,7 +72,7 @@ If you reactivate or rely on one of those routes, update the inventory and valid
 | Deploy script, `package.json`, `supabase/config.toml`, or PR contract files | `npm run lint`; inspect branch, project-ref, and deploy-flag changes against `ai/repo.yaml`; run `npm run check` if runtime inventory or imports changed | if the task includes a real deploy, record which environment was deployed and which function names were used | Remote deploy proof is not implied by local lint or type-check. |
 | Auth probe tooling | `npm run lint`; `node scripts/probe-functions-auth.cjs --help`; `npm run probe:auth -- --dry-run` | run `npm run probe:auth -- --remote` or `--local` when the task explicitly includes live probe validation | Dry-run is the safe default when you only changed classification or selection logic. |
 | Repo tests only | `npm run lint`; `npm run check`; targeted `deno check --config supabase/functions/deno.json <changed-test-file>` | run neighboring tests that cover the same shared module or function family | This repo keeps Deno tests in `test/**`, not under each function folder. |
-| AI docs only | run the root warning-only `ai-doc-lint` against touched files | perform scenario-based routing checks from root into this repo | Refresh review metadata even when prose-only docs change. |
+| AI docs only | run repo-local `ai-doc-lint` against touched files or the equivalent local PR check | perform scenario-based routing checks from root into this repo | Refresh review metadata even when prose-only docs change. |
 
 ## Auth And Probe Notes
 
@@ -93,7 +93,7 @@ npm run probe:auth -- --remote --only lca_
 
 ## AI Contract File Notes
 
-Root `ai-doc-lint` currently expects repo-local `ai/*.yaml` files to stay JSON-compatible YAML.
+The repo-local `ai-doc-lint` implementation expects repo-local `ai/*.yaml` files to stay JSON-compatible YAML.
 
 In this repo that means:
 

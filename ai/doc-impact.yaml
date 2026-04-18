@@ -8,14 +8,32 @@
       "scope": "repo",
       "repo": "edge-functions",
       "triggers": [
-        { "path": "AGENTS.md", "kind": "doc-contract" },
-        { "path": "README.md", "kind": "doc-entry" },
-        { "path": "ai/**", "kind": "doc-ai-layer" }
+        {
+          "path": "AGENTS.md",
+          "kind": "doc-contract"
+        },
+        {
+          "path": "README.md",
+          "kind": "doc-entry"
+        },
+        {
+          "path": "ai/**",
+          "kind": "doc-ai-layer"
+        }
       ],
       "requiredDocs": [
-        { "path": "AGENTS.md", "mode": "review_or_update" },
-        { "path": "ai/repo.yaml", "mode": "review_or_update" },
-        { "path": "ai/task-router.md", "mode": "review_or_update" }
+        {
+          "path": "AGENTS.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/repo.yaml",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/task-router.md",
+          "mode": "review_or_update"
+        }
       ],
       "reason": "Entry guidance, repo facts, and routing docs must stay aligned."
     },
@@ -24,15 +42,36 @@
       "scope": "repo",
       "repo": "edge-functions",
       "triggers": [
-        { "path": "supabase/functions/**", "kind": "runtime-code" },
-        { "path": "supabase/functions/_shared/**", "kind": "shared-runtime" }
+        {
+          "path": "supabase/functions/**",
+          "kind": "runtime-code"
+        },
+        {
+          "path": "supabase/functions/_shared/**",
+          "kind": "shared-runtime"
+        }
       ],
       "requiredDocs": [
-        { "path": "AGENTS.md", "mode": "review_or_update" },
-        { "path": "ai/repo.yaml", "mode": "review_or_update" },
-        { "path": "ai/task-router.md", "mode": "review_or_update" },
-        { "path": "ai/validation.md", "mode": "review_or_update" },
-        { "path": "ai/architecture.md", "mode": "review_or_update" }
+        {
+          "path": "AGENTS.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/repo.yaml",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/task-router.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/validation.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/architecture.md",
+          "mode": "review_or_update"
+        }
       ],
       "reason": "Runtime and shared module changes can alter repo ownership, routing, validation scope, and architecture hotspots."
     },
@@ -41,15 +80,36 @@
       "scope": "repo",
       "repo": "edge-functions",
       "triggers": [
-        { "path": "test/**", "kind": "runtime-test" },
-        { "path": "scripts/deno-check-all.cjs", "kind": "validation-wrapper" },
-        { "path": ".github/workflows/**", "kind": "ci" }
+        {
+          "path": "test/**",
+          "kind": "runtime-test"
+        },
+        {
+          "path": "scripts/deno-check-all.cjs",
+          "kind": "validation-wrapper"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "kind": "ci"
+        }
       ],
       "requiredDocs": [
-        { "path": "AGENTS.md", "mode": "review_or_update" },
-        { "path": "ai/task-router.md", "mode": "review_or_update" },
-        { "path": "ai/validation.md", "mode": "review_or_update" },
-        { "path": "ai/architecture.md", "mode": "review_or_update" }
+        {
+          "path": "AGENTS.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/task-router.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/validation.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/architecture.md",
+          "mode": "review_or_update"
+        }
       ],
       "reason": "Test inventory and CI changes affect how future runtime work is checked and where validation expectations live."
     },
@@ -58,23 +118,100 @@
       "scope": "repo",
       "repo": "edge-functions",
       "triggers": [
-        { "path": "package.json", "kind": "runtime-config" },
-        { "path": "supabase/config.toml", "kind": "deploy-config" },
-        { "path": "scripts/deploy-function.cjs", "kind": "deploy-script" },
-        { "path": "scripts/probe-functions-auth.cjs", "kind": "ops-script" },
-        { "path": "scripts/lca_submit_poll_fetch.sh", "kind": "ops-script" },
-        { "path": "test.example.http", "kind": "request-collection" },
-        { "path": "supabase/.env.example", "kind": "env-template" },
-        { "path": ".github/PULL_REQUEST_TEMPLATE/**", "kind": "pr-contract" }
+        {
+          "path": "package.json",
+          "kind": "runtime-config"
+        },
+        {
+          "path": "supabase/config.toml",
+          "kind": "deploy-config"
+        },
+        {
+          "path": "scripts/deploy-function.cjs",
+          "kind": "deploy-script"
+        },
+        {
+          "path": "scripts/probe-functions-auth.cjs",
+          "kind": "ops-script"
+        },
+        {
+          "path": "scripts/lca_submit_poll_fetch.sh",
+          "kind": "ops-script"
+        },
+        {
+          "path": "test.example.http",
+          "kind": "request-collection"
+        },
+        {
+          "path": "supabase/.env.example",
+          "kind": "env-template"
+        },
+        {
+          "path": ".github/PULL_REQUEST_TEMPLATE/**",
+          "kind": "pr-contract"
+        }
       ],
       "requiredDocs": [
-        { "path": "AGENTS.md", "mode": "review_or_update" },
-        { "path": "ai/repo.yaml", "mode": "review_or_update" },
-        { "path": "ai/task-router.md", "mode": "review_or_update" },
-        { "path": "ai/validation.md", "mode": "review_or_update" },
-        { "path": "ai/architecture.md", "mode": "review_or_update" }
+        {
+          "path": "AGENTS.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/repo.yaml",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/task-router.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/validation.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/architecture.md",
+          "mode": "review_or_update"
+        }
       ],
       "reason": "Deploy targets, auth probes, request examples, and PR contracts define how runtime behavior is validated and handed off."
+    },
+    {
+      "id": "edge-functions-ai-doc-maintenance-contract",
+      "scope": "repo",
+      "repo": "edge-functions",
+      "triggers": [
+        {
+          "path": ".github/workflows/ai-doc-lint.yml",
+          "kind": "automation"
+        },
+        {
+          "path": ".github/scripts/ai-doc-lint.mjs",
+          "kind": "automation"
+        },
+        {
+          "path": ".github/scripts/ai-doc-lint.test.mjs",
+          "kind": "automation"
+        }
+      ],
+      "requiredDocs": [
+        {
+          "path": "AGENTS.md",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/repo.yaml",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/doc-impact.yaml",
+          "mode": "review_or_update"
+        },
+        {
+          "path": "ai/validation.md",
+          "mode": "review_or_update"
+        }
+      ],
+      "reason": "Repo-local AI doc maintenance automation changes alter the maintenance gate and should refresh the AI contract docs."
     }
   ]
 }

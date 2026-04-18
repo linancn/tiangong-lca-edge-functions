@@ -32,7 +32,10 @@
       "sharedRoot": "supabase/functions/_shared",
       "testsRoot": "test",
       "localServeCommand": "npm start",
-      "baselineValidationCommands": ["npm run lint", "npm run check"],
+      "baselineValidationCommands": [
+        "npm run lint",
+        "npm run check"
+      ],
       "remoteDeployCommands": [
         "npm run deploy:dev -- <function-name> [more-function-names...]",
         "npm run deploy:main -- <function-name> [more-function-names...]"
@@ -42,11 +45,17 @@
       "deployGatewayRule": "Both scripted remote deploy paths append --no-verify-jwt and therefore rely on function-runtime authentication instead of gateway JWT enforcement.",
       "authModel": {
         "runtimeEntry": "supabase/functions/_shared/auth.ts",
-        "supportedMethods": ["JWT", "USER_API_KEY", "SERVICE_API_KEY"],
+        "supportedMethods": [
+          "JWT",
+          "USER_API_KEY",
+          "SERVICE_API_KEY"
+        ],
         "probeScript": "scripts/probe-functions-auth.cjs"
       },
       "checkBaselineSkips": {
-        "functionPrefixes": ["antchain_"],
+        "functionPrefixes": [
+          "antchain_"
+        ],
         "functionNames": [
           "embedding",
           "webhook_flow_embedding",
@@ -55,7 +64,10 @@
         ],
         "notes": "test/*.ts is always included. embedding_ft_local is local-only and is not part of the index.ts inventory."
       },
-      "remoteProjects": { "dev": "fotofiyqnuyvgtotswie", "main": "qgzvkongdjqiiamzbbts" }
+      "remoteProjects": {
+        "dev": "fotofiyqnuyvgtotswie",
+        "main": "qgzvkongdjqiiamzbbts"
+      }
     },
     "sourceOfTruth": {
       "stableManualEditPaths": [
@@ -99,9 +111,18 @@
           "path": "test.example.http",
           "role": "checked-in request collection for local and remote smoke checks"
         },
-        { "path": "supabase/.env.example", "role": "local environment template" },
-        { "path": "README.md", "role": "human setup and operations guide" },
-        { "path": ".github/workflows/ci.yml", "role": "CI baseline for lint and deno-check" },
+        {
+          "path": "supabase/.env.example",
+          "role": "local environment template"
+        },
+        {
+          "path": "README.md",
+          "role": "human setup and operations guide"
+        },
+        {
+          "path": ".github/workflows/ci.yml",
+          "role": "CI baseline for lint and deno-check"
+        },
         {
           "path": ".github/PULL_REQUEST_TEMPLATE/**",
           "role": "repo-level PR base, deploy, and integration contract"
@@ -191,13 +212,17 @@
       }
     ],
     "validation": {
-      "baselineLocalCommands": ["npm run lint", "npm run check"],
+      "baselineLocalCommands": [
+        "npm run lint",
+        "npm run check"
+      ],
       "ciWorkflow": ".github/workflows/ci.yml",
       "notes": [
         "CI installs Node dependencies, then runs npm run lint and npm run check.",
         "Remote deploy proof is separate from local lint and deno-check proof.",
         "If a function depends on missing SQL, RPC, or state-code semantics, database-engine must validate the database side."
-      ]
+      ],
+      "aiDocLintWorkflow": ".github/workflows/ai-doc-lint.yml"
     }
   }
 }
