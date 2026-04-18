@@ -65,6 +65,7 @@ When working inside `tiangong-lca-edge-functions`, load docs in this order:
 | Investigate deploy target, project ref, or `--no-verify-jwt` behavior | `package.json`, `scripts/deploy-function.cjs`, `supabase/config.toml`, `.github/PULL_REQUEST_TEMPLATE/**` | `ai/repo.yaml`, `ai/validation.md` | Do not change deploy targets or auth assumptions silently. |
 | Investigate auth or connectivity drift across many functions | `scripts/probe-functions-auth.cjs`, `test.example.http`, then affected functions | `ai/validation.md` | Use `--dry-run`, `--remote`, or `--local` before editing many handlers. |
 | Decide whether the task is actually a database schema or RPC-truth change | `database-engine`, not this repo | root `ai/task-router.md`, `database-engine/AGENTS.md` | Schema, migrations, SQL tests, and persistent branch governance do not belong here. |
+| Change repo-local AI-doc maintenance only | `AGENTS.md`, `ai/**`, `.github/workflows/ai-doc-lint.yml`, `.github/scripts/ai-doc-lint.*` | `ai/validation.md` when present, otherwise `ai/repo.yaml` | Keep the repo-local maintenance gate aligned with root `ai/ci-lint-spec.md` and `ai/review-matrix.md`. |
 | Decide whether work is delivery-complete after merge | root workspace docs, not repo code paths | root `AGENTS.md`, `_docs/workspace-branch-policy-contract.md` | Root integration remains a separate phase. |
 
 ## Wrong Turns To Avoid

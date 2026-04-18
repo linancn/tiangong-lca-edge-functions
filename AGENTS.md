@@ -94,6 +94,7 @@ Do not accept GitHub UI defaults when opening routine PRs.
 
 ## Runtime Facts
 
+- Repo-local AI-doc maintenance is enforced by `.github/workflows/ai-doc-lint.yml` using the vendored `.github/scripts/ai-doc-lint.*` files.
 - Local serve command: `npm start`
 - Baseline local validation: `npm run lint`, `npm run check`
 - `npm run check` walks enabled `supabase/functions/*/index.ts` files plus `test/*.ts`
