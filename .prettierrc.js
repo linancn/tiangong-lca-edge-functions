@@ -12,5 +12,11 @@ module.exports = {
         parser: 'json',
       },
     },
+    {
+      files: 'ai/**/*.yaml',
+      options: {
+        parser: 'json',
+      },
+    },
   ],
 };

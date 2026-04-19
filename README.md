@@ -8,6 +8,18 @@ Supabase Edge Functions for LCA search, embedding, and solving workflows.
 - Functions root: `supabase/functions`
 - Local serve command: `npm start`
 
+## AI Docs Entry
+
+For the AI-facing checked-in contract layer, start with:
+
+1. `AGENTS.md`
+2. `ai/repo.yaml`
+3. `ai/task-router.md`
+4. `ai/validation.md`
+5. `ai/architecture.md`
+
+These files are the low-token entry path for repo ownership, branch and deploy rules, validation, and cross-repo boundaries. `README.md` remains the human-oriented setup and operations guide.
+
 ## Branch & Deployment Contract
 
 - 本仓库采用以下分支规则：Git `dev` 是日常 trunk，routine PR 默认回 `dev`，`dev -> main` 是 promote 路径，hotfix 从 `main` 起并在合并后回合并到 `dev`。
