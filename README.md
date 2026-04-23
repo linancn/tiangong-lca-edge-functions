@@ -1,8 +1,36 @@
+---
+title: TianGong LCA Edge Functions Landing
+docType: overview
+scope: repo
+status: active
+authoritative: false
+owner: edge-functions
+language: en
+whenToUse:
+  - when you need the shortest high-level description of what this repo owns
+  - when landing in the repo without needing the full AI contract surface yet
+whenToUpdate:
+  - when repo purpose, setup, or branch/deploy summary changes
+  - when the AI entry surface listed here changes
+checkPaths:
+  - README.md
+  - AGENTS.md
+  - .docpact/config.yaml
+  - docs/agents/**
+lastReviewedAt: 2026-04-23
+lastReviewedCommit: 63e23a8cb916cb49521cbbe869b38d637040a8b5
+related:
+  - AGENTS.md
+  - .docpact/config.yaml
+  - docs/agents/repo-validation.md
+  - docs/agents/repo-architecture.md
+---
+
 # TianGong-LCA-Edge-Functions
 
 ## Overview
 
-Supabase Edge Functions for LCA search, embedding, and solving workflows.
+Supabase Edge Functions for LCA search, embedding, TIDAS package orchestration, and solving workflows.
 
 - Runtime: Supabase Edge Runtime (Deno 2.1.x)
 - Functions root: `supabase/functions`
@@ -13,12 +41,12 @@ Supabase Edge Functions for LCA search, embedding, and solving workflows.
 For the AI-facing checked-in contract layer, start with:
 
 1. `AGENTS.md`
-2. `ai/repo.yaml`
-3. `ai/task-router.md`
-4. `ai/validation.md`
-5. `ai/architecture.md`
+2. `.docpact/config.yaml`
+3. `docs/agents/repo-validation.md`
+4. `docs/agents/repo-architecture.md`
+5. `.github/PULL_REQUEST_TEMPLATE/*.md` only when you need PR handoff details
 
-These files are the low-token entry path for repo ownership, branch and deploy rules, validation, and cross-repo boundaries. `README.md` remains the human-oriented setup and operations guide.
+These files are the low-token entry path for repo ownership, branch and deploy rules, validation, and cross-repo boundaries. `README.md` remains the human-oriented setup and operations guide. `test.example.http` is a supporting request collection for concrete payloads, not part of the governed AI contract surface.
 
 ## Branch & Deployment Contract
 
@@ -116,7 +144,7 @@ curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/embedding
 
 ### Request collection
 
-See `test.example.http` for local and remote examples, including:
+See `test.example.http` for local and remote examples. Treat it as a supporting artifact for concrete payloads rather than a canonical AI contract doc. It currently includes:
 
 - `flow_hybrid_search`
 - `process_hybrid_search`
@@ -213,7 +241,8 @@ deno check --config supabase/functions/deno.json <changed-file>
 4. Keep docs synced:
 
 - Update `README.md` for human-facing workflow changes.
-- Update `AGENTS.md` for AI workflow/dependency/process changes.
+- Update `AGENTS.md` for repo contract, boundaries, or minimal execution-fact changes.
+- Update `.docpact/config.yaml` when routing, ownership, governed-doc rules, or freshness coverage changes.
 
 ## LCA Queue RPC Prerequisite
 
@@ -258,243 +287,3 @@ grant execute on function public.lca_enqueue_job(text, jsonb) to service_role;
   - `GET`: `/functions/v1/lca_results/{resultId}` or `?result_id=...`
   - `POST`: body `{ "result_id": "<uuid>" }`
 - `lca_query_results`: `POST` only.
-  - optional `data_scope`: `"current_user"` (default), `"open_data"`, `"all_data"`
-  - mode `process_all_impacts`: body `{ "mode": "process_all_impacts", "data_scope": "current_user", "process_id": "<uuid>" }`
-  - mode `processes_one_impact`: body `{ "mode": "processes_one_impact", "data_scope": "current_user", "process_ids": ["<uuid>"], "impact_id": "<uuid>" }`
-  - mode `processes_one_impact` hotspot ranking: body `{ "mode": "processes_one_impact", "data_scope": "all_data", "impact_id": "<uuid>", "top_n": 20, "sort_by": "absolute_value", "sort_direction": "desc" }`
-  - all three scopes reuse the same user-enhanced snapshot family
-  - request-time process filtering stays distinct: `current_user = current-user processes`, `open_data = published processes`, `all_data = published + current-user processes`
-  - missing snapshot auto-build is attempted for every `data_scope`
-- `lca_contribution_path`: `POST` only.
-  - optional `data_scope`: `"current_user"` (default), `"open_data"`, `"all_data"`
-  - body `{ "process_id": "<uuid>", "impact_id": "<uuid>", "amount": 1.0, "options": { "max_depth": 4, "top_k_children": 5, "cutoff_share": 0.01, "max_nodes": 200 } }`
-  - returns `queued | in_progress | cache_hit`
-  - all three scopes reuse the same user-enhanced snapshot family
-  - request-time root-process filtering stays distinct: `current_user = current-user processes`, `open_data = published processes`, `all_data = published + current-user processes`
-  - missing snapshot auto-build is attempted for every `data_scope`
-- `lca_contribution_path_result`: supports `GET` and `POST`.
-  - `GET`: `/functions/v1/lca_contribution_path_result/{resultId}` or `?result_id=...`
-  - `POST`: body `{ "result_id": "<uuid>" }`
-- `import_tidas_package`: `POST` only.
-  - auth: supports both `Authorization: Bearer <USER_JWT>` and `Authorization: Bearer <USER_API_KEY>`
-  - action `prepare_upload`: body `{ "action": "prepare_upload", "filename": "example.zip", "byte_size": 123, "content_type": "application/zip" }`
-  - action `enqueue`: body `{ "action": "enqueue", "job_id": "<uuid>", "source_artifact_id": "<uuid>", "artifact_sha256": "<sha256-or-null>", "artifact_byte_size": 123, "filename": "example.zip", "content_type": "application/zip" }`
-- `tidas_package_jobs`: supports `GET` and `POST`.
-  - auth: supports both `Authorization: Bearer <USER_JWT>` and `Authorization: Bearer <USER_API_KEY>`
-  - `GET`: `/functions/v1/tidas_package_jobs/{jobId}` or `?job_id=...`
-  - `POST`: body `{ "job_id": "<uuid>" }`
-
-## TIDAS Package Import API
-
-The async TIDAS package import flow uses the edge-function base URL:
-
-- local: `http://127.0.0.1:54321/functions/v1`
-- remote: `<your-edge-functions-url>/functions/v1`
-
-The supported auth headers are:
-
-- browser JWT: `Authorization: Bearer <USER_JWT>`
-- user API key: `Authorization: Bearer <USER_API_KEY>`
-
-Recommended flow:
-
-1. Call `POST /import_tidas_package` with `{"action":"prepare_upload", ...}` to create the import job and receive a signed upload target.
-2. Upload the ZIP bytes with the returned signed-upload fields.
-   - Preferred: use `upload.bucket`, `upload.path`, and `upload.token` with the Supabase Storage signed-upload helper.
-   - Optional convenience: if `upload.signed_url` is non-null, clients may upload directly to that URL.
-3. Call `POST /import_tidas_package` with `{"action":"enqueue", ...}` to mark the source artifact ready and enqueue the async worker job.
-4. Poll `GET /tidas_package_jobs/{job_id}` until the job reaches `completed` or `failed`.
-
-Example `prepare_upload` request:
-
-```bash
-curl -i --location --request POST "${BASE_URL}/import_tidas_package" \
-  --header 'Content-Type: application/json' \
-  --header "Authorization: Bearer ${USER_API_KEY}" \
-  --header 'X-Idempotency-Key: tidas-import-demo-prepare-001' \
-  --data '{
-    "action": "prepare_upload",
-    "filename": "example-package.zip",
-    "byte_size": 123456,
-    "content_type": "application/zip"
-  }'
-```
-
-Example upload with the Supabase Storage signed-upload helper:
-
-```ts
-const { error } = await supabase.storage
-  .from(upload.bucket)
-  .uploadToSignedUrl(upload.path, upload.token, file, {
-    contentType: upload.content_type,
-    upsert: true,
-  });
-```
-
-Optional direct upload when `upload.signed_url` is present:
-
-```bash
-curl -i --request PUT "${SIGNED_URL}" \
-  --header 'Content-Type: application/zip' \
-  --data-binary @./example-package.zip
-```
-
-Example `enqueue` request:
-
-```bash
-curl -i --location --request POST "${BASE_URL}/import_tidas_package" \
-  --header 'Content-Type: application/json' \
-  --header "Authorization: Bearer ${USER_API_KEY}" \
-  --data '{
-    "action": "enqueue",
-    "job_id": "<job-id-from-prepare-upload>",
-    "source_artifact_id": "<source-artifact-id-from-prepare-upload>",
-    "artifact_sha256": "<optional-sha256>",
-    "artifact_byte_size": 123456,
-    "filename": "example-package.zip",
-    "content_type": "application/zip"
-  }'
-```
-
-Example job polling:
-
-```bash
-curl -i --location --request GET "${BASE_URL}/tidas_package_jobs/<job-id>" \
-  --header "Authorization: Bearer ${USER_API_KEY}"
-```
-
-Notes:
-
-- The edge function keeps the existing browser JWT flow unchanged; API-key clients use the same prepare-upload, direct-upload, enqueue, and poll contract.
-- JWT callers do not require Redis; the Redis-backed path is only used for `USER_API_KEY` bearer authentication.
-- Import validation now happens asynchronously in the calculator worker after enqueue, and validation failures are surfaced through the import report artifact linked from `tidas_package_jobs`.
-
-## LCA Minimal Integration Script (submit -> poll -> fetch)
-
-```bash
-USER_JWT="<your-user-jwt>" \
-DEMAND_MODE=single \
-PROCESS_INDEX=0 \
-AMOUNT=1 \
-./scripts/lca_submit_poll_fetch.sh
-```
-
-```bash
-USER_API_KEY="<base64-email-password>" \
-DEMAND_MODE=single \
-PROCESS_INDEX=0 \
-AMOUNT=1 \
-./scripts/lca_submit_poll_fetch.sh
-```
-
-```bash
-USER_JWT="<your-user-jwt>" \
-DEMAND_MODE=all_unit \
-./scripts/lca_submit_poll_fetch.sh
-```
-
-Optional envs:
-
-- `BASE_URL` (default `http://127.0.0.1:54321/functions/v1`)
-- `DEMAND_MODE` (`single` or `all_unit`, default `single`)
-- `TIMEOUT_SEC` (default `120`)
-- `POLL_INTERVAL_SEC` (default `1`)
-- `IDEMPOTENCY_KEY` (optional; auto-generated by default)
-- `PROCESS_INDEX` / `AMOUNT` (used only when `DEMAND_MODE=single`)
-- `UNIT_BATCH_SIZE` (optional; used only when `DEMAND_MODE=all_unit`)
-- auth: set one of `USER_JWT` or `USER_API_KEY`
-
-## Remote Config & Deploy
-
-### CLI baseline
-
-- 标准 CLI 版本固定为 `supabase@2.85.0`。
-- 远端部署统一使用仓库脚本，不要直接依赖裸 `npx supabase` 的隐式版本解析。
-- 标准部署入口：
-  - `npm run deploy:dev -- <function-name> [more-function-names...]`
-  - `npm run deploy:main -- <function-name> [more-function-names...]`
-- 这两个脚本都会自动：
-  - 使用固定的 `supabase@2.85.0`
-  - 读取仓库内登记的 `dev` / `main` project ref
-  - 固定追加 `--no-verify-jwt`
-
-部署前需要先满足以下其一：
-
-- 已执行 `npx --yes supabase@2.85.0 login`
-- 或已显式提供 `SUPABASE_ACCESS_TOKEN`
-
-### Push secrets
-
-```bash
-# Dangerous: make sure you are targeting the correct project before overwriting secrets.
-npx --yes supabase@2.85.0 secrets set --env-file ./supabase/.env.local --project-ref fotofiyqnuyvgtotswie
-npx --yes supabase@2.85.0 secrets set --env-file ./supabase/.env.local --project-ref qgzvkongdjqiiamzbbts
-```
-
-### Deploy examples
-
-把同一批函数部署到 `dev` 时，把下面命令里的 `deploy:main` 改成 `deploy:dev` 即可。
-
-### Redeply
-
-整体重新部署
-
-```shell
-set -euo pipefail && \
-for fn in $(find supabase/functions -mindepth 1 -maxdepth 1 -type d \
-  ! -name '_shared' \
-  ! -name 'antchain_get_local_ip' \
-  ! -name 'antchain_sign_request' \
-  ! -name 'embedding_ft_local' \
-  -exec basename {} \; | sort); do
-  echo "==> deploy $fn"
-  supabase functions deploy "$fn" \
-    --project-ref fotofiyqnuyvgtotswie \
-    --no-verify-jwt \
-    --use-api \
-    --import-map supabase/functions/deno.json
-done
-```
-
-#### Search Functions
-
-```bash
-npm run deploy:main -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
-```
-
-#### LCA Functions
-
-```bash
-npm run deploy:main -- lca_solve lca_jobs lca_results lca_query_results lca_contribution_path lca_contribution_path_result
-```
-
-#### Embedding Functions
-
-```bash
-npm run deploy:main -- embedding_ft webhook_process_embedding_ft webhook_model_embedding_ft webhook_flow_embedding_ft
-```
-
-#### Data Operation Functions
-
-```bash
-npm run deploy:main -- update_data
-```
-
-#### Cognito Functions
-
-```bash
-npm run deploy:main -- sign_up_cognito change_password_cognito change_email_cognito
-```
-
-#### AI Related Functions
-
-```bash
-npm run deploy:main -- ai_suggest
-```
-
-#### Antchain Related Functions (not enabled)
-
-```bash
-# npm run deploy:main -- antchain_request_process_data antchain_sign_request antchain_run_antchain_calculation
-# npm run deploy:main -- antchain_get_local_ip antchain_create_calculation antchain_query_calculation_status antchain_query_calculation_results
-```

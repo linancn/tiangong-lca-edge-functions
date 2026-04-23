@@ -1,3 +1,25 @@
+---
+title: edge-functions Feature To Dev PR Template
+docType: template
+scope: repo
+status: active
+authoritative: false
+owner: edge-functions
+language: en
+whenToUse:
+  - when opening a routine feature or fix PR into dev
+  - when checking the expected validation and handoff note shape for dev-bound work
+whenToUpdate:
+  - when branch handoff expectations for dev-bound PRs change
+  - when the validation note shape for routine repo delivery changes
+checkPaths:
+  - .github/PULL_REQUEST_TEMPLATE/feature-to-dev.md
+  - AGENTS.md
+  - docs/agents/repo-validation.md
+lastReviewedAt: 2026-04-23
+lastReviewedCommit: 63e23a8cb916cb49521cbbe869b38d637040a8b5
+---
+
 ## Branch Contract
 
 - Base branch: `dev`
