@@ -39,7 +39,7 @@ related:
 
 ## Repo Contract
 
-`tiangong-lca-edge-functions` owns the checked-in Supabase Edge Function runtime contract for TianGong LCA: function entrypoints, shared runtime helpers, repo-level validation tooling, deploy scripts, request examples, and repo-local documentation governance.
+`tiangong-lca-edge-functions` owns the checked-in Supabase Edge Function runtime contract for TianGong LCA: function entrypoints, shared runtime helpers, repo-level validation tooling, deploy scripts, supporting request collections, and repo-local documentation governance.
 
 Start here when the task may change Edge runtime behavior, auth/deploy semantics, repo proof expectations, or repo documentation ownership.
 
@@ -51,7 +51,7 @@ Start here when the task may change Edge runtime behavior, auth/deploy semantics
 | `.docpact/config.yaml` | machine-readable repo facts, routing intents, governed-doc rules, ownership, coverage, freshness | explanatory prose or narrative walkthroughs |
 | `docs/agents/repo-validation.md` | minimum proof by change type, probe/deploy proof guidance, PR validation note shape | repo contract, branch policy truth, large setup notes |
 | `docs/agents/repo-architecture.md` | compact repo mental model, stable path map, hotspot families, common misreads | checklists or current proof queue |
-| `README.md` | human landing context, setup, local serve, request examples, operator-facing notes | machine-readable routing or lint semantics |
+| `README.md` | human landing context, setup, local serve, operator-facing notes, and request-example guidance | machine-readable routing or lint semantics or the raw request-collection artifact |
 | `.github/PULL_REQUEST_TEMPLATE/*.md` | branch-specific PR note shape and handoff prompts | canonical proof rules or repo ownership truth |
 
 ## Load Order
@@ -61,7 +61,8 @@ Read in this order:
 1. `AGENTS.md`
 2. `.docpact/config.yaml`
 3. `docs/agents/repo-validation.md` or `docs/agents/repo-architecture.md`
-4. `README.md`, `test.example.http`, or `.github/PULL_REQUEST_TEMPLATE/*.md` only when the task needs setup, request examples, or PR handoff details
+4. `README.md` or `.github/PULL_REQUEST_TEMPLATE/*.md` only when the task needs setup or PR handoff details
+5. `test.example.http` only when you need concrete local or remote request payloads after the contract surface has already routed the task
 
 Do not start from repo landing prose or raw function inventories when the core contract surface is enough.
 
@@ -70,7 +71,8 @@ Do not start from repo landing prose or raw function inventories when the core c
 - path-level ownership, routing intents, governed-doc inventory, and lint rules live in `.docpact/config.yaml`
 - minimum proof and deploy/auth-probe expectations live in `docs/agents/repo-validation.md`
 - stable path groups and hotspot families live in `docs/agents/repo-architecture.md`
-- human setup and request collections stay in `README.md` and `test.example.http`
+- human setup and request-example guidance stay in `README.md`
+- `test.example.http` is a supporting request collection for concrete payloads, not a governed source doc
 - repo-local documentation maintenance is enforced by `.github/workflows/ai-doc-lint.yml` with `docpact lint`
 - the main routing intents are `function-runtime`, `auth-runtime`, `command-runtime`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
 
@@ -100,7 +102,7 @@ At a human-readable level, this repo owns:
 - `test/**` for repo-level Deno tests
 - `scripts/**` for deno-check inventory, deploy contract, auth probes, and smoke helpers
 - `package.json`, `supabase/config.toml`, and `supabase/.env.example` for repo runtime/deploy/operator configuration
-- `README.md`, `test.example.http`, `.github/PULL_REQUEST_TEMPLATE/**`, and repo-local governed docs
+- `README.md`, supporting request collection `test.example.http`, `.github/PULL_REQUEST_TEMPLATE/**`, and repo-local governed docs
 
 This repo does not own:
 
@@ -131,7 +133,8 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - if a human-readable repo contract, branch rule, or hard boundary changes, update `AGENTS.md`
 - if proof expectations change, update `docs/agents/repo-validation.md`
 - if repo shape, hotspot families, or path ownership explanation changes, update `docs/agents/repo-architecture.md`
-- if setup steps or request examples change, update `README.md` and `test.example.http`
+- if setup steps or operator-facing guidance change, update `README.md`
+- if checked-in request examples change, update `test.example.http`; update `README.md` too only when the human guidance or coverage summary changed
 - if PR handoff prompts or M2 branch-note shape changes, update `.github/PULL_REQUEST_TEMPLATE/*.md`
 - do not copy the same rule into multiple docs just to make it easier to find
 

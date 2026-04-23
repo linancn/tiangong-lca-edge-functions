@@ -26,7 +26,7 @@ checkPaths:
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
 lastReviewedAt: 2026-04-23
-lastReviewedCommit: 63e23a8cb916cb49521cbbe869b38d637040a8b5
+lastReviewedCommit: 4830ccb1e963a121948995ed9b3da620c670f563
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

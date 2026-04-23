@@ -44,9 +44,9 @@ For the AI-facing checked-in contract layer, start with:
 2. `.docpact/config.yaml`
 3. `docs/agents/repo-validation.md`
 4. `docs/agents/repo-architecture.md`
-5. `test.example.http` and `.github/PULL_REQUEST_TEMPLATE/*.md` only when you need request examples or PR handoff details
+5. `.github/PULL_REQUEST_TEMPLATE/*.md` only when you need PR handoff details
 
-These files are the low-token entry path for repo ownership, branch and deploy rules, validation, and cross-repo boundaries. `README.md` remains the human-oriented setup and operations guide.
+These files are the low-token entry path for repo ownership, branch and deploy rules, validation, and cross-repo boundaries. `README.md` remains the human-oriented setup and operations guide. `test.example.http` is a supporting request collection for concrete payloads, not part of the governed AI contract surface.
 
 ## Branch & Deployment Contract
 
@@ -144,7 +144,7 @@ curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/embedding
 
 ### Request collection
 
-See `test.example.http` for local and remote examples, including:
+See `test.example.http` for local and remote examples. Treat it as a supporting artifact for concrete payloads rather than a canonical AI contract doc. It currently includes:
 
 - `flow_hybrid_search`
 - `process_hybrid_search`
