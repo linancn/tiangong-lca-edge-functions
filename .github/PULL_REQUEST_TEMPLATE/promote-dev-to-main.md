@@ -1,3 +1,25 @@
+---
+title: edge-functions Promote Dev To Main PR Template
+docType: template
+scope: repo
+status: active
+authoritative: false
+owner: edge-functions
+language: en
+whenToUse:
+  - when opening a promotion PR from dev into main
+  - when checking the expected validation and follow-up note shape for a promote PR
+whenToUpdate:
+  - when promotion handoff expectations change
+  - when validation or back-merge note shape for promote PRs changes
+checkPaths:
+  - .github/PULL_REQUEST_TEMPLATE/promote-dev-to-main.md
+  - AGENTS.md
+  - docs/agents/repo-validation.md
+lastReviewedAt: 2026-04-23
+lastReviewedCommit: 63e23a8cb916cb49521cbbe869b38d637040a8b5
+---
+
 ## Promotion Contract
 
 - Base branch: `main`
