@@ -1,0 +1,307 @@
+version: 1
+layout: repo
+lastReviewedAt: 2026-04-23
+lastReviewedCommit: 63e23a8cb916cb49521cbbe869b38d637040a8b5
+
+# Keep deterministic governance facts here.
+# AGENTS.md stays as the repo contract entrypoint.
+# Narrow source docs keep proof and repo-shape explanations.
+catalog:
+  repos:
+    - id: edge-functions
+      path: .
+      canonicalRepo: linancn/tiangong-lca-edge-functions
+      entryDoc: AGENTS.md
+      workflowDocs:
+        - docs/agents/repo-validation.md
+        - docs/agents/repo-architecture.md
+      workspaceIntegrationRequired: true
+
+ownership:
+  domains:
+    - id: edge-runtime-and-shared-modules
+      paths:
+        include:
+          - supabase/functions/**
+      ownerRepo: edge-functions
+    - id: repo-validation-deploy-and-ops-surface
+      paths:
+        include:
+          - test/**
+          - scripts/**
+          - package.json
+          - supabase/config.toml
+          - supabase/.env.example
+          - test.example.http
+          - .github/workflows/ci.yml
+      ownerRepo: edge-functions
+    - id: repo-governance-and-docs
+      paths:
+        include:
+          - AGENTS.md
+          - README.md
+          - .docpact/**
+          - docs/agents/**
+          - .github/workflows/ai-doc-lint.yml
+          - .github/PULL_REQUEST_TEMPLATE/**
+      ownerRepo: edge-functions
+
+coverage:
+  include:
+    - AGENTS.md
+    - README.md
+    - .docpact/**
+    - docs/agents/repo-validation.md
+    - docs/agents/repo-architecture.md
+    - .github/PULL_REQUEST_TEMPLATE/*.md
+    - .github/workflows/ai-doc-lint.yml
+    - .github/workflows/ci.yml
+    - package.json
+    - supabase/config.toml
+    - supabase/.env.example
+    - supabase/functions/**
+    - test/**
+    - scripts/**
+    - test.example.http
+  exclude:
+    - .git/**
+    - .github/scripts/**
+
+freshness:
+  warn_after_commits: 40
+  warn_after_days: 60
+  critical_after_days: 120
+
+routing:
+  intents:
+    function-runtime:
+      paths:
+        - supabase/functions/*/index.ts
+        - supabase/functions/*/handler.ts
+        - supabase/functions/**
+    auth-runtime:
+      paths:
+        - supabase/functions/_shared/auth.ts
+        - supabase/functions/_shared/cognito_auth.ts
+        - supabase/functions/_shared/decode_api_key.ts
+        - scripts/probe-functions-auth.cjs
+        - test.example.http
+    command-runtime:
+      paths:
+        - supabase/functions/app_dataset_*/**
+        - supabase/functions/app_review_*/**
+        - supabase/functions/app_team_*/**
+        - supabase/functions/app_user_*/**
+        - supabase/functions/admin_*/**
+        - supabase/functions/_shared/command_runtime/**
+        - supabase/functions/_shared/commands/**
+        - supabase/functions/_shared/db_rpc/**
+    search-and-embedding:
+      paths:
+        - supabase/functions/flow_hybrid_search/**
+        - supabase/functions/process_hybrid_search/**
+        - supabase/functions/lifecyclemodel_hybrid_search/**
+        - supabase/functions/ai_suggest/**
+        - supabase/functions/embedding*
+        - supabase/functions/webhook_*embedding*
+        - supabase/functions/_shared/openai_*.ts
+        - supabase/functions/_shared/hybrid_query_utils.ts
+    lca-runtime:
+      paths:
+        - supabase/functions/lca_*/**
+        - supabase/functions/_shared/lca_process_scope.ts
+        - supabase/functions/_shared/lca_snapshot_scope.ts
+        - scripts/lca_submit_poll_fetch.sh
+    tidas-package:
+      paths:
+        - supabase/functions/import_tidas_package/**
+        - supabase/functions/export_tidas_package/**
+        - supabase/functions/tidas_package_jobs/**
+        - supabase/functions/_shared/tidas_package.ts
+        - supabase/functions/_shared/redis_client.ts
+    deploy-auth-drift:
+      paths:
+        - package.json
+        - supabase/config.toml
+        - supabase/.env.example
+        - scripts/deploy-function.cjs
+        - scripts/probe-functions-auth.cjs
+        - .github/PULL_REQUEST_TEMPLATE/*.md
+        - README.md
+    proof:
+      paths:
+        - test/**
+        - scripts/deno-check-all.cjs
+        - scripts/probe-functions-auth.cjs
+        - .github/workflows/ci.yml
+        - docs/agents/repo-validation.md
+        - test.example.http
+    repo-docs:
+      paths:
+        - AGENTS.md
+        - README.md
+        - .docpact/**
+        - docs/agents/**
+        - .github/PULL_REQUEST_TEMPLATE/*.md
+    root-integration:
+      paths:
+        - AGENTS.md
+        - .github/PULL_REQUEST_TEMPLATE/promote-dev-to-main.md
+
+docInventory:
+  include:
+    - AGENTS.md
+    - README.md
+    - .docpact/config.yaml
+    - docs/agents/repo-validation.md
+    - docs/agents/repo-architecture.md
+    - .github/PULL_REQUEST_TEMPLATE/feature-to-dev.md
+    - .github/PULL_REQUEST_TEMPLATE/promote-dev-to-main.md
+
+repo:
+  id: edge-functions
+  owner: edge-functions
+
+rules:
+  - id: edge-functions-bootstrap-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: AGENTS.md
+        kind: doc-contract
+      - path: .docpact/**
+        kind: doc-ai-layer
+      - path: docs/agents/repo-validation.md
+        kind: deep-doc
+      - path: docs/agents/repo-architecture.md
+        kind: deep-doc
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: docs/agents/repo-validation.md
+        mode: review_or_update
+      - path: docs/agents/repo-architecture.md
+        mode: review_or_update
+    reason: Repo entry guidance, machine-readable routing, and retained source docs must stay aligned.
+  - id: edge-functions-readme-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: README.md
+        kind: repo-landing
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: README.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+    reason: Repo landing text should stay aligned with the active repo contract and docpact entry surface.
+  - id: edge-functions-feature-pr-template-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: .github/PULL_REQUEST_TEMPLATE/feature-to-dev.md
+        kind: doc-template
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: .github/PULL_REQUEST_TEMPLATE/feature-to-dev.md
+        mode: review_or_update
+    reason: The feature-to-dev PR template should stay aligned with the repo's active M2 branch and handoff contract.
+  - id: edge-functions-promote-pr-template-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: .github/PULL_REQUEST_TEMPLATE/promote-dev-to-main.md
+        kind: doc-template
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: .github/PULL_REQUEST_TEMPLATE/promote-dev-to-main.md
+        mode: review_or_update
+      - path: docs/agents/repo-validation.md
+        mode: review_or_update
+    reason: The promote-to-main template should stay aligned with the repo's release-path, proof, and back-merge contract.
+  - id: edge-functions-runtime-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: supabase/functions/**
+        kind: runtime-code
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: docs/agents/repo-validation.md
+        mode: review_or_update
+      - path: docs/agents/repo-architecture.md
+        mode: review_or_update
+    reason: Runtime changes can alter repo boundaries, routing, validation scope, and hotspot ownership.
+  - id: edge-functions-proof-and-ci-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: test/**
+        kind: runtime-test
+      - path: scripts/deno-check-all.cjs
+        kind: validation-wrapper
+      - path: .github/workflows/ci.yml
+        kind: automation
+    requiredDocs:
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: docs/agents/repo-validation.md
+        mode: review_or_update
+    reason: Test inventory and CI baseline changes alter the proof story for future runtime work.
+  - id: edge-functions-deploy-and-ops-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: package.json
+        kind: runtime-config
+      - path: supabase/config.toml
+        kind: deploy-config
+      - path: supabase/.env.example
+        kind: env-template
+      - path: scripts/deploy-function.cjs
+        kind: deploy-script
+      - path: scripts/probe-functions-auth.cjs
+        kind: ops-script
+      - path: scripts/lca_submit_poll_fetch.sh
+        kind: ops-script
+      - path: test.example.http
+        kind: request-collection
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: README.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: docs/agents/repo-validation.md
+        mode: review_or_update
+      - path: docs/agents/repo-architecture.md
+        mode: review_or_update
+    reason: Deploy targets, auth probes, and request collections define how runtime behavior is checked and handed off.
+  - id: edge-functions-ai-doc-maintenance-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: .github/workflows/ai-doc-lint.yml
+        kind: automation
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: docs/agents/repo-validation.md
+        mode: review_or_update
+    reason: Documentation-governance automation changes should refresh the repo contract and maintenance guidance together.

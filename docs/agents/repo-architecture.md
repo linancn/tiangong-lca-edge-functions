@@ -15,8 +15,8 @@ whenToUpdate:
   - when shared runtime boundaries move
   - when deploy or validation architecture changes enough to make this map misleading
 checkPaths:
-  - ai/architecture.md
-  - ai/repo.yaml
+  - docs/agents/repo-architecture.md
+  - .docpact/config.yaml
   - package.json
   - supabase/config.toml
   - supabase/functions/**
@@ -25,15 +25,13 @@ checkPaths:
   - test.example.http
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
-lastReviewedAt: 2026-04-18
-lastReviewedCommit: 94889a43af4e63a496bcbbb2e2bf5f3a69677dc0
+lastReviewedAt: 2026-04-23
+lastReviewedCommit: 63e23a8cb916cb49521cbbe869b38d637040a8b5
 related:
-  - ../AGENTS.md
-  - ./repo.yaml
-  - ./task-router.md
-  - ./validation.md
-  - ../README.md
-  - ../test.example.http
+  - ../../AGENTS.md
+  - ../../.docpact/config.yaml
+  - ./repo-validation.md
+  - ../../README.md
 ---
 
 # edge-functions Architecture Notes
@@ -59,6 +57,7 @@ This repo is organized around Edge Function families plus a shared runtime layer
 | `scripts/**` | stable | deno-check inventory, deploy contract, auth probe, and LCA smoke helper |
 | `supabase/config.toml` | stable | local serve and remote edge deploy config; not database schema truth |
 | `test.example.http` | stable | checked-in smoke request collection for local and remote routes |
+| `.github/PULL_REQUEST_TEMPLATE/*.md` | stable | M2 branch-specific PR note shape for feature and promote flows |
 
 ## Branch Model In Practice
 
@@ -68,7 +67,7 @@ This repo is organized around Edge Function families plus a shared runtime layer
 - Git `main` is the promoted release line
 - routine feature or fix PRs target `dev`
 - promotion PRs target `main`
-- `.github/PULL_REQUEST_TEMPLATE/feature-to-dev.md` and `promote-dev-to-main.md` encode those expectations
+- `.github/PULL_REQUEST_TEMPLATE/feature-to-dev.md` and `promote-dev-to-main.md` encode the repo-level PR handoff shape
 
 This means branch behavior is part of the repo contract, not just a GitHub UI preference.
 

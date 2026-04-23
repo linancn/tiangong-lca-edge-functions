@@ -1,5 +1,5 @@
 ---
-title: edge-functions AI Working Guide
+title: edge-functions Repo Contract
 docType: contract
 scope: repo
 status: active
@@ -7,18 +7,18 @@ authoritative: true
 owner: edge-functions
 language: en
 whenToUse:
-  - when a task may change Edge Function runtime behavior, auth handling, request or response semantics, deploy scripts, or repo validation flow
+  - when the task may change Edge Function runtime behavior, auth handling, request or response semantics, deploy scripts, or repo validation flow
   - when routing work from the workspace root into tiangong-lca-edge-functions
-  - when deciding whether a change belongs here, in database-engine, in tiangong-lca-next, or in lca-workspace
+  - when deciding which document owns a rule, command, or runtime boundary
 whenToUpdate:
-  - when repo ownership or source-of-truth boundaries change
-  - when branch, deploy, auth-probe, or validation contracts change
-  - when the repo-local AI bootstrap docs under ai/ change
+  - when repo facts, branch rules, deploy/auth rules, or source-of-truth boundaries change
+  - when the repo validation or repo-shape entry docs become inaccurate
+  - when documentation ownership becomes redundant or ambiguous
 checkPaths:
   - AGENTS.md
   - README.md
-  - ai/**/*.md
-  - ai/**/*.yaml
+  - .docpact/**/*.yaml
+  - docs/agents/**
   - package.json
   - supabase/config.toml
   - supabase/functions/**
@@ -28,46 +28,79 @@ checkPaths:
   - supabase/.env.example
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
-lastReviewedAt: 2026-04-18
-lastReviewedCommit: 94889a43af4e63a496bcbbb2e2bf5f3a69677dc0
+lastReviewedAt: 2026-04-23
+lastReviewedCommit: 63e23a8cb916cb49521cbbe869b38d637040a8b5
 related:
-  - ai/repo.yaml
-  - ai/task-router.md
-  - ai/validation.md
-  - ai/architecture.md
+  - .docpact/config.yaml
+  - docs/agents/repo-validation.md
+  - docs/agents/repo-architecture.md
   - README.md
-  - test.example.http
 ---
 
-# AGENTS.md — edge-functions AI Working Guide
+## Repo Contract
 
-`tiangong-lca-edge-functions` owns the checked-in Supabase Edge Function runtime contract for TianGong LCA. Start here when the task may change function behavior, shared runtime modules, deploy scripts, or repo-local validation expectations.
+`tiangong-lca-edge-functions` owns the checked-in Supabase Edge Function runtime contract for TianGong LCA: function entrypoints, shared runtime helpers, repo-level validation tooling, deploy scripts, request examples, and repo-local documentation governance.
 
-## AI Load Order
+Start here when the task may change Edge runtime behavior, auth/deploy semantics, repo proof expectations, or repo documentation ownership.
 
-Load docs in this order:
+## Documentation Roles
+
+| Document | Owns | Does not own |
+| --- | --- | --- |
+| `AGENTS.md` | repo contract, branch and delivery rules, hard boundaries, minimal execution facts | deep runtime path maps, full proof matrix, long setup prose |
+| `.docpact/config.yaml` | machine-readable repo facts, routing intents, governed-doc rules, ownership, coverage, freshness | explanatory prose or narrative walkthroughs |
+| `docs/agents/repo-validation.md` | minimum proof by change type, probe/deploy proof guidance, PR validation note shape | repo contract, branch policy truth, large setup notes |
+| `docs/agents/repo-architecture.md` | compact repo mental model, stable path map, hotspot families, common misreads | checklists or current proof queue |
+| `README.md` | human landing context, setup, local serve, request examples, operator-facing notes | machine-readable routing or lint semantics |
+| `.github/PULL_REQUEST_TEMPLATE/*.md` | branch-specific PR note shape and handoff prompts | canonical proof rules or repo ownership truth |
+
+## Load Order
+
+Read in this order:
 
 1. `AGENTS.md`
-2. `ai/repo.yaml`
-3. `ai/task-router.md`
-4. `ai/validation.md`
-5. `ai/architecture.md`
-6. `README.md` and `test.example.http` only when you need human setup details or concrete request examples
+2. `.docpact/config.yaml`
+3. `docs/agents/repo-validation.md` or `docs/agents/repo-architecture.md`
+4. `README.md`, `test.example.http`, or `.github/PULL_REQUEST_TEMPLATE/*.md` only when the task needs setup, request examples, or PR handoff details
 
-Do not start with the long README, raw function inventories, or GitHub default-branch UI.
+Do not start from repo landing prose or raw function inventories when the core contract surface is enough.
 
-## Repo Ownership
+## Operational Pointers
 
-This repo owns:
+- path-level ownership, routing intents, governed-doc inventory, and lint rules live in `.docpact/config.yaml`
+- minimum proof and deploy/auth-probe expectations live in `docs/agents/repo-validation.md`
+- stable path groups and hotspot families live in `docs/agents/repo-architecture.md`
+- human setup and request collections stay in `README.md` and `test.example.http`
+- repo-local documentation maintenance is enforced by `.github/workflows/ai-doc-lint.yml` with `docpact lint`
+- the main routing intents are `function-runtime`, `auth-runtime`, `command-runtime`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
+
+## Minimal Execution Facts
+
+Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/repo-validation.md` for the full setup and proof details.
+
+- package manager: `npm`
+- Node baseline: `22`
+- local serve command: `npm start`
+- baseline local validation: `npm run lint` and `npm run check`
+- remote deploy entrypoints:
+  - `npm run deploy:dev -- <function-name> [more-function-names...]`
+  - `npm run deploy:main -- <function-name> [more-function-names...]`
+- auth and connectivity drift probe: `npm run probe:auth -- --remote` or `npm run probe:auth -- --local`
+- local serve and scripted remote deploys both use `--no-verify-jwt`
+- gateway JWT verification being off does not make runtime auth optional; functions must still authenticate and authorize requests explicitly
+
+## Ownership Boundaries
+
+The authoritative path-level ownership map lives in `.docpact/config.yaml`.
+
+At a human-readable level, this repo owns:
 
 - `supabase/functions/**` for Edge Function entrypoints, handlers, and runtime request or response behavior
 - `supabase/functions/_shared/**` for auth, command runtime, DB-RPC wrappers, OpenAI, Redis, Supabase client helpers, and shared domain utilities
 - `test/**` for repo-level Deno tests
-- `scripts/deno-check-all.cjs`, `scripts/deploy-function.cjs`, `scripts/probe-functions-auth.cjs`, and `scripts/lca_submit_poll_fetch.sh`
-- `package.json` for Node scripts, Supabase CLI pinning, and remote project-ref mapping
-- `supabase/config.toml` for local serve and edge deploy bindings
-- `.github/workflows/ci.yml` and `.github/PULL_REQUEST_TEMPLATE/**`
-- `test.example.http` and `supabase/.env.example` as checked-in request and env examples
+- `scripts/**` for deno-check inventory, deploy contract, auth probes, and smoke helpers
+- `package.json`, `supabase/config.toml`, and `supabase/.env.example` for repo runtime/deploy/operator configuration
+- `README.md`, `test.example.http`, `.github/PULL_REQUEST_TEMPLATE/**`, and repo-local governed docs
 
 This repo does not own:
 
@@ -77,54 +110,38 @@ This repo does not own:
 
 Route those tasks to:
 
-- `tiangong-lca/database-engine` for schema truth, migrations, SQL tests, and Supabase branch governance
-- `linancn/tiangong-lca-next` for frontend behavior and app-side flows
-- `tiangong-lca/workspace` for root integration after merge
+- `database-engine` for schema truth, migrations, SQL tests, RPC truth, and persistent branch governance
+- `tiangong-lca-next` for frontend behavior and app-side flows
+- `lca-workspace` for root integration after merge
 
-## Branch Facts
+## Branch And Delivery Facts
 
 - GitHub default branch: `main`
-- True daily trunk: `dev`
-- Routine branch base: `dev`
-- Routine PR base: `dev`
-- Promote path: `dev -> main`
-- Hotfix path: branch from `main`, merge back into `main`, then back-merge `main -> dev`
+- true daily trunk: `dev`
+- routine branch base: `dev`
+- routine PR base: `dev`
+- promote path: `dev -> main`
+- hotfix path: branch from `main`, merge into `main`, then back-merge `main -> dev`
 
-Do not accept GitHub UI defaults when opening routine PRs.
+Do not infer routine workflow from GitHub default-branch UI alone.
 
-## Runtime Facts
+## Documentation Update Rules
 
-- Repo-local AI-doc maintenance is enforced by `.github/workflows/ai-doc-lint.yml` using the vendored `.github/scripts/ai-doc-lint.*` files.
-- Local serve command: `npm start`
-- Baseline local validation: `npm run lint`, `npm run check`
-- `npm run check` walks enabled `supabase/functions/*/index.ts` files plus `test/*.ts`
-- Baseline `npm run check` intentionally skips `antchain_*`, `embedding`, `webhook_flow_embedding`, `webhook_model_embedding`, and `webhook_process_embedding`
-- Remote deploy entrypoints:
-  - `npm run deploy:dev -- <function-name> [more-function-names...]`
-  - `npm run deploy:main -- <function-name> [more-function-names...]`
-- Both deploy scripts append `--no-verify-jwt`
-- Local serve also uses `--no-verify-jwt`
-- Gateway JWT verification being off does not mean runtime auth is optional; functions must still authenticate and authorize requests
-- Auth and connectivity drift triage starts with `npm run probe:auth -- --remote` or `npm run probe:auth -- --local`
-
-## Quick Routes
-
-| If the task is about... | Load next |
-| --- | --- |
-| adding or changing one Edge Function or shared runtime module | `ai/task-router.md`, then `ai/validation.md` |
-| changing auth, credential precedence, or command-runtime behavior | `ai/task-router.md`, then `ai/architecture.md` |
-| changing deploy targets, project refs, or auth-probe behavior | `ai/repo.yaml`, then `ai/validation.md` |
-| changing request examples, smoke-test workflow, or repo-level tests | `ai/validation.md`, then `README.md` or `test.example.http` |
-| deciding whether missing SQL or RPC behavior belongs here | `ai/task-router.md`, then root `ai/task-router.md` and `database-engine/AGENTS.md` |
-| deciding whether a merged repo PR is delivery-complete | root `AGENTS.md` and `_docs/workspace-branch-policy-contract.md` in `lca-workspace` |
+- if a machine-readable repo fact, routing intent, or governed-doc rule changes, update `.docpact/config.yaml`
+- if a human-readable repo contract, branch rule, or hard boundary changes, update `AGENTS.md`
+- if proof expectations change, update `docs/agents/repo-validation.md`
+- if repo shape, hotspot families, or path ownership explanation changes, update `docs/agents/repo-architecture.md`
+- if setup steps or request examples change, update `README.md` and `test.example.http`
+- if PR handoff prompts or M2 branch-note shape changes, update `.github/PULL_REQUEST_TEMPLATE/*.md`
+- do not copy the same rule into multiple docs just to make it easier to find
 
 ## Hard Boundaries
 
-- Do not invent schema truth or migration history in this repo.
-- Do not interpret `--no-verify-jwt` as permission for anonymous business logic.
-- Do not move repo-level tests into `supabase/functions/**`; current convention keeps them in `test/**`.
-- Do not treat GitHub default branch `main` as the daily trunk.
-- Do not mark delivery complete if root workspace integration is still pending.
+- do not invent schema truth or migration history in this repo
+- do not interpret `--no-verify-jwt` as permission for anonymous business logic
+- do not move repo-level tests into `supabase/functions/**`; this repo keeps Deno tests in `test/**`
+- do not treat GitHub default branch `main` as the daily trunk
+- do not mark delivery complete if root workspace integration is still pending
 
 ## Workspace Integration
 
@@ -133,7 +150,5 @@ A merged PR in `tiangong-lca-edge-functions` is repo-complete, not delivery-comp
 If the change must ship through the workspace:
 
 1. merge the child PR into `tiangong-lca-edge-functions`
-2. make sure the intended SHA is eligible for root integration
+2. promote or select an eligible child SHA according to workspace policy
 3. update the `lca-workspace` submodule pointer deliberately
-
-For normal root `main` integration, `lca-workspace/main` should point only at commits already promoted onto `tiangong-lca-edge-functions/main`.

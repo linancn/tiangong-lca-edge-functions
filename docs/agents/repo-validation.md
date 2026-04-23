@@ -13,10 +13,10 @@ whenToUse:
 whenToUpdate:
   - when the repo gains a new canonical validation command or wrapper
   - when change categories require different minimum proof
-  - when deploy or auth-probe behavior changes
+  - when deploy, auth-probe, or documentation-governance behavior changes
 checkPaths:
-  - ai/validation.md
-  - ai/task-router.md
+  - docs/agents/repo-validation.md
+  - .docpact/config.yaml
   - package.json
   - supabase/config.toml
   - supabase/functions/**
@@ -25,15 +25,13 @@ checkPaths:
   - test.example.http
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
-lastReviewedAt: 2026-04-18
-lastReviewedCommit: 94889a43af4e63a496bcbbb2e2bf5f3a69677dc0
+lastReviewedAt: 2026-04-23
+lastReviewedCommit: 63e23a8cb916cb49521cbbe869b38d637040a8b5
 related:
-  - ../AGENTS.md
-  - ./repo.yaml
-  - ./task-router.md
-  - ./architecture.md
-  - ../README.md
-  - ../test.example.http
+  - ../../AGENTS.md
+  - ../../.docpact/config.yaml
+  - ./repo-architecture.md
+  - ../../README.md
 ---
 
 # edge-functions Validation Guide
@@ -69,10 +67,10 @@ If you reactivate or rely on one of those routes, update the inventory and valid
 | Hybrid search, AI suggestion, or OpenAI shared layer | `npm run lint`; `npm run check`; targeted `deno check` on changed function and shared OpenAI helper files | smoke one relevant request from `test.example.http` or equivalent local or remote call | Model defaults and query-rewrite helpers live in repo code, not only in env or README prose. |
 | LCA solve, queue, result, or scope helpers | `npm run lint`; `npm run check`; targeted `deno check` on changed `lca_*` files and `_shared/lca_*` helpers | run `scripts/lca_submit_poll_fetch.sh` when the task explicitly touches the submit, poll, or fetch path; otherwise record why that proof is deferred | Missing `lca_enqueue_job` or related DB-side truth is validated in `database-engine`, not here. |
 | TIDAS package import, export, or job paths | `npm run lint`; `npm run check`; targeted `deno check` on changed package files and `_shared/tidas_package.ts` | use the relevant requests in `test.example.http`; if auth or payload shaping changed, run a local or remote smoke path | JWT and `USER_API_KEY` coverage matters for these routes. |
-| Deploy script, `package.json`, `supabase/config.toml`, or PR contract files | `npm run lint`; inspect branch, project-ref, and deploy-flag changes against `ai/repo.yaml`; run `npm run check` if runtime inventory or imports changed | if the task includes a real deploy, record which environment was deployed and which function names were used | Remote deploy proof is not implied by local lint or type-check. |
+| Deploy script, `package.json`, `supabase/config.toml`, or PR contract files | `npm run lint`; inspect branch, project-ref, and deploy-flag changes against `AGENTS.md` and `.docpact/config.yaml`; run `npm run check` if runtime inventory or imports changed | if the task includes a real deploy, record which environment was deployed and which function names were used | Remote deploy proof is not implied by local lint or type-check. |
 | Auth probe tooling | `npm run lint`; `node scripts/probe-functions-auth.cjs --help`; `npm run probe:auth -- --dry-run` | run `npm run probe:auth -- --remote` or `--local` when the task explicitly includes live probe validation | Dry-run is the safe default when you only changed classification or selection logic. |
 | Repo tests only | `npm run lint`; `npm run check`; targeted `deno check --config supabase/functions/deno.json <changed-test-file>` | run neighboring tests that cover the same shared module or function family | This repo keeps Deno tests in `test/**`, not under each function folder. |
-| AI docs only | run repo-local `ai-doc-lint` against touched files or the equivalent local PR check | perform scenario-based routing checks from root into this repo | Refresh review metadata even when prose-only docs change. |
+| Repo docs or docpact config only | `docpact validate-config --root . --strict`; `docpact lint --root . --worktree --mode enforce` | perform scenario-based route checks for the affected intent surface | Refresh review metadata when governed docs change without code changes. |
 
 ## Auth And Probe Notes
 
@@ -91,15 +89,17 @@ npm run probe:auth -- --dry-run
 npm run probe:auth -- --remote --only lca_
 ```
 
-## AI Contract File Notes
+## Docpact Governance Notes
 
-The repo-local `ai-doc-lint` implementation expects repo-local `ai/*.yaml` files to stay JSON-compatible YAML.
+The repo's machine-readable governance source is `.docpact/config.yaml`.
 
-In this repo that means:
+That means:
 
-- `ai/repo.yaml` and `ai/doc-impact.yaml` should remain parseable by a JSON parser
-- repo Prettier is configured to format `ai/**/*.yaml` with the JSON parser instead of YAML syntax
-- if `npm run lint` rewrites those files into YAML-style single-quoted objects, the contract is broken
+- governed-doc rules, routing intents, ownership boundaries, and freshness live in `.docpact/config.yaml`
+- `.github/workflows/ai-doc-lint.yml` should validate config and run `docpact lint`
+- retained explanatory docs stay in `AGENTS.md`, this file, `repo-architecture.md`, `README.md`, and the PR templates
+
+Do not recreate deleted `ai/*` files under a new name. Keep deterministic facts in config and explanatory material in retained source docs.
 
 ## Remote Deploy Notes
 
