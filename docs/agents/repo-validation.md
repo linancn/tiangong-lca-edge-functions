@@ -25,8 +25,8 @@ checkPaths:
   - test.example.http
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
-lastReviewedAt: 2026-04-23
-lastReviewedCommit: 4830ccb1e963a121948995ed9b3da620c670f563
+lastReviewedAt: 2026-04-24
+lastReviewedCommit: a88517ffa1247661918261f78dc8c063aca6d133
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
