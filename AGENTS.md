@@ -28,8 +28,8 @@ checkPaths:
   - supabase/.env.example
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
-lastReviewedAt: 2026-04-23
-lastReviewedCommit: 63e23a8cb916cb49521cbbe869b38d637040a8b5
+lastReviewedAt: 2026-04-24
+lastReviewedCommit: a88517ffa1247661918261f78dc8c063aca6d133
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
