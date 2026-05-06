@@ -193,11 +193,9 @@ rules:
         kind: repo-landing
     requiredDocs:
       - path: AGENTS.md
-        mode: review_or_update
-      - path: README.md
-        mode: review_or_update
+        mode: must_exist
       - path: .docpact/config.yaml
-        mode: review_or_update
+        mode: must_exist
     reason: Repo landing text should stay aligned with the active repo contract and docpact entry surface.
   - id: edge-functions-feature-pr-template-contract
     scope: repo
