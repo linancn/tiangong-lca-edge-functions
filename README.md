@@ -1,31 +1,3 @@
----
-title: TianGong LCA Edge Functions Landing
-docType: overview
-scope: repo
-status: active
-authoritative: false
-owner: edge-functions
-language: en
-whenToUse:
-  - when you need the shortest high-level description of what this repo owns
-  - when landing in the repo without needing the full AI contract surface yet
-whenToUpdate:
-  - when repo purpose, setup, or branch/deploy summary changes
-  - when the AI entry surface listed here changes
-checkPaths:
-  - README.md
-  - AGENTS.md
-  - .docpact/config.yaml
-  - docs/agents/**
-lastReviewedAt: 2026-04-23
-lastReviewedCommit: 63e23a8cb916cb49521cbbe869b38d637040a8b5
-related:
-  - AGENTS.md
-  - .docpact/config.yaml
-  - docs/agents/repo-validation.md
-  - docs/agents/repo-architecture.md
----
-
 # TianGong-LCA-Edge-Functions
 
 ## Overview
