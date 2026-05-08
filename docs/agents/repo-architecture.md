@@ -25,8 +25,11 @@ checkPaths:
   - test.example.http
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
-lastReviewedAt: 2026-05-06
-lastReviewedCommit: 252bbed6651c17d46798370fc274577c03049bea
+  - .githooks/pre-push
+  - scripts/docpact-gate.sh
+  - scripts/install-git-hooks.sh
+lastReviewedAt: 2026-05-08
+lastReviewedCommit: ac19c2bd6a8756eca22b870a25cd64232b3d5ef0
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -191,3 +194,7 @@ If one of those changes, assume more than one function family is affected.
 - `supabase/config.toml` does not own database schema truth
 - `--no-verify-jwt` does not remove runtime auth requirements
 - a merged child PR does not finish workspace delivery
+
+## Local Docpact Push Gate
+
+This repository has a versioned local `pre-push` hook under `.githooks/pre-push` that delegates to `scripts/docpact-gate.sh`. The hook is a local developer guard for docpact config validation and enforced doc-governance linting; CI remains the authoritative PR enforcement path.

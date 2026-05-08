@@ -28,8 +28,11 @@ checkPaths:
   - supabase/.env.example
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
-lastReviewedAt: 2026-05-06
-lastReviewedCommit: 252bbed6651c17d46798370fc274577c03049bea
+  - .githooks/**
+  - scripts/docpact-gate.sh
+  - scripts/install-git-hooks.sh
+lastReviewedAt: 2026-05-08
+lastReviewedCommit: ac19c2bd6a8756eca22b870a25cd64232b3d5ef0
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -155,3 +158,13 @@ If the change must ship through the workspace:
 1. merge the child PR into `tiangong-lca-edge-functions`
 2. promote or select an eligible child SHA according to workspace policy
 3. update the `lca-workspace` submodule pointer deliberately
+
+## Local Docpact Push Gate
+
+Install the versioned local hook once per checkout:
+
+```bash
+./scripts/install-git-hooks.sh
+```
+
+The `pre-push` hook runs `scripts/docpact-gate.sh`, which performs strict config validation and `docpact lint --mode enforce` before the push leaves the machine. The default comparison base is `origin/dev` for routine branches and `origin/main` for promote or hotfix branches. Override it for unusual stacks with `DOCPACT_BASE_REF=<ref>` or `scripts/docpact-gate.sh --base <ref>`. The gate writes its detailed report to a temporary file so normal pushes do not create `.docpact/runs/` artifacts.
