@@ -25,8 +25,11 @@ checkPaths:
   - test.example.http
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
-lastReviewedAt: 2026-05-06
-lastReviewedCommit: 252bbed6651c17d46798370fc274577c03049bea
+  - .githooks/pre-push
+  - scripts/docpact-gate.sh
+  - scripts/install-git-hooks.sh
+lastReviewedAt: 2026-05-08
+lastReviewedCommit: ac19c2bd6a8756eca22b870a25cd64232b3d5ef0
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -135,3 +138,13 @@ A good PR note for this repo should say:
 2. which targeted `deno check` or repo test files were exercised
 3. whether any deploy or probe proof was performed or deferred
 4. whether any required database-side proof lives in `database-engine`
+
+## Local Docpact Push Gate
+
+Install the versioned local hook once per checkout:
+
+```bash
+./scripts/install-git-hooks.sh
+```
+
+The `pre-push` hook runs `scripts/docpact-gate.sh`, which performs strict config validation and `docpact lint --mode enforce` before the push leaves the machine. The default comparison base is `origin/dev` for routine branches and `origin/main` for promote or hotfix branches. Override it for unusual stacks with `DOCPACT_BASE_REF=<ref>` or `scripts/docpact-gate.sh --base <ref>`. The gate writes its detailed report to a temporary file so normal pushes do not create `.docpact/runs/` artifacts.
