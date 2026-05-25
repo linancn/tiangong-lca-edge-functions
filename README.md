@@ -1,3 +1,26 @@
+---
+title: TianGong LCA Edge Functions
+docType: guide
+scope: repo
+status: active
+authoritative: false
+owner: edge-functions
+language: en
+whenToUse:
+  - when setting up or serving edge functions locally
+  - when finding human-facing request examples and runtime environment notes
+whenToUpdate:
+  - when setup, local serve, request examples, or operator-facing runtime guidance changes
+checkPaths:
+  - README.md
+  - package.json
+  - supabase/config.toml
+  - supabase/.env.example
+  - test.example.http
+lastReviewedAt: 2026-05-24
+lastReviewedCommit: 353b87c5efde6b7138b9d171c0c203a4305991cc
+---
+
 # TianGong-LCA-Edge-Functions
 
 ## Overview
@@ -121,6 +144,8 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 - `flow_hybrid_search`
 - `process_hybrid_search`
 - `lifecyclemodel_hybrid_search`
+- `app_dataset_verify_remote`
+- `app_dataset_review_submit_gate`
 - `ai_suggest`
 - `lca_solve` / `lca_jobs` / `lca_results`
 - `lca_query_results`
@@ -243,6 +268,31 @@ revoke all on function public.lca_enqueue_job(text, jsonb) from public;
 revoke execute on function public.lca_enqueue_job(text, jsonb) from anon, authenticated;
 grant execute on function public.lca_enqueue_job(text, jsonb) to service_role;
 ```
+
+## Review-submit Gate Function Call Pattern
+
+`app_dataset_review_submit_gate` is the Edge API boundary for calculator-owned review-submit numerical stability reports. It accepts authenticated `POST` requests and returns normalized gate states for Next:
+
+- `queued` / `running`: HTTP `202`, not submit-ready.
+- `passed`: HTTP `200`, submit-ready for the exact dataset revision checksum and policy.
+- `blocked` / `stale`: HTTP `409`, not submit-ready; render returned `blockingReasons`.
+- `error`: HTTP `502`, calculator or backend gate failure.
+
+Request shape:
+
+```json
+{
+  "table": "processes",
+  "id": "<dataset uuid>",
+  "version": "01.00.000",
+  "revisionChecksum": "<sha256>",
+  "action": "ensure",
+  "policyProfile": "review_submit_fast.v1",
+  "reportSchemaVersion": "review_submit_gate_report.v1"
+}
+```
+
+The function calls database-owned RPC `cmd_dataset_review_submit_gate`; database-engine owns persisted gate run schema, idempotent reuse, stale detection, and final submit-review assertion. Edge and Next must not duplicate calculator blocker heuristics.
 
 ## LCA Function Call Patterns
 

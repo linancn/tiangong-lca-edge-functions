@@ -40,18 +40,21 @@ function buildActor(supabase: FakeRpcSupabase) {
   };
 }
 
-Deno.test('notification validation-issue payload parser rejects removed source dataset fields', () => {
-  const parsed = parseNotificationSendValidationIssueCommand({
-    recipientUserId: TEST_RECIPIENT_ID,
-    datasetType: 'process data set',
-    datasetId: TEST_DATASET_ID,
-    datasetVersion: '01.00.000',
-    issueCodes: ['ruleVerificationFailed'],
-    sourceDatasetType: 'process data set',
-  });
+Deno.test(
+  'notification validation-issue payload parser rejects removed source dataset fields',
+  () => {
+    const parsed = parseNotificationSendValidationIssueCommand({
+      recipientUserId: TEST_RECIPIENT_ID,
+      datasetType: 'process data set',
+      datasetId: TEST_DATASET_ID,
+      datasetVersion: '01.00.000',
+      issueCodes: ['ruleVerificationFailed'],
+      sourceDatasetType: 'process data set',
+    });
 
-  assertEquals(parsed.ok, false);
-});
+    assertEquals(parsed.ok, false);
+  },
+);
 
 Deno.test('createNotificationCommandRepository requires an explicit Supabase client', () => {
   assertThrows(
