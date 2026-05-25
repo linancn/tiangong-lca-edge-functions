@@ -1,3 +1,26 @@
+---
+title: TianGong LCA Edge Functions
+docType: guide
+scope: repo
+status: active
+authoritative: false
+owner: edge-functions
+language: en
+whenToUse:
+  - when setting up or serving edge functions locally
+  - when finding human-facing request examples and runtime environment notes
+whenToUpdate:
+  - when setup, local serve, request examples, or operator-facing runtime guidance changes
+checkPaths:
+  - README.md
+  - package.json
+  - supabase/config.toml
+  - supabase/.env.example
+  - test.example.http
+lastReviewedAt: 2026-05-24
+lastReviewedCommit: 353b87c5efde6b7138b9d171c0c203a4305991cc
+---
+
 # TianGong-LCA-Edge-Functions
 
 ## Overview
@@ -121,6 +144,7 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 - `flow_hybrid_search`
 - `process_hybrid_search`
 - `lifecyclemodel_hybrid_search`
+- `app_dataset_verify_remote`
 - `ai_suggest`
 - `lca_solve` / `lca_jobs` / `lca_results`
 - `lca_query_results`
