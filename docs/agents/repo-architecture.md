@@ -116,6 +116,8 @@ The shared layers that matter most are:
 - `supabase/functions/_shared/commands/**`
 - `supabase/functions/_shared/db_rpc/**`
 
+`app_dataset_review_submit_gate` is the edge API boundary for dataset review-submit numerical stability checks. It normalizes request and response semantics for Next and calls database-owned RPCs for persisted gate runs; it does not own calculator blocker heuristics or database schema. `app_dataset_submit_review` carries gate assertion metadata for process submit-review so DB truth can reject stale, wrong-policy, or blocked gate runs before a review is created.
+
 ### Search, embedding, and AI-backed routes
 
 These routes cluster around:
