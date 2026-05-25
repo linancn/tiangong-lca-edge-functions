@@ -6,6 +6,7 @@ import {
   callDatasetCreateRpc,
   callDatasetDeleteRpc,
   callDatasetPublishRpc,
+  callDatasetReviewSubmitGateRpc,
   callDatasetSaveDraftRpc,
   callDatasetSubmitReviewRpc,
   type DatasetRpcResult,
@@ -15,6 +16,7 @@ import type {
   CreateRequest,
   DeleteRequest,
   PublishRequest,
+  ReviewSubmitGateRequest,
   SaveDraftRequest,
   SubmitReviewRequest,
 } from './types.ts';
@@ -29,6 +31,10 @@ export type DatasetCommandRepository = {
   publish: (request: PublishRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
   submitReview: (
     request: SubmitReviewRequest,
+    audit: CommandAuditPayload,
+  ) => Promise<DatasetRpcResult>;
+  reviewSubmitGate: (
+    request: ReviewSubmitGateRequest,
     audit: CommandAuditPayload,
   ) => Promise<DatasetRpcResult>;
 };
@@ -51,5 +57,6 @@ export function createDatasetCommandRepository(supabase: RpcClient): DatasetComm
     assignTeam: (request, audit) => callDatasetAssignTeamRpc(client, request, audit),
     publish: (request, audit) => callDatasetPublishRpc(client, request, audit),
     submitReview: (request, audit) => callDatasetSubmitReviewRpc(client, request, audit),
+    reviewSubmitGate: (request, audit) => callDatasetReviewSubmitGateRpc(client, request, audit),
   };
 }

@@ -26,10 +26,11 @@ checkPaths:
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
   - .githooks/pre-push
+  - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-05-08
-lastReviewedCommit: ac19c2bd6a8756eca22b870a25cd64232b3d5ef0
+lastReviewedAt: 2026-05-24
+lastReviewedCommit: 353b87c5efde6b7138b9d171c0c203a4305991cc
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -67,13 +68,14 @@ If you reactivate or rely on one of those routes, update the inventory and valid
 | One function entrypoint or nearby handler | `npm run lint`; `npm run check`; targeted `deno check --config supabase/functions/deno.json <changed-entry-or-handler>` | use `test.example.http` or an equivalent request to smoke the changed path | For handler-based functions, validate both the entrypoint and the extracted handler file. |
 | Shared auth modules | `npm run lint`; `npm run check`; targeted `deno check` on `_shared/auth.ts` and directly affected consumers | run `npm run probe:auth -- --dry-run`; run a local or remote probe if the change affects credential selection | `gateway_invalid_jwt` and `function_auth_failed` are different failure classes. |
 | Command runtime, command handlers, or DB-RPC wrappers | `npm run lint`; `npm run check`; targeted `deno check` on changed `_shared/command_runtime/**`, `_shared/commands/**`, `_shared/db_rpc/**`, and at least one direct consumer | run nearby repo tests such as `test/command_runtime_test.ts`, `test/dataset_command_rpc_contract_test.ts`, or `test/review_command_rpc_contract_test.ts` | If the change depends on new SQL or RPC truth, record the `database-engine` follow-up explicitly. |
+| Review-submit numerical gate API or submit-review gate assertion | `npm run lint`; `npm run check`; targeted `deno check` on `app_dataset_review_submit_gate`, dataset command files, and DB-RPC wrappers; run `test/app_dataset_review_submit_gate_test.ts`, `test/app_dataset_submit_review_test.ts`, and `test/dataset_command_rpc_contract_test.ts` | smoke `app_dataset_review_submit_gate` against a dev environment only after the database-engine gate-run RPCs exist | Keep edge response semantics aligned with calculator `review_submit_gate_report.v1` and database-engine persisted assertion truth; do not duplicate calculator blocker heuristics in Edge. |
 | Hybrid search, AI suggestion, or OpenAI shared layer | `npm run lint`; `npm run check`; targeted `deno check` on changed function and shared OpenAI helper files | smoke one relevant request from `test.example.http` or equivalent local or remote call | Model defaults and query-rewrite helpers live in repo code, not only in env or README prose. |
 | LCA solve, queue, result, or scope helpers | `npm run lint`; `npm run check`; targeted `deno check` on changed `lca_*` files and `_shared/lca_*` helpers | run `scripts/lca_submit_poll_fetch.sh` when the task explicitly touches the submit, poll, or fetch path; otherwise record why that proof is deferred | Missing `lca_enqueue_job` or related DB-side truth is validated in `database-engine`, not here. |
 | TIDAS package import, export, or job paths | `npm run lint`; `npm run check`; targeted `deno check` on changed package files and `_shared/tidas_package.ts` | use the relevant requests in `test.example.http`; if auth or payload shaping changed, run a local or remote smoke path | JWT and `USER_API_KEY` coverage matters for these routes. |
 | Deploy script, `package.json`, `supabase/config.toml`, or PR contract files | `npm run lint`; inspect branch, project-ref, and deploy-flag changes against `AGENTS.md` and `.docpact/config.yaml`; run `npm run check` if runtime inventory or imports changed | if the task includes a real deploy, record which environment was deployed and which function names were used | Remote deploy proof is not implied by local lint or type-check. |
 | Auth probe tooling | `npm run lint`; `node scripts/probe-functions-auth.cjs --help`; `npm run probe:auth -- --dry-run` | run `npm run probe:auth -- --remote` or `--local` when the task explicitly includes live probe validation | Dry-run is the safe default when you only changed classification or selection logic. |
 | Repo tests only | `npm run lint`; `npm run check`; targeted `deno check --config supabase/functions/deno.json <changed-test-file>` | run neighboring tests that cover the same shared module or function family | This repo keeps Deno tests in `test/**`, not under each function folder. |
-| Repo docs or docpact config only | `docpact validate-config --root . --strict`; `docpact lint --root . --worktree --mode enforce` | perform scenario-based route checks for the affected intent surface | Refresh review metadata when governed docs change without code changes. |
+| Repo docs or docpact config only | `scripts/docpact validate-config --root . --strict`; `scripts/docpact lint --root . --worktree --mode enforce` | perform scenario-based route checks for the affected intent surface | Refresh review metadata when governed docs change without code changes. |
 
 ## Auth And Probe Notes
 
@@ -147,4 +149,4 @@ Install the versioned local hook once per checkout:
 ./scripts/install-git-hooks.sh
 ```
 
-The `pre-push` hook runs `scripts/docpact-gate.sh`, which performs strict config validation and `docpact lint --mode enforce` before the push leaves the machine. The default comparison base is `origin/dev` for routine branches and `origin/main` for promote or hotfix branches. Override it for unusual stacks with `DOCPACT_BASE_REF=<ref>` or `scripts/docpact-gate.sh --base <ref>`. The gate writes its detailed report to a temporary file so normal pushes do not create `.docpact/runs/` artifacts.
+The `pre-push` hook runs `scripts/docpact-gate.sh`, which delegates CLI lookup to `scripts/docpact` and performs strict config validation plus enforced lint before the push leaves the machine. The wrapper checks `DOCPACT_BIN`, Cargo install locations, Homebrew install locations, and then `PATH`, so local agent shells should not fail only because bare `docpact` is unavailable. The default comparison base is `origin/dev` for routine branches and `origin/main` for promote or hotfix branches. Override it for unusual stacks with `DOCPACT_BASE_REF=<ref>` or `scripts/docpact-gate.sh --base <ref>`. The gate writes its detailed report to a temporary file so normal pushes do not create `.docpact/runs/` artifacts.

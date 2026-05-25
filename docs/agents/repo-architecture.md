@@ -26,10 +26,11 @@ checkPaths:
   - .github/workflows/**
   - .github/PULL_REQUEST_TEMPLATE/**
   - .githooks/pre-push
+  - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-05-08
-lastReviewedCommit: ac19c2bd6a8756eca22b870a25cd64232b3d5ef0
+lastReviewedAt: 2026-05-24
+lastReviewedCommit: 353b87c5efde6b7138b9d171c0c203a4305991cc
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -115,6 +116,8 @@ The shared layers that matter most are:
 - `supabase/functions/_shared/commands/**`
 - `supabase/functions/_shared/db_rpc/**`
 
+`app_dataset_review_submit_gate` is the edge API boundary for dataset review-submit numerical stability checks. It normalizes request and response semantics for Next and calls database-owned RPCs for persisted gate runs; it does not own calculator blocker heuristics or database schema. `app_dataset_submit_review` carries gate assertion metadata for process submit-review so DB truth can reject stale, wrong-policy, or blocked gate runs before a review is created.
+
 ### Search, embedding, and AI-backed routes
 
 These routes cluster around:
@@ -197,4 +200,4 @@ If one of those changes, assume more than one function family is affected.
 
 ## Local Docpact Push Gate
 
-This repository has a versioned local `pre-push` hook under `.githooks/pre-push` that delegates to `scripts/docpact-gate.sh`. The hook is a local developer guard for docpact config validation and enforced doc-governance linting; CI remains the authoritative PR enforcement path.
+This repository has a versioned local `pre-push` hook under `.githooks/pre-push` that delegates to `scripts/docpact-gate.sh`. The gate resolves the CLI through `scripts/docpact`, so local agent shells do not need bare `docpact` on `PATH`. The hook is a local developer guard for docpact config validation and enforced doc-governance linting; CI remains the authoritative PR enforcement path.
