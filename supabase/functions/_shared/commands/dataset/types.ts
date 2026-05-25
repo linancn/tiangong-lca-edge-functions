@@ -50,6 +50,55 @@ export type SubmitReviewRequest = {
   table: DatasetTable;
   id: string;
   version: string;
+  reviewSubmitGateRunId?: string;
+  revisionChecksum?: string;
+  reviewSubmitPolicyProfile?: string;
+  reviewSubmitReportSchemaVersion?: string;
+};
+
+export const REVIEW_SUBMIT_GATE_POLICY_PROFILE = 'review_submit_fast.v1';
+export const REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION = 'review_submit_gate_report.v1';
+
+export type ReviewSubmitGateAction = 'ensure' | 'read' | 'rerun';
+
+export type ReviewSubmitGateRequest = {
+  table: DatasetTable;
+  id: string;
+  version: string;
+  revisionChecksum: string;
+  action: ReviewSubmitGateAction;
+  gateRunId?: string;
+  policyProfile: typeof REVIEW_SUBMIT_GATE_POLICY_PROFILE;
+  reportSchemaVersion: typeof REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION;
+};
+
+export type ReviewSubmitGateStatus =
+  | 'queued'
+  | 'running'
+  | 'passed'
+  | 'blocked'
+  | 'error'
+  | 'stale';
+
+export type ReviewSubmitGateResult = {
+  status: ReviewSubmitGateStatus;
+  gateRunId?: string;
+  datasetRevision?: {
+    table: DatasetTable;
+    id: string;
+    version: string;
+    revisionChecksum: string;
+  };
+  policy?: {
+    profile: string;
+  };
+  calculatorReport?: {
+    schemaVersion?: string;
+    reportId?: string;
+    generatedAt?: string;
+  } | null;
+  blockingReasons?: unknown[];
+  [key: string]: unknown;
 };
 
 export type DatasetCommandFailure = {

@@ -4,11 +4,13 @@ import { buildCommandAuditPayload } from '../supabase/functions/_shared/command_
 import { createRequestSchema } from '../supabase/functions/_shared/commands/dataset/create.ts';
 import { deleteRequestSchema } from '../supabase/functions/_shared/commands/dataset/delete.ts';
 import { createDatasetCommandRepository } from '../supabase/functions/_shared/commands/dataset/repository.ts';
+import { reviewSubmitGateRequestSchema } from '../supabase/functions/_shared/commands/dataset/review_submit_gate.ts';
 import { saveDraftRequestSchema } from '../supabase/functions/_shared/commands/dataset/save_draft.ts';
 import { submitReviewRequestSchema } from '../supabase/functions/_shared/commands/dataset/submit_review.ts';
 import {
   callDatasetCreateRpc,
   callDatasetDeleteRpc,
+  callDatasetReviewSubmitGateRpc,
   callDatasetSaveDraftRpc,
   callDatasetSubmitReviewRpc,
   type DatasetRpcResult,
@@ -35,6 +37,32 @@ Deno.test('submitReviewRequestSchema rejects unexpected payload fields', () => {
   });
 
   assertEquals(parsed.success, false);
+});
+
+Deno.test('submitReviewRequestSchema requires process gate metadata', () => {
+  const parsed = submitReviewRequestSchema.safeParse({
+    table: 'processes',
+    id: '11111111-1111-4111-8111-111111111111',
+    version: '01.00.000',
+  });
+
+  assertEquals(parsed.success, false);
+});
+
+Deno.test('reviewSubmitGateRequestSchema defaults action and calculator contract versions', () => {
+  const parsed = reviewSubmitGateRequestSchema.safeParse({
+    table: 'processes',
+    id: '11111111-1111-4111-8111-111111111111',
+    version: '01.00.000',
+    revisionChecksum: 'a'.repeat(64),
+  });
+
+  assertEquals(parsed.success, true);
+  if (parsed.success) {
+    assertEquals(parsed.data.action, 'ensure');
+    assertEquals(parsed.data.policyProfile, 'review_submit_fast.v1');
+    assertEquals(parsed.data.reportSchemaVersion, 'review_submit_gate_report.v1');
+  }
 });
 
 Deno.test('createRequestSchema rejects create payloads with version fields', () => {
@@ -110,6 +138,18 @@ const submitReviewRequest = {
   table: 'processes' as const,
   id: '11111111-1111-4111-8111-111111111111',
   version: '01.00.000',
+  reviewSubmitGateRunId: '44444444-4444-4444-8444-444444444444',
+  revisionChecksum: 'a'.repeat(64),
+};
+
+const reviewSubmitGateRequest = {
+  table: 'processes' as const,
+  id: '11111111-1111-4111-8111-111111111111',
+  version: '01.00.000',
+  revisionChecksum: 'a'.repeat(64),
+  action: 'ensure' as const,
+  policyProfile: 'review_submit_fast.v1' as const,
+  reportSchemaVersion: 'review_submit_gate_report.v1' as const,
 };
 
 const auditPayload = buildCommandAuditPayload({
@@ -300,3 +340,28 @@ Deno.test(
     });
   },
 );
+
+Deno.test('callDatasetReviewSubmitGateRpc unwraps review-submit gate run envelopes', async () => {
+  const result = (await callDatasetReviewSubmitGateRpc(
+    new FakeRpcSupabase({
+      data: {
+        ok: true,
+        data: {
+          status: 'queued',
+          gateRunId: '44444444-4444-4444-8444-444444444444',
+        },
+      },
+      error: null,
+    }) as never,
+    reviewSubmitGateRequest,
+    auditPayload,
+  )) as DatasetRpcResult;
+
+  assertEquals(result, {
+    ok: true,
+    data: {
+      status: 'queued',
+      gateRunId: '44444444-4444-4444-8444-444444444444',
+    },
+  });
+});

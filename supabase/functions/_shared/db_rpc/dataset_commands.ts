@@ -7,8 +7,13 @@ import type {
   DatasetCommandFailure,
   DeleteRequest,
   PublishRequest,
+  ReviewSubmitGateRequest,
   SaveDraftRequest,
   SubmitReviewRequest,
+} from '../commands/dataset/types.ts';
+import {
+  REVIEW_SUBMIT_GATE_POLICY_PROFILE,
+  REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION,
 } from '../commands/dataset/types.ts';
 
 type RpcClient = Pick<SupabaseClient, 'rpc'>;
@@ -150,6 +155,29 @@ export function buildDatasetSubmitReviewRpcArgs(
     p_table: request.table,
     p_id: request.id,
     p_version: request.version,
+    p_review_submit_gate_run_id: request.reviewSubmitGateRunId ?? null,
+    p_review_submit_revision_checksum: request.revisionChecksum ?? null,
+    p_review_submit_policy_profile:
+      request.reviewSubmitPolicyProfile ?? REVIEW_SUBMIT_GATE_POLICY_PROFILE,
+    p_review_submit_report_schema_version:
+      request.reviewSubmitReportSchemaVersion ?? REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION,
+    p_audit: audit,
+  };
+}
+
+export function buildDatasetReviewSubmitGateRpcArgs(
+  request: ReviewSubmitGateRequest,
+  audit: CommandAuditPayload,
+): Record<string, unknown> {
+  return {
+    p_table: request.table,
+    p_id: request.id,
+    p_version: request.version,
+    p_revision_checksum: request.revisionChecksum,
+    p_policy_profile: request.policyProfile,
+    p_report_schema_version: request.reportSchemaVersion,
+    p_action: request.action,
+    p_gate_run_id: request.gateRunId ?? null,
     p_audit: audit,
   };
 }
@@ -215,5 +243,17 @@ export function callDatasetSubmitReviewRpc(
     supabase,
     'cmd_review_submit',
     buildDatasetSubmitReviewRpcArgs(request, audit),
+  );
+}
+
+export function callDatasetReviewSubmitGateRpc(
+  supabase: RpcClient,
+  request: ReviewSubmitGateRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDatasetRpc(
+    supabase,
+    'cmd_dataset_review_submit_gate',
+    buildDatasetReviewSubmitGateRpcArgs(request, audit),
   );
 }

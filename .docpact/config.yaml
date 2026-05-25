@@ -115,6 +115,20 @@ routing:
         - supabase/functions/_shared/command_runtime/**
         - supabase/functions/_shared/commands/**
         - supabase/functions/_shared/db_rpc/**
+    review-submit-gate:
+      paths:
+        - supabase/functions/app_dataset_review_submit_gate/**
+        - supabase/functions/app_dataset_submit_review/**
+        - supabase/functions/_shared/commands/dataset/review_submit_gate.ts
+        - supabase/functions/_shared/commands/dataset/submit_review.ts
+        - supabase/functions/_shared/commands/dataset/types.ts
+        - supabase/functions/_shared/commands/dataset/validation.ts
+        - supabase/functions/_shared/db_rpc/dataset_commands.ts
+        - test/app_dataset_review_submit_gate_test.ts
+        - test/app_dataset_submit_review_test.ts
+        - test/dataset_command_rpc_contract_test.ts
+        - README.md
+        - test.example.http
     search-and-embedding:
       paths:
         - supabase/functions/flow_hybrid_search/**
@@ -262,6 +276,38 @@ rules:
       - path: docs/agents/repo-architecture.md
         mode: review_or_update
     reason: Runtime changes can alter repo boundaries, routing, validation scope, and hotspot ownership.
+  - id: edge-functions-review-submit-gate-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: supabase/functions/app_dataset_review_submit_gate/**
+        kind: runtime-code
+      - path: supabase/functions/app_dataset_submit_review/**
+        kind: runtime-code
+      - path: supabase/functions/_shared/commands/dataset/review_submit_gate.ts
+        kind: runtime-code
+      - path: supabase/functions/_shared/commands/dataset/submit_review.ts
+        kind: runtime-code
+      - path: supabase/functions/_shared/db_rpc/dataset_commands.ts
+        kind: runtime-code
+      - path: test/app_dataset_review_submit_gate_test.ts
+        kind: runtime-test
+      - path: test/app_dataset_submit_review_test.ts
+        kind: runtime-test
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: docs/agents/repo-validation.md
+        mode: review_or_update
+      - path: docs/agents/repo-architecture.md
+        mode: review_or_update
+      - path: README.md
+        mode: review_or_update
+      - path: test.example.http
+        mode: review_or_update
+    reason: Review-submit gate API and submit-review assertion metadata define the edge contract consumed by Next and backed by database-engine RPC truth.
   - id: edge-functions-proof-and-ci-contract
     scope: repo
     repo: edge-functions

@@ -121,6 +121,20 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_verify
       ]
     }'
 
+### @name Dataset_Review_Submit_Gate：Local
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_review_submit_gate' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --data '{
+      "table": "processes",
+      "id": "012fc8f6-9a30-4d98-9b03-34ddec3a6f10",
+      "version": "01.01.002",
+      "revisionChecksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "action": "ensure",
+      "policyProfile": "review_submit_fast.v1",
+      "reportSchemaVersion": "review_submit_gate_report.v1"
+    }'
+
 ### @name AI_Suggest：Remote
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/ai_suggest' \
     --header 'Content-Type: application/json' \
