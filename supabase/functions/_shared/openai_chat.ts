@@ -5,6 +5,7 @@ import OpenAI from '@openai/openai';
  */
 // Cache clients per (apiKey+baseUrl) tuple so different base URLs can be used.
 const _clients = new Map<string, OpenAI>();
+const DEFAULT_OPENAI_REASONING_EFFORT = 'none';
 function getClient(baseUrl?: string): OpenAI {
   const apiKey = Deno.env.get('OPENAI_API_KEY');
   if (!apiKey) throw new Error('Missing OPENAI_API_KEY environment variable');
@@ -19,7 +20,7 @@ function getClient(baseUrl?: string): OpenAI {
 }
 
 export interface OpenAIChatOptions {
-  /** Model name; defaults to env OPENAI_CHAT_MODEL or falls back to gpt-5-mini */
+  /** Model name; defaults to env OPENAI_CHAT_MODEL or falls back to gpt-5.4-nano */
   model?: string;
   /** Enable streaming (default false). Function currently returns aggregate result. */
   stream?: boolean;
@@ -52,11 +53,12 @@ export async function openaiChat(
     Deno.env.get('OPENAI_BASE_URL') ||
     undefined;
   const client = getClient(baseUrl);
-  const model = options.model || Deno.env.get('OPENAI_CHAT_MODEL') || 'gpt-4.1-mini';
+  const model = options.model || Deno.env.get('OPENAI_CHAT_MODEL');
   const stream = options.stream ?? false;
 
   const response = await client.responses.create({
     model,
+    reasoning: { effort: DEFAULT_OPENAI_REASONING_EFFORT },
     stream,
     input,
   });

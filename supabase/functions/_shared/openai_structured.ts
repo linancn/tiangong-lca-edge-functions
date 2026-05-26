@@ -1,6 +1,7 @@
 import OpenAI from '@openai/openai';
 
 const _clients = new Map<string, OpenAI>();
+const DEFAULT_OPENAI_REASONING_EFFORT = 'none';
 
 function getClient(baseUrl?: string): OpenAI {
   const apiKey = Deno.env.get('OPENAI_API_KEY');
@@ -132,7 +133,8 @@ export interface OpenAIStructuredRequest {
 
 export async function openaiStructuredOutput<T>(request: OpenAIStructuredRequest): Promise<T> {
   const baseUrl = request.options?.baseUrl || Deno.env.get('OPENAI_BASE_URL') || undefined;
-  const model = request.options?.model || Deno.env.get('OPENAI_CHAT_MODEL') || 'gpt-4.1-mini';
+  const model =
+    request.options?.model || Deno.env.get('OPENAI_CHAT_MODEL');
   const temperature = request.options?.temperature ?? 0;
 
   const client = getClient(baseUrl);
@@ -146,6 +148,7 @@ export async function openaiStructuredOutput<T>(request: OpenAIStructuredRequest
   if (clientAny.responses?.create) {
     response = await clientAny.responses.create({
       model,
+      reasoning: { effort: DEFAULT_OPENAI_REASONING_EFFORT },
       temperature,
       input: [
         { role: 'system', content: request.systemPrompt },
@@ -163,6 +166,7 @@ export async function openaiStructuredOutput<T>(request: OpenAIStructuredRequest
   } else if (clientAny.chat?.completions?.create) {
     response = await clientAny.chat.completions.create({
       model,
+      reasoning_effort: DEFAULT_OPENAI_REASONING_EFFORT,
       temperature,
       messages: [
         { role: 'system', content: request.systemPrompt },
