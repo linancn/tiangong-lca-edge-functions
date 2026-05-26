@@ -2,10 +2,15 @@ import { assertEquals } from 'jsr:@std/assert';
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import type { CommandAuditPayload } from '../supabase/functions/_shared/command_runtime/audit_log.ts';
+import {
+  stableJsonSha256,
+  stableJsonStringify,
+} from '../supabase/functions/_shared/commands/dataset/canonical_json.ts';
 import type { DatasetCommandRepository } from '../supabase/functions/_shared/commands/dataset/repository.ts';
 import {
   executeReviewSubmitGateCommand,
   parseReviewSubmitGateCommand,
+  resolveAuthoritativeReviewSubmitRevision,
 } from '../supabase/functions/_shared/commands/dataset/review_submit_gate.ts';
 import type {
   DatasetCommandExecutionResult,
@@ -17,6 +22,13 @@ const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
 const TEST_DATASET_ID = '22222222-2222-4222-8222-222222222222';
 const TEST_GATE_RUN_ID = '33333333-3333-4333-8333-333333333333';
 const TEST_REVISION_CHECKSUM = 'b'.repeat(64);
+const TEST_CLIENT_REVISION_CHECKSUM = 'a'.repeat(64);
+
+type RevisionRow = {
+  id: string;
+  version: string;
+  json_ordered?: unknown;
+};
 
 class FakeReviewSubmitGateRepository implements DatasetCommandRepository {
   reviewSubmitGateCalls: Array<{ request: ReviewSubmitGateRequest; audit: CommandAuditPayload }> =
@@ -44,12 +56,49 @@ class FakeReviewSubmitGateRepository implements DatasetCommandRepository {
   }
 }
 
-function buildActor() {
+class FakeRevisionQuery {
+  private filters: Array<{ field: string; value: unknown }> = [];
+
+  constructor(private readonly rows: RevisionRow[]) {}
+
+  select(_columns: string) {
+    return this;
+  }
+
+  eq(field: string, value: unknown) {
+    this.filters.push({ field, value });
+    return this;
+  }
+
+  async range(from: number, to: number) {
+    const rows = this.rows.filter((row) =>
+      this.filters.every(
+        (filter) => (row as unknown as Record<string, unknown>)[filter.field] === filter.value,
+      ),
+    );
+
+    return { data: rows.slice(from, to + 1), error: null };
+  }
+}
+
+class FakeRevisionSupabase {
+  constructor(private readonly rowsByTable: Record<string, RevisionRow[]>) {}
+
+  from(table: string) {
+    return new FakeRevisionQuery(this.rowsByTable[table] ?? []);
+  }
+}
+
+function buildActor(supabase: unknown = {}) {
   return {
     userId: TEST_USER_ID,
     accessToken: 'access-token',
-    supabase: {} as SupabaseClient,
+    supabase: supabase as SupabaseClient,
   };
+}
+
+function resolveTestRevision(revisionChecksum = TEST_REVISION_CHECKSUM) {
+  return () => Promise.resolve({ ok: true as const, revisionChecksum });
 }
 
 function commandBody<T>(result: DatasetCommandExecutionResult): T {
@@ -69,6 +118,57 @@ Deno.test('parseReviewSubmitGateCommand rejects malformed gate payloads', () => 
   });
 
   assertEquals(result.ok, false);
+});
+
+Deno.test('parseReviewSubmitGateCommand accepts missing client checksum', () => {
+  const result = parseReviewSubmitGateCommand({
+    table: 'processes',
+    id: TEST_DATASET_ID,
+    version: '01.00.000',
+  });
+
+  assertEquals(result.ok, true);
+});
+
+Deno.test('stableJsonSha256 orders keys like the calculator runner', async () => {
+  assertEquals(
+    stableJsonStringify({ 2: 'two', 10: 'ten', 1: 'one', a: 'letter' }),
+    '{"1":"one","10":"ten","2":"two","a":"letter"}',
+  );
+  assertEquals(
+    await stableJsonSha256({ '@xml:lang': 'en', '#text': 'hello' }),
+    '3e129ac94dcaabd25e1cdcf880c0c3cb95ed192479416b0f9010661a622e1a65',
+  );
+});
+
+Deno.test('resolveAuthoritativeReviewSubmitRevision hashes persisted json_ordered', async () => {
+  const payload = { '@xml:lang': 'en', '#text': 'hello' };
+  const result = await resolveAuthoritativeReviewSubmitRevision(
+    {
+      table: 'processes',
+      id: TEST_DATASET_ID,
+      version: '01.00.000',
+      action: 'ensure',
+      policyProfile: 'review_submit_fast.v1',
+      reportSchemaVersion: 'review_submit_gate_report.v1',
+    },
+    buildActor(
+      new FakeRevisionSupabase({
+        processes: [
+          {
+            id: TEST_DATASET_ID,
+            version: '01.00.000',
+            json_ordered: payload,
+          },
+        ],
+      }),
+    ),
+  );
+
+  assertEquals(result, {
+    ok: true,
+    revisionChecksum: '3e129ac94dcaabd25e1cdcf880c0c3cb95ed192479416b0f9010661a622e1a65',
+  });
 });
 
 Deno.test('executeReviewSubmitGateCommand returns passed gate as submit-ready', async () => {
@@ -99,13 +199,14 @@ Deno.test('executeReviewSubmitGateCommand returns passed gate as submit-ready', 
       table: 'processes',
       id: TEST_DATASET_ID,
       version: '01.00.000',
-      revisionChecksum: TEST_REVISION_CHECKSUM,
+      revisionChecksum: TEST_CLIENT_REVISION_CHECKSUM,
       action: 'ensure',
       policyProfile: 'review_submit_fast.v1',
       reportSchemaVersion: 'review_submit_gate_report.v1',
     },
     buildActor(),
     repository,
+    resolveTestRevision(),
   );
 
   assertEquals(result.ok, true);
@@ -142,6 +243,8 @@ Deno.test('executeReviewSubmitGateCommand returns passed gate as submit-ready', 
           gateRunId: null,
           policyProfile: 'review_submit_fast.v1',
           reportSchemaVersion: 'review_submit_gate_report.v1',
+          clientRevisionChecksum: TEST_CLIENT_REVISION_CHECKSUM,
+          revisionChecksum: TEST_REVISION_CHECKSUM,
         },
       },
     },
@@ -175,8 +278,18 @@ Deno.test('executeReviewSubmitGateCommand maps queued and blocked gate states', 
     reportSchemaVersion: 'review_submit_gate_report.v1',
   };
 
-  const queued = await executeReviewSubmitGateCommand(request, buildActor(), queuedRepository);
-  const blocked = await executeReviewSubmitGateCommand(request, buildActor(), blockedRepository);
+  const queued = await executeReviewSubmitGateCommand(
+    request,
+    buildActor(),
+    queuedRepository,
+    resolveTestRevision(),
+  );
+  const blocked = await executeReviewSubmitGateCommand(
+    request,
+    buildActor(),
+    blockedRepository,
+    resolveTestRevision(),
+  );
 
   assertEquals(queued.ok, true);
   assertEquals(queued.status, 202);

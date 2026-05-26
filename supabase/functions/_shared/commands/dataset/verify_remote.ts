@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 import type { ActorContext } from '../../command_runtime/actor_context.ts';
 import type { CommandParseResult } from '../../command_runtime/command.ts';
+import { stableJsonSha256 } from './canonical_json.ts';
 import type { DatasetCommandExecutionResult } from './types.ts';
 
 type QueryClient = Pick<SupabaseClient, 'from'>;
@@ -157,31 +158,7 @@ function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResu
   };
 }
 
-function sortedJson(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => sortedJson(item));
-  }
-
-  if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-      .filter((entry) => entry[1] !== undefined)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => [key, sortedJson(item)]);
-    return Object.fromEntries(entries);
-  }
-
-  return value;
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-export async function stableJsonSha256(value: unknown): Promise<string> {
-  const payload = new TextEncoder().encode(JSON.stringify(sortedJson(value)));
-  const digest = await crypto.subtle.digest('SHA-256', payload);
-  return bytesToHex(new Uint8Array(digest));
-}
+export { stableJsonSha256 } from './canonical_json.ts';
 
 function normalizeRow(row: unknown): RemoteVerifyRow | null {
   if (!row || typeof row !== 'object') {
