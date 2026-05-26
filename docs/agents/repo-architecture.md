@@ -30,7 +30,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-05-26
-lastReviewedCommit: fc96a4fe75242d5212f26652aac2a61e20795026
+lastReviewedCommit: 1b79d8034e65e44777174a630880d3f41c270464
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -116,7 +116,7 @@ The shared layers that matter most are:
 - `supabase/functions/_shared/commands/**`
 - `supabase/functions/_shared/db_rpc/**`
 
-`app_dataset_review_submit_gate` is the edge API boundary for dataset review-submit numerical stability checks. It normalizes request and response semantics for Next and calls database-owned RPCs for persisted gate runs; it does not own calculator blocker heuristics or database schema. `app_dataset_submit_review` carries gate assertion metadata for process submit-review so DB truth can reject stale, wrong-policy, or blocked gate runs before a review is created.
+`app_dataset_review_submit_gate` is the edge API boundary for dataset review-submit numerical stability checks. It normalizes request and response semantics for Next, derives the authoritative revision checksum from the authorized persisted `json_ordered` row, and calls database-owned RPCs for persisted gate runs. Client-provided revision checksums are compatibility/diagnostic input only. Edge does not own calculator blocker heuristics or database schema. `app_dataset_submit_review` carries gate assertion metadata for process submit-review so DB truth can reject stale, wrong-policy, wrong-checksum, or blocked gate runs before a review is created.
 
 ### Search, embedding, and AI-backed routes
 
