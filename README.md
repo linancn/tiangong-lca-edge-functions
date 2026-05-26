@@ -273,7 +273,7 @@ grant execute on function public.lca_enqueue_job(text, jsonb) to service_role;
 
 ## Review-submit Gate Function Call Pattern
 
-`app_dataset_review_submit_gate` is the Edge API boundary for calculator-owned review-submit numerical stability reports. It accepts authenticated `POST` requests and returns normalized gate states for Next:
+`app_dataset_review_submit_gate` is the Edge API boundary for calculator-owned review-submit numerical stability reports. It accepts authenticated `POST` requests, derives the authoritative revision checksum from the persisted `json_ordered` row, and returns normalized gate states for Next:
 
 - `queued` / `running`: HTTP `202`, not submit-ready.
 - `passed`: HTTP `200`, submit-ready for the exact dataset revision checksum and policy.
@@ -287,12 +287,13 @@ Request shape:
   "table": "processes",
   "id": "<dataset uuid>",
   "version": "01.00.000",
-  "revisionChecksum": "<sha256>",
   "action": "ensure",
   "policyProfile": "review_submit_fast.v1",
   "reportSchemaVersion": "review_submit_gate_report.v1"
 }
 ```
+
+Legacy clients may still send `revisionChecksum`, but the function treats it as diagnostic input only. The value passed to `cmd_dataset_review_submit_gate` is always computed server-side from the authorized persisted row.
 
 The function calls database-owned RPC `cmd_dataset_review_submit_gate`; database-engine owns persisted gate run schema, idempotent reuse, stale detection, and final submit-review assertion. Edge and Next must not duplicate calculator blocker heuristics.
 
