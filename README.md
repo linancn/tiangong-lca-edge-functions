@@ -84,6 +84,8 @@ Required keys are managed in this file, for example:
 - `REMOTE_SERVICE_API_KEY` only for `AuthMethod.SERVICE_API_KEY` request authentication
 - `UPSTASH_REDIS_URL`
 - `UPSTASH_REDIS_TOKEN`
+- `SAGEMAKER_ENDPOINT_NAME`
+- `EMBEDDING_FT_DB_LOCK_TIMEOUT`, `EMBEDDING_FT_DB_STATEMENT_TIMEOUT`, and `EMBEDDING_FT_DB_RETRY_BACKOFF_SECONDS` for `embedding_ft` database-update backoff behavior
 
 Credential contract:
 
