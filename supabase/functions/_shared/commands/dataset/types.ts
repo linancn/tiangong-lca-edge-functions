@@ -65,7 +65,7 @@ export type ReviewSubmitGateRequest = {
   table: DatasetTable;
   id: string;
   version: string;
-  revisionChecksum: string;
+  revisionChecksum?: string;
   action: ReviewSubmitGateAction;
   gateRunId?: string;
   policyProfile: typeof REVIEW_SUBMIT_GATE_POLICY_PROFILE;

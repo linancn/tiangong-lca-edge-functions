@@ -129,7 +129,6 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_review
       "table": "processes",
       "id": "012fc8f6-9a30-4d98-9b03-34ddec3a6f10",
       "version": "01.01.002",
-      "revisionChecksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "action": "ensure",
       "policyProfile": "review_submit_fast.v1",
       "reportSchemaVersion": "review_submit_gate_report.v1"
