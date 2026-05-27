@@ -1,11 +1,6 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import {
-  generateFlowMarkdown,
-  generateFlowTextSummary,
-  normalizeJsonOrdered,
-} from './flow_extraction.ts';
-import type { OpenAIChatResult } from './openai_chat.ts';
+import { generateFlowMarkdown, normalizeJsonOrdered } from './flow_extraction.ts';
 
 export type DatasetExtractionKind = 'extracted_md' | 'extracted_text';
 export type DatasetEntityKind = 'flow' | 'process';
@@ -51,10 +46,6 @@ export interface DatasetExtractionWorkerOptions {
   visibilityTimeoutSeconds?: number;
   maxReadCount?: number;
   markdownGenerator?: (flowJson: unknown) => string;
-  textGenerator?: (
-    flowJson: unknown,
-    chat?: (input: string, options?: { stream?: boolean }) => Promise<OpenAIChatResult>,
-  ) => Promise<string>;
 }
 
 interface RpcEnvelope<T> {
@@ -109,7 +100,7 @@ function assertFlowJob(job: ClaimedDatasetExtractionJob): void {
       code: 'UNSUPPORTED_ENTITY_KIND',
     });
   }
-  if (message.extraction_kind !== 'extracted_md' && message.extraction_kind !== 'extracted_text') {
+  if (message.extraction_kind !== 'extracted_md') {
     throw Object.assign(new Error('Unsupported dataset extraction kind'), {
       code: 'UNSUPPORTED_EXTRACTION_KIND',
     });
@@ -177,7 +168,7 @@ async function updateFlowExtraction(
   supabase: SupabaseClient,
   id: string,
   version: string,
-  values: { extracted_md?: string; extracted_text?: string },
+  values: { extracted_md: string },
 ): Promise<void> {
   const { error } = await supabase.from('flows').update(values).eq('id', id).eq('version', version);
   if (error) throw error;
@@ -187,7 +178,6 @@ async function processFlowJob(
   supabase: SupabaseClient,
   job: ClaimedDatasetExtractionJob,
   markdownGenerator: (flowJson: unknown) => string,
-  textGenerator: (flowJson: unknown) => Promise<string>,
 ): Promise<void> {
   assertFlowJob(job);
   const { id, version, extraction_kind } = job.message;
@@ -203,9 +193,6 @@ async function processFlowJob(
     await updateFlowExtraction(supabase, id, version, { extracted_md: markdown });
     return;
   }
-
-  const summary = await textGenerator(flowJson);
-  await updateFlowExtraction(supabase, id, version, { extracted_text: summary });
 }
 
 export async function processDatasetExtractionJobs(
@@ -215,7 +202,6 @@ export async function processDatasetExtractionJobs(
   const visibilityTimeoutSeconds = positiveInteger(options.visibilityTimeoutSeconds, 300, 3600);
   const maxReadCount = positiveInteger(options.maxReadCount, 5, 100);
   const markdownGenerator = options.markdownGenerator ?? generateFlowMarkdown;
-  const textGenerator = options.textGenerator ?? generateFlowTextSummary;
 
   const { data, error } = await options.supabase.rpc('cmd_dataset_extraction_claim', {
     p_qty: batchSize,
@@ -250,9 +236,7 @@ export async function processDatasetExtractionJobs(
     };
 
     try {
-      await processFlowJob(options.supabase, job, markdownGenerator, (flowJson) =>
-        textGenerator(flowJson),
-      );
+      await processFlowJob(options.supabase, job, markdownGenerator);
       ackIds.push(job.msg_id);
       const result = {
         ...baseLog,
@@ -264,7 +248,10 @@ export async function processDatasetExtractionJobs(
     } catch (caught) {
       const code = errorCode(caught);
       const message = errorMessage(caught);
-      const terminal = code === 'UNSUPPORTED_ENTITY_KIND' || job.read_ct >= maxReadCount;
+      const terminal =
+        code === 'UNSUPPORTED_ENTITY_KIND' ||
+        code === 'UNSUPPORTED_EXTRACTION_KIND' ||
+        job.read_ct >= maxReadCount;
 
       if (terminal) {
         await recordTerminalFailure(options.supabase, job, code, message);
@@ -273,7 +260,7 @@ export async function processDatasetExtractionJobs(
       const result = {
         ...baseLog,
         status:
-          code === 'UNSUPPORTED_ENTITY_KIND'
+          code === 'UNSUPPORTED_ENTITY_KIND' || code === 'UNSUPPORTED_EXTRACTION_KIND'
             ? ('unsupported' as const)
             : terminal
               ? ('failed' as const)

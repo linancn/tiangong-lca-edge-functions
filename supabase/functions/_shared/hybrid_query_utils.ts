@@ -195,6 +195,8 @@ export function sanitizeHybridQueryOutput(
   );
 
   const normalizedUserQuery = normalizeTerm(userQuery);
+  const userQueryHasCjk = CJK_PATTERN.test(normalizedUserQuery);
+  const userQueryHasLatin = LATIN_CHAR_PATTERN.test(normalizedUserQuery);
 
   if (fulltextQueryEn.length === 0 && semanticQueryEn) {
     fulltextQueryEn = [semanticQueryEn];
@@ -203,16 +205,31 @@ export function sanitizeHybridQueryOutput(
     fulltextQueryZh = [normalizedUserQuery];
   }
 
+  if (normalizedUserQuery && (userQueryHasLatin || CAS_PATTERN.test(normalizedUserQuery))) {
+    fulltextQueryEn = prependSeedTerm(fulltextQueryEn, normalizedUserQuery);
+  }
+  if (normalizedUserQuery && userQueryHasCjk) {
+    fulltextQueryZh = prependSeedTerm(fulltextQueryZh, normalizedUserQuery);
+  }
+
   const enSeed = semanticQueryEn || fulltextQueryEn[0] || '';
+  const rawEnSeed =
+    normalizedUserQuery && (userQueryHasLatin || CAS_PATTERN.test(normalizedUserQuery))
+      ? normalizedUserQuery
+      : '';
   const zhSeed =
     normalizedUserQuery && CJK_PATTERN.test(normalizedUserQuery)
       ? normalizedUserQuery
       : fulltextQueryZh[0] || '';
-  const enRest = fulltextQueryEn.filter((term) => term.toLowerCase() !== enSeed.toLowerCase());
+  const enRest = fulltextQueryEn.filter(
+    (term) =>
+      term.toLowerCase() !== enSeed.toLowerCase() &&
+      (!rawEnSeed || term.toLowerCase() !== rawEnSeed.toLowerCase()),
+  );
   const zhRest = fulltextQueryZh.filter((term) => term !== zhSeed);
   const sortedEnRest = sortTermsDeterministically(dedupeNearDuplicates(enRest), 'en');
   const sortedZhRest = sortTermsDeterministically(dedupeNearDuplicates(zhRest), 'zh-Hans-CN');
-  fulltextQueryEn = enSeed ? [enSeed, ...sortedEnRest] : sortedEnRest;
+  fulltextQueryEn = uniqueTerms([enSeed, rawEnSeed, ...sortedEnRest].filter(Boolean));
   fulltextQueryZh = zhSeed ? [zhSeed, ...sortedZhRest] : sortedZhRest;
 
   return {
@@ -220,4 +237,11 @@ export function sanitizeHybridQueryOutput(
     fulltext_query_en: fulltextQueryEn.slice(0, 6),
     fulltext_query_zh: fulltextQueryZh.slice(0, 6),
   };
+}
+
+export function buildHybridFulltextQueryString(query: HybridSearchQuery): string {
+  return [...query.fulltext_query_zh, ...query.fulltext_query_en]
+    .filter((term) => term.trim().length > 0)
+    .map((term) => `(${term})`)
+    .join(' OR ');
 }
