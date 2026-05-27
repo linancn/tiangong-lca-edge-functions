@@ -139,7 +139,7 @@ function buildFlowJob(
 }
 
 Deno.test(
-  'processDatasetExtractionJobs updates flow markdown/text jobs and acks successes',
+  'processDatasetExtractionJobs updates flow markdown jobs and acks successes',
   async () => {
     const supabase = new FakeSupabase();
     supabase.flows.push({
@@ -147,21 +147,20 @@ Deno.test(
       version: '01.00.000',
       json_ordered: FLOW_JSON,
     });
-    supabase.claimedJobs = [buildFlowJob(1, 'extracted_md'), buildFlowJob(2, 'extracted_text')];
+    supabase.claimedJobs = [buildFlowJob(1, 'extracted_md')];
 
     const result = await processDatasetExtractionJobs({
       supabase: supabase as unknown as SupabaseClient,
       markdownGenerator: () => '# Test flow',
-      textGenerator: async () => 'Test flow summary.',
     });
 
-    assertEquals(result.claimed, 2);
-    assertEquals(result.acked, 2);
+    assertEquals(result.claimed, 1);
+    assertEquals(result.acked, 1);
     assertEquals(supabase.flows[0].extracted_md, '# Test flow');
-    assertEquals(supabase.flows[0].extracted_text, 'Test flow summary.');
+    assertEquals('extracted_text' in supabase.flows[0], false);
     assertEquals(supabase.rpcCalls.at(-1), {
       fn: 'cmd_dataset_extraction_ack',
-      args: { p_msg_ids: [1, 2] },
+      args: { p_msg_ids: [1] },
     });
   },
 );
@@ -173,12 +172,12 @@ Deno.test('processDatasetExtractionJobs leaves transient failures unacked for re
     version: '01.00.000',
     json_ordered: FLOW_JSON,
   });
-  supabase.claimedJobs = [buildFlowJob(3, 'extracted_text', 1)];
+  supabase.claimedJobs = [buildFlowJob(3, 'extracted_md', 1)];
 
   const result = await processDatasetExtractionJobs({
     supabase: supabase as unknown as SupabaseClient,
-    textGenerator: async () => {
-      throw new Error('temporary OpenAI failure');
+    markdownGenerator: () => {
+      throw new Error('temporary markdown failure');
     },
   });
 
@@ -201,18 +200,32 @@ Deno.test('processDatasetExtractionJobs records terminal retry failures', async 
     version: '01.00.000',
     json_ordered: FLOW_JSON,
   });
-  supabase.claimedJobs = [buildFlowJob(4, 'extracted_text', 5)];
+  supabase.claimedJobs = [buildFlowJob(4, 'extracted_md', 5)];
 
   const result = await processDatasetExtractionJobs({
     supabase: supabase as unknown as SupabaseClient,
     maxReadCount: 5,
-    textGenerator: async () => {
-      throw new Error('terminal OpenAI failure');
+    markdownGenerator: () => {
+      throw new Error('terminal markdown failure');
     },
   });
 
   assertEquals(result.acked, 0);
   assertEquals(result.results[0].status, 'failed');
+  assertEquals(supabase.rpcCalls.at(-1)?.fn, 'cmd_dataset_extraction_record_failure');
+});
+
+Deno.test('processDatasetExtractionJobs records extracted_text jobs as unsupported', async () => {
+  const supabase = new FakeSupabase();
+  supabase.claimedJobs = [buildFlowJob(6, 'extracted_text', 1)];
+
+  const result = await processDatasetExtractionJobs({
+    supabase: supabase as unknown as SupabaseClient,
+  });
+
+  assertEquals(result.acked, 0);
+  assertEquals(result.results[0].status, 'unsupported');
+  assertEquals(result.results[0].error_code, 'UNSUPPORTED_EXTRACTION_KIND');
   assertEquals(supabase.rpcCalls.at(-1)?.fn, 'cmd_dataset_extraction_record_failure');
 });
 
