@@ -9,6 +9,10 @@ import {
   HybridSearchQuery,
   sanitizeHybridQueryOutput,
 } from '../_shared/hybrid_query_utils.ts';
+import {
+  buildHybridSearchRpcRequest,
+  parseHybridSearchClientRequest,
+} from '../_shared/hybrid_search_request.ts';
 import { openaiStructuredOutput } from '../_shared/openai_structured.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseClient as supabase, supabaseAuthClient } from '../_shared/supabase_client.ts';
@@ -191,12 +195,16 @@ Deno.serve(async (req) => {
 
   console.log('Auth Success:', authResult);
 
-  const { query, filter } = await req.json();
-
-  if (!query) {
-    return new Response('Missing query', { status: 400 });
+  let parsedRequest;
+  try {
+    parsedRequest = parseHybridSearchClientRequest(await req.json());
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Invalid request body';
+    return new Response(JSON.stringify({ error: message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400,
+    });
   }
-  const queryText = typeof query === 'string' ? query.trim() : String(query);
 
   const rawRes = await openaiStructuredOutput<HybridSearchQuery>({
     schemaName: 'lifecyclemodel_hybrid_search_queries',
@@ -204,11 +212,11 @@ Deno.serve(async (req) => {
     systemPrompt: `Field: Life Cycle Assessment (LCA)
 Task: Transform description of lifecycle models into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.
 ${HYBRID_SYNONYM_RULES}`,
-    userPrompt: `Lifecycle model description: ${queryText}`,
+    userPrompt: `Lifecycle model description: ${parsedRequest.queryText}`,
     options: { model: openai_chat_model, temperature: 0 },
   });
 
-  const normalizedRes = sanitizeHybridQueryOutput(rawRes, queryText);
+  const normalizedRes = sanitizeHybridQueryOutput(rawRes, parsedRequest.queryText);
   const semanticQueryEn = normalizedRes.semantic_query_en;
   const fulltextQueryZh = normalizedRes.fulltext_query_zh;
   const fulltextQueryEn = normalizedRes.fulltext_query_en;
@@ -225,14 +233,11 @@ ${HYBRID_SYNONYM_RULES}`,
   const embedding = await generateEmbedding(semanticQueryEn);
   const vectorStr = `[${embedding.join(',')}]`;
 
-  const filterCondition =
-    filter !== undefined ? (typeof filter === 'string' ? filter : JSON.stringify(filter)) : {};
-
-  const requestBody = {
-    query_text: queryFulltextString,
-    query_embedding: vectorStr,
-    filter_condition: filterCondition,
-  };
+  const requestBody = buildHybridSearchRpcRequest(
+    queryFulltextString,
+    vectorStr,
+    parsedRequest.rpcOptions,
+  );
 
   // console.log('LLM structured res:', JSON.stringify(res, null, 2));
   // console.log('combinedFulltextQueries:', combinedFulltextQueries);
