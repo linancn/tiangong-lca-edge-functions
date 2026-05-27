@@ -217,11 +217,13 @@ npm run probe:auth -- --dry-run
 
 After any code or document update:
 
-1. Run lint/format:
+1. Run the non-mutating formatting check:
 
 ```bash
 npm run lint
 ```
+
+Use `npm run format` only when you intend to rewrite files with Prettier.
 
 2. Run the repo baseline Deno checks:
 

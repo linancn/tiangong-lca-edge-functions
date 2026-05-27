@@ -11,7 +11,8 @@
     "deploy:dev": "node ./scripts/deploy-function.cjs dev",
     "deploy:main": "node ./scripts/deploy-function.cjs main",
     "probe:auth": "node ./scripts/probe-functions-auth.cjs",
-    "lint": "prettier -c --write \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\""
+    "format": "prettier --write \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\"",
+    "lint": "prettier --check \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\""
   },
   "devDependencies": {
     "prettier": "^3.8.1",
