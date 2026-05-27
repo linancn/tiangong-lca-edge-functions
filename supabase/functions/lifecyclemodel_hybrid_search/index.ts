@@ -4,6 +4,7 @@ import { InvokeEndpointCommand, SageMakerRuntimeClient } from '@aws-sdk/client-s
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import {
+  buildHybridFulltextQueryString,
   HYBRID_SYNONYM_RULES,
   hybridQuerySchema,
   HybridSearchQuery,
@@ -225,10 +226,7 @@ ${HYBRID_SYNONYM_RULES}`,
     throw new Error('OpenAI structured output missing semantic_query_en');
   }
 
-  const combinedFulltextQueries = [...fulltextQueryZh, ...fulltextQueryEn].map(
-    (query) => `(${query})`,
-  );
-  const queryFulltextString = combinedFulltextQueries.join(' OR ');
+  const queryFulltextString = buildHybridFulltextQueryString(normalizedRes);
 
   const embedding = await generateEmbedding(semanticQueryEn);
   const vectorStr = `[${embedding.join(',')}]`;
@@ -239,21 +237,56 @@ ${HYBRID_SYNONYM_RULES}`,
     parsedRequest.rpcOptions,
   );
 
-  // console.log('LLM structured res:', JSON.stringify(res, null, 2));
-  // console.log('combinedFulltextQueries:', combinedFulltextQueries);
-  // console.log('queryFulltextString.len:', queryFulltextString.length);
-  // console.log('semanticQueryEn:', semanticQueryEn);
-  // console.log('requestBody:', JSON.stringify(requestBody, null, 2));
+  const rpcLogBase = {
+    function: 'lifecyclemodel_hybrid_search',
+    entity_kind: 'lifecyclemodel',
+    query_raw: parsedRequest.queryText,
+    semantic_query_en: semanticQueryEn,
+    fulltext_query_en: fulltextQueryEn,
+    fulltext_query_zh: fulltextQueryZh,
+    query_fulltext_string: queryFulltextString,
+    match_threshold: requestBody.match_threshold,
+    data_source: requestBody.data_source,
+  };
+  const rpcStartedAt = Date.now();
+  console.log('[hybrid_search]', { ...rpcLogBase, stage: 'rpc_start' });
 
-  const { data, error } = await supabase.rpc('hybrid_search_lifecyclemodels', requestBody);
+  let { data, error } = await supabase.rpc('hybrid_search_lifecyclemodels', requestBody);
+  let fallbackUsed = false;
+
+  if (!error && Array.isArray(data) && data.length === 0 && requestBody.match_threshold > 0) {
+    fallbackUsed = true;
+    const fallbackRequestBody = { ...requestBody, match_threshold: 0 };
+    console.log('[hybrid_search]', {
+      ...rpcLogBase,
+      stage: 'rpc_empty_fallback',
+      match_threshold: fallbackRequestBody.match_threshold,
+      duration_ms: Date.now() - rpcStartedAt,
+    });
+    ({ data, error } = await supabase.rpc('hybrid_search_lifecyclemodels', fallbackRequestBody));
+  }
 
   if (error) {
-    console.error('Hybrid search error:', error);
+    console.error('[hybrid_search]', {
+      ...rpcLogBase,
+      stage: 'rpc_error',
+      duration_ms: Date.now() - rpcStartedAt,
+      error_code: error.code ?? 'HYBRID_SEARCH_RPC_ERROR',
+      error_message: error.message,
+      fallback_used: fallbackUsed,
+    });
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { 'Content-Type': 'application/json' },
       status: 500,
     });
   }
+  console.log('[hybrid_search]', {
+    ...rpcLogBase,
+    stage: 'rpc_success',
+    duration_ms: Date.now() - rpcStartedAt,
+    result_count: Array.isArray(data) ? data.length : 0,
+    fallback_used: fallbackUsed,
+  });
   if (data) {
     if (data.length > 0) {
       return new Response(
