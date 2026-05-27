@@ -7,5 +7,12 @@ cd "$repo_root"
 "$repo_root/scripts/docpact-gate.sh" "$@"
 
 echo "Running local test gate: npm run lint && npm run check"
+pre_lint_status="$(git status --porcelain=v1 --untracked-files=normal)"
 npm run lint
+post_lint_status="$(git status --porcelain=v1 --untracked-files=normal)"
+if [ "$post_lint_status" != "$pre_lint_status" ]; then
+  echo "npm run lint changed the working tree. Review, stage, and commit those changes before pushing." >&2
+  git status --short >&2
+  exit 1
+fi
 npm run check

@@ -200,4 +200,4 @@ If one of those changes, assume more than one function family is affected.
 
 ## Local Docpact Push Gate
 
-This repository has a versioned local `pre-push` hook under `.githooks/pre-push` that delegates to `scripts/docpact-gate.sh` and then runs `npm run lint` plus `npm run check`. The gate resolves the CLI through `scripts/docpact`, so local agent shells do not need bare `docpact` on `PATH`. The hook is the local guard for docpact config validation, enforced doc-governance linting, and Edge Function checks; the GitHub `CI` workflow is manual-dispatch only.
+This repository has a versioned local `pre-push` hook under `.githooks/pre-push` that delegates to `scripts/docpact-gate.sh` and then runs non-mutating `npm run lint` plus `npm run check`. The hook aborts if the lint step changes the working tree, so generated formatting changes must be reviewed and committed before push. The gate resolves the CLI through `scripts/docpact`, so local agent shells do not need bare `docpact` on `PATH`. The hook is the local guard for docpact config validation, enforced doc-governance linting, and Edge Function checks; the GitHub `CI` workflow is manual-dispatch only.
