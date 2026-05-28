@@ -77,7 +77,7 @@ Do not start from repo landing prose or raw function inventories when the core c
 - stable path groups and hotspot families live in `docs/agents/repo-architecture.md`
 - human setup and request-example guidance stay in `README.md`
 - `test.example.http` is a supporting request collection for concrete payloads, not a governed source doc
-- repo-local documentation maintenance is enforced by `.github/workflows/ai-doc-lint.yml` with `docpact lint`
+- repo-local documentation maintenance is enforced locally by the pre-push docpact gate; `.github/workflows/ai-doc-lint.yml` is manual-dispatch fallback
 - the main routing intents are `function-runtime`, `auth-runtime`, `command-runtime`, `review-submit-gate`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
 
 ## Minimal Execution Facts
