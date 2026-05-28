@@ -101,7 +101,7 @@ The repo's machine-readable governance source is `.docpact/config.yaml`.
 That means:
 
 - governed-doc rules, routing intents, ownership boundaries, and freshness live in `.docpact/config.yaml`
-- `.github/workflows/ai-doc-lint.yml` should validate config and run `docpact lint`
+- `.github/workflows/ai-doc-lint.yml` is manual-dispatch fallback and should delegate to the same local docpact gate
 - retained explanatory docs stay in `AGENTS.md`, this file, `repo-architecture.md`, `README.md`, and the PR templates
 
 Do not recreate deleted `ai/*` files under a new name. Keep deterministic facts in config and explanatory material in retained source docs.
