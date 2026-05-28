@@ -15,9 +15,14 @@ import {
   buildHybridSearchRpcRequest,
   parseHybridSearchClientRequest,
 } from '../_shared/hybrid_search_request.ts';
+import {
+  createHybridSearchRpcClient,
+  HybridSearchRpcContextError,
+  type HybridSearchRpcClientContext,
+} from '../_shared/hybrid_search_rpc_context.ts';
 import { openaiStructuredOutput } from '../_shared/openai_structured.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
-import { supabaseClient as supabase, supabaseAuthClient } from '../_shared/supabase_client.ts';
+import { supabaseAuthClient } from '../_shared/supabase_client.ts';
 
 const openai_chat_model = Deno.env.get('OPENAI_CHAT_MODEL') ?? 'gpt-4.1-mini';
 const SAGEMAKER_ENDPOINT_NAME = Deno.env.get('SAGEMAKER_ENDPOINT_NAME');
@@ -239,6 +244,22 @@ ${HYBRID_SYNONYM_RULES}`,
     vectorStr,
     parsedRequest.rpcOptions,
   );
+  let rpcClientContext: HybridSearchRpcClientContext;
+  try {
+    rpcClientContext = createHybridSearchRpcClient(
+      req.headers.get('Authorization'),
+      requestBody.data_source,
+    );
+  } catch (error) {
+    if (error instanceof HybridSearchRpcContextError) {
+      return new Response(JSON.stringify({ error: error.message, code: error.code }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: error.status,
+      });
+    }
+
+    throw error;
+  }
 
   const rpcLogBase = {
     function: 'process_hybrid_search',
@@ -250,11 +271,12 @@ ${HYBRID_SYNONYM_RULES}`,
     query_fulltext_string: queryFulltextString,
     match_threshold: requestBody.match_threshold,
     data_source: requestBody.data_source,
+    user_context_kind: rpcClientContext.userContextKind,
   };
   const rpcStartedAt = Date.now();
   console.log('[hybrid_search]', { ...rpcLogBase, stage: 'rpc_start' });
 
-  let { data, error } = await supabase.rpc('hybrid_search_processes', requestBody);
+  let { data, error } = await rpcClientContext.client.rpc('hybrid_search_processes', requestBody);
   let fallbackUsed = false;
 
   if (!error && Array.isArray(data) && data.length === 0 && requestBody.match_threshold > 0) {
@@ -266,7 +288,10 @@ ${HYBRID_SYNONYM_RULES}`,
       match_threshold: fallbackRequestBody.match_threshold,
       duration_ms: Date.now() - rpcStartedAt,
     });
-    ({ data, error } = await supabase.rpc('hybrid_search_processes', fallbackRequestBody));
+    ({ data, error } = await rpcClientContext.client.rpc(
+      'hybrid_search_processes',
+      fallbackRequestBody,
+    ));
   }
 
   if (error) {
