@@ -5,12 +5,15 @@ import { createRequestSchema } from '../supabase/functions/_shared/commands/data
 import { deleteRequestSchema } from '../supabase/functions/_shared/commands/dataset/delete.ts';
 import { createDatasetCommandRepository } from '../supabase/functions/_shared/commands/dataset/repository.ts';
 import { reviewSubmitGateRequestSchema } from '../supabase/functions/_shared/commands/dataset/review_submit_gate.ts';
+import { reviewSubmitJobRequestSchema } from '../supabase/functions/_shared/commands/dataset/review_submit_jobs.ts';
 import { saveDraftRequestSchema } from '../supabase/functions/_shared/commands/dataset/save_draft.ts';
 import { submitReviewRequestSchema } from '../supabase/functions/_shared/commands/dataset/submit_review.ts';
 import {
   callDatasetCreateRpc,
   callDatasetDeleteRpc,
   callDatasetReviewSubmitGateRpc,
+  callDatasetReviewSubmitJobEnqueueRpc,
+  callDatasetReviewSubmitJobReadRpc,
   callDatasetSaveDraftRpc,
   callDatasetSubmitReviewRpc,
   type DatasetRpcResult,
@@ -65,6 +68,24 @@ Deno.test('reviewSubmitGateRequestSchema defaults action and calculator contract
   }
 });
 
+Deno.test(
+  'reviewSubmitJobRequestSchema defaults enqueue action and calculator contract versions',
+  () => {
+    const parsed = reviewSubmitJobRequestSchema.safeParse({
+      table: 'processes',
+      id: '11111111-1111-4111-8111-111111111111',
+      version: '01.00.000',
+    });
+
+    assertEquals(parsed.success, true);
+    if (parsed.success && parsed.data.action === 'enqueue') {
+      assertEquals(parsed.data.action, 'enqueue');
+      assertEquals(parsed.data.policyProfile, 'review_submit_fast.v1');
+      assertEquals(parsed.data.reportSchemaVersion, 'review_submit_gate_report.v1');
+    }
+  },
+);
+
 Deno.test('createRequestSchema rejects create payloads with version fields', () => {
   const parsed = createRequestSchema.safeParse({
     table: 'flows',
@@ -107,9 +128,12 @@ Deno.test('createDatasetCommandRepository requires an explicit Supabase client',
 });
 
 class FakeRpcSupabase {
+  calls: Array<{ fn: string; args: unknown }> = [];
+
   constructor(private readonly result: { data: unknown; error: unknown }) {}
 
-  rpc() {
+  rpc(fn: string, args: unknown) {
+    this.calls.push({ fn, args: structuredClone(args) });
     return Promise.resolve(this.result);
   }
 }
@@ -150,6 +174,21 @@ const reviewSubmitGateRequest = {
   action: 'ensure' as const,
   policyProfile: 'review_submit_fast.v1' as const,
   reportSchemaVersion: 'review_submit_gate_report.v1' as const,
+};
+
+const reviewSubmitJobEnqueueRequest = {
+  action: 'enqueue' as const,
+  table: 'processes' as const,
+  id: '11111111-1111-4111-8111-111111111111',
+  version: '01.00.000',
+  revisionChecksum: 'a'.repeat(64),
+  policyProfile: 'review_submit_fast.v1' as const,
+  reportSchemaVersion: 'review_submit_gate_report.v1' as const,
+};
+
+const reviewSubmitJobReadRequest = {
+  action: 'read' as const,
+  reviewSubmitJobId: '55555555-5555-4555-8555-555555555555',
 };
 
 const auditPayload = buildCommandAuditPayload({
@@ -364,4 +403,77 @@ Deno.test('callDatasetReviewSubmitGateRpc unwraps review-submit gate run envelop
       gateRunId: '44444444-4444-4444-8444-444444444444',
     },
   });
+});
+
+Deno.test('callDatasetReviewSubmitJobEnqueueRpc forwards enqueue job RPC args', async () => {
+  const supabase = new FakeRpcSupabase({
+    data: {
+      ok: true,
+      data: {
+        status: 'waiting_gate',
+        reviewSubmitJobId: reviewSubmitJobReadRequest.reviewSubmitJobId,
+      },
+    },
+    error: null,
+  });
+  const result = (await callDatasetReviewSubmitJobEnqueueRpc(
+    supabase as never,
+    reviewSubmitJobEnqueueRequest,
+    auditPayload,
+  )) as DatasetRpcResult;
+
+  assertEquals(result, {
+    ok: true,
+    data: {
+      status: 'waiting_gate',
+      reviewSubmitJobId: reviewSubmitJobReadRequest.reviewSubmitJobId,
+    },
+  });
+  assertEquals(supabase.calls, [
+    {
+      fn: 'cmd_dataset_review_submit_job_enqueue',
+      args: {
+        p_table: 'processes',
+        p_id: reviewSubmitJobEnqueueRequest.id,
+        p_version: reviewSubmitJobEnqueueRequest.version,
+        p_revision_checksum: reviewSubmitJobEnqueueRequest.revisionChecksum,
+        p_policy_profile: 'review_submit_fast.v1',
+        p_report_schema_version: 'review_submit_gate_report.v1',
+        p_audit: auditPayload,
+      },
+    },
+  ]);
+});
+
+Deno.test('callDatasetReviewSubmitJobReadRpc unwraps review-submit job envelopes', async () => {
+  const supabase = new FakeRpcSupabase({
+    data: {
+      ok: true,
+      data: {
+        status: 'submitted',
+        reviewSubmitJobId: reviewSubmitJobReadRequest.reviewSubmitJobId,
+      },
+    },
+    error: null,
+  });
+  const result = (await callDatasetReviewSubmitJobReadRpc(
+    supabase as never,
+    reviewSubmitJobReadRequest,
+  )) as DatasetRpcResult;
+
+  assertEquals(result, {
+    ok: true,
+    data: {
+      status: 'submitted',
+      reviewSubmitJobId: reviewSubmitJobReadRequest.reviewSubmitJobId,
+    },
+  });
+  assertEquals(supabase.calls, [
+    {
+      fn: 'cmd_dataset_review_submit_job_read',
+      args: {
+        p_job_id: reviewSubmitJobReadRequest.reviewSubmitJobId,
+      },
+    },
+  ]);
 });

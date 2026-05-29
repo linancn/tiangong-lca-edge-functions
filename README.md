@@ -17,8 +17,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-05-24
-lastReviewedCommit: 353b87c5efde6b7138b9d171c0c203a4305991cc
+lastReviewedAt: 2026-05-29
+lastReviewedCommit: a98c4dc89050a426f8428b46c1ad0e89dc89e8f6
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -148,6 +148,7 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 - `lifecyclemodel_hybrid_search`
 - `app_dataset_verify_remote`
 - `app_dataset_review_submit_gate`
+- `app_dataset_review_submit_jobs`
 - `ai_suggest`
 - `lca_solve` / `lca_jobs` / `lca_results`
 - `lca_query_results`
@@ -298,6 +299,21 @@ Request shape:
 Legacy clients may still send `revisionChecksum`, but the function treats it as diagnostic input only. The value passed to `cmd_dataset_review_submit_gate` is always computed server-side from the authorized persisted row.
 
 The function calls database-owned RPC `cmd_dataset_review_submit_gate`; database-engine owns persisted gate run schema, idempotent reuse, stale detection, and final submit-review assertion. Edge and Next must not duplicate calculator blocker heuristics.
+
+`app_dataset_review_submit_jobs` is the user-facing orchestration API for reliable final review submission. It accepts authenticated `POST` requests:
+
+- `enqueue`: derives the authoritative revision checksum from persisted `json_ordered`, creates or reuses a DB-owned submit job, and returns the persisted job state.
+- `read`: reads a known `reviewSubmitJobId`.
+- `read_latest`: derives the current authoritative checksum and reads the latest matching job for the dataset revision.
+
+Job response states map to HTTP status as follows:
+
+- `queued` / `waiting_gate` / `submitting`: HTTP `202`, work is still in progress.
+- `submitted`: HTTP `200`, DB final submit completed.
+- `blocked` / `stale` / `cancelled`: HTTP `409`, not submit-ready or no longer active.
+- `error`: HTTP `502`, backend worker or DB orchestration failed.
+
+`process_dataset_review_submit_jobs` is a service-key-only worker endpoint. It claims DB submit jobs, records `waiting_gate` when the gate is not ready, records terminal blocked/stale/error gate states, and calls DB-owned `cmd_review_submit_from_job` only after the gate has passed. Recurring invocation should be enabled only after the database RPC migration and this Edge Function are both deployed.
 
 ## LCA Function Call Patterns
 

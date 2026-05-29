@@ -101,6 +101,70 @@ export type ReviewSubmitGateResult = {
   [key: string]: unknown;
 };
 
+export type ReviewSubmitJobAction = 'enqueue' | 'read' | 'read_latest';
+
+export type ReviewSubmitJobStatus =
+  | 'queued'
+  | 'waiting_gate'
+  | 'submitting'
+  | 'submitted'
+  | 'blocked'
+  | 'stale'
+  | 'error'
+  | 'cancelled';
+
+export type ReviewSubmitJobEnqueueRequest = {
+  action: 'enqueue';
+  table: 'processes';
+  id: string;
+  version: string;
+  revisionChecksum?: string;
+  policyProfile: typeof REVIEW_SUBMIT_GATE_POLICY_PROFILE;
+  reportSchemaVersion: typeof REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION;
+};
+
+export type ReviewSubmitJobReadRequest = {
+  action: 'read';
+  reviewSubmitJobId: string;
+};
+
+export type ReviewSubmitJobReadLatestRequest = {
+  action: 'read_latest';
+  table: 'processes';
+  id: string;
+  version: string;
+  revisionChecksum?: string;
+};
+
+export type ReviewSubmitJobRequest =
+  | ReviewSubmitJobEnqueueRequest
+  | ReviewSubmitJobReadRequest
+  | ReviewSubmitJobReadLatestRequest;
+
+export type ReviewSubmitJobResult = {
+  status: ReviewSubmitJobStatus;
+  reviewSubmitJobId?: string;
+  gateRunId?: string | null;
+  datasetRevision?: {
+    table: DatasetTable;
+    id: string;
+    version: string;
+    revisionChecksum: string;
+  };
+  policy?: {
+    profile?: string;
+    reportSchemaVersion?: string;
+  };
+  gate?: ReviewSubmitGateResult | null;
+  error?: {
+    code?: string;
+    message?: string;
+    details?: unknown;
+  } | null;
+  result?: unknown;
+  [key: string]: unknown;
+};
+
 export type DatasetCommandFailure = {
   ok: false;
   code: string;
