@@ -8,6 +8,9 @@ import type {
   DeleteRequest,
   PublishRequest,
   ReviewSubmitGateRequest,
+  ReviewSubmitJobEnqueueRequest,
+  ReviewSubmitJobReadLatestRequest,
+  ReviewSubmitJobReadRequest,
   SaveDraftRequest,
   SubmitReviewRequest,
 } from '../commands/dataset/types.ts';
@@ -182,6 +185,40 @@ export function buildDatasetReviewSubmitGateRpcArgs(
   };
 }
 
+export function buildDatasetReviewSubmitJobEnqueueRpcArgs(
+  request: ReviewSubmitJobEnqueueRequest,
+  audit: CommandAuditPayload,
+): Record<string, unknown> {
+  return {
+    p_table: request.table,
+    p_id: request.id,
+    p_version: request.version,
+    p_revision_checksum: request.revisionChecksum,
+    p_policy_profile: request.policyProfile,
+    p_report_schema_version: request.reportSchemaVersion,
+    p_audit: audit,
+  };
+}
+
+export function buildDatasetReviewSubmitJobReadRpcArgs(
+  request: ReviewSubmitJobReadRequest,
+): Record<string, unknown> {
+  return {
+    p_job_id: request.reviewSubmitJobId,
+  };
+}
+
+export function buildDatasetReviewSubmitJobReadLatestRpcArgs(
+  request: ReviewSubmitJobReadLatestRequest,
+): Record<string, unknown> {
+  return {
+    p_table: request.table,
+    p_id: request.id,
+    p_version: request.version,
+    p_revision_checksum: request.revisionChecksum ?? null,
+  };
+}
+
 export function callDatasetSaveDraftRpc(
   supabase: RpcClient,
   request: SaveDraftRequest,
@@ -191,6 +228,40 @@ export function callDatasetSaveDraftRpc(
     supabase,
     'cmd_dataset_save_draft',
     buildDatasetSaveDraftRpcArgs(request, audit),
+  );
+}
+
+export function callDatasetReviewSubmitJobEnqueueRpc(
+  supabase: RpcClient,
+  request: ReviewSubmitJobEnqueueRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDatasetRpc(
+    supabase,
+    'cmd_dataset_review_submit_job_enqueue',
+    buildDatasetReviewSubmitJobEnqueueRpcArgs(request, audit),
+  );
+}
+
+export function callDatasetReviewSubmitJobReadRpc(
+  supabase: RpcClient,
+  request: ReviewSubmitJobReadRequest,
+) {
+  return callDatasetRpc(
+    supabase,
+    'cmd_dataset_review_submit_job_read',
+    buildDatasetReviewSubmitJobReadRpcArgs(request),
+  );
+}
+
+export function callDatasetReviewSubmitJobReadLatestRpc(
+  supabase: RpcClient,
+  request: ReviewSubmitJobReadLatestRequest,
+) {
+  return callDatasetRpc(
+    supabase,
+    'cmd_dataset_review_submit_job_read_latest',
+    buildDatasetReviewSubmitJobReadLatestRpcArgs(request),
   );
 }
 

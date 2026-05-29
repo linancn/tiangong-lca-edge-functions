@@ -46,6 +46,9 @@ class FakeReviewSubmitGateRepository implements DatasetCommandRepository {
   assignTeam = () => this.unimplemented();
   publish = () => this.unimplemented();
   submitReview = () => this.unimplemented();
+  reviewSubmitJobEnqueue = () => this.unimplemented();
+  reviewSubmitJobRead = () => this.unimplemented();
+  reviewSubmitJobReadLatest = () => this.unimplemented();
 
   reviewSubmitGate(request: ReviewSubmitGateRequest, audit: CommandAuditPayload) {
     this.reviewSubmitGateCalls.push({
