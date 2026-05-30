@@ -29,6 +29,7 @@ class FakeSupabase {
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
   signedUploadCalls: Array<{ bucket: string; objectPath: string }> = [];
   signedDownloadCalls: Array<{ bucket: string; objectPath: string; expiresIn: number }> = [];
+  signedDownloadErrors = new Map<string, JsonRecord>();
 
   from(table: TableName): FakeQueryBuilder {
     return new FakeQueryBuilder(this, table);
@@ -54,6 +55,14 @@ class FakeSupabase {
       },
       createSignedUrl: async (objectPath: string, expiresIn: number) => {
         this.signedDownloadCalls.push({ bucket, objectPath, expiresIn });
+        const error = this.signedDownloadErrors.get(objectPath);
+        if (error) {
+          return {
+            data: null,
+            error,
+          };
+        }
+
         return {
           data: {
             signedUrl: `https://download.example/${bucket}/${encodePath(objectPath)}?expires=${expiresIn}`,
@@ -512,8 +521,249 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       jobLookup.artifacts_by_kind.import_source.signed_download_url,
       `https://download.example/lca_results/lca-results/packages/jobs/${prepared.job_id}/import-source.zip?expires=3600`,
     );
+    assertEquals(jobLookup.artifacts_by_kind.import_source.download_status, 'available');
+    assertEquals(jobLookup.artifacts_by_kind.import_source.download_error_code, null);
     assertEquals(jobsRedisCalls, 1);
     assertEquals(jobsAuthCalls, [[AuthMethod.JWT, AuthMethod.USER_API_KEY]]);
+  });
+});
+
+Deno.test(
+  'tidas_package_jobs marks expired and deleted package artifacts as unavailable',
+  async () => {
+    await withPackageStorageEnv(async () => {
+      const { createTidasPackageJobsHandler } = await loadTidasHandlers();
+      const supabase = new FakeSupabase();
+      const jobId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const expiredPath = `lca-results/packages/jobs/${jobId}/export-package.zip`;
+      const deletedPath = `lca-results/packages/jobs/${jobId}/export-report.json`;
+
+      await supabase.insert('lca_package_jobs', {
+        id: jobId,
+        job_type: 'export_package',
+        status: 'ready',
+        requested_by: TEST_USER_ID,
+        scope: 'current_user',
+        root_count: 0,
+        request_key: 'request-key',
+        payload: {},
+        diagnostics: {},
+        created_at: '2026-05-01T00:00:00.000Z',
+        updated_at: '2026-05-01T00:00:00.000Z',
+      });
+      await supabase.insert('lca_package_artifacts', [
+        {
+          id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          job_id: jobId,
+          artifact_kind: 'export_zip',
+          status: 'ready',
+          artifact_url: `${TEST_SUPABASE_URL}/storage/v1/s3/lca_results/${expiredPath}`,
+          artifact_sha256: null,
+          artifact_byte_size: 100,
+          artifact_format: 'tidas-package-zip:v1',
+          content_type: 'application/zip',
+          metadata: {},
+          expires_at: '2020-01-01T00:00:00.000Z',
+          is_pinned: false,
+          created_at: '2026-05-01T00:00:00.000Z',
+          updated_at: '2026-05-01T00:00:00.000Z',
+        },
+        {
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          job_id: jobId,
+          artifact_kind: 'export_report',
+          status: 'deleted',
+          artifact_url: `${TEST_SUPABASE_URL}/storage/v1/s3/lca_results/${deletedPath}`,
+          artifact_sha256: null,
+          artifact_byte_size: 50,
+          artifact_format: 'tidas-package-export-report:v1',
+          content_type: 'application/json',
+          metadata: {},
+          expires_at: '2099-01-01T00:00:00.000Z',
+          is_pinned: false,
+          created_at: '2026-05-01T00:00:01.000Z',
+          updated_at: '2026-05-01T00:00:01.000Z',
+        },
+      ]);
+
+      const handler = createTidasPackageJobsHandler({
+        authClient: {} as SupabaseClient,
+        supabase: supabase as unknown as SupabaseClient,
+        authenticateRequest: async () => createAuthResult(),
+        getRedisClient: async () => undefined,
+      });
+
+      const response = await handler(
+        new Request(`https://example.com/functions/v1/tidas_package_jobs/${jobId}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${TEST_JWT}`,
+          },
+        }),
+      );
+
+      assertEquals(response.status, 200);
+      const body = await response.json();
+      assertEquals(body.artifacts_by_kind.export_zip.signed_download_url, null);
+      assertEquals(body.artifacts_by_kind.export_zip.download_status, 'expired');
+      assertEquals(
+        body.artifacts_by_kind.export_zip.download_error_code,
+        'PACKAGE_ARTIFACT_EXPIRED',
+      );
+      assertEquals(body.artifacts_by_kind.export_report.signed_download_url, null);
+      assertEquals(body.artifacts_by_kind.export_report.download_status, 'deleted');
+      assertEquals(
+        body.artifacts_by_kind.export_report.download_error_code,
+        'PACKAGE_ARTIFACT_DELETED',
+      );
+      assertEquals(supabase.signedDownloadCalls.length, 0);
+    });
+  },
+);
+
+Deno.test(
+  'tidas_package_jobs reports object-missing when signing an unexpired artifact fails',
+  async () => {
+    await withPackageStorageEnv(async () => {
+      const { createTidasPackageJobsHandler } = await loadTidasHandlers();
+      const supabase = new FakeSupabase();
+      const jobId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const objectPath = `lca-results/packages/jobs/${jobId}/export-package.zip`;
+
+      await supabase.insert('lca_package_jobs', {
+        id: jobId,
+        job_type: 'export_package',
+        status: 'ready',
+        requested_by: TEST_USER_ID,
+        scope: 'current_user',
+        root_count: 0,
+        request_key: 'request-key',
+        payload: {},
+        diagnostics: {},
+        created_at: '2026-05-01T00:00:00.000Z',
+        updated_at: '2026-05-01T00:00:00.000Z',
+      });
+      await supabase.insert('lca_package_artifacts', {
+        id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        job_id: jobId,
+        artifact_kind: 'export_zip',
+        status: 'ready',
+        artifact_url: `${TEST_SUPABASE_URL}/storage/v1/s3/lca_results/${objectPath}`,
+        artifact_sha256: null,
+        artifact_byte_size: 100,
+        artifact_format: 'tidas-package-zip:v1',
+        content_type: 'application/zip',
+        metadata: {},
+        expires_at: '2099-01-01T00:00:00.000Z',
+        is_pinned: false,
+        created_at: '2026-05-01T00:00:00.000Z',
+        updated_at: '2026-05-01T00:00:00.000Z',
+      });
+      supabase.signedDownloadErrors.set(objectPath, {
+        code: 'NoSuchKey',
+        statusCode: '404',
+        message: 'Object not found',
+      });
+
+      const handler = createTidasPackageJobsHandler({
+        authClient: {} as SupabaseClient,
+        supabase: supabase as unknown as SupabaseClient,
+        authenticateRequest: async () => createAuthResult(),
+        getRedisClient: async () => undefined,
+      });
+
+      const response = await handler(
+        new Request(`https://example.com/functions/v1/tidas_package_jobs/${jobId}`, {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${TEST_JWT}`,
+          },
+        }),
+      );
+
+      assertEquals(response.status, 200);
+      const body = await response.json();
+      assertEquals(body.artifacts_by_kind.export_zip.signed_download_url, null);
+      assertEquals(body.artifacts_by_kind.export_zip.download_status, 'object_missing');
+      assertEquals(
+        body.artifacts_by_kind.export_zip.download_error_code,
+        'PACKAGE_ARTIFACT_OBJECT_MISSING',
+      );
+      assertEquals(supabase.signedDownloadCalls.length, 1);
+    });
+  },
+);
+
+Deno.test('import_tidas_package rejects enqueue for deleted source artifacts', async () => {
+  await withPackageStorageEnv(async () => {
+    const { createImportTidasPackageHandler } = await loadTidasHandlers();
+    const supabase = new FakeSupabase();
+    const jobId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+    const sourceArtifactId = '99999999-9999-4999-8999-999999999999';
+
+    await supabase.insert('lca_package_jobs', {
+      id: jobId,
+      job_type: 'import_package',
+      status: 'stale',
+      requested_by: TEST_USER_ID,
+      scope: null,
+      root_count: 0,
+      request_key: null,
+      payload: {},
+      diagnostics: {},
+      created_at: '2026-05-01T00:00:00.000Z',
+      updated_at: '2026-05-01T00:00:00.000Z',
+    });
+    await supabase.insert('lca_package_artifacts', {
+      id: sourceArtifactId,
+      job_id: jobId,
+      artifact_kind: 'import_source',
+      status: 'deleted',
+      artifact_url: `${TEST_SUPABASE_URL}/storage/v1/s3/lca_results/lca-results/packages/jobs/${jobId}/import-source.zip`,
+      artifact_sha256: null,
+      artifact_byte_size: 100,
+      artifact_format: 'tidas-package-zip:v1',
+      content_type: 'application/zip',
+      metadata: {},
+      expires_at: '2099-01-01T00:00:00.000Z',
+      is_pinned: false,
+      created_at: '2026-05-01T00:00:00.000Z',
+      updated_at: '2026-05-01T00:00:00.000Z',
+    });
+
+    const handler = createImportTidasPackageHandler({
+      authClient: {} as SupabaseClient,
+      supabase: supabase as unknown as SupabaseClient,
+      authenticateRequest: async () => createAuthResult(),
+      getRedisClient: async () => undefined,
+    });
+
+    const response = await handler(
+      new Request('https://example.com/functions/v1/import_tidas_package', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${TEST_JWT}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'enqueue',
+          job_id: jobId,
+          source_artifact_id: sourceArtifactId,
+          artifact_sha256: await sha256Hex(EMPTY_ZIP_BYTES),
+          artifact_byte_size: EMPTY_ZIP_BYTES.byteLength,
+          filename: 'Demo Package.zip',
+          content_type: 'application/zip',
+        }),
+      }),
+    );
+
+    assertEquals(response.status, 410);
+    assertEquals(await response.json(), {
+      ok: false,
+      code: 'PACKAGE_ARTIFACT_DELETED',
+      message: 'Package artifact payload has been deleted; create a new package job',
+    });
+    assertEquals(supabase.rpcCalls.length, 0);
   });
 });
 
