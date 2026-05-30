@@ -81,11 +81,29 @@ type PackageArtifactResponse = {
   storage_object_path: string | null;
   signed_download_url: string | null;
   signed_download_expires_in_seconds: number | null;
+  download_status: PackageArtifactDownloadStatus;
+  download_error_code: string | null;
+  download_error_message: string | null;
   metadata: JsonRecord;
   expires_at: string | null;
   is_pinned: boolean;
   created_at: string | null;
   updated_at: string | null;
+};
+
+export type PackageArtifactDownloadStatus =
+  | 'available'
+  | 'not_ready'
+  | 'expired'
+  | 'deleted'
+  | 'object_missing'
+  | 'storage_path_invalid'
+  | 'signed_url_failed';
+
+type PackageArtifactDownloadState = {
+  status: PackageArtifactDownloadStatus;
+  code: string | null;
+  message: string | null;
 };
 
 type PackageRequestCacheResponse = {
@@ -532,6 +550,7 @@ export async function enqueueImportTidasPackage(
   const nowIso = new Date().toISOString();
   const job = await fetchOwnedPackageJob(supabase, userId, parsed.job_id, 'import_package');
   const sourceArtifact = await fetchPackageArtifact(supabase, parsed.source_artifact_id, job.id);
+  assertPackageArtifactUsable(sourceArtifact);
 
   if (sourceArtifact.artifact_kind !== 'import_source') {
     throw new TidasPackageError(
@@ -1394,6 +1413,31 @@ async function fetchPackageArtifact(
   return toPackageArtifactRow(data);
 }
 
+function assertPackageArtifactUsable(artifact: PackageArtifactRow): void {
+  const unavailable = getPackageArtifactDownloadUnavailableState(artifact, {
+    hasStoragePath: true,
+  });
+  if (!unavailable) {
+    return;
+  }
+
+  if (unavailable.code === 'PACKAGE_ARTIFACT_DELETED') {
+    throw new TidasPackageError(
+      410,
+      unavailable.code,
+      'Package artifact payload has been deleted; create a new package job',
+    );
+  }
+
+  if (unavailable.code === 'PACKAGE_ARTIFACT_EXPIRED') {
+    throw new TidasPackageError(
+      410,
+      unavailable.code,
+      'Package artifact has expired; create a new package job',
+    );
+  }
+}
+
 async function fetchPackageArtifactByKind(
   supabase: SupabaseClient,
   jobId: string,
@@ -1458,8 +1502,18 @@ async function toArtifactResponse(supabase: SupabaseClient, row: Record<string, 
   const artifact = toPackageArtifactRow(row);
   const storagePath = parseStoragePathFromArtifactUrl(artifact.artifact_url);
   let signedDownloadUrl: string | null = null;
+  let downloadState: PackageArtifactDownloadState = getPackageArtifactDownloadUnavailableState(
+    artifact,
+    {
+      hasStoragePath: storagePath !== null,
+    },
+  ) ?? {
+    status: 'available',
+    code: null,
+    message: null,
+  };
 
-  if (artifact.status === 'ready' && storagePath) {
+  if (downloadState.status === 'available' && storagePath) {
     const { data, error } = await supabase.storage
       .from(storagePath.bucket)
       .createSignedUrl(storagePath.objectPath, SIGNED_URL_EXPIRES_IN_SECONDS);
@@ -1470,8 +1524,16 @@ async function toArtifactResponse(supabase: SupabaseClient, row: Record<string, 
         artifact_id: artifact.id,
         artifact_url: artifact.artifact_url,
       });
+      downloadState = classifySignedUrlError(error);
     } else {
       signedDownloadUrl = data?.signedUrl ?? null;
+      if (!signedDownloadUrl) {
+        downloadState = {
+          status: 'signed_url_failed',
+          code: 'PACKAGE_ARTIFACT_SIGNED_URL_FAILED',
+          message: 'Package artifact signed download URL could not be created',
+        };
+      }
     }
   }
 
@@ -1488,11 +1550,92 @@ async function toArtifactResponse(supabase: SupabaseClient, row: Record<string, 
     storage_object_path: storagePath?.objectPath ?? null,
     signed_download_url: signedDownloadUrl,
     signed_download_expires_in_seconds: signedDownloadUrl ? SIGNED_URL_EXPIRES_IN_SECONDS : null,
+    download_status: downloadState.status,
+    download_error_code: downloadState.code,
+    download_error_message: downloadState.message,
     metadata: artifact.metadata,
     expires_at: artifact.expires_at,
     is_pinned: artifact.is_pinned,
     created_at: artifact.created_at,
     updated_at: artifact.updated_at,
+  };
+}
+
+function getPackageArtifactDownloadUnavailableState(
+  artifact: PackageArtifactRow,
+  options: { hasStoragePath: boolean },
+): PackageArtifactDownloadState | null {
+  if (artifact.status === 'deleted') {
+    return {
+      status: 'deleted',
+      code: 'PACKAGE_ARTIFACT_DELETED',
+      message: 'Package artifact payload has been deleted; create a new package job',
+    };
+  }
+
+  if (artifact.status === 'ready' && isPackageArtifactExpired(artifact)) {
+    return {
+      status: 'expired',
+      code: 'PACKAGE_ARTIFACT_EXPIRED',
+      message: 'Package artifact has expired; create a new package job',
+    };
+  }
+
+  if (artifact.status !== 'ready') {
+    return {
+      status: 'not_ready',
+      code: artifact.status === 'stale' ? 'PACKAGE_ARTIFACT_STALE' : 'PACKAGE_ARTIFACT_NOT_READY',
+      message:
+        artifact.status === 'stale'
+          ? 'Package artifact is stale; create a new package job'
+          : 'Package artifact is not ready for download',
+    };
+  }
+
+  if (!options.hasStoragePath) {
+    return {
+      status: 'storage_path_invalid',
+      code: 'PACKAGE_ARTIFACT_STORAGE_PATH_INVALID',
+      message: 'Package artifact storage path is invalid',
+    };
+  }
+
+  return null;
+}
+
+function isPackageArtifactExpired(artifact: PackageArtifactRow): boolean {
+  if (artifact.is_pinned || !artifact.expires_at) {
+    return false;
+  }
+
+  const expiresAtMs = Date.parse(artifact.expires_at);
+  return Number.isFinite(expiresAtMs) && expiresAtMs <= Date.now();
+}
+
+function classifySignedUrlError(error: unknown): PackageArtifactDownloadState {
+  const record = asRecord(error);
+  const message = normalizeNullableString(record.message) ?? 'Package artifact is unavailable';
+  const code = normalizeNullableString(record.code);
+  const statusCode = normalizeNullableString(record.statusCode ?? record.status);
+  const searchable = `${code ?? ''} ${statusCode ?? ''} ${message}`.toLowerCase();
+
+  if (
+    statusCode === '404' ||
+    searchable.includes('nosuchkey') ||
+    searchable.includes('no such key') ||
+    searchable.includes('not found')
+  ) {
+    return {
+      status: 'object_missing',
+      code: 'PACKAGE_ARTIFACT_OBJECT_MISSING',
+      message: 'Package artifact object is missing; create a new package job',
+    };
+  }
+
+  return {
+    status: 'signed_url_failed',
+    code: 'PACKAGE_ARTIFACT_SIGNED_URL_FAILED',
+    message,
   };
 }
 

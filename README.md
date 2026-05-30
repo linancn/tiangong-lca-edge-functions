@@ -155,6 +155,16 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 - `lca_contribution_path` / `lca_contribution_path_result`
 - `import_tidas_package` / `tidas_package_jobs`
 
+### TIDAS package artifact download contract
+
+`tidas_package_jobs` returns package artifacts with backward-compatible download fields:
+
+- `signed_download_url` is present only when the artifact is `ready`, not expired, not deleted, has a valid storage path, and storage can create a signed URL.
+- `download_status` is one of `available`, `not_ready`, `expired`, `deleted`, `object_missing`, `storage_path_invalid`, or `signed_url_failed`.
+- `download_error_code` is `null` for `available`; stable unavailable codes include `PACKAGE_ARTIFACT_EXPIRED`, `PACKAGE_ARTIFACT_DELETED`, `PACKAGE_ARTIFACT_OBJECT_MISSING`, `PACKAGE_ARTIFACT_STORAGE_PATH_INVALID`, `PACKAGE_ARTIFACT_NOT_READY`, `PACKAGE_ARTIFACT_STALE`, and `PACKAGE_ARTIFACT_SIGNED_URL_FAILED`.
+
+Clients should treat `expired`, `deleted`, and `object_missing` as terminal download states and prompt the user to regenerate or re-upload the package. Job lookup itself still returns HTTP `200` when the authenticated user can read the job; missing jobs, auth failures, and business failures keep their existing top-level status and error-code behavior.
+
 ### Auth / connectivity probe
 
 当你怀疑远端出现“函数通了，但 auth 行为漂移”这类问题时，优先跑仓库内的统一探测脚本：
