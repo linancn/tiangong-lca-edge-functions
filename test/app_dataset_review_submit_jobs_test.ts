@@ -19,6 +19,7 @@ const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
 const TEST_DATASET_ID = '22222222-2222-4222-8222-222222222222';
 const TEST_JOB_ID = '33333333-3333-4333-8333-333333333333';
 const TEST_GATE_RUN_ID = '44444444-4444-4444-8444-444444444444';
+const TEST_GATE_WORKER_JOB_ID = '66666666-6666-4666-8666-666666666666';
 const TEST_REVISION_CHECKSUM = 'b'.repeat(64);
 const TEST_CLIENT_REVISION_CHECKSUM = 'a'.repeat(64);
 
@@ -112,6 +113,7 @@ Deno.test(
         status: 'waiting_gate',
         reviewSubmitJobId: TEST_JOB_ID,
         gateRunId: TEST_GATE_RUN_ID,
+        gateWorkerJobId: TEST_GATE_WORKER_JOB_ID,
         datasetRevision: {
           table: 'processes',
           id: TEST_DATASET_ID,
@@ -146,6 +148,7 @@ Deno.test(
           status: string;
           reviewSubmitJobId: string;
           gateRunId: string;
+          gateWorkerJobId: string;
           datasetRevision: {
             table: string;
             id: string;
@@ -161,6 +164,7 @@ Deno.test(
           status: 'waiting_gate',
           reviewSubmitJobId: TEST_JOB_ID,
           gateRunId: TEST_GATE_RUN_ID,
+          gateWorkerJobId: TEST_GATE_WORKER_JOB_ID,
           datasetRevision: {
             table: 'processes',
             id: TEST_DATASET_ID,
