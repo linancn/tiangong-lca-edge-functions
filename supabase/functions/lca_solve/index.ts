@@ -18,6 +18,12 @@ import {
 } from '../_shared/lca_snapshot_scope.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient, supabaseClient } from '../_shared/supabase_client.ts';
+import {
+  enqueueCalculatorWorkerJob,
+  isWorkerJobsCutoverEnabled,
+  lcaWorkerJobKindForJobType,
+  workerJobPayloadSchemaVersion,
+} from '../_shared/worker_jobs_cutover.ts';
 
 type SolveRequest = {
   scope?: string;
@@ -44,6 +50,7 @@ type SolveResponse = {
   snapshot_id: string;
   cache_key: string;
   job_id?: string;
+  worker_job_id?: string | null;
   result_id?: string;
 };
 
@@ -145,6 +152,7 @@ Deno.serve(async (req) => {
         {
           error: 'snapshot_build_queued',
           build_job_id: queued.job_id,
+          build_worker_job_id: queued.worker_job_id ?? null,
           build_snapshot_id: queued.snapshot_id,
         },
         409,
@@ -404,27 +412,66 @@ Deno.serve(async (req) => {
   }
 
   const finalJobId = String(jobRow.id);
+  let finalWorkerJobId: string | null = null;
 
   if (finalJobId === newJobId) {
-    const { error: enqueueError } = await supabaseClient.rpc('lca_enqueue_job', {
-      p_queue_name: QUEUE_NAME,
-      p_message: payload,
-    });
-
-    if (enqueueError) {
-      console.error('enqueue queue message failed', {
-        error: enqueueError.message,
-        code: enqueueError.code,
-        details: enqueueError.details,
-        hint: enqueueError.hint,
-      });
-
-      // `lca_enqueue_job` RPC may be missing if DB migration is not applied.
-      if (enqueueError.code === 'PGRST202' || enqueueError.message.includes('lca_enqueue_job')) {
-        return json({ error: 'queue_rpc_missing' }, 500);
+    if (isWorkerJobsCutoverEnabled('LCA_WORKER_JOBS_ENABLED')) {
+      const jobKind = lcaWorkerJobKindForJobType(jobType);
+      if (!jobKind) {
+        return json({ error: 'worker_job_kind_unsupported' }, 500);
       }
 
-      return json({ error: 'queue_enqueue_failed' }, 500);
+      const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
+        jobKind,
+        payload: {
+          ...payload,
+          job_id: finalJobId,
+        },
+        payloadSchemaVersion: workerJobPayloadSchemaVersion(jobKind),
+        subjectType: 'lca_job',
+        subjectId: finalJobId,
+        subjectVersion: snapshotId,
+        requestedBy: userId,
+        requesterType: 'user',
+        idempotencyKey,
+        requestHash: requestKey,
+        queueKey: snapshotId,
+        visibility: 'user',
+      });
+      if (!workerJob.ok) {
+        console.error('enqueue lca worker_jobs job failed', {
+          error: workerJob.error,
+          status: workerJob.status,
+          details: workerJob.details,
+          lca_job_id: finalJobId,
+        });
+        return json(
+          { error: 'worker_jobs_enqueue_failed', details: workerJob.error },
+          workerJob.status,
+        );
+      }
+      finalWorkerJobId = workerJob.workerJobId;
+    } else {
+      const { error: enqueueError } = await supabaseClient.rpc('lca_enqueue_job', {
+        p_queue_name: QUEUE_NAME,
+        p_message: payload,
+      });
+
+      if (enqueueError) {
+        console.error('enqueue queue message failed', {
+          error: enqueueError.message,
+          code: enqueueError.code,
+          details: enqueueError.details,
+          hint: enqueueError.hint,
+        });
+
+        // `lca_enqueue_job` RPC may be missing if DB migration is not applied.
+        if (enqueueError.code === 'PGRST202' || enqueueError.message.includes('lca_enqueue_job')) {
+          return json({ error: 'queue_rpc_missing' }, 500);
+        }
+
+        return json({ error: 'queue_enqueue_failed' }, 500);
+      }
     }
   }
 
@@ -476,6 +523,7 @@ Deno.serve(async (req) => {
     snapshot_id: snapshotId,
     cache_key: requestKey,
     job_id: finalJobId,
+    worker_job_id: finalWorkerJobId,
   };
 
   return json(queued, 202);
@@ -784,7 +832,7 @@ async function fetchTableMaxModifiedAt(
 }
 
 type BuildQueueResult =
-  | { ok: true; job_id: string; snapshot_id: string }
+  | { ok: true; job_id: string; snapshot_id: string; worker_job_id?: string | null }
   | { ok: false; error: string; status: number };
 
 async function ensureSnapshotBuildQueued(
@@ -883,21 +931,64 @@ async function ensureSnapshotBuildQueued(
 
   const finalJobId = String(jobRow.id);
   const finalSnapshotId = String(jobRow.snapshot_id);
+  let finalWorkerJobId: string | null = null;
   if (finalJobId === jobId) {
-    const { error: enqueueError } = await supabaseClient.rpc('lca_enqueue_job', {
-      p_queue_name: QUEUE_NAME,
-      p_message: buildPayload,
-    });
-    if (enqueueError) {
-      console.error('enqueue build snapshot message failed', {
-        error: enqueueError.message,
-        code: enqueueError.code,
+    if (isWorkerJobsCutoverEnabled('LCA_WORKER_JOBS_ENABLED')) {
+      const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
+        jobKind: 'lca.build_snapshot',
+        payload: {
+          ...buildPayload,
+          job_id: finalJobId,
+          snapshot_id: finalSnapshotId,
+        },
+        payloadSchemaVersion: 'lca.build_snapshot.request.v1',
+        subjectType: 'lca_job',
+        subjectId: finalJobId,
+        subjectVersion: finalSnapshotId,
+        requestedBy: userId,
+        requesterType: 'user',
+        idempotencyKey: `${userId}:${requestKey}`,
+        requestHash: requestKey,
+        concurrencyKey: `lca.build_snapshot:${scope}:${requestKey}`,
+        queueKey: scope,
+        visibility: 'user',
       });
-      return { ok: false, error: 'snapshot_build_enqueue_failed', status: 500 };
+      if (!workerJob.ok) {
+        console.error('enqueue build snapshot worker_jobs job failed', {
+          error: workerJob.error,
+          status: workerJob.status,
+          details: workerJob.details,
+          lca_job_id: finalJobId,
+          snapshot_id: finalSnapshotId,
+        });
+        return {
+          ok: false,
+          error: 'snapshot_build_worker_jobs_enqueue_failed',
+          status: workerJob.status,
+        };
+      }
+      finalWorkerJobId = workerJob.workerJobId;
+    } else {
+      const { error: enqueueError } = await supabaseClient.rpc('lca_enqueue_job', {
+        p_queue_name: QUEUE_NAME,
+        p_message: buildPayload,
+      });
+      if (enqueueError) {
+        console.error('enqueue build snapshot message failed', {
+          error: enqueueError.message,
+          code: enqueueError.code,
+        });
+        return { ok: false, error: 'snapshot_build_enqueue_failed', status: 500 };
+      }
     }
   }
 
-  return { ok: true, job_id: finalJobId, snapshot_id: finalSnapshotId };
+  return {
+    ok: true,
+    job_id: finalJobId,
+    snapshot_id: finalSnapshotId,
+    worker_job_id: finalWorkerJobId,
+  };
 }
 
 async function findActiveBuildJob(
