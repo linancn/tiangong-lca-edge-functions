@@ -133,7 +133,7 @@ Deno.test('parseReviewSubmitGateCommand accepts missing client checksum', () => 
   assertEquals(result.ok, true);
 });
 
-Deno.test('stableJsonSha256 orders keys like the calculator runner', async () => {
+Deno.test('stableJsonSha256 orders keys like the worker runner', async () => {
   assertEquals(
     stableJsonStringify({ 2: 'two', 10: 'ten', 1: 'one', a: 'letter' }),
     '{"1":"one","10":"ten","2":"two","a":"letter"}',

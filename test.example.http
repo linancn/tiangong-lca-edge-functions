@@ -122,6 +122,7 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_verify
     }'
 
 ### @name Dataset_Review_Submit_Gate：Local
+# Worker-owned gate reports may still contain legacy payload fields such as calculatorReport.
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_review_submit_gate' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
