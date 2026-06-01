@@ -5,6 +5,7 @@ import { processReviewSubmitJobs } from '../supabase/functions/_shared/review_su
 
 const TEST_JOB_ID = '33333333-3333-4333-8333-333333333333';
 const TEST_GATE_RUN_ID = '44444444-4444-4444-8444-444444444444';
+const TEST_GATE_WORKER_JOB_ID = '66666666-6666-4666-8666-666666666666';
 const TEST_DATASET_ID = '22222222-2222-4222-8222-222222222222';
 const TEST_REVISION_CHECKSUM = 'a'.repeat(64);
 
@@ -43,6 +44,38 @@ function jobPayload(gateStatus: string) {
       status: gateStatus,
       gateRunId: TEST_GATE_RUN_ID,
       blockingReasons: gateStatus === 'blocked' ? [{ code: 'singular_risk_medium_or_high' }] : [],
+    },
+  };
+}
+
+function workerGateJobPayload(workerStatus: string, resultStatus = 'passed') {
+  return {
+    status: 'submitting',
+    reviewSubmitJobId: TEST_JOB_ID,
+    gateWorkerJobId: TEST_GATE_WORKER_JOB_ID,
+    datasetRevision: {
+      table: 'processes',
+      id: TEST_DATASET_ID,
+      version: '01.00.000',
+      revisionChecksum: TEST_REVISION_CHECKSUM,
+    },
+    gateWorkerJob: {
+      id: TEST_GATE_WORKER_JOB_ID,
+      jobKind: 'review_submit.gate',
+      status: workerStatus,
+      result: {
+        status: resultStatus,
+        datasetRevision: {
+          table: 'processes',
+          id: TEST_DATASET_ID,
+          version: '01.00.000',
+          revisionChecksum: TEST_REVISION_CHECKSUM,
+        },
+        blockingReasons:
+          workerStatus === 'blocked' ? [{ code: 'singular_risk_medium_or_high' }] : [],
+      },
+      blockerCodes: workerStatus === 'blocked' ? ['singular_risk_medium_or_high'] : [],
+      resolutionScope: workerStatus === 'blocked' ? 'user' : null,
     },
   };
 }
@@ -114,6 +147,43 @@ Deno.test('processReviewSubmitJobs submits jobs whose gate already passed', asyn
   assertEquals(supabase.rpcCalls[1].args.p_job_id, TEST_JOB_ID);
 });
 
+Deno.test('processReviewSubmitJobs submits jobs whose worker gate completed', async () => {
+  const supabase = new FakeWorkerSupabase([
+    {
+      data: {
+        ok: true,
+        data: [workerGateJobPayload('completed')],
+      },
+      error: null,
+    },
+    {
+      data: {
+        ok: true,
+        data: { ...workerGateJobPayload('completed'), status: 'submitted' },
+      },
+      error: null,
+    },
+  ]);
+
+  const result = await processReviewSubmitJobs({
+    supabase: supabase as unknown as SupabaseClient,
+    batchSize: 1,
+    staleSubmittingSeconds: 60,
+  });
+
+  assertEquals(result.claimed, 1);
+  assertEquals(result.submitted, 1);
+  assertEquals(
+    supabase.rpcCalls.map((call) => call.fn),
+    ['cmd_dataset_review_submit_job_claim', 'cmd_review_submit_from_job'],
+  );
+  assertEquals(supabase.rpcCalls[1].args.p_job_id, TEST_JOB_ID);
+  assertEquals(
+    (supabase.rpcCalls[1].args.p_audit as Record<string, unknown>).gateWorkerJobId,
+    TEST_GATE_WORKER_JOB_ID,
+  );
+});
+
 Deno.test('processReviewSubmitJobs records terminal blocked gate state', async () => {
   const supabase = new FakeWorkerSupabase([
     {
@@ -146,6 +216,47 @@ Deno.test('processReviewSubmitJobs records terminal blocked gate state', async (
   );
   assertEquals(supabase.rpcCalls[1].args.p_status, 'blocked');
   assertEquals(supabase.rpcCalls[1].args.p_error_code, 'REVIEW_SUBMIT_GATE_BLOCKED');
+});
+
+Deno.test('processReviewSubmitJobs records terminal blocked worker gate state', async () => {
+  const supabase = new FakeWorkerSupabase([
+    {
+      data: {
+        ok: true,
+        data: [workerGateJobPayload('blocked', 'blocked')],
+      },
+      error: null,
+    },
+    {
+      data: {
+        ok: true,
+        data: { ...workerGateJobPayload('blocked', 'blocked'), status: 'blocked' },
+      },
+      error: null,
+    },
+  ]);
+
+  const result = await processReviewSubmitJobs({
+    supabase: supabase as unknown as SupabaseClient,
+    batchSize: 1,
+    staleSubmittingSeconds: 60,
+  });
+
+  assertEquals(result.claimed, 1);
+  assertEquals(result.blocked, 1);
+  assertEquals(
+    supabase.rpcCalls.map((call) => call.fn),
+    ['cmd_dataset_review_submit_job_claim', 'cmd_dataset_review_submit_job_record_result'],
+  );
+  assertEquals(supabase.rpcCalls[1].args.p_status, 'blocked');
+  assertEquals(supabase.rpcCalls[1].args.p_error_code, 'REVIEW_SUBMIT_GATE_BLOCKED');
+  assertEquals(
+    (
+      (supabase.rpcCalls[1].args.p_error_details as Record<string, unknown>)
+        .gateWorkerJob as Record<string, unknown>
+    ).id,
+    TEST_GATE_WORKER_JOB_ID,
+  );
 });
 
 Deno.test('processReviewSubmitJobs records malformed job payloads as terminal errors', async () => {

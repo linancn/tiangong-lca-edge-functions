@@ -32,8 +32,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-05-30
-lastReviewedCommit: 9fea5b9d1d628e9d4d3c8cb93fde321b68e2bf30
+lastReviewedAt: 2026-05-31
+lastReviewedCommit: 2efa723ca766ceefd42bc94b3bde71ca78f67e50
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -104,6 +104,7 @@ At a human-readable level, this repo owns:
 
 - `supabase/functions/**` for Edge Function entrypoints, handlers, and runtime request or response behavior
 - `supabase/functions/_shared/**` for auth, command runtime, DB-RPC wrappers, OpenAI, Redis, Supabase client helpers, and shared domain utilities
+- review-submit Edge orchestration, including API projection, service-worker polling, and DB-RPC wrapper calls for database-owned `worker_jobs`
 - `test/**` for repo-level Deno tests
 - `scripts/**` for deno-check inventory, deploy contract, auth probes, and smoke helpers
 - `package.json`, `supabase/config.toml`, and `supabase/.env.example` for repo runtime/deploy/operator configuration

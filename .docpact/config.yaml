@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-05-30'
-lastReviewedCommit: '9fea5b9d1d628e9d4d3c8cb93fde321b68e2bf30'
+lastReviewedAt: '2026-05-31'
+lastReviewedCommit: '2efa723ca766ceefd42bc94b3bde71ca78f67e50'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -120,19 +120,24 @@ routing:
         - supabase/functions/app_dataset_review_submit_gate/**
         - supabase/functions/app_dataset_review_submit_jobs/**
         - supabase/functions/app_dataset_submit_review/**
+        - supabase/functions/app_worker_jobs/**
         - supabase/functions/process_dataset_review_submit_jobs/**
+        - supabase/functions/_shared/commands/worker_jobs.ts
         - supabase/functions/_shared/commands/dataset/review_submit_gate.ts
         - supabase/functions/_shared/commands/dataset/review_submit_jobs.ts
         - supabase/functions/_shared/commands/dataset/submit_review.ts
         - supabase/functions/_shared/commands/dataset/types.ts
         - supabase/functions/_shared/commands/dataset/validation.ts
         - supabase/functions/_shared/db_rpc/dataset_commands.ts
+        - supabase/functions/_shared/db_rpc/worker_jobs.ts
         - supabase/functions/_shared/review_submit_job_worker.ts
         - test/app_dataset_review_submit_gate_test.ts
         - test/app_dataset_review_submit_jobs_test.ts
         - test/app_dataset_submit_review_test.ts
+        - test/app_worker_jobs_test.ts
         - test/dataset_command_rpc_contract_test.ts
         - test/review_submit_job_worker_test.ts
+        - test/worker_jobs_test.ts
         - README.md
         - test.example.http
     search-and-embedding:
@@ -292,7 +297,11 @@ rules:
         kind: runtime-code
       - path: supabase/functions/app_dataset_submit_review/**
         kind: runtime-code
+      - path: supabase/functions/app_worker_jobs/**
+        kind: runtime-code
       - path: supabase/functions/process_dataset_review_submit_jobs/**
+        kind: runtime-code
+      - path: supabase/functions/_shared/commands/worker_jobs.ts
         kind: runtime-code
       - path: supabase/functions/_shared/commands/dataset/review_submit_gate.ts
         kind: runtime-code
@@ -302,6 +311,8 @@ rules:
         kind: runtime-code
       - path: supabase/functions/_shared/db_rpc/dataset_commands.ts
         kind: runtime-code
+      - path: supabase/functions/_shared/db_rpc/worker_jobs.ts
+        kind: runtime-code
       - path: supabase/functions/_shared/review_submit_job_worker.ts
         kind: runtime-code
       - path: test/app_dataset_review_submit_gate_test.ts
@@ -310,7 +321,11 @@ rules:
         kind: runtime-test
       - path: test/app_dataset_submit_review_test.ts
         kind: runtime-test
+      - path: test/app_worker_jobs_test.ts
+        kind: runtime-test
       - path: test/review_submit_job_worker_test.ts
+        kind: runtime-test
+      - path: test/worker_jobs_test.ts
         kind: runtime-test
     requiredDocs:
       - path: AGENTS.md

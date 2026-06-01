@@ -23,6 +23,10 @@ import {
 } from '../_shared/lca_snapshot_scope.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient, supabaseClient } from '../_shared/supabase_client.ts';
+import {
+  enqueueCalculatorWorkerJob,
+  isWorkerJobsCutoverEnabled,
+} from '../_shared/worker_jobs_cutover.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ALL_UNIT_QUERY_FORMAT = 'all-unit-query:v1';
@@ -101,7 +105,7 @@ type ScopedSnapshotResolution =
   | { kind: 'none' };
 
 type BuildQueueResult =
-  | { ok: true; job_id: string; snapshot_id: string }
+  | { ok: true; job_id: string; snapshot_id: string; worker_job_id?: string | null }
   | { ok: false; error: string; status: number };
 
 type LatestAllUnitRow = {
@@ -191,6 +195,7 @@ Deno.serve(async (req) => {
         {
           error: 'snapshot_build_queued',
           build_job_id: queued.job_id,
+          build_worker_job_id: queued.worker_job_id ?? null,
           build_snapshot_id: queued.snapshot_id,
         },
         409,
@@ -836,21 +841,64 @@ async function ensureSnapshotBuildQueued(
 
   const finalJobId = String(jobRow.id);
   const finalSnapshotId = String(jobRow.snapshot_id);
+  let finalWorkerJobId: string | null = null;
   if (finalJobId === jobId) {
-    const { error: enqueueError } = await supabaseClient.rpc('lca_enqueue_job', {
-      p_queue_name: QUEUE_NAME,
-      p_message: buildPayload,
-    });
-    if (enqueueError) {
-      console.error('enqueue build snapshot message failed', {
-        error: enqueueError.message,
-        code: enqueueError.code,
+    if (isWorkerJobsCutoverEnabled('LCA_WORKER_JOBS_ENABLED')) {
+      const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
+        jobKind: 'lca.build_snapshot',
+        payload: {
+          ...buildPayload,
+          job_id: finalJobId,
+          snapshot_id: finalSnapshotId,
+        },
+        payloadSchemaVersion: 'lca.build_snapshot.request.v1',
+        subjectType: 'lca_job',
+        subjectId: finalJobId,
+        subjectVersion: finalSnapshotId,
+        requestedBy: userId,
+        requesterType: 'user',
+        idempotencyKey: `${userId}:${requestKey}`,
+        requestHash: requestKey,
+        concurrencyKey: `lca.build_snapshot:${scope}:${requestKey}`,
+        queueKey: scope,
+        visibility: 'user',
       });
-      return { ok: false, error: 'snapshot_build_enqueue_failed', status: 500 };
+      if (!workerJob.ok) {
+        console.error('enqueue build snapshot worker_jobs job failed', {
+          error: workerJob.error,
+          status: workerJob.status,
+          details: workerJob.details,
+          lca_job_id: finalJobId,
+          snapshot_id: finalSnapshotId,
+        });
+        return {
+          ok: false,
+          error: 'snapshot_build_worker_jobs_enqueue_failed',
+          status: workerJob.status,
+        };
+      }
+      finalWorkerJobId = workerJob.workerJobId;
+    } else {
+      const { error: enqueueError } = await supabaseClient.rpc('lca_enqueue_job', {
+        p_queue_name: QUEUE_NAME,
+        p_message: buildPayload,
+      });
+      if (enqueueError) {
+        console.error('enqueue build snapshot message failed', {
+          error: enqueueError.message,
+          code: enqueueError.code,
+        });
+        return { ok: false, error: 'snapshot_build_enqueue_failed', status: 500 };
+      }
     }
   }
 
-  return { ok: true, job_id: finalJobId, snapshot_id: finalSnapshotId };
+  return {
+    ok: true,
+    job_id: finalJobId,
+    snapshot_id: finalSnapshotId,
+    worker_job_id: finalWorkerJobId,
+  };
 }
 
 async function findActiveBuildJob(

@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-05-30
-lastReviewedCommit: 9fea5b9d1d628e9d4d3c8cb93fde321b68e2bf30
+lastReviewedAt: 2026-05-31
+lastReviewedCommit: 2efa723ca766ceefd42bc94b3bde71ca78f67e50
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -116,7 +116,7 @@ The shared layers that matter most are:
 - `supabase/functions/_shared/commands/**`
 - `supabase/functions/_shared/db_rpc/**`
 
-`app_dataset_review_submit_gate` is the edge API boundary for dataset review-submit numerical stability checks. It normalizes request and response semantics for Next, derives the authoritative revision checksum from the authorized persisted `json_ordered` row, and calls database-owned RPCs for persisted gate runs. Client-provided revision checksums are compatibility/diagnostic input only. Edge does not own calculator blocker heuristics or database schema. `app_dataset_review_submit_jobs` is the user-facing orchestration API for persisted review-submit jobs, and `process_dataset_review_submit_jobs` is the service-key-only worker that advances those jobs after gate results are available. `app_dataset_submit_review` remains the direct compatibility path carrying gate assertion metadata for process submit-review so DB truth can reject stale, wrong-policy, wrong-checksum, or blocked gate runs before a review is created.
+`app_dataset_review_submit_gate` is the edge API boundary for dataset review-submit numerical stability checks. It normalizes request and response semantics for Next, derives the authoritative revision checksum from the authorized persisted `json_ordered` row, and calls database-owned RPCs for persisted gate runs. Client-provided revision checksums are compatibility/diagnostic input only. Edge does not own calculator blocker heuristics or database schema. `app_dataset_review_submit_jobs` is the user-facing orchestration API for persisted review-submit jobs, and `process_dataset_review_submit_jobs` is the service-key-only worker that advances those jobs after gate results are available. New review-submit jobs use database-owned `worker_jobs` gate records through `gateWorkerJobId` / `gateWorkerJob`; the legacy `gateRunId` path remains compatibility-only until cutover is complete. `app_worker_jobs` is the authenticated task-center API for listing, reading, and cancelling user-visible worker jobs through service-role DB RPCs with Edge ownership checks. `app_dataset_submit_review` remains the direct compatibility path carrying gate assertion metadata for process submit-review so DB truth can reject stale, wrong-policy, wrong-checksum, or blocked gate runs before a review is created.
 
 ### Search, embedding, and AI-backed routes
 
@@ -153,6 +153,8 @@ Shared scope logic lives in:
 - `supabase/functions/_shared/lca_process_scope.ts`
 - `supabase/functions/_shared/lca_snapshot_scope.ts`
 
+`supabase/functions/_shared/worker_jobs_cutover.ts` owns the feature-flagged handoff from legacy `lca_jobs`/pgmq enqueue to database-owned `worker_jobs`. `LCA_WORKER_JOBS_ENABLED=true` keeps existing domain rows/cache but enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `worker_enqueue_job`; when the flag is absent or false, routes keep the legacy pgmq enqueue path. Edge still owns auth and request normalization only; calculator owns execution.
+
 ### TIDAS package flows
 
 This cluster includes:
@@ -165,6 +167,8 @@ Shared behavior lives in:
 
 - `supabase/functions/_shared/tidas_package.ts`
 - `supabase/functions/_shared/redis_client.ts`
+
+`TIDAS_PACKAGE_WORKER_JOBS_ENABLED=true` switches import/export enqueue from `lca_package_enqueue_job` to `worker_enqueue_job` for `tidas.import_package` and `tidas.export_package`. The package domain rows, request cache, artifacts, and lookup APIs remain the business truth; `worker_jobs` is the task lifecycle projection and calculator delivery mechanism.
 
 ## Database Boundary
 

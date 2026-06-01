@@ -149,6 +149,7 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 - `app_dataset_verify_remote`
 - `app_dataset_review_submit_gate`
 - `app_dataset_review_submit_jobs`
+- `app_worker_jobs`
 - `ai_suggest`
 - `lca_solve` / `lca_jobs` / `lca_results`
 - `lca_query_results`
@@ -310,7 +311,7 @@ Legacy clients may still send `revisionChecksum`, but the function treats it as 
 
 The function calls database-owned RPC `cmd_dataset_review_submit_gate`; database-engine owns persisted gate run schema, idempotent reuse, stale detection, and final submit-review assertion. Edge and Next must not duplicate calculator blocker heuristics.
 
-`app_dataset_review_submit_jobs` is the user-facing orchestration API for reliable final review submission. It accepts authenticated `POST` requests:
+`app_dataset_review_submit_jobs` is the user-facing orchestration API for reliable final review submission. It accepts authenticated `POST` requests and returns DB-owned coordinator state. New jobs are linked to calculator `worker_jobs` gate records via `gateWorkerJobId` / `gateWorkerJob`; legacy `gateRunId` remains a compatibility field while the old gate-run path is retired.
 
 - `enqueue`: derives the authoritative revision checksum from persisted `json_ordered`, creates or reuses a DB-owned submit job, and returns the persisted job state.
 - `read`: reads a known `reviewSubmitJobId`.
@@ -323,7 +324,9 @@ Job response states map to HTTP status as follows:
 - `blocked` / `stale` / `cancelled`: HTTP `409`, not submit-ready or no longer active.
 - `error`: HTTP `502`, backend worker or DB orchestration failed.
 
-`process_dataset_review_submit_jobs` is a service-key-only worker endpoint. It claims DB submit jobs, records `waiting_gate` when the gate is not ready, records terminal blocked/stale/error gate states, and calls DB-owned `cmd_review_submit_from_job` only after the gate has passed. Recurring invocation should be enabled only after the database RPC migration and this Edge Function are both deployed.
+`process_dataset_review_submit_jobs` is a service-key-only worker endpoint. It claims DB submit jobs, records `waiting_gate` when the calculator worker gate is not ready, maps terminal blocked/cancelled/failed gate worker states back to the coordinator, and calls DB-owned `cmd_review_submit_from_job` only after the gate worker job has completed with a passed result. Recurring invocation should be enabled only after the database RPC migration and this Edge Function are both deployed.
+
+`app_worker_jobs` is the authenticated task-center API for user-visible `worker_jobs`. It supports `list`, `read`, and `cancel`, calls service-role DB RPCs from Edge, and enforces requester ownership before returning or cancelling a job. It does not expose generic user enqueue; job-specific APIs such as `app_dataset_review_submit_jobs` own enqueue semantics and payload validation.
 
 ## LCA Function Call Patterns
 
