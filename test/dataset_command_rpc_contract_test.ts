@@ -52,24 +52,27 @@ Deno.test('submitReviewRequestSchema requires process gate metadata', () => {
   assertEquals(parsed.success, false);
 });
 
-Deno.test('reviewSubmitGateRequestSchema defaults action and calculator contract versions', () => {
-  const parsed = reviewSubmitGateRequestSchema.safeParse({
-    table: 'processes',
-    id: '11111111-1111-4111-8111-111111111111',
-    version: '01.00.000',
-    revisionChecksum: 'a'.repeat(64),
-  });
+Deno.test(
+  'reviewSubmitGateRequestSchema defaults action and review-submit gate contract versions',
+  () => {
+    const parsed = reviewSubmitGateRequestSchema.safeParse({
+      table: 'processes',
+      id: '11111111-1111-4111-8111-111111111111',
+      version: '01.00.000',
+      revisionChecksum: 'a'.repeat(64),
+    });
 
-  assertEquals(parsed.success, true);
-  if (parsed.success) {
-    assertEquals(parsed.data.action, 'ensure');
-    assertEquals(parsed.data.policyProfile, 'review_submit_fast.v1');
-    assertEquals(parsed.data.reportSchemaVersion, 'review_submit_gate_report.v1');
-  }
-});
+    assertEquals(parsed.success, true);
+    if (parsed.success) {
+      assertEquals(parsed.data.action, 'ensure');
+      assertEquals(parsed.data.policyProfile, 'review_submit_fast.v1');
+      assertEquals(parsed.data.reportSchemaVersion, 'review_submit_gate_report.v1');
+    }
+  },
+);
 
 Deno.test(
-  'reviewSubmitJobRequestSchema defaults enqueue action and calculator contract versions',
+  'reviewSubmitJobRequestSchema defaults enqueue action and review-submit gate contract versions',
   () => {
     const parsed = reviewSubmitJobRequestSchema.safeParse({
       table: 'processes',
