@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-05-30
-lastReviewedCommit: 9fea5b9d1d628e9d4d3c8cb93fde321b68e2bf30
+lastReviewedAt: 2026-05-31
+lastReviewedCommit: 2efa723ca766ceefd42bc94b3bde71ca78f67e50
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -153,6 +153,8 @@ Shared scope logic lives in:
 - `supabase/functions/_shared/lca_process_scope.ts`
 - `supabase/functions/_shared/lca_snapshot_scope.ts`
 
+`supabase/functions/_shared/worker_jobs_cutover.ts` owns the feature-flagged handoff from legacy `lca_jobs`/pgmq enqueue to database-owned `worker_jobs`. `LCA_WORKER_JOBS_ENABLED=true` keeps existing domain rows/cache but enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `worker_enqueue_job`; when the flag is absent or false, routes keep the legacy pgmq enqueue path. Edge still owns auth and request normalization only; calculator owns execution.
+
 ### TIDAS package flows
 
 This cluster includes:
@@ -165,6 +167,8 @@ Shared behavior lives in:
 
 - `supabase/functions/_shared/tidas_package.ts`
 - `supabase/functions/_shared/redis_client.ts`
+
+`TIDAS_PACKAGE_WORKER_JOBS_ENABLED=true` switches import/export enqueue from `lca_package_enqueue_job` to `worker_enqueue_job` for `tidas.import_package` and `tidas.export_package`. The package domain rows, request cache, artifacts, and lookup APIs remain the business truth; `worker_jobs` is the task lifecycle projection and calculator delivery mechanism.
 
 ## Database Boundary
 

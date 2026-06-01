@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 import { corsHeaders } from './cors.ts';
+import { enqueueCalculatorWorkerJob, isWorkerJobsCutoverEnabled } from './worker_jobs_cutover.ts';
 
 export const SUPPORTED_TIDAS_TABLES = [
   'contacts',
@@ -394,27 +395,62 @@ export async function queueExportTidasPackage(
   }
 
   const finalJobId = await readJobIdByIdempotencyKey(supabase, idempotencyKey, userId);
+  let finalWorkerJobId: string | null = null;
 
   if (finalJobId === newJobId) {
-    const { error: enqueueError } = await supabase.rpc('lca_package_enqueue_job', {
-      p_message: payload,
-    });
-
-    if (enqueueError) {
-      console.error('enqueue lca_package job failed', {
-        error: enqueueError.message,
-        code: enqueueError.code,
-        details: enqueueError.details,
-        hint: enqueueError.hint,
-        job_id: newJobId,
+    if (isWorkerJobsCutoverEnabled('TIDAS_PACKAGE_WORKER_JOBS_ENABLED')) {
+      const workerJob = await enqueueCalculatorWorkerJob(supabase, {
+        jobKind: 'tidas.export_package',
+        payload: {
+          ...payload,
+          job_id: finalJobId,
+        },
+        payloadSchemaVersion: 'tidas.export_package.request.v1',
+        subjectType: 'lca_package_job',
+        subjectId: finalJobId,
+        subjectVersion: normalized.scope,
+        requestedBy: userId,
+        requesterType: 'user',
+        idempotencyKey,
+        requestHash: requestKey,
+        queueKey: normalized.scope,
+        visibility: 'user',
       });
-      if (
-        enqueueError.code === 'PGRST202' ||
-        enqueueError.message.includes('lca_package_enqueue_job')
-      ) {
-        throw new TidasPackageError(500, 'QUEUE_RPC_MISSING', 'Package queue RPC is missing');
+      if (!workerJob.ok) {
+        console.error('enqueue tidas export worker_jobs job failed', {
+          error: workerJob.error,
+          status: workerJob.status,
+          details: workerJob.details,
+          job_id: finalJobId,
+        });
+        throw new TidasPackageError(
+          workerJob.status,
+          'WORKER_JOBS_ENQUEUE_FAILED',
+          'Failed to enqueue export worker job',
+        );
       }
-      throw new TidasPackageError(500, 'QUEUE_ENQUEUE_FAILED', 'Failed to enqueue export job');
+      finalWorkerJobId = workerJob.workerJobId;
+    } else {
+      const { error: enqueueError } = await supabase.rpc('lca_package_enqueue_job', {
+        p_message: payload,
+      });
+
+      if (enqueueError) {
+        console.error('enqueue lca_package job failed', {
+          error: enqueueError.message,
+          code: enqueueError.code,
+          details: enqueueError.details,
+          hint: enqueueError.hint,
+          job_id: newJobId,
+        });
+        if (
+          enqueueError.code === 'PGRST202' ||
+          enqueueError.message.includes('lca_package_enqueue_job')
+        ) {
+          throw new TidasPackageError(500, 'QUEUE_RPC_MISSING', 'Package queue RPC is missing');
+        }
+        throw new TidasPackageError(500, 'QUEUE_ENQUEUE_FAILED', 'Failed to enqueue export job');
+      }
     }
   }
 
@@ -431,6 +467,7 @@ export async function queueExportTidasPackage(
     ok: true,
     mode: 'queued' as const,
     job_id: finalJobId,
+    ...(finalWorkerJobId ? { worker_job_id: finalWorkerJobId } : {}),
     scope: normalized.scope,
     root_count: normalized.roots.length,
   };
@@ -641,29 +678,62 @@ export async function enqueueImportTidasPackage(
     throw new TidasPackageError(500, 'JOB_UPDATE_FAILED', 'Failed to enqueue import job');
   }
 
-  const { error: enqueueError } = await supabase.rpc('lca_package_enqueue_job', {
-    p_message: payload,
-  });
-
-  if (enqueueError) {
-    console.error('enqueue import job failed', {
-      error: enqueueError.message,
-      code: enqueueError.code,
-      job_id: job.id,
+  let workerJobId: string | null = null;
+  if (isWorkerJobsCutoverEnabled('TIDAS_PACKAGE_WORKER_JOBS_ENABLED')) {
+    const workerJob = await enqueueCalculatorWorkerJob(supabase, {
+      jobKind: 'tidas.import_package',
+      payload,
+      payloadSchemaVersion: 'tidas.import_package.request.v1',
+      subjectType: 'lca_package_job',
+      subjectId: job.id,
+      subjectVersion: sourceArtifact.id,
+      requestedBy: userId,
+      requesterType: 'user',
+      idempotencyKey: `${userId}:import_package:${job.id}`,
+      requestHash: parsed.artifact_sha256 ?? sourceArtifact.id,
+      queueKey: sourceArtifact.id,
+      visibility: 'user',
     });
-    if (
-      enqueueError.code === 'PGRST202' ||
-      enqueueError.message.includes('lca_package_enqueue_job')
-    ) {
-      throw new TidasPackageError(500, 'QUEUE_RPC_MISSING', 'Package queue RPC is missing');
+    if (!workerJob.ok) {
+      console.error('enqueue tidas import worker_jobs job failed', {
+        error: workerJob.error,
+        status: workerJob.status,
+        details: workerJob.details,
+        job_id: job.id,
+      });
+      throw new TidasPackageError(
+        workerJob.status,
+        'WORKER_JOBS_ENQUEUE_FAILED',
+        'Failed to enqueue import worker job',
+      );
     }
-    throw new TidasPackageError(500, 'QUEUE_ENQUEUE_FAILED', 'Failed to enqueue import job');
+    workerJobId = workerJob.workerJobId;
+  } else {
+    const { error: enqueueError } = await supabase.rpc('lca_package_enqueue_job', {
+      p_message: payload,
+    });
+
+    if (enqueueError) {
+      console.error('enqueue import job failed', {
+        error: enqueueError.message,
+        code: enqueueError.code,
+        job_id: job.id,
+      });
+      if (
+        enqueueError.code === 'PGRST202' ||
+        enqueueError.message.includes('lca_package_enqueue_job')
+      ) {
+        throw new TidasPackageError(500, 'QUEUE_RPC_MISSING', 'Package queue RPC is missing');
+      }
+      throw new TidasPackageError(500, 'QUEUE_ENQUEUE_FAILED', 'Failed to enqueue import job');
+    }
   }
 
   return {
     ok: true,
     mode: 'queued' as const,
     job_id: job.id,
+    ...(workerJobId ? { worker_job_id: workerJobId } : {}),
     source_artifact_id: sourceArtifact.id,
   };
 }
