@@ -113,6 +113,41 @@ export type ReviewSubmitJobStatus =
   | 'error'
   | 'cancelled';
 
+export type WorkerJobStatus =
+  | 'queued'
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'blocked'
+  | 'stale'
+  | 'failed'
+  | 'cancelled';
+
+export type WorkerJobResult = {
+  id?: string;
+  jobKind?: string;
+  workerRuntime?: string;
+  workerQueue?: string;
+  subjectType?: string;
+  subjectId?: string;
+  subjectVersion?: string;
+  requestedBy?: string;
+  status: WorkerJobStatus;
+  phase?: string | null;
+  progress?: number | string | null;
+  result?: unknown;
+  errorCode?: string | null;
+  errorMessage?: string | null;
+  blockerCodes?: string[];
+  resolutionScope?: 'user' | 'operator' | 'system' | null;
+  retryable?: boolean | null;
+  createdAt?: string;
+  updatedAt?: string;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  [key: string]: unknown;
+};
+
 export type ReviewSubmitJobEnqueueRequest = {
   action: 'enqueue';
   table: 'processes';
@@ -145,6 +180,7 @@ export type ReviewSubmitJobResult = {
   status: ReviewSubmitJobStatus;
   reviewSubmitJobId?: string;
   gateRunId?: string | null;
+  gateWorkerJobId?: string | null;
   datasetRevision?: {
     table: DatasetTable;
     id: string;
@@ -156,6 +192,7 @@ export type ReviewSubmitJobResult = {
     reportSchemaVersion?: string;
   };
   gate?: ReviewSubmitGateResult | null;
+  gateWorkerJob?: WorkerJobResult | null;
   error?: {
     code?: string;
     message?: string;

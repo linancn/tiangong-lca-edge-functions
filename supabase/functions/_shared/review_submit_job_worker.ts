@@ -6,6 +6,8 @@ import type {
   ReviewSubmitGateStatus,
   ReviewSubmitJobResult,
   ReviewSubmitJobStatus,
+  WorkerJobResult,
+  WorkerJobStatus,
 } from './commands/dataset/types.ts';
 
 export interface ReviewSubmitJobWorkerOptions {
@@ -17,10 +19,12 @@ export interface ReviewSubmitJobWorkerOptions {
 export interface ReviewSubmitJobProcessResult {
   review_submit_job_id?: string;
   gate_run_id?: string | null;
+  gate_worker_job_id?: string | null;
   table?: string;
   id?: string;
   version?: string;
   gate_status?: string;
+  gate_worker_status?: string;
   status: 'submitted' | 'waiting_gate' | 'blocked' | 'stale' | 'cancelled' | 'failed';
   duration_ms: number;
   error_code?: string;
@@ -92,6 +96,19 @@ function isJobStatus(value: unknown): value is ReviewSubmitJobStatus {
   );
 }
 
+function isWorkerJobStatus(value: unknown): value is WorkerJobStatus {
+  return (
+    value === 'queued' ||
+    value === 'running' ||
+    value === 'waiting' ||
+    value === 'completed' ||
+    value === 'blocked' ||
+    value === 'stale' ||
+    value === 'failed' ||
+    value === 'cancelled'
+  );
+}
+
 function parseGate(value: unknown): ReviewSubmitGateResult | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
@@ -104,16 +121,33 @@ function parseGate(value: unknown): ReviewSubmitGateResult | null {
   } as ReviewSubmitGateResult;
 }
 
+function parseWorkerJob(value: unknown): WorkerJobResult | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const workerJob = value as Record<string, unknown>;
+  return {
+    ...workerJob,
+    status: isWorkerJobStatus(workerJob.status) ? workerJob.status : 'failed',
+  } as WorkerJobResult;
+}
+
 function parseJob(value: unknown): ReviewSubmitJobResult {
   const raw = asRecord(value);
   const datasetRevision = asRecord(raw.datasetRevision);
   const gate = parseGate(raw.gate);
+  const gateWorkerJob = parseWorkerJob(raw.gateWorkerJob);
   return {
     ...raw,
     status: isJobStatus(raw.status) ? raw.status : 'error',
     reviewSubmitJobId: asString(raw.reviewSubmitJobId),
     gateRunId:
       raw.gateRunId === null || raw.gateRunId === undefined ? null : asString(raw.gateRunId),
+    gateWorkerJobId:
+      raw.gateWorkerJobId === null || raw.gateWorkerJobId === undefined
+        ? null
+        : asString(raw.gateWorkerJobId),
     datasetRevision: {
       table: asString(datasetRevision.table) as DatasetTable,
       id: asString(datasetRevision.id),
@@ -121,6 +155,7 @@ function parseJob(value: unknown): ReviewSubmitJobResult {
       revisionChecksum: asString(datasetRevision.revisionChecksum),
     },
     gate,
+    gateWorkerJob,
   };
 }
 
@@ -212,6 +247,7 @@ async function submitFromJob(
       command: 'review_submit_job_worker_submit',
       reviewSubmitJobId: job.reviewSubmitJobId,
       gateRunId: job.gateRunId ?? null,
+      gateWorkerJobId: job.gateWorkerJobId ?? null,
     },
   });
 
@@ -234,10 +270,12 @@ function resultBase(job: ReviewSubmitJobResult, startedAt: number) {
   return {
     review_submit_job_id: job.reviewSubmitJobId,
     gate_run_id: job.gateRunId ?? null,
+    gate_worker_job_id: job.gateWorkerJobId ?? null,
     table: job.datasetRevision?.table,
     id: job.datasetRevision?.id,
     version: job.datasetRevision?.version,
     gate_status: job.gate?.status,
+    gate_worker_status: job.gateWorkerJob?.status,
     duration_ms: Date.now() - startedAt,
   };
 }
@@ -276,6 +314,138 @@ function errorForGate(gate: ReviewSubmitGateResult): {
   }
 }
 
+function terminalStatusForWorkerGate(
+  workerJob: WorkerJobResult,
+): 'blocked' | 'error' | 'cancelled' {
+  if (workerJob.status === 'blocked') return 'blocked';
+  if (workerJob.status === 'cancelled') return 'cancelled';
+  return 'error';
+}
+
+function errorForWorkerGate(workerJob: WorkerJobResult): {
+  code: string;
+  message: string;
+  details: unknown;
+} {
+  switch (workerJob.status) {
+    case 'blocked':
+      return {
+        code: 'REVIEW_SUBMIT_GATE_BLOCKED',
+        message: 'Review-submit gate blocked this dataset revision',
+        details: { gateWorkerJob: workerJob },
+      };
+    case 'cancelled':
+      return {
+        code: 'REVIEW_SUBMIT_JOB_CANCELLED',
+        message: 'Review-submit gate worker job was cancelled',
+        details: { gateWorkerJob: workerJob },
+      };
+    case 'failed':
+    default:
+      return {
+        code:
+          typeof workerJob.errorCode === 'string' && workerJob.errorCode.trim()
+            ? workerJob.errorCode
+            : 'REVIEW_SUBMIT_GATE_ERROR',
+        message:
+          typeof workerJob.errorMessage === 'string' && workerJob.errorMessage.trim()
+            ? workerJob.errorMessage
+            : 'Review-submit gate failed before review submission',
+        details: { gateWorkerJob: workerJob },
+      };
+  }
+}
+
+function workerGateResultStatus(workerJob: WorkerJobResult): string {
+  const result = asRecord(workerJob.result);
+  return asString(result.status);
+}
+
+async function processWorkerGateJob(
+  supabase: RpcClient,
+  job: ReviewSubmitJobResult,
+  startedAt: number,
+): Promise<ReviewSubmitJobProcessResult> {
+  const workerJob = job.gateWorkerJob;
+
+  if (!workerJob || !workerJob.status) {
+    const error = {
+      code: 'INVALID_REVIEW_SUBMIT_JOB_GATE',
+      message: 'Review-submit job payload is missing gate worker state',
+      details: { job },
+    };
+    await recordJobResult(supabase, job, 'error', error);
+    return {
+      ...resultBase(job, startedAt),
+      status: 'failed',
+      error_code: error.code,
+      error_message: error.message,
+    };
+  }
+
+  if (
+    workerJob.status === 'queued' ||
+    workerJob.status === 'running' ||
+    workerJob.status === 'waiting' ||
+    workerJob.status === 'stale'
+  ) {
+    await recordJobResult(supabase, job, 'waiting_gate');
+    return {
+      ...resultBase(job, startedAt),
+      status: 'waiting_gate',
+    };
+  }
+
+  if (workerJob.status === 'completed') {
+    if (workerGateResultStatus(workerJob) !== 'passed') {
+      const error = {
+        code: 'INVALID_REVIEW_SUBMIT_GATE_RESULT',
+        message: 'Review-submit gate worker job completed without a passed result',
+        details: { gateWorkerJob: workerJob },
+      };
+      await recordJobResult(supabase, job, 'error', error);
+      return {
+        ...resultBase(job, startedAt),
+        status: 'failed',
+        error_code: error.code,
+        error_message: error.message,
+      };
+    }
+
+    const result = await submitFromJob(supabase, job);
+    if (result.ok) {
+      return {
+        ...resultBase(job, startedAt),
+        status: 'submitted',
+      };
+    }
+
+    return {
+      ...resultBase(job, startedAt),
+      status:
+        result.code === 'REVIEW_SUBMIT_GATE_BLOCKED'
+          ? 'blocked'
+          : result.code === 'REVIEW_SUBMIT_GATE_STALE' || result.code === 'REVIEW_SUBMIT_JOB_STALE'
+            ? 'stale'
+            : result.code === 'REVIEW_SUBMIT_JOB_CANCELLED'
+              ? 'cancelled'
+              : 'failed',
+      error_code: result.code,
+      error_message: result.message,
+    };
+  }
+
+  const status = terminalStatusForWorkerGate(workerJob);
+  const error = errorForWorkerGate(workerJob);
+  await recordJobResult(supabase, job, status, error);
+  return {
+    ...resultBase(job, startedAt),
+    status: status === 'error' ? 'failed' : status,
+    error_code: error.code,
+    error_message: error.message,
+  };
+}
+
 async function processJob(
   supabase: RpcClient,
   job: ReviewSubmitJobResult,
@@ -287,6 +457,10 @@ async function processJob(
     throw Object.assign(new Error('Review-submit job payload is missing reviewSubmitJobId'), {
       code: 'INVALID_REVIEW_SUBMIT_JOB_PAYLOAD',
     });
+  }
+
+  if (job.gateWorkerJob || job.gateWorkerJobId) {
+    return await processWorkerGateJob(supabase, job, startedAt);
   }
 
   if (!gate || !gate.status) {

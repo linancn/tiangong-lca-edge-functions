@@ -134,7 +134,7 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_review
       "reportSchemaVersion": "review_submit_gate_report.v1"
     }'
 
-### @name Dataset_Review_Submit_Jobs_Enqueue：Local
+### @name Dataset_Review_Submit_Jobs_Enqueue_Worker_Gate：Local
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_review_submit_jobs' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
@@ -156,13 +156,34 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_review
       "reviewSubmitJobId": "<review submit job uuid>"
     }'
 
-### @name Dataset_Review_Submit_Jobs_Worker：Local
+### @name Dataset_Review_Submit_Jobs_Worker_Coordinator：Local
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_dataset_review_submit_jobs' \
     --header 'Content-Type: application/json' \
     --header 'apikey: {{$dotenv SERVICE_API_KEY}}' \
     --data '{
       "batchSize": 10,
       "staleSubmittingSeconds": 300
+    }'
+
+### @name Worker_Jobs_List：Local
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_worker_jobs' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --data '{
+      "action": "list",
+      "subjectType": "processes",
+      "subjectId": "012fc8f6-9a30-4d98-9b03-34ddec3a6f10",
+      "statuses": ["queued", "running", "waiting", "blocked", "failed"],
+      "limit": 25
+    }'
+
+### @name Worker_Jobs_Read：Local
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_worker_jobs' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --data '{
+      "action": "read",
+      "jobId": "<worker job uuid>"
     }'
 
 ### @name AI_Suggest：Remote
