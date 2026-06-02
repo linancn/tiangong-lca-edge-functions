@@ -369,6 +369,19 @@ export async function queueExportTidasPackage(
     roots: normalized.roots,
   };
 
+  if (!isWorkerJobsCutoverEnabled('TIDAS_PACKAGE_WORKER_JOBS_ENABLED')) {
+    console.error('legacy package queue fallback is disabled before export job insert', {
+      idempotency_key: idempotencyKey,
+      request_key: requestKey,
+      user_id: userId,
+    });
+    throw new TidasPackageError(
+      503,
+      'LEGACY_QUEUE_DISABLED',
+      'Package worker_jobs cutover must be enabled',
+    );
+  }
+
   const { error: insertJobError } = await supabase.from('lca_package_jobs').insert({
     id: newJobId,
     job_type: 'export_package',
@@ -398,68 +411,45 @@ export async function queueExportTidasPackage(
   let finalWorkerJobId: string | null = null;
 
   if (finalJobId === newJobId) {
-    if (isWorkerJobsCutoverEnabled('TIDAS_PACKAGE_WORKER_JOBS_ENABLED')) {
-      const workerJob = await enqueueCalculatorWorkerJob(supabase, {
-        jobKind: 'tidas.export_package',
-        payload: {
-          ...payload,
-          job_id: finalJobId,
-        },
-        payloadSchemaVersion: 'tidas.export_package.request.v1',
-        subjectType: 'lca_package_job',
-        subjectId: finalJobId,
-        subjectVersion: normalized.scope,
-        requestedBy: userId,
-        requesterType: 'user',
-        idempotencyKey,
-        requestHash: requestKey,
-        queueKey: normalized.scope,
-        visibility: 'user',
+    const workerJob = await enqueueCalculatorWorkerJob(supabase, {
+      jobKind: 'tidas.export_package',
+      payload: {
+        ...payload,
+        job_id: finalJobId,
+      },
+      payloadSchemaVersion: 'tidas.export_package.request.v1',
+      subjectType: 'lca_package_job',
+      subjectId: finalJobId,
+      subjectVersion: normalized.scope,
+      requestedBy: userId,
+      requesterType: 'user',
+      idempotencyKey,
+      requestHash: requestKey,
+      queueKey: normalized.scope,
+      visibility: 'user',
+    });
+    if (!workerJob.ok) {
+      console.error('enqueue tidas export worker_jobs job failed', {
+        error: workerJob.error,
+        status: workerJob.status,
+        details: workerJob.details,
+        job_id: finalJobId,
       });
-      if (!workerJob.ok) {
-        console.error('enqueue tidas export worker_jobs job failed', {
-          error: workerJob.error,
-          status: workerJob.status,
-          details: workerJob.details,
-          job_id: finalJobId,
-        });
-        await markPackageJobWorkerEnqueueFailed(supabase, {
-          jobId: finalJobId,
-          userId,
-          nowIso,
-          errorCode: workerJob.error,
-          errorMessage: 'Failed to enqueue export worker job',
-          details: workerJob.details,
-        });
-        throw new TidasPackageError(
-          workerJob.status,
-          'WORKER_JOBS_ENQUEUE_FAILED',
-          'Failed to enqueue export worker job',
-        );
-      }
-      finalWorkerJobId = workerJob.workerJobId;
-    } else {
-      const { error: enqueueError } = await supabase.rpc('lca_package_enqueue_job', {
-        p_message: payload,
+      await markPackageJobWorkerEnqueueFailed(supabase, {
+        jobId: finalJobId,
+        userId,
+        nowIso,
+        errorCode: workerJob.error,
+        errorMessage: 'Failed to enqueue export worker job',
+        details: workerJob.details,
       });
-
-      if (enqueueError) {
-        console.error('enqueue lca_package job failed', {
-          error: enqueueError.message,
-          code: enqueueError.code,
-          details: enqueueError.details,
-          hint: enqueueError.hint,
-          job_id: newJobId,
-        });
-        if (
-          enqueueError.code === 'PGRST202' ||
-          enqueueError.message.includes('lca_package_enqueue_job')
-        ) {
-          throw new TidasPackageError(500, 'QUEUE_RPC_MISSING', 'Package queue RPC is missing');
-        }
-        throw new TidasPackageError(500, 'QUEUE_ENQUEUE_FAILED', 'Failed to enqueue export job');
-      }
+      throw new TidasPackageError(
+        workerJob.status,
+        'WORKER_JOBS_ENQUEUE_FAILED',
+        'Failed to enqueue export worker job',
+      );
     }
+    finalWorkerJobId = workerJob.workerJobId;
   }
 
   await upsertExportRequestCache(supabase, {
@@ -630,6 +620,19 @@ export async function enqueueImportTidasPackage(
     source_artifact_id: sourceArtifact.id,
   };
 
+  if (!isWorkerJobsCutoverEnabled('TIDAS_PACKAGE_WORKER_JOBS_ENABLED')) {
+    console.error('legacy package queue fallback is disabled before import job enqueue', {
+      job_id: job.id,
+      source_artifact_id: sourceArtifact.id,
+      user_id: userId,
+    });
+    throw new TidasPackageError(
+      503,
+      'LEGACY_QUEUE_DISABLED',
+      'Package worker_jobs cutover must be enabled',
+    );
+  }
+
   const metadata = {
     ...sourceArtifact.metadata,
     filename: parsed.filename ?? sourceArtifact.metadata.filename ?? IMPORT_SOURCE_FILENAME,
@@ -687,63 +690,42 @@ export async function enqueueImportTidasPackage(
   }
 
   let workerJobId: string | null = null;
-  if (isWorkerJobsCutoverEnabled('TIDAS_PACKAGE_WORKER_JOBS_ENABLED')) {
-    const workerJob = await enqueueCalculatorWorkerJob(supabase, {
-      jobKind: 'tidas.import_package',
-      payload,
-      payloadSchemaVersion: 'tidas.import_package.request.v1',
-      subjectType: 'lca_package_job',
-      subjectId: job.id,
-      subjectVersion: sourceArtifact.id,
-      requestedBy: userId,
-      requesterType: 'user',
-      idempotencyKey: `${userId}:import_package:${job.id}`,
-      requestHash: parsed.artifact_sha256 ?? sourceArtifact.id,
-      queueKey: sourceArtifact.id,
-      visibility: 'user',
+  const workerJob = await enqueueCalculatorWorkerJob(supabase, {
+    jobKind: 'tidas.import_package',
+    payload,
+    payloadSchemaVersion: 'tidas.import_package.request.v1',
+    subjectType: 'lca_package_job',
+    subjectId: job.id,
+    subjectVersion: sourceArtifact.id,
+    requestedBy: userId,
+    requesterType: 'user',
+    idempotencyKey: `${userId}:import_package:${job.id}`,
+    requestHash: parsed.artifact_sha256 ?? sourceArtifact.id,
+    queueKey: sourceArtifact.id,
+    visibility: 'user',
+  });
+  if (!workerJob.ok) {
+    console.error('enqueue tidas import worker_jobs job failed', {
+      error: workerJob.error,
+      status: workerJob.status,
+      details: workerJob.details,
+      job_id: job.id,
     });
-    if (!workerJob.ok) {
-      console.error('enqueue tidas import worker_jobs job failed', {
-        error: workerJob.error,
-        status: workerJob.status,
-        details: workerJob.details,
-        job_id: job.id,
-      });
-      await markPackageJobWorkerEnqueueFailed(supabase, {
-        jobId: job.id,
-        userId,
-        nowIso,
-        errorCode: workerJob.error,
-        errorMessage: 'Failed to enqueue import worker job',
-        details: workerJob.details,
-      });
-      throw new TidasPackageError(
-        workerJob.status,
-        'WORKER_JOBS_ENQUEUE_FAILED',
-        'Failed to enqueue import worker job',
-      );
-    }
-    workerJobId = workerJob.workerJobId;
-  } else {
-    const { error: enqueueError } = await supabase.rpc('lca_package_enqueue_job', {
-      p_message: payload,
+    await markPackageJobWorkerEnqueueFailed(supabase, {
+      jobId: job.id,
+      userId,
+      nowIso,
+      errorCode: workerJob.error,
+      errorMessage: 'Failed to enqueue import worker job',
+      details: workerJob.details,
     });
-
-    if (enqueueError) {
-      console.error('enqueue import job failed', {
-        error: enqueueError.message,
-        code: enqueueError.code,
-        job_id: job.id,
-      });
-      if (
-        enqueueError.code === 'PGRST202' ||
-        enqueueError.message.includes('lca_package_enqueue_job')
-      ) {
-        throw new TidasPackageError(500, 'QUEUE_RPC_MISSING', 'Package queue RPC is missing');
-      }
-      throw new TidasPackageError(500, 'QUEUE_ENQUEUE_FAILED', 'Failed to enqueue import job');
-    }
+    throw new TidasPackageError(
+      workerJob.status,
+      'WORKER_JOBS_ENQUEUE_FAILED',
+      'Failed to enqueue import worker job',
+    );
   }
+  workerJobId = workerJob.workerJobId;
 
   return {
     ok: true,

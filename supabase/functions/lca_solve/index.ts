@@ -85,7 +85,6 @@ type ResultCacheRow = {
   hit_count: number;
 };
 
-const QUEUE_NAME = 'lca_jobs';
 const REQUEST_VERSION = 'lca_solve_v2';
 const SNAPSHOT_BUILD_REQUEST_VERSION = 'lca_snapshot_build_v1';
 const ACTIVE_BUILD_MAX_QUEUED_MS = 10 * 60 * 1000;
@@ -372,6 +371,15 @@ Deno.serve(async (req) => {
     }
   }
 
+  if (!isWorkerJobsCutoverEnabled('LCA_WORKER_JOBS_ENABLED')) {
+    console.error('legacy lca queue fallback is disabled before job insert', {
+      idempotency_key: idempotencyKey,
+      request_key: requestKey,
+      job_type: jobType,
+    });
+    return json({ error: 'legacy_queue_disabled' }, 503);
+  }
+
   const { error: insertJobError } = await supabaseClient.from('lca_jobs').insert({
     id: newJobId,
     job_type: jobType,
@@ -416,72 +424,49 @@ Deno.serve(async (req) => {
   let finalWorkerJobId: string | null = null;
 
   if (finalJobId === newJobId) {
-    if (isWorkerJobsCutoverEnabled('LCA_WORKER_JOBS_ENABLED')) {
-      const jobKind = lcaWorkerJobKindForJobType(jobType);
-      if (!jobKind) {
-        return json({ error: 'worker_job_kind_unsupported' }, 500);
-      }
-
-      const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
-        jobKind,
-        payload: {
-          ...payload,
-          job_id: finalJobId,
-        },
-        payloadSchemaVersion: workerJobPayloadSchemaVersion(jobKind),
-        subjectType: 'lca_job',
-        subjectId: finalJobId,
-        subjectVersion: snapshotId,
-        requestedBy: userId,
-        requesterType: 'user',
-        idempotencyKey,
-        requestHash: requestKey,
-        queueKey: snapshotId,
-        visibility: 'user',
-      });
-      if (!workerJob.ok) {
-        console.error('enqueue lca worker_jobs job failed', {
-          error: workerJob.error,
-          status: workerJob.status,
-          details: workerJob.details,
-          lca_job_id: finalJobId,
-        });
-        await markRetainedLcaJobWorkerEnqueueFailed(supabaseClient, {
-          jobId: finalJobId,
-          userId,
-          nowIso,
-          errorCode: workerJob.error,
-          errorMessage: 'Failed to enqueue LCA worker job',
-          details: workerJob.details,
-        });
-        return json(
-          { error: 'worker_jobs_enqueue_failed', details: workerJob.error },
-          workerJob.status,
-        );
-      }
-      finalWorkerJobId = workerJob.workerJobId;
-    } else {
-      const { error: enqueueError } = await supabaseClient.rpc('lca_enqueue_job', {
-        p_queue_name: QUEUE_NAME,
-        p_message: payload,
-      });
-
-      if (enqueueError) {
-        console.error('enqueue queue message failed', {
-          error: enqueueError.message,
-          code: enqueueError.code,
-          details: enqueueError.details,
-          hint: enqueueError.hint,
-        });
-
-        // `lca_enqueue_job` RPC may be missing if DB migration is not applied.
-        if (enqueueError.code === 'PGRST202' || enqueueError.message.includes('lca_enqueue_job')) {
-          return json({ error: 'queue_rpc_missing' }, 500);
-        }
-
-        return json({ error: 'queue_enqueue_failed' }, 500);
-      }
+    const jobKind = lcaWorkerJobKindForJobType(jobType);
+    if (!jobKind) {
+      return json({ error: 'worker_job_kind_unsupported' }, 500);
     }
+
+    const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
+      jobKind,
+      payload: {
+        ...payload,
+        job_id: finalJobId,
+      },
+      payloadSchemaVersion: workerJobPayloadSchemaVersion(jobKind),
+      subjectType: 'lca_job',
+      subjectId: finalJobId,
+      subjectVersion: snapshotId,
+      requestedBy: userId,
+      requesterType: 'user',
+      idempotencyKey,
+      requestHash: requestKey,
+      queueKey: snapshotId,
+      visibility: 'user',
+    });
+    if (!workerJob.ok) {
+      console.error('enqueue lca worker_jobs job failed', {
+        error: workerJob.error,
+        status: workerJob.status,
+        details: workerJob.details,
+        lca_job_id: finalJobId,
+      });
+      await markRetainedLcaJobWorkerEnqueueFailed(supabaseClient, {
+        jobId: finalJobId,
+        userId,
+        nowIso,
+        errorCode: workerJob.error,
+        errorMessage: 'Failed to enqueue LCA worker job',
+        details: workerJob.details,
+      });
+      return json(
+        { error: 'worker_jobs_enqueue_failed', details: workerJob.error },
+        workerJob.status,
+      );
+    }
+    finalWorkerJobId = workerJob.workerJobId;
   }
 
   if (existingCache.row) {
@@ -897,6 +882,14 @@ async function ensureSnapshotBuildQueued(
     return { ok: false, error: 'snapshot_build_seed_failed', status: 500 };
   }
 
+  if (!isWorkerJobsCutoverEnabled('LCA_WORKER_JOBS_ENABLED')) {
+    console.error('legacy lca snapshot queue fallback is disabled before job insert', {
+      request_key: requestKey,
+      snapshot_id: snapshotId,
+    });
+    return { ok: false, error: 'legacy_queue_disabled', status: 503 };
+  }
+
   const nowIso = new Date().toISOString();
   const { error: jobInsertError } = await supabaseClient.from('lca_jobs').insert({
     id: jobId,
@@ -942,62 +935,48 @@ async function ensureSnapshotBuildQueued(
   const finalSnapshotId = String(jobRow.snapshot_id);
   let finalWorkerJobId: string | null = null;
   if (finalJobId === jobId) {
-    if (isWorkerJobsCutoverEnabled('LCA_WORKER_JOBS_ENABLED')) {
-      const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
-        jobKind: 'lca.build_snapshot',
-        payload: {
-          ...buildPayload,
-          job_id: finalJobId,
-          snapshot_id: finalSnapshotId,
-        },
-        payloadSchemaVersion: 'lca.build_snapshot.request.v1',
-        subjectType: 'lca_job',
-        subjectId: finalJobId,
-        subjectVersion: finalSnapshotId,
-        requestedBy: userId,
-        requesterType: 'user',
-        idempotencyKey: `${userId}:${requestKey}`,
-        requestHash: requestKey,
-        concurrencyKey: `lca.build_snapshot:${scope}:${requestKey}`,
-        queueKey: scope,
-        visibility: 'user',
+    const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
+      jobKind: 'lca.build_snapshot',
+      payload: {
+        ...buildPayload,
+        job_id: finalJobId,
+        snapshot_id: finalSnapshotId,
+      },
+      payloadSchemaVersion: 'lca.build_snapshot.request.v1',
+      subjectType: 'lca_job',
+      subjectId: finalJobId,
+      subjectVersion: finalSnapshotId,
+      requestedBy: userId,
+      requesterType: 'user',
+      idempotencyKey: `${userId}:${requestKey}`,
+      requestHash: requestKey,
+      concurrencyKey: `lca.build_snapshot:${scope}:${requestKey}`,
+      queueKey: scope,
+      visibility: 'user',
+    });
+    if (!workerJob.ok) {
+      console.error('enqueue build snapshot worker_jobs job failed', {
+        error: workerJob.error,
+        status: workerJob.status,
+        details: workerJob.details,
+        lca_job_id: finalJobId,
+        snapshot_id: finalSnapshotId,
       });
-      if (!workerJob.ok) {
-        console.error('enqueue build snapshot worker_jobs job failed', {
-          error: workerJob.error,
-          status: workerJob.status,
-          details: workerJob.details,
-          lca_job_id: finalJobId,
-          snapshot_id: finalSnapshotId,
-        });
-        await markRetainedLcaJobWorkerEnqueueFailed(supabaseClient, {
-          jobId: finalJobId,
-          userId,
-          nowIso,
-          errorCode: workerJob.error,
-          errorMessage: 'Failed to enqueue snapshot build worker job',
-          details: workerJob.details,
-        });
-        return {
-          ok: false,
-          error: 'snapshot_build_worker_jobs_enqueue_failed',
-          status: workerJob.status,
-        };
-      }
-      finalWorkerJobId = workerJob.workerJobId;
-    } else {
-      const { error: enqueueError } = await supabaseClient.rpc('lca_enqueue_job', {
-        p_queue_name: QUEUE_NAME,
-        p_message: buildPayload,
+      await markRetainedLcaJobWorkerEnqueueFailed(supabaseClient, {
+        jobId: finalJobId,
+        userId,
+        nowIso,
+        errorCode: workerJob.error,
+        errorMessage: 'Failed to enqueue snapshot build worker job',
+        details: workerJob.details,
       });
-      if (enqueueError) {
-        console.error('enqueue build snapshot message failed', {
-          error: enqueueError.message,
-          code: enqueueError.code,
-        });
-        return { ok: false, error: 'snapshot_build_enqueue_failed', status: 500 };
-      }
+      return {
+        ok: false,
+        error: 'snapshot_build_worker_jobs_enqueue_failed',
+        status: workerJob.status,
+      };
     }
+    finalWorkerJobId = workerJob.workerJobId;
   }
 
   return {
