@@ -72,6 +72,15 @@ type ExportRequestCacheRow = {
   hit_count: number;
 };
 
+type ExportRequestCacheLookupRow = ExportRequestCacheRow & {
+  request_key: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  last_accessed_at: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 export type ExportCacheAction = 'cache_hit' | 'in_progress' | 'retry';
 
 type PackageArtifactResponse = {
@@ -740,20 +749,22 @@ export async function lookupTidasPackageJob(
     throw new TidasPackageError(400, 'INVALID_JOB_ID', 'Invalid job identifier');
   }
 
-  const legacyJob = await fetchOwnedPackageJobIfExists(supabase, userId, jobId);
+  const requestCacheRow = await fetchOwnedExportRequestCacheByLookupId(supabase, userId, jobId);
+  const effectiveJobId = requestCacheRow?.job_id ?? jobId;
+  const legacyJob = await fetchOwnedPackageJobIfExists(supabase, userId, effectiveJobId);
   const { data: artifactRows, error: artifactError } = await supabase
     .from('lca_package_artifacts')
     .select(
       'id,worker_job_id,artifact_kind,status,artifact_url,artifact_sha256,artifact_byte_size,artifact_format,content_type,metadata,expires_at,is_pinned,created_at,updated_at',
     )
-    .eq('job_id', jobId)
+    .eq('job_id', effectiveJobId)
     .order('created_at', { ascending: true });
 
   if (artifactError) {
     console.error('query lca_package_artifacts failed', {
       error: artifactError.message,
       code: artifactError.code,
-      job_id: jobId,
+      job_id: effectiveJobId,
       user_id: userId,
     });
     throw new TidasPackageError(500, 'ARTIFACT_LOOKUP_FAILED', 'Failed to query package artifacts');
@@ -763,47 +774,43 @@ export async function lookupTidasPackageJob(
   const hasOwnedArtifact = artifactDomainRows.some(
     (artifact) => normalizeNullableString(artifact.metadata.requested_by) === userId,
   );
-  if (!legacyJob && !hasOwnedArtifact) {
+  const requestCacheWorkerJob = requestCacheRow?.worker_job_id
+    ? await fetchOwnedWorkerPackageJobIfExists(
+        supabase,
+        userId,
+        requestCacheRow.worker_job_id,
+        'tidas.export_package',
+      )
+    : null;
+  const lookupWorkerJob =
+    !requestCacheWorkerJob && jobId !== effectiveJobId
+      ? await fetchOwnedWorkerPackageJobIfExists(supabase, userId, jobId, 'tidas.export_package')
+      : null;
+  const artifactWorkerJob = await fetchWorkerPackageJobForArtifacts(
+    supabase,
+    userId,
+    artifactDomainRows,
+  );
+  const workerJob = requestCacheWorkerJob ?? lookupWorkerJob ?? artifactWorkerJob;
+
+  if (!legacyJob && !hasOwnedArtifact && !requestCacheRow && !workerJob) {
     throw new TidasPackageError(404, 'JOB_NOT_FOUND', 'Package job not found');
   }
 
-  const workerJob = await fetchWorkerPackageJobForArtifacts(supabase, userId, artifactDomainRows);
   const job =
-    legacyJob ?? buildPackageJobRowFromWorkerOrArtifacts(jobId, workerJob, artifactDomainRows);
+    legacyJob ??
+    buildPackageJobRowFromWorkerOrArtifacts(effectiveJobId, workerJob, artifactDomainRows);
 
   const artifacts = await Promise.all(
     (artifactRows ?? []).map((row) => toArtifactResponse(supabase, row)),
   );
 
-  const { data: cacheRow } = await supabase
-    .from('lca_package_request_cache')
-    .select(
-      'id,status,error_code,error_message,hit_count,last_accessed_at,created_at,updated_at,export_artifact_id,report_artifact_id',
-    )
-    .eq('job_id', jobId)
-    .maybeSingle();
-
   const artifactsByKind = Object.fromEntries(
     artifacts.map((artifact) => [artifact.artifact_kind, artifact]),
   );
 
-  const requestCache: PackageRequestCacheResponse | null = cacheRow
-    ? {
-        id: String(cacheRow.id),
-        status: String(cacheRow.status),
-        error_code: cacheRow.error_code ? String(cacheRow.error_code) : null,
-        error_message: cacheRow.error_message ? String(cacheRow.error_message) : null,
-        hit_count: Number(cacheRow.hit_count ?? 0),
-        last_accessed_at: cacheRow.last_accessed_at ?? null,
-        created_at: cacheRow.created_at ?? null,
-        updated_at: cacheRow.updated_at ?? null,
-        export_artifact_id: cacheRow.export_artifact_id
-          ? String(cacheRow.export_artifact_id)
-          : null,
-        report_artifact_id: cacheRow.report_artifact_id
-          ? String(cacheRow.report_artifact_id)
-          : null,
-      }
+  const requestCache: PackageRequestCacheResponse | null = requestCacheRow
+    ? toPackageRequestCacheResponse(requestCacheRow)
     : null;
   const diagnosticsSummary = buildPackageJobDiagnosticsSummary({
     status: job.status,
@@ -1100,6 +1107,89 @@ async function fetchExportRequestCache(
     export_artifact_id: data.export_artifact_id ? String(data.export_artifact_id) : null,
     report_artifact_id: data.report_artifact_id ? String(data.report_artifact_id) : null,
     hit_count: Number(data.hit_count ?? 0),
+  };
+}
+
+async function fetchOwnedExportRequestCacheByLookupId(
+  supabase: SupabaseClient,
+  userId: string,
+  lookupId: string,
+): Promise<ExportRequestCacheLookupRow | null> {
+  const byCompatibilityJobId = await fetchOwnedExportRequestCacheByField(
+    supabase,
+    userId,
+    'job_id',
+    lookupId,
+  );
+  if (byCompatibilityJobId) {
+    return byCompatibilityJobId;
+  }
+
+  return await fetchOwnedExportRequestCacheByField(supabase, userId, 'worker_job_id', lookupId);
+}
+
+async function fetchOwnedExportRequestCacheByField(
+  supabase: SupabaseClient,
+  userId: string,
+  field: 'job_id' | 'worker_job_id',
+  value: string,
+): Promise<ExportRequestCacheLookupRow | null> {
+  const { data, error } = await supabase
+    .from('lca_package_request_cache')
+    .select(
+      'id,status,request_key,job_id,worker_job_id,error_code,error_message,hit_count,last_accessed_at,created_at,updated_at,export_artifact_id,report_artifact_id',
+    )
+    .eq('requested_by', userId)
+    .eq('operation', 'export_package')
+    .eq(field, value)
+    .maybeSingle();
+
+  if (error) {
+    console.error('query lca_package_request_cache by job id failed', {
+      error: error.message,
+      code: error.code,
+      user_id: userId,
+      lookup_field: field,
+      lookup_id: value,
+    });
+    throw new TidasPackageError(500, 'REQUEST_CACHE_LOOKUP_FAILED', 'Failed to query export cache');
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    id: String(data.id),
+    status: String(data.status),
+    request_key: data.request_key ? String(data.request_key) : null,
+    job_id: data.job_id ? String(data.job_id) : null,
+    worker_job_id: data.worker_job_id ? String(data.worker_job_id) : null,
+    error_code: data.error_code ? String(data.error_code) : null,
+    error_message: data.error_message ? String(data.error_message) : null,
+    hit_count: Number(data.hit_count ?? 0),
+    last_accessed_at: data.last_accessed_at ? String(data.last_accessed_at) : null,
+    created_at: data.created_at ? String(data.created_at) : null,
+    updated_at: data.updated_at ? String(data.updated_at) : null,
+    export_artifact_id: data.export_artifact_id ? String(data.export_artifact_id) : null,
+    report_artifact_id: data.report_artifact_id ? String(data.report_artifact_id) : null,
+  };
+}
+
+function toPackageRequestCacheResponse(
+  row: ExportRequestCacheLookupRow,
+): PackageRequestCacheResponse {
+  return {
+    id: row.id,
+    status: row.status,
+    error_code: row.error_code,
+    error_message: row.error_message,
+    hit_count: row.hit_count,
+    last_accessed_at: row.last_accessed_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    export_artifact_id: row.export_artifact_id,
+    report_artifact_id: row.report_artifact_id,
   };
 }
 
@@ -1530,6 +1620,10 @@ async function fetchOwnedPackageJobIfExists(
     .maybeSingle();
 
   if (error) {
+    if (isMissingLegacyPackageJobTableError(error)) {
+      return null;
+    }
+
     console.error('query lca_package_jobs failed during cache reconciliation', {
       error: error.message,
       code: error.code,
@@ -1567,6 +1661,10 @@ async function fetchOwnedPackageJob(
     .maybeSingle();
 
   if (error) {
+    if (isMissingLegacyPackageJobTableError(error)) {
+      throw new TidasPackageError(404, 'JOB_NOT_FOUND', 'Package job not found');
+    }
+
     console.error('query lca_package_jobs failed', {
       error: error.message,
       code: error.code,
@@ -1586,6 +1684,28 @@ async function fetchOwnedPackageJob(
   }
 
   return row;
+}
+
+function isMissingLegacyPackageJobTableError(error: {
+  code?: unknown;
+  message?: unknown;
+  details?: unknown;
+  hint?: unknown;
+}): boolean {
+  const code = normalizeString(error.code);
+  const message = normalizeString(error.message).toLowerCase();
+  const details = normalizeString(error.details).toLowerCase();
+  const hint = normalizeString(error.hint).toLowerCase();
+  const combined = `${message} ${details} ${hint}`;
+
+  return (
+    code === '42P01' ||
+    code === 'PGRST205' ||
+    (combined.includes('lca_package_jobs') &&
+      (combined.includes('schema cache') ||
+        combined.includes('does not exist') ||
+        combined.includes('not found')))
+  );
 }
 
 function toPackageJobRow(data: Record<string, unknown>): PackageJobRow {
