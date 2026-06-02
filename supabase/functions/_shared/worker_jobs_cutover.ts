@@ -47,6 +47,25 @@ export function workerJobIdFromRpcData(data: unknown): string | null {
   return typeof id === 'string' && id.length > 0 ? id : null;
 }
 
+function workerJobPayloadFromRpcData(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return null;
+  }
+
+  const payload = (data as { payload?: unknown }).payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+
+  return payload as Record<string, unknown>;
+}
+
+export function workerJobPayloadStringFromRpcData(data: unknown, field: string): string | null {
+  const payload = workerJobPayloadFromRpcData(data);
+  const value = payload?.[field];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 export async function enqueueCalculatorWorkerJob(
   supabase: SupabaseClient,
   request: WorkerJobEnqueueRequest,

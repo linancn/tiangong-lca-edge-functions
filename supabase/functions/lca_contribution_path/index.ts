@@ -4,8 +4,8 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { validateProcessEntriesInDataScope } from '../_shared/lca_process_scope.ts';
+import { ensureLcaSnapshotBuildQueued } from '../_shared/lca_snapshot_build_queue.ts';
 import {
-  buildSnapshotBuildPayloadFields,
   buildSnapshotContainsFilter,
   buildSnapshotProcessFilter,
   matchesSnapshotProcessFilter,
@@ -14,14 +14,13 @@ import {
   shouldAutoBuildSnapshot,
   type LcaDataScope,
   type ParsedSnapshotProcessFilter,
-  type SnapshotProcessFilter,
 } from '../_shared/lca_snapshot_scope.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient, supabaseClient } from '../_shared/supabase_client.ts';
 import {
   enqueueCalculatorWorkerJob,
   isWorkerJobsCutoverEnabled,
-  markRetainedLcaJobWorkerEnqueueFailed,
+  workerJobPayloadStringFromRpcData,
 } from '../_shared/worker_jobs_cutover.ts';
 
 type ContributionPathRequest = {
@@ -89,14 +88,11 @@ type ScopedSnapshotResolution =
   | { kind: 'stale'; snapshot_id: string }
   | { kind: 'none' };
 
-type BuildQueueResult =
-  | { ok: true; job_id: string; snapshot_id: string; worker_job_id?: string | null }
-  | { ok: false; error: string; status: number };
-
 type ResultCacheRow = {
   id: string;
   status: string;
   job_id: string | null;
+  worker_job_id: string | null;
   result_id: string | null;
   hit_count: number;
 };
@@ -118,9 +114,6 @@ type ContributionPathOptions = {
 };
 
 const REQUEST_VERSION = 'lca_contribution_path_v1';
-const SNAPSHOT_BUILD_REQUEST_VERSION = 'lca_snapshot_build_v1';
-const ACTIVE_BUILD_MAX_QUEUED_MS = 10 * 60 * 1000;
-const ACTIVE_BUILD_MAX_RUNNING_MS = 2 * 60 * 60 * 1000;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req) => {
@@ -194,7 +187,11 @@ Deno.serve(async (req) => {
       (snapshotMeta.error === 'no_ready_snapshot' ||
         snapshotMeta.error === 'snapshot_stale_rebuild_required');
     if (shouldQueueBuild) {
-      const queued = await ensureSnapshotBuildQueued(scope, userId, dataScope);
+      const queued = await ensureLcaSnapshotBuildQueued(supabaseClient, {
+        scope,
+        dataScope,
+        userId,
+      });
       if (!queued.ok) {
         return json({ error: queued.error }, queued.status);
       }
@@ -298,9 +295,9 @@ Deno.serve(async (req) => {
 
     if (
       (existingCache.row.status === 'pending' || existingCache.row.status === 'running') &&
-      existingCache.row.job_id
+      (existingCache.row.worker_job_id || existingCache.row.job_id)
     ) {
-      const cacheJobState = await fetchCacheJobState(existingCache.row.job_id);
+      const cacheJobState = await fetchCacheJobState(existingCache.row);
       if (cacheJobState.ok) {
         if (
           (cacheJobState.data.status === 'ready' || cacheJobState.data.status === 'completed') &&
@@ -322,12 +319,18 @@ Deno.serve(async (req) => {
           return json(cacheHit, 200);
         }
 
-        if (cacheJobState.data.status === 'queued' || cacheJobState.data.status === 'running') {
+        if (
+          cacheJobState.data.status === 'queued' ||
+          cacheJobState.data.status === 'running' ||
+          cacheJobState.data.status === 'waiting' ||
+          cacheJobState.data.status === 'blocked'
+        ) {
           const inProgress: ContributionPathResponse = {
             mode: 'in_progress',
             snapshot_id: snapshotId,
             cache_key: requestKey,
-            job_id: existingCache.row.job_id,
+            job_id: existingCache.row.job_id ?? undefined,
+            worker_job_id: existingCache.row.worker_job_id,
           };
           return json(inProgress, 200);
         }
@@ -346,7 +349,8 @@ Deno.serve(async (req) => {
           mode: 'in_progress',
           snapshot_id: snapshotId,
           cache_key: requestKey,
-          job_id: existingCache.row.job_id,
+          job_id: existingCache.row.job_id ?? undefined,
+          worker_job_id: existingCache.row.worker_job_id,
         };
         return json(inProgress, 200);
       }
@@ -380,88 +384,34 @@ Deno.serve(async (req) => {
     return json({ error: 'legacy_queue_disabled' }, 503);
   }
 
-  const { error: insertJobError } = await supabaseClient.from('lca_jobs').insert({
-    id: newJobId,
-    job_type: 'analyze_contribution_path',
-    snapshot_id: snapshotId,
-    status: 'queued',
+  const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
+    jobKind: 'lca.contribution_path',
     payload,
-    diagnostics: {},
-    requested_by: userId,
-    request_key: requestKey,
-    idempotency_key: idempotencyKey,
-    created_at: nowIso,
-    updated_at: nowIso,
+    payloadSchemaVersion: 'lca.contribution_path.request.v1',
+    subjectType: 'lca_job',
+    subjectId: newJobId,
+    subjectVersion: snapshotId,
+    requestedBy: userId,
+    requesterType: 'user',
+    idempotencyKey,
+    requestHash: requestKey,
+    queueKey: snapshotId,
+    visibility: 'user',
   });
-
-  if (insertJobError && !isDuplicateKey(insertJobError.code)) {
-    console.error('insert lca_jobs failed', {
-      error: insertJobError.message,
-      code: insertJobError.code,
-      idempotency_key: idempotencyKey,
+  if (!workerJob.ok) {
+    console.error('enqueue contribution path worker_jobs job failed', {
+      error: workerJob.error,
+      status: workerJob.status,
+      details: workerJob.details,
+      lca_job_id: newJobId,
     });
-    return json({ error: 'job_insert_failed' }, 500);
+    return json(
+      { error: 'worker_jobs_enqueue_failed', details: workerJob.error },
+      workerJob.status,
+    );
   }
-
-  const { data: jobRow, error: jobReadError } = await supabaseClient
-    .from('lca_jobs')
-    .select('id')
-    .eq('idempotency_key', idempotencyKey)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (jobReadError || !jobRow?.id) {
-    console.error('read lca_jobs by idempotency_key failed', {
-      error: jobReadError?.message,
-      code: jobReadError?.code,
-      idempotency_key: idempotencyKey,
-    });
-    return json({ error: 'job_lookup_failed' }, 500);
-  }
-
-  const finalJobId = String(jobRow.id);
-  let finalWorkerJobId: string | null = null;
-  if (finalJobId === newJobId) {
-    const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
-      jobKind: 'lca.contribution_path',
-      payload: {
-        ...payload,
-        job_id: finalJobId,
-      },
-      payloadSchemaVersion: 'lca.contribution_path.request.v1',
-      subjectType: 'lca_job',
-      subjectId: finalJobId,
-      subjectVersion: snapshotId,
-      requestedBy: userId,
-      requesterType: 'user',
-      idempotencyKey,
-      requestHash: requestKey,
-      queueKey: snapshotId,
-      visibility: 'user',
-    });
-    if (!workerJob.ok) {
-      console.error('enqueue contribution path worker_jobs job failed', {
-        error: workerJob.error,
-        status: workerJob.status,
-        details: workerJob.details,
-        lca_job_id: finalJobId,
-      });
-      await markRetainedLcaJobWorkerEnqueueFailed(supabaseClient, {
-        jobId: finalJobId,
-        userId,
-        nowIso,
-        errorCode: workerJob.error,
-        errorMessage: 'Failed to enqueue contribution path worker job',
-        details: workerJob.details,
-      });
-      return json(
-        { error: 'worker_jobs_enqueue_failed', details: workerJob.error },
-        workerJob.status,
-      );
-    }
-    finalWorkerJobId = workerJob.workerJobId;
-  }
+  const finalJobId = workerJobPayloadStringFromRpcData(workerJob.data, 'job_id') ?? newJobId;
+  const finalWorkerJobId = workerJob.workerJobId;
 
   if (existingCache.row) {
     const { error: cacheUpdateError } = await supabaseClient
@@ -469,6 +419,7 @@ Deno.serve(async (req) => {
       .update({
         status: 'pending',
         job_id: finalJobId,
+        worker_job_id: finalWorkerJobId,
         request_payload: normalizedRequest,
         hit_count: existingCache.row.hit_count + 1,
         last_accessed_at: nowIso,
@@ -491,6 +442,7 @@ Deno.serve(async (req) => {
       request_payload: normalizedRequest,
       status: 'pending',
       job_id: finalJobId,
+      worker_job_id: finalWorkerJobId,
       hit_count: 1,
       last_accessed_at: nowIso,
       created_at: nowIso,
@@ -555,7 +507,7 @@ async function fetchResultCache(
 ): Promise<{ ok: true; row: ResultCacheRow | null } | { ok: false }> {
   const { data, error } = await supabaseClient
     .from('lca_result_cache')
-    .select('id,status,job_id,result_id,hit_count')
+    .select('id,status,job_id,worker_job_id,result_id,hit_count')
     .eq('scope', scope)
     .eq('snapshot_id', snapshotId)
     .eq('request_key', requestKey)
@@ -581,6 +533,7 @@ async function fetchResultCache(
       id: String(data.id),
       status: String(data.status),
       job_id: data.job_id ? String(data.job_id) : null,
+      worker_job_id: data.worker_job_id ? String(data.worker_job_id) : null,
       result_id: data.result_id ? String(data.result_id) : null,
       hit_count: Number(data.hit_count ?? 0),
     },
@@ -647,6 +600,70 @@ async function updateResultCacheState(
 }
 
 async function fetchCacheJobState(
+  row: ResultCacheRow,
+): Promise<{ ok: true; data: CacheJobState } | { ok: false }> {
+  if (row.worker_job_id) {
+    return await fetchWorkerCacheJobState(row.worker_job_id);
+  }
+
+  if (!row.job_id) {
+    return { ok: false };
+  }
+
+  return await fetchLegacyCacheJobState(row.job_id);
+}
+
+async function fetchWorkerCacheJobState(
+  workerJobId: string,
+): Promise<{ ok: true; data: CacheJobState } | { ok: false }> {
+  const { data: jobData, error: jobError } = await supabaseClient
+    .from('worker_jobs')
+    .select('id,status')
+    .eq('id', workerJobId)
+    .maybeSingle();
+
+  if (jobError) {
+    console.warn('fetch worker cache job state failed', {
+      error: jobError.message,
+      worker_job_id: workerJobId,
+    });
+    return { ok: false };
+  }
+
+  if (!jobData) {
+    return { ok: false };
+  }
+
+  let resultId: string | null = null;
+  if (jobData.status === 'completed') {
+    const { data: resultData, error: resultError } = await supabaseClient
+      .from('lca_results')
+      .select('id')
+      .eq('worker_job_id', workerJobId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (resultError) {
+      console.warn('fetch contribution path result by worker_job_id failed', {
+        error: resultError.message,
+        worker_job_id: workerJobId,
+      });
+      return { ok: false };
+    }
+    resultId = resultData?.id ? String(resultData.id) : null;
+  }
+
+  return {
+    ok: true,
+    data: {
+      status: String(jobData.status),
+      result_id: resultId,
+    },
+  };
+}
+
+async function fetchLegacyCacheJobState(
   jobId: string,
 ): Promise<{ ok: true; data: CacheJobState } | { ok: false }> {
   const { data: jobData, error: jobError } = await supabaseClient
@@ -908,241 +925,6 @@ async function fetchTableMaxModifiedAt(
     return null;
   }
   return data?.modified_at ? String(data.modified_at) : null;
-}
-
-async function ensureSnapshotBuildQueued(
-  scope: string,
-  userId: string,
-  dataScope: LcaDataScope = 'current_user',
-): Promise<BuildQueueResult> {
-  const processFilter = buildSnapshotProcessFilter(dataScope, userId);
-  const activeBuild = await findActiveBuildJob(scope, processFilter);
-  if (!activeBuild.ok) {
-    return activeBuild;
-  }
-  if (activeBuild.job_id && activeBuild.snapshot_id) {
-    return { ok: true, job_id: activeBuild.job_id, snapshot_id: activeBuild.snapshot_id };
-  }
-
-  const snapshotId = crypto.randomUUID();
-  const jobId = crypto.randomUUID();
-  const buildPayload = {
-    type: 'build_snapshot',
-    job_id: jobId,
-    snapshot_id: snapshotId,
-    scope,
-    ...buildSnapshotBuildPayloadFields(processFilter),
-    reference_normalization_mode: 'lenient',
-    allocation_fraction_mode: 'lenient',
-    self_loop_cutoff: 0.999999,
-    singular_eps: 1e-12,
-    no_lcia: false,
-  };
-  const requestKey = await sha256Hex(
-    JSON.stringify({
-      version: SNAPSHOT_BUILD_REQUEST_VERSION,
-      scope,
-      process_filter: processFilter,
-      payload: buildPayload,
-    }),
-  );
-
-  const { error: snapshotInsertError } = await supabaseClient.from('lca_network_snapshots').insert({
-    id: snapshotId,
-    scope: 'full_library',
-    process_filter: processFilter,
-    status: 'draft',
-    created_by: userId,
-  });
-  if (snapshotInsertError && !isDuplicateKey(snapshotInsertError.code)) {
-    console.error('insert lca_network_snapshots failed', {
-      error: snapshotInsertError.message,
-      code: snapshotInsertError.code,
-      snapshot_id: snapshotId,
-    });
-    return { ok: false, error: 'snapshot_build_seed_failed', status: 500 };
-  }
-
-  if (!isWorkerJobsCutoverEnabled('LCA_WORKER_JOBS_ENABLED')) {
-    console.error('legacy lca snapshot queue fallback is disabled before job insert', {
-      request_key: requestKey,
-      snapshot_id: snapshotId,
-    });
-    return { ok: false, error: 'legacy_queue_disabled', status: 503 };
-  }
-
-  const nowIso = new Date().toISOString();
-  const { error: jobInsertError } = await supabaseClient.from('lca_jobs').insert({
-    id: jobId,
-    job_type: 'build_snapshot',
-    snapshot_id: snapshotId,
-    status: 'queued',
-    payload: buildPayload,
-    diagnostics: {},
-    requested_by: userId,
-    request_key: requestKey,
-    idempotency_key: `${userId}:${requestKey}`,
-    created_at: nowIso,
-    updated_at: nowIso,
-  });
-  if (jobInsertError && !isDuplicateKey(jobInsertError.code)) {
-    console.error('insert build lca_jobs failed', {
-      error: jobInsertError.message,
-      code: jobInsertError.code,
-      job_id: jobId,
-    });
-    return { ok: false, error: 'snapshot_build_job_insert_failed', status: 500 };
-  }
-
-  const { data: jobRow, error: jobReadError } = await supabaseClient
-    .from('lca_jobs')
-    .select('id,snapshot_id')
-    .eq('request_key', requestKey)
-    .eq('job_type', 'build_snapshot')
-    .eq('requested_by', userId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (jobReadError || !jobRow?.id || !jobRow?.snapshot_id) {
-    console.error('read build lca_jobs failed', {
-      error: jobReadError?.message,
-      code: jobReadError?.code,
-      request_key: requestKey,
-    });
-    return { ok: false, error: 'snapshot_build_job_lookup_failed', status: 500 };
-  }
-
-  const finalJobId = String(jobRow.id);
-  const finalSnapshotId = String(jobRow.snapshot_id);
-  let finalWorkerJobId: string | null = null;
-  if (finalJobId === jobId) {
-    const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
-      jobKind: 'lca.build_snapshot',
-      payload: {
-        ...buildPayload,
-        job_id: finalJobId,
-        snapshot_id: finalSnapshotId,
-      },
-      payloadSchemaVersion: 'lca.build_snapshot.request.v1',
-      subjectType: 'lca_job',
-      subjectId: finalJobId,
-      subjectVersion: finalSnapshotId,
-      requestedBy: userId,
-      requesterType: 'user',
-      idempotencyKey: `${userId}:${requestKey}`,
-      requestHash: requestKey,
-      concurrencyKey: `lca.build_snapshot:${scope}:${requestKey}`,
-      queueKey: scope,
-      visibility: 'user',
-    });
-    if (!workerJob.ok) {
-      console.error('enqueue build snapshot worker_jobs job failed', {
-        error: workerJob.error,
-        status: workerJob.status,
-        details: workerJob.details,
-        lca_job_id: finalJobId,
-        snapshot_id: finalSnapshotId,
-      });
-      await markRetainedLcaJobWorkerEnqueueFailed(supabaseClient, {
-        jobId: finalJobId,
-        userId,
-        nowIso,
-        errorCode: workerJob.error,
-        errorMessage: 'Failed to enqueue snapshot build worker job',
-        details: workerJob.details,
-      });
-      return {
-        ok: false,
-        error: 'snapshot_build_worker_jobs_enqueue_failed',
-        status: workerJob.status,
-      };
-    }
-    finalWorkerJobId = workerJob.workerJobId;
-  }
-
-  return {
-    ok: true,
-    job_id: finalJobId,
-    snapshot_id: finalSnapshotId,
-    worker_job_id: finalWorkerJobId,
-  };
-}
-
-async function findActiveBuildJob(
-  scope: string,
-  expectedProcessFilter: SnapshotProcessFilter,
-): Promise<
-  | { ok: true; job_id: string | null; snapshot_id: string | null }
-  | { ok: false; error: string; status: number }
-> {
-  const { data: rows, error } = await supabaseClient
-    .from('lca_jobs')
-    .select('id,snapshot_id,payload,status,created_at,started_at')
-    .eq('job_type', 'build_snapshot')
-    .in('status', ['queued', 'running'])
-    .order('created_at', { ascending: false })
-    .limit(100);
-
-  if (error) {
-    console.error('read active build lca_jobs failed', {
-      error: error.message,
-      code: error.code,
-    });
-    return { ok: false, error: 'snapshot_build_job_lookup_failed', status: 500 };
-  }
-
-  for (const row of rows ?? []) {
-    const status = String((row as { status?: unknown }).status ?? '');
-    const nowMs = Date.now();
-    const createdAtRaw = (row as { created_at?: unknown }).created_at;
-    const createdAtMs =
-      createdAtRaw === null || createdAtRaw === undefined
-        ? Number.NaN
-        : Date.parse(String(createdAtRaw));
-    const startedAtRaw = (row as { started_at?: unknown }).started_at;
-    const startedAtMs =
-      startedAtRaw === null || startedAtRaw === undefined
-        ? Number.NaN
-        : Date.parse(String(startedAtRaw));
-    if (
-      status === 'queued' &&
-      Number.isFinite(createdAtMs) &&
-      nowMs - createdAtMs > ACTIVE_BUILD_MAX_QUEUED_MS
-    ) {
-      continue;
-    }
-    if (
-      status === 'running' &&
-      Number.isFinite(startedAtMs) &&
-      nowMs - startedAtMs > ACTIVE_BUILD_MAX_RUNNING_MS
-    ) {
-      continue;
-    }
-
-    const payload = (row as { payload?: unknown }).payload as { scope?: unknown } | undefined;
-    if ((payload?.scope ?? '') !== scope) {
-      continue;
-    }
-    const jobId = String((row as { id?: unknown }).id ?? '').trim();
-    const snapshotId = String((row as { snapshot_id?: unknown }).snapshot_id ?? '').trim();
-    if (!jobId || !snapshotId) {
-      continue;
-    }
-    const { data: snap, error: snapErr } = await supabaseClient
-      .from('lca_network_snapshots')
-      .select('process_filter')
-      .eq('id', snapshotId)
-      .maybeSingle();
-    if (snapErr || !snap) {
-      continue;
-    }
-    const filter = (snap as { process_filter?: unknown }).process_filter;
-    if (matchesSnapshotProcessFilter(filter, expectedProcessFilter)) {
-      return { ok: true, job_id: jobId, snapshot_id: snapshotId };
-    }
-  }
-
-  return { ok: true, job_id: null, snapshot_id: null };
 }
 
 async function fetchSnapshotArtifactMeta(
