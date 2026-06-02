@@ -313,6 +313,7 @@ function withPackageStorageEnv<T>(fn: () => Promise<T>): Promise<T> {
     S3_ENDPOINT: Deno.env.get('S3_ENDPOINT'),
     S3_BUCKET: Deno.env.get('S3_BUCKET'),
     S3_PREFIX: Deno.env.get('S3_PREFIX'),
+    TIDAS_PACKAGE_WORKER_JOBS_ENABLED: Deno.env.get('TIDAS_PACKAGE_WORKER_JOBS_ENABLED'),
   };
 
   Deno.env.set('REMOTE_SUPABASE_URL', TEST_SUPABASE_URL);
@@ -320,6 +321,7 @@ function withPackageStorageEnv<T>(fn: () => Promise<T>): Promise<T> {
   Deno.env.set('S3_ENDPOINT', 'https://example.storage.supabase.co/storage/v1/s3');
   Deno.env.set('S3_BUCKET', 'lca_results');
   Deno.env.set('S3_PREFIX', 'lca-results');
+  Deno.env.delete('TIDAS_PACKAGE_WORKER_JOBS_ENABLED');
 
   return fn().finally(() => {
     restoreEnvVar('REMOTE_SUPABASE_URL', previous.REMOTE_SUPABASE_URL);
@@ -327,6 +329,7 @@ function withPackageStorageEnv<T>(fn: () => Promise<T>): Promise<T> {
     restoreEnvVar('S3_ENDPOINT', previous.S3_ENDPOINT);
     restoreEnvVar('S3_BUCKET', previous.S3_BUCKET);
     restoreEnvVar('S3_PREFIX', previous.S3_PREFIX);
+    restoreEnvVar('TIDAS_PACKAGE_WORKER_JOBS_ENABLED', previous.TIDAS_PACKAGE_WORKER_JOBS_ENABLED);
   });
 }
 
@@ -612,6 +615,73 @@ Deno.test('import_tidas_package marks retained job failed when worker enqueue fa
     assertEquals((jobRow.diagnostics as JsonRecord).error_code, '42501');
   });
 });
+
+Deno.test(
+  'import_tidas_package fails closed when package worker_jobs cutover is disabled',
+  async () => {
+    await withPackageStorageEnv(async () => {
+      Deno.env.set('TIDAS_PACKAGE_WORKER_JOBS_ENABLED', 'false');
+      const { createImportTidasPackageHandler } = await loadTidasHandlers();
+      const supabase = new FakeSupabase();
+      const handler = createImportTidasPackageHandler({
+        authClient: {} as SupabaseClient,
+        supabase: supabase as unknown as SupabaseClient,
+        authenticateRequest: async () => createAuthResult(),
+        getRedisClient: async () => undefined,
+      });
+
+      const prepareResponse = await handler(
+        new Request('https://example.com/functions/v1/import_tidas_package', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${TEST_JWT}`,
+            'Content-Type': 'application/json',
+            'x-idempotency-key': 'cutover-disabled',
+          },
+          body: JSON.stringify({
+            action: 'prepare_upload',
+            filename: 'fixtures/Demo Package.zip',
+            byte_size: EMPTY_ZIP_BYTES.byteLength,
+            content_type: 'application/zip',
+          }),
+        }),
+      );
+      assertEquals(prepareResponse.status, 200);
+      const prepared = await prepareResponse.json();
+      const artifactSha256 = await sha256Hex(EMPTY_ZIP_BYTES);
+
+      const enqueueResponse = await handler(
+        new Request('https://example.com/functions/v1/import_tidas_package', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${TEST_JWT}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'enqueue',
+            job_id: prepared.job_id,
+            source_artifact_id: prepared.source_artifact_id,
+            artifact_sha256: artifactSha256,
+            artifact_byte_size: EMPTY_ZIP_BYTES.byteLength,
+            filename: './uploads/Demo Package.zip',
+            content_type: 'application/zip',
+          }),
+        }),
+      );
+
+      assertEquals(enqueueResponse.status, 503);
+      assertEquals(await enqueueResponse.json(), {
+        ok: false,
+        code: 'LEGACY_QUEUE_DISABLED',
+        message: 'Package worker_jobs cutover must be enabled',
+      });
+      const jobRow = supabase.getRows('lca_package_jobs')[0];
+      assertEquals(jobRow.status, 'stale');
+      assertEquals((jobRow.diagnostics as JsonRecord).phase, 'prepare_upload');
+      assertEquals(supabase.rpcCalls.length, 0);
+    });
+  },
+);
 
 Deno.test(
   'tidas_package_jobs marks expired and deleted package artifacts as unavailable',
