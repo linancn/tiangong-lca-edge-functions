@@ -6,6 +6,7 @@ import {
   lcaWorkerJobKindForJobType,
   workerJobIdFromRpcData,
   workerJobPayloadSchemaVersion,
+  workerJobPayloadStringFromRpcData,
 } from '../supabase/functions/_shared/worker_jobs_cutover.ts';
 
 Deno.test('isWorkerJobsCutoverEnabled defaults on and accepts explicit overrides', () => {
@@ -55,6 +56,25 @@ Deno.test('workerJobIdFromRpcData extracts worker job id defensively', () => {
   assertEquals(workerJobIdFromRpcData({ id: 'job-1' }), 'job-1');
   assertEquals(workerJobIdFromRpcData({ id: 1 }), null);
   assertEquals(workerJobIdFromRpcData(null), null);
+});
+
+Deno.test('workerJobPayloadStringFromRpcData extracts compatibility payload ids', () => {
+  assertEquals(
+    workerJobPayloadStringFromRpcData(
+      { id: 'worker-1', payload: { job_id: 'legacy-job-1', snapshot_id: 'snapshot-1' } },
+      'job_id',
+    ),
+    'legacy-job-1',
+  );
+  assertEquals(
+    workerJobPayloadStringFromRpcData(
+      { id: 'worker-1', payload: { job_id: 'legacy-job-1', snapshot_id: 'snapshot-1' } },
+      'snapshot_id',
+    ),
+    'snapshot-1',
+  );
+  assertEquals(workerJobPayloadStringFromRpcData({ id: 'worker-1' }, 'job_id'), null);
+  assertEquals(workerJobPayloadStringFromRpcData({ id: 'worker-1', payload: [] }, 'job_id'), null);
 });
 
 Deno.test('enqueueCalculatorWorkerJob requires canonical worker job id', async () => {
