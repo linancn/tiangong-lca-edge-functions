@@ -423,6 +423,14 @@ export async function queueExportTidasPackage(
           details: workerJob.details,
           job_id: finalJobId,
         });
+        await markPackageJobWorkerEnqueueFailed(supabase, {
+          jobId: finalJobId,
+          userId,
+          nowIso,
+          errorCode: workerJob.error,
+          errorMessage: 'Failed to enqueue export worker job',
+          details: workerJob.details,
+        });
         throw new TidasPackageError(
           workerJob.status,
           'WORKER_JOBS_ENQUEUE_FAILED',
@@ -700,6 +708,14 @@ export async function enqueueImportTidasPackage(
         status: workerJob.status,
         details: workerJob.details,
         job_id: job.id,
+      });
+      await markPackageJobWorkerEnqueueFailed(supabase, {
+        jobId: job.id,
+        userId,
+        nowIso,
+        errorCode: workerJob.error,
+        errorMessage: 'Failed to enqueue import worker job',
+        details: workerJob.details,
       });
       throw new TidasPackageError(
         workerJob.status,
@@ -1192,6 +1208,45 @@ async function upsertExportRequestCache(
       'REQUEST_CACHE_INSERT_FAILED',
       'Failed to create export cache',
     );
+  }
+}
+
+async function markPackageJobWorkerEnqueueFailed(
+  supabase: SupabaseClient,
+  args: {
+    jobId: string;
+    userId: string;
+    nowIso: string;
+    errorCode: string;
+    errorMessage: string;
+    details?: unknown;
+  },
+): Promise<void> {
+  const diagnostics = {
+    phase: 'worker_jobs_enqueue_failed',
+    error_code: args.errorCode,
+    error_message: args.errorMessage,
+    details: args.details ?? null,
+  };
+
+  const { error } = await supabase
+    .from('lca_package_jobs')
+    .update({
+      status: 'failed',
+      diagnostics,
+      finished_at: args.nowIso,
+      updated_at: args.nowIso,
+    })
+    .eq('id', args.jobId)
+    .eq('requested_by', args.userId);
+
+  if (error) {
+    console.error('mark package job worker_jobs enqueue failure failed', {
+      error: error.message,
+      code: error.code,
+      job_id: args.jobId,
+      user_id: args.userId,
+    });
   }
 }
 

@@ -22,6 +22,7 @@ import {
   enqueueCalculatorWorkerJob,
   isWorkerJobsCutoverEnabled,
   lcaWorkerJobKindForJobType,
+  markRetainedLcaJobWorkerEnqueueFailed,
   workerJobPayloadSchemaVersion,
 } from '../_shared/worker_jobs_cutover.ts';
 
@@ -444,6 +445,14 @@ Deno.serve(async (req) => {
           status: workerJob.status,
           details: workerJob.details,
           lca_job_id: finalJobId,
+        });
+        await markRetainedLcaJobWorkerEnqueueFailed(supabaseClient, {
+          jobId: finalJobId,
+          userId,
+          nowIso,
+          errorCode: workerJob.error,
+          errorMessage: 'Failed to enqueue LCA worker job',
+          details: workerJob.details,
         });
         return json(
           { error: 'worker_jobs_enqueue_failed', details: workerJob.error },
@@ -960,6 +969,14 @@ async function ensureSnapshotBuildQueued(
           details: workerJob.details,
           lca_job_id: finalJobId,
           snapshot_id: finalSnapshotId,
+        });
+        await markRetainedLcaJobWorkerEnqueueFailed(supabaseClient, {
+          jobId: finalJobId,
+          userId,
+          nowIso,
+          errorCode: workerJob.error,
+          errorMessage: 'Failed to enqueue snapshot build worker job',
+          details: workerJob.details,
         });
         return {
           ok: false,

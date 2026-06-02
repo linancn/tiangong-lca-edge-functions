@@ -257,33 +257,16 @@ deno check --config supabase/functions/deno.json <changed-file>
 - Update `AGENTS.md` for repo contract, boundaries, or minimal execution-fact changes.
 - Update `.docpact/config.yaml` when routing, ownership, governed-doc rules, or freshness coverage changes.
 
-## LCA Queue RPC Prerequisite
+## Worker Jobs RPC Prerequisite
 
-`lca_solve` does not use direct `postgres` connections. It enqueues jobs via Supabase RPC:
+LCA solve/snapshot/contribution path, TIDAS package import/export, and review-submit orchestration use database-owned `worker_jobs` RPCs for canonical task lifecycle state. The target database must include the `database-engine` worker job contract migrations before these Edge Functions are deployed:
 
-- `public.lca_enqueue_job(p_queue_name text, p_message jsonb)`
+- `public.worker_enqueue_job(...)`
+- `public.worker_read_job(...)`
+- `public.worker_list_jobs(...)`
+- `public.worker_cancel_job(...)`
 
-Ensure this function exists in your database:
-
-```sql
-create or replace function public.lca_enqueue_job(p_queue_name text, p_message jsonb)
-returns bigint
-language plpgsql
-security definer
-set search_path = public, pgmq
-as $$
-declare
-  v_msg_id bigint;
-begin
-  select pgmq.send(p_queue_name, p_message) into v_msg_id;
-  return v_msg_id;
-end;
-$$;
-
-revoke all on function public.lca_enqueue_job(text, jsonb) from public;
-revoke execute on function public.lca_enqueue_job(text, jsonb) from anon, authenticated;
-grant execute on function public.lca_enqueue_job(text, jsonb) to service_role;
-```
+Retained domain tables such as `lca_jobs`, `lca_result_cache`, `lca_package_jobs`, `lca_package_artifacts`, and `dataset_review_submit_jobs` still carry result/cache/artifact/history metadata, but they are not the user-facing task fact. Legacy `lca_enqueue_job` / `lca_package_enqueue_job` are compatibility/debug paths only and should not be documented or configured as the normal production enqueue path.
 
 ## Review-submit Gate Function Call Pattern
 
@@ -336,7 +319,7 @@ Job response states map to HTTP status as follows:
   - snapshot family semantics: all three scopes reuse the same user-enhanced snapshot family, i.e. published data plus the current user's private data
   - root-process semantics stay distinct: `current_user` only accepts current-user processes, `open_data` only accepts published processes, `all_data` accepts published plus current-user processes
   - missing snapshot auto-build is attempted for every `data_scope`
-- `lca_jobs`: supports `GET` and `POST`.
+- `lca_jobs`: retained compatibility route, supports `GET` and `POST`.
   - `GET`: `/functions/v1/lca_jobs/{jobId}` or `?job_id=...`
   - `POST`: body `{ "job_id": "<uuid>" }`
 - `lca_results`: supports `GET` and `POST`.
