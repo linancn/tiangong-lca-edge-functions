@@ -3,6 +3,7 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
+import { ensureLcaAllUnitSolveQueued } from '../_shared/lca_all_unit_solve_queue.ts';
 import {
   fetchProcessScopeLookup,
   matchesProcessDataScope,
@@ -215,10 +216,26 @@ Deno.serve(async (req) => {
     return json({ error: latestAllUnit.error }, latestAllUnit.status);
   }
   if (!latestAllUnit.row) {
-    if (allowFallback) {
-      return json({ error: 'fallback_not_implemented_yet' }, 501);
+    const queued = await ensureLcaAllUnitSolveQueued(supabaseClient, {
+      scope,
+      snapshotId,
+      userId,
+    });
+    if (!queued.ok) {
+      return json({ error: queued.error, details: queued.details ?? null }, queued.status);
     }
-    return json({ error: 'all_unit_result_not_ready' }, 409);
+    return json(
+      {
+        error: 'all_unit_result_queued',
+        mode: queued.mode,
+        snapshot_id: queued.snapshot_id,
+        cache_key: queued.cache_key,
+        solve_job_id: queued.job_id,
+        solve_worker_job_id: queued.worker_job_id,
+        fallback_requested: allowFallback,
+      },
+      409,
+    );
   }
 
   const queryArtifact = await fetchArtifactJson<AllUnitQueryEnvelope>(
