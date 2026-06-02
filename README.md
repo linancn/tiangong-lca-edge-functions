@@ -266,7 +266,7 @@ LCA solve/snapshot/contribution path, TIDAS package import/export, and review-su
 - `public.worker_list_jobs(...)`
 - `public.worker_cancel_job(...)`
 
-Retained domain tables such as `lca_jobs`, `lca_result_cache`, `lca_package_jobs`, `lca_package_artifacts`, and `dataset_review_submit_jobs` still carry result/cache/artifact/history metadata, but they are not the user-facing task fact. Legacy `lca_enqueue_job` / `lca_package_enqueue_job` must not be used as enqueue fallback. If `LCA_WORKER_JOBS_ENABLED=false`, `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false`, or `WORKER_JOBS_CUTOVER_ENABLED=false`, new worker-owned submissions fail closed with `legacy_queue_disabled` / `LEGACY_QUEUE_DISABLED` instead of writing to the legacy queue path.
+Retained domain tables such as `lca_jobs`, `lca_result_cache`, `lca_package_jobs`, `lca_package_artifacts`, and `dataset_review_submit_jobs` still carry result/cache/artifact/history metadata, but they are not the user-facing task fact. New LCA solve/snapshot/contribution and TIDAS package import/export submissions enqueue `worker_jobs` directly; the legacy job ids returned by those APIs are compatibility ids carried in worker payloads, not newly inserted `lca_jobs` / `lca_package_jobs` rows. Legacy `lca_enqueue_job` / `lca_package_enqueue_job` must not be used as enqueue fallback. If `LCA_WORKER_JOBS_ENABLED=false`, `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false`, or `WORKER_JOBS_CUTOVER_ENABLED=false`, new worker-owned submissions fail closed with `legacy_queue_disabled` / `LEGACY_QUEUE_DISABLED` instead of writing to the legacy queue path.
 
 ## Review-submit Gate Function Call Pattern
 

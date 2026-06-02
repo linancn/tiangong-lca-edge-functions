@@ -7,9 +7,13 @@ type JsonRecord = Record<string, unknown>;
 type Filter = {
   field: string;
   value: unknown;
-  op: 'eq' | 'in';
+  op: 'eq' | 'in' | 'contains';
 };
-type TableName = 'lca_package_artifacts' | 'lca_package_jobs' | 'lca_package_request_cache';
+type TableName =
+  | 'lca_package_artifacts'
+  | 'lca_package_jobs'
+  | 'lca_package_request_cache'
+  | 'worker_jobs';
 
 const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
 const TEST_WORKER_JOB_ID = '22222222-2222-4222-8222-222222222222';
@@ -26,6 +30,7 @@ class FakeSupabase {
     lca_package_jobs: [],
     lca_package_artifacts: [],
     lca_package_request_cache: [],
+    worker_jobs: [],
   };
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
   rpcResults = new Map<string, { data: unknown; error: unknown }>();
@@ -44,11 +49,31 @@ class FakeSupabase {
       return Promise.resolve(structuredClone(configured));
     }
     if (fn === 'worker_enqueue_job') {
+      const record = asJsonRecord(args);
+      const payload = asJsonRecord(record.p_payload_json);
+      const nowIso = new Date().toISOString();
+      this.tables.worker_jobs.push({
+        id: TEST_WORKER_JOB_ID,
+        job_kind: String(record.p_job_kind ?? ''),
+        status: 'queued',
+        requested_by: record.p_requested_by ?? null,
+        request_hash: record.p_request_hash ?? null,
+        payload_json: payload,
+        diagnostics: {},
+        error_code: null,
+        error_message: null,
+        created_at: nowIso,
+        started_at: null,
+        finished_at: null,
+        updated_at: nowIso,
+      });
       return Promise.resolve({
         data: {
           ok: true,
           data: {
             id: TEST_WORKER_JOB_ID,
+            payload,
+            status: 'queued',
           },
         },
         error: null,
@@ -156,6 +181,9 @@ class FakeSupabase {
         if (filter.op === 'eq') {
           return actual === filter.value;
         }
+        if (filter.op === 'contains') {
+          return jsonContains(actual, filter.value);
+        }
 
         return Array.isArray(filter.value) && filter.value.includes(actual);
       }),
@@ -220,6 +248,11 @@ class FakeQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
     return this;
   }
 
+  contains(field: string, value: unknown): this {
+    this.filters.push({ field, value, op: 'contains' });
+    return this;
+  }
+
   order(field: string, options?: { ascending?: boolean }): this {
     this.orderField = field;
     this.orderAscending = options?.ascending ?? true;
@@ -265,6 +298,28 @@ function normalizeSortValue(value: unknown): string | number {
     return value;
   }
   return '';
+}
+
+function asJsonRecord(value: unknown): JsonRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return value as JsonRecord;
+}
+
+function jsonContains(actual: unknown, expected: unknown): boolean {
+  const actualRecord = asJsonRecord(actual);
+  const expectedRecord = asJsonRecord(expected);
+
+  return Object.entries(expectedRecord).every(([key, expectedValue]) => {
+    const actualValue = actualRecord[key];
+    if (expectedValue && typeof expectedValue === 'object' && !Array.isArray(expectedValue)) {
+      return jsonContains(actualValue, expectedValue);
+    }
+
+    return actualValue === expectedValue;
+  });
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -417,7 +472,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
     assertEquals(prepared.upload.content_type, 'application/zip');
     assertEquals(importRedisCalls, 0);
     assertEquals(importAuthCalls, [[AuthMethod.JWT]]);
-    assertEquals(supabase.getRows('lca_package_jobs').length, 1);
+    assertEquals(supabase.getRows('lca_package_jobs').length, 0);
     assertEquals(supabase.getRows('lca_package_artifacts').length, 1);
 
     const repeatedPrepareResponse = await importHandler(
@@ -441,7 +496,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
     assertEquals(repeatedPrepareResponse.status, 200);
     assertEquals(repeatedPrepared.job_id, prepared.job_id);
     assertEquals(repeatedPrepared.source_artifact_id, prepared.source_artifact_id);
-    assertEquals(supabase.getRows('lca_package_jobs').length, 1);
+    assertEquals(supabase.getRows('lca_package_jobs').length, 0);
     assertEquals(supabase.getRows('lca_package_artifacts').length, 1);
 
     const artifactSha256 = await sha256Hex(EMPTY_ZIP_BYTES);
@@ -481,11 +536,19 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
     assertEquals(artifactRow.content_type, 'application/zip');
     assertEquals((artifactRow.metadata as JsonRecord).upload_state, 'uploaded');
     assertEquals((artifactRow.metadata as JsonRecord).filename, 'Demo_Package.zip');
+    assertEquals((artifactRow.metadata as JsonRecord).phase, 'enqueue_import');
+    assertEquals(artifactRow.worker_job_id, TEST_WORKER_JOB_ID);
 
-    const jobRow = supabase.getRows('lca_package_jobs')[0];
-    assertEquals(jobRow.status, 'queued');
-    assertEquals(jobRow.request_key, artifactSha256);
-    assertEquals((jobRow.diagnostics as JsonRecord).phase, 'enqueue_import');
+    assertEquals(supabase.getRows('lca_package_jobs').length, 0);
+    const workerJobRow = supabase.getRows('worker_jobs')[0];
+    assertEquals(workerJobRow.status, 'queued');
+    assertEquals(workerJobRow.job_kind, 'tidas.import_package');
+    assertEquals(workerJobRow.request_hash, artifactSha256);
+    assertEquals((workerJobRow.payload_json as JsonRecord).job_id, prepared.job_id);
+    assertEquals(
+      (workerJobRow.payload_json as JsonRecord).source_artifact_id,
+      prepared.source_artifact_id,
+    );
     assertEquals(supabase.rpcCalls.length, 1);
     assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job');
 
@@ -505,6 +568,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       ok: true,
       mode: 'in_progress',
       job_id: prepared.job_id,
+      worker_job_id: TEST_WORKER_JOB_ID,
       source_artifact_id: prepared.source_artifact_id,
     });
     assertEquals(supabase.rpcCalls.length, 1);
@@ -549,72 +613,81 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
   });
 });
 
-Deno.test('import_tidas_package marks retained job failed when worker enqueue fails', async () => {
-  await withPackageStorageEnv(async () => {
-    const { createImportTidasPackageHandler } = await loadTidasHandlers();
-    const supabase = new FakeSupabase();
-    const handler = createImportTidasPackageHandler({
-      authClient: {} as SupabaseClient,
-      supabase: supabase as unknown as SupabaseClient,
-      authenticateRequest: async () => createAuthResult(),
-      getRedisClient: async () => undefined,
-    });
+Deno.test(
+  'import_tidas_package fails without creating a legacy job row when worker enqueue fails',
+  async () => {
+    await withPackageStorageEnv(async () => {
+      const { createImportTidasPackageHandler } = await loadTidasHandlers();
+      const supabase = new FakeSupabase();
+      const handler = createImportTidasPackageHandler({
+        authClient: {} as SupabaseClient,
+        supabase: supabase as unknown as SupabaseClient,
+        authenticateRequest: async () => createAuthResult(),
+        getRedisClient: async () => undefined,
+      });
 
-    const prepareResponse = await handler(
-      new Request('https://example.com/functions/v1/import_tidas_package', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${TEST_JWT}`,
-          'Content-Type': 'application/json',
-          'x-idempotency-key': 'enqueue-fails',
-        },
-        body: JSON.stringify({
-          action: 'prepare_upload',
-          filename: 'fixtures/Demo Package.zip',
-          byte_size: EMPTY_ZIP_BYTES.byteLength,
-          content_type: 'application/zip',
+      const prepareResponse = await handler(
+        new Request('https://example.com/functions/v1/import_tidas_package', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${TEST_JWT}`,
+            'Content-Type': 'application/json',
+            'x-idempotency-key': 'enqueue-fails',
+          },
+          body: JSON.stringify({
+            action: 'prepare_upload',
+            filename: 'fixtures/Demo Package.zip',
+            byte_size: EMPTY_ZIP_BYTES.byteLength,
+            content_type: 'application/zip',
+          }),
         }),
-      }),
-    );
-    assertEquals(prepareResponse.status, 200);
-    const prepared = await prepareResponse.json();
-    const artifactSha256 = await sha256Hex(EMPTY_ZIP_BYTES);
+      );
+      assertEquals(prepareResponse.status, 200);
+      const prepared = await prepareResponse.json();
+      const artifactSha256 = await sha256Hex(EMPTY_ZIP_BYTES);
 
-    supabase.rpcResults.set('worker_enqueue_job', {
-      data: null,
-      error: {
-        code: '42501',
-        message: 'permission denied for worker_enqueue_job',
-        details: { reason: 'missing_migration' },
-      },
-    });
-
-    const enqueueResponse = await handler(
-      new Request('https://example.com/functions/v1/import_tidas_package', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${TEST_JWT}`,
-          'Content-Type': 'application/json',
+      supabase.rpcResults.set('worker_enqueue_job', {
+        data: null,
+        error: {
+          code: '42501',
+          message: 'permission denied for worker_enqueue_job',
+          details: { reason: 'missing_migration' },
         },
-        body: JSON.stringify({
-          action: 'enqueue',
-          job_id: prepared.job_id,
-          source_artifact_id: prepared.source_artifact_id,
-          artifact_sha256: artifactSha256,
-          artifact_byte_size: EMPTY_ZIP_BYTES.byteLength,
-          filename: './uploads/Demo Package.zip',
-          content_type: 'application/zip',
-        }),
-      }),
-    );
+      });
 
-    assertEquals(enqueueResponse.status, 403);
-    const jobRow = supabase.getRows('lca_package_jobs')[0];
-    assertEquals(jobRow.status, 'failed');
-    assertEquals((jobRow.diagnostics as JsonRecord).phase, 'worker_jobs_enqueue_failed');
-    assertEquals((jobRow.diagnostics as JsonRecord).error_code, '42501');
-  });
-});
+      const enqueueResponse = await handler(
+        new Request('https://example.com/functions/v1/import_tidas_package', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${TEST_JWT}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'enqueue',
+            job_id: prepared.job_id,
+            source_artifact_id: prepared.source_artifact_id,
+            artifact_sha256: artifactSha256,
+            artifact_byte_size: EMPTY_ZIP_BYTES.byteLength,
+            filename: './uploads/Demo Package.zip',
+            content_type: 'application/zip',
+          }),
+        }),
+      );
+
+      assertEquals(enqueueResponse.status, 403);
+      assertEquals(await enqueueResponse.json(), {
+        ok: false,
+        code: 'WORKER_JOBS_ENQUEUE_FAILED',
+        message: 'Failed to enqueue import worker job',
+      });
+      assertEquals(supabase.getRows('lca_package_jobs').length, 0);
+      const artifactRow = supabase.getRows('lca_package_artifacts')[0];
+      assertEquals(artifactRow.status, 'ready');
+      assertEquals(artifactRow.worker_job_id, null);
+      assertEquals(supabase.rpcCalls.length, 1);
+    });
+  },
+);
 
 Deno.test(
   'import_tidas_package fails closed when package worker_jobs cutover is disabled',
@@ -675,9 +748,10 @@ Deno.test(
         code: 'LEGACY_QUEUE_DISABLED',
         message: 'Package worker_jobs cutover must be enabled',
       });
-      const jobRow = supabase.getRows('lca_package_jobs')[0];
-      assertEquals(jobRow.status, 'stale');
-      assertEquals((jobRow.diagnostics as JsonRecord).phase, 'prepare_upload');
+      assertEquals(supabase.getRows('lca_package_jobs').length, 0);
+      const artifactRow = supabase.getRows('lca_package_artifacts')[0];
+      assertEquals(artifactRow.status, 'pending');
+      assertEquals((artifactRow.metadata as JsonRecord).upload_state, 'prepared');
       assertEquals(supabase.rpcCalls.length, 0);
     });
   },

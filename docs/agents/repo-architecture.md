@@ -30,7 +30,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-06-02
-lastReviewedCommit: 445104e77a69ebc3418f541fe5f260940144cb15
+lastReviewedCommit: 0ae67565bbd681e9f3027ab982fb5bfacd8e4d35
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -153,7 +153,7 @@ Shared scope logic lives in:
 - `supabase/functions/_shared/lca_process_scope.ts`
 - `supabase/functions/_shared/lca_snapshot_scope.ts`
 
-`supabase/functions/_shared/worker_jobs_cutover.ts` owns the handoff from retained domain rows/cache to database-owned `worker_jobs`. The default path keeps existing `lca_jobs` / `lca_result_cache` domain metadata, enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `worker_enqueue_job`, and marks retained rows failed when canonical enqueue fails. Setting `LCA_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new LCA worker submissions and fails closed with `legacy_queue_disabled`; it must not fall back to legacy `lca_enqueue_job`. Edge still owns auth and request normalization only; `tiangong-lca-worker` owns execution.
+`supabase/functions/_shared/worker_jobs_cutover.ts` owns the handoff from Edge runtime requests to database-owned `worker_jobs`, and `supabase/functions/_shared/lca_snapshot_build_queue.ts` owns shared snapshot-build enqueue/reuse. The default path enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `worker_enqueue_job` without creating new `lca_jobs` rows. `lca_result_cache` remains retained result/cache metadata and stores both compatibility `job_id` and canonical `worker_job_id` where applicable. Setting `LCA_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new LCA worker submissions and fails closed with `legacy_queue_disabled`; it must not fall back to legacy `lca_enqueue_job`. Edge still owns auth and request normalization only; `tiangong-lca-worker` owns execution.
 
 ### TIDAS package flows
 
@@ -168,7 +168,7 @@ Shared behavior lives in:
 - `supabase/functions/_shared/tidas_package.ts`
 - `supabase/functions/_shared/redis_client.ts`
 
-The default TIDAS package path enqueues `tidas.import_package` and `tidas.export_package` through `worker_enqueue_job`; setting `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new package worker submissions and fails closed with `LEGACY_QUEUE_DISABLED`; it must not fall back to legacy `lca_package_enqueue_job`. The package domain rows, request cache, artifacts, and lookup APIs remain retained domain metadata; `worker_jobs` is the canonical task lifecycle projection and worker delivery mechanism.
+The default TIDAS package path enqueues `tidas.import_package` and `tidas.export_package` through `worker_enqueue_job` without creating new `lca_package_jobs` rows. Import prepare creates an `import_source` artifact row for upload coordination; import enqueue links that artifact to the canonical `worker_jobs` row. Export request cache stores both compatibility `job_id` and canonical `worker_job_id` where applicable. Setting `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new package worker submissions and fails closed with `LEGACY_QUEUE_DISABLED`; it must not fall back to legacy `lca_package_enqueue_job`. Existing package domain rows, request cache, artifacts, and lookup APIs remain retained compatibility metadata; `worker_jobs` is the canonical task lifecycle projection and worker delivery mechanism.
 
 ## Database Boundary
 
