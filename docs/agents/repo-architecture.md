@@ -153,7 +153,7 @@ Shared scope logic lives in:
 - `supabase/functions/_shared/lca_process_scope.ts`
 - `supabase/functions/_shared/lca_snapshot_scope.ts`
 
-`supabase/functions/_shared/worker_jobs_cutover.ts` owns the feature-flagged handoff from legacy `lca_jobs`/pgmq enqueue to database-owned `worker_jobs`. `LCA_WORKER_JOBS_ENABLED=true` keeps existing domain rows/cache but enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `worker_enqueue_job`; when the flag is absent or false, routes keep the legacy pgmq enqueue path. Edge still owns auth and request normalization only; `tiangong-lca-worker` owns execution.
+`supabase/functions/_shared/worker_jobs_cutover.ts` owns the handoff from retained domain rows/cache to database-owned `worker_jobs`. The default path keeps existing `lca_jobs` / `lca_result_cache` domain metadata, enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `worker_enqueue_job`, and marks retained rows failed when canonical enqueue fails. Setting `LCA_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` is legacy/debug-only. Edge still owns auth and request normalization only; `tiangong-lca-worker` owns execution.
 
 ### TIDAS package flows
 
@@ -168,7 +168,7 @@ Shared behavior lives in:
 - `supabase/functions/_shared/tidas_package.ts`
 - `supabase/functions/_shared/redis_client.ts`
 
-`TIDAS_PACKAGE_WORKER_JOBS_ENABLED=true` switches import/export enqueue from `lca_package_enqueue_job` to `worker_enqueue_job` for `tidas.import_package` and `tidas.export_package`. The package domain rows, request cache, artifacts, and lookup APIs remain the business truth; `worker_jobs` is the task lifecycle projection and worker delivery mechanism.
+The default TIDAS package path enqueues `tidas.import_package` and `tidas.export_package` through `worker_enqueue_job`; setting `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` is legacy/debug-only. The package domain rows, request cache, artifacts, and lookup APIs remain retained domain metadata; `worker_jobs` is the canonical task lifecycle projection and worker delivery mechanism.
 
 ## Database Boundary
 
@@ -176,7 +176,7 @@ This repo consumes database truth but does not own it.
 
 Typical signs the task also belongs in `database-engine`:
 
-- a route depends on a missing RPC such as `lca_enqueue_job`
+- a route depends on a missing RPC such as `worker_enqueue_job`
 - command wrappers need new SQL contract or policy behavior
 - published-state or `state_code` semantics changed
 

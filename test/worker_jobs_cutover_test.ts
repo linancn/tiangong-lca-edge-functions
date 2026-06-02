@@ -1,19 +1,30 @@
 import { assertEquals } from 'jsr:@std/assert';
 
 import {
+  enqueueCalculatorWorkerJob,
   isWorkerJobsCutoverEnabled,
   lcaWorkerJobKindForJobType,
   workerJobIdFromRpcData,
   workerJobPayloadSchemaVersion,
 } from '../supabase/functions/_shared/worker_jobs_cutover.ts';
 
-Deno.test('isWorkerJobsCutoverEnabled accepts explicit truthy values', () => {
+Deno.test('isWorkerJobsCutoverEnabled defaults on and accepts explicit overrides', () => {
+  assertEquals(
+    isWorkerJobsCutoverEnabled('FEATURE', () => undefined),
+    true,
+  );
   assertEquals(
     isWorkerJobsCutoverEnabled('FEATURE', (key) => (key === 'FEATURE' ? 'true' : undefined)),
     true,
   );
   assertEquals(
     isWorkerJobsCutoverEnabled('FEATURE', (key) => (key === 'FEATURE' ? '0' : undefined)),
+    false,
+  );
+  assertEquals(
+    isWorkerJobsCutoverEnabled('FEATURE', (key) =>
+      key === 'WORKER_JOBS_CUTOVER_ENABLED' ? 'off' : undefined,
+    ),
     false,
   );
   assertEquals(
@@ -44,4 +55,33 @@ Deno.test('workerJobIdFromRpcData extracts worker job id defensively', () => {
   assertEquals(workerJobIdFromRpcData({ id: 'job-1' }), 'job-1');
   assertEquals(workerJobIdFromRpcData({ id: 1 }), null);
   assertEquals(workerJobIdFromRpcData(null), null);
+});
+
+Deno.test('enqueueCalculatorWorkerJob requires canonical worker job id', async () => {
+  const supabase = {
+    rpc: () =>
+      Promise.resolve({
+        data: {
+          ok: true,
+          data: {
+            status: 'queued',
+          },
+        },
+        error: null,
+      }),
+  };
+
+  const result = await enqueueCalculatorWorkerJob(supabase as never, {
+    jobKind: 'lca.solve_one',
+    payload: {},
+  });
+
+  assertEquals(result, {
+    ok: false,
+    error: 'WORKER_JOB_ID_MISSING',
+    status: 500,
+    details: {
+      status: 'queued',
+    },
+  });
 });
