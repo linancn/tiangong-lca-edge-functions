@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertMatch } from 'jsr:@std/assert';
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import { type AuthResult, AuthMethod } from '../supabase/functions/_shared/auth.ts';
+import { AuthMethod, type AuthResult } from '../supabase/functions/_shared/auth.ts';
 
 type JsonRecord = Record<string, unknown>;
 type Filter = {
@@ -13,6 +13,7 @@ type TableName =
   | 'lca_package_artifacts'
   | 'lca_package_jobs'
   | 'lca_package_request_cache'
+  | 'roles'
   | 'worker_jobs';
 
 const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
@@ -30,10 +31,12 @@ class FakeSupabase {
     lca_package_jobs: [],
     lca_package_artifacts: [],
     lca_package_request_cache: [],
+    roles: [],
     worker_jobs: [],
   };
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
   rpcResults = new Map<string, { data: unknown; error: unknown }>();
+  missingTables = new Set<TableName>();
   signedUploadCalls: Array<{ bucket: string; objectPath: string }> = [];
   signedDownloadCalls: Array<{ bucket: string; objectPath: string; expiresIn: number }> = [];
   signedDownloadErrors = new Map<string, JsonRecord>();
@@ -107,7 +110,9 @@ class FakeSupabase {
 
         return {
           data: {
-            signedUrl: `https://download.example/${bucket}/${encodePath(objectPath)}?expires=${expiresIn}`,
+            signedUrl: `https://download.example/${bucket}/${encodePath(
+              objectPath,
+            )}?expires=${expiresIn}`,
           },
           error: null,
         };
@@ -125,7 +130,10 @@ class FakeSupabase {
       if (this.isDuplicate(table, row)) {
         return Promise.resolve({
           data: null,
-          error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+          error: {
+            code: '23505',
+            message: 'duplicate key value violates unique constraint',
+          },
         });
       }
     }
@@ -135,6 +143,16 @@ class FakeSupabase {
   }
 
   executeSelect(query: FakeQueryBuilder) {
+    if (this.missingTables.has(query.table)) {
+      return {
+        data: null,
+        error: {
+          code: 'PGRST205',
+          message: `Could not find the table 'public.${query.table}' in the schema cache`,
+        },
+      };
+    }
+
     let rows = this.filterRows(query.table, query.filters);
 
     if (query.orderField) {
@@ -160,6 +178,13 @@ class FakeSupabase {
 
   executeMaybeSingle(query: FakeQueryBuilder) {
     const { data, error } = this.executeSelect(query);
+    if (error || !Array.isArray(data)) {
+      return Promise.resolve({
+        data: null,
+        error,
+      });
+    }
+
     return Promise.resolve({
       data: data[0] ?? null,
       error,
@@ -167,6 +192,16 @@ class FakeSupabase {
   }
 
   executeUpdate(query: FakeQueryBuilder) {
+    if (this.missingTables.has(query.table)) {
+      return {
+        data: null,
+        error: {
+          code: 'PGRST205',
+          message: `Could not find the table 'public.${query.table}' in the schema cache`,
+        },
+      };
+    }
+
     const rows = this.filterRows(query.table, query.filters);
     for (const row of rows) {
       Object.assign(row, structuredClone(query.updateValues));
@@ -339,22 +374,28 @@ function createAuthResult(userId = TEST_USER_ID): AuthResult {
 }
 
 type TidasHandlersModule = {
+  createExportTidasPackageHandler: typeof import('../supabase/functions/export_tidas_package/handler.ts').createExportTidasPackageHandler;
   createImportTidasPackageHandler: typeof import('../supabase/functions/import_tidas_package/handler.ts').createImportTidasPackageHandler;
   createTidasPackageJobsHandler: typeof import('../supabase/functions/tidas_package_jobs/handler.ts').createTidasPackageJobsHandler;
+  queueExportTidasPackage: typeof import('../supabase/functions/_shared/tidas_package.ts').queueExportTidasPackage;
 };
 
 let handlersModulePromise: Promise<TidasHandlersModule> | undefined;
 
 async function loadTidasHandlers(): Promise<TidasHandlersModule> {
   handlersModulePromise ??= (async () => {
-    const [importModule, jobsModule] = await Promise.all([
+    const [exportModule, importModule, jobsModule, packageModule] = await Promise.all([
+      import('../supabase/functions/export_tidas_package/handler.ts'),
       import('../supabase/functions/import_tidas_package/handler.ts'),
       import('../supabase/functions/tidas_package_jobs/handler.ts'),
+      import('../supabase/functions/_shared/tidas_package.ts'),
     ]);
 
     return {
+      createExportTidasPackageHandler: exportModule.createExportTidasPackageHandler,
       createImportTidasPackageHandler: importModule.createImportTidasPackageHandler,
       createTidasPackageJobsHandler: jobsModule.createTidasPackageJobsHandler,
+      queueExportTidasPackage: packageModule.queueExportTidasPackage,
     };
   })();
 
@@ -397,11 +438,133 @@ function restoreEnvVar(name: string, value: string | undefined): void {
   Deno.env.set(name, value);
 }
 
+Deno.test('export_tidas_package API exposes queued worker job before artifacts exist', async () => {
+  await withPackageStorageEnv(async () => {
+    const {
+      createExportTidasPackageHandler,
+      createTidasPackageJobsHandler,
+      queueExportTidasPackage,
+    } = await loadTidasHandlers();
+    const supabase = new FakeSupabase();
+    supabase.missingTables.add('lca_package_jobs');
+    const exportAuthCalls: AuthMethod[][] = [];
+    const jobsAuthCalls: AuthMethod[][] = [];
+    let jobsRedisCalls = 0;
+
+    const exportHandler = createExportTidasPackageHandler({
+      authClient: {} as SupabaseClient,
+      supabase: supabase as unknown as SupabaseClient,
+      authenticateRequest: async (_req, config) => {
+        exportAuthCalls.push([...config.allowedMethods]);
+        return createAuthResult();
+      },
+      queueExportTidasPackage,
+    });
+
+    const jobsHandler = createTidasPackageJobsHandler({
+      authClient: {} as SupabaseClient,
+      supabase: supabase as unknown as SupabaseClient,
+      authenticateRequest: async (_req, config) => {
+        jobsAuthCalls.push([...config.allowedMethods]);
+        return createAuthResult();
+      },
+      getRedisClient: async () => {
+        jobsRedisCalls += 1;
+        return undefined;
+      },
+    });
+
+    const exportResponse = await exportHandler(
+      new Request('https://example.com/functions/v1/export_tidas_package', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${TEST_JWT}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ scope: 'current_user' }),
+      }),
+    );
+
+    assertEquals(exportResponse.status, 202);
+    const queued = await exportResponse.json();
+    assertEquals(queued.ok, true);
+    assertEquals(queued.mode, 'queued');
+    assertMatch(
+      queued.job_id,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+    );
+    assertEquals(queued.worker_job_id, TEST_WORKER_JOB_ID);
+    assertEquals(queued.scope, 'current_user');
+    assertEquals(queued.root_count, 0);
+    assertEquals(exportAuthCalls, [[AuthMethod.JWT]]);
+
+    assertEquals(supabase.getRows('lca_package_jobs').length, 0);
+    assertEquals(supabase.getRows('lca_package_artifacts').length, 0);
+
+    const cacheRow = supabase.getRows('lca_package_request_cache')[0];
+    assertEquals(cacheRow.status, 'pending');
+    assertEquals(cacheRow.job_id, queued.job_id);
+    assertEquals(cacheRow.worker_job_id, TEST_WORKER_JOB_ID);
+
+    const workerJobRow = supabase.getRows('worker_jobs')[0];
+    assertEquals(workerJobRow.status, 'queued');
+    assertEquals(workerJobRow.job_kind, 'tidas.export_package');
+    assertEquals(workerJobRow.requested_by, TEST_USER_ID);
+    assertEquals((workerJobRow.payload_json as JsonRecord).job_id, queued.job_id);
+    assertEquals((workerJobRow.payload_json as JsonRecord).scope, 'current_user');
+    assertEquals(supabase.rpcCalls.length, 1);
+    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job');
+
+    const lookupResponse = await jobsHandler(
+      new Request(`https://example.com/functions/v1/tidas_package_jobs/${queued.job_id}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${TEST_JWT}`,
+        },
+      }),
+    );
+    assertEquals(lookupResponse.status, 200);
+
+    const jobLookup = await lookupResponse.json();
+    assertEquals(jobLookup.ok, true);
+    assertEquals(jobLookup.job_id, queued.job_id);
+    assertEquals(jobLookup.job_type, 'export_package');
+    assertEquals(jobLookup.status, 'queued');
+    assertEquals(jobLookup.scope, 'current_user');
+    assertEquals(jobLookup.root_count, 0);
+    assertEquals(jobLookup.request_key, workerJobRow.request_hash);
+    assertEquals(jobLookup.request_cache.status, 'pending');
+    assertEquals(jobLookup.request_cache.export_artifact_id, null);
+    assertEquals(jobLookup.request_cache.report_artifact_id, null);
+    assertEquals(jobLookup.artifacts.length, 0);
+    assertEquals(jobsRedisCalls, 1);
+    assertEquals(jobsAuthCalls, [[AuthMethod.JWT, AuthMethod.USER_API_KEY]]);
+
+    const workerIdLookupResponse = await jobsHandler(
+      new Request('https://example.com/functions/v1/tidas_package_jobs', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${TEST_JWT}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ job_id: TEST_WORKER_JOB_ID }),
+      }),
+    );
+    assertEquals(workerIdLookupResponse.status, 200);
+
+    const workerIdLookup = await workerIdLookupResponse.json();
+    assertEquals(workerIdLookup.ok, true);
+    assertEquals(workerIdLookup.job_id, queued.job_id);
+    assertEquals(workerIdLookup.status, 'queued');
+  });
+});
+
 Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup flow', async () => {
   await withPackageStorageEnv(async () => {
     const { createImportTidasPackageHandler, createTidasPackageJobsHandler } =
       await loadTidasHandlers();
     const supabase = new FakeSupabase();
+    supabase.missingTables.add('lca_package_jobs');
     const importAuthCalls: AuthMethod[][] = [];
     const jobsAuthCalls: AuthMethod[][] = [];
     let importRedisCalls = 0;
