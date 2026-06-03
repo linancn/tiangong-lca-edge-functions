@@ -930,19 +930,6 @@ Deno.test(
       const expiredPath = `lca-results/packages/jobs/${jobId}/export-package.zip`;
       const deletedPath = `lca-results/packages/jobs/${jobId}/export-report.json`;
 
-      await supabase.insert('lca_package_jobs', {
-        id: jobId,
-        job_type: 'export_package',
-        status: 'ready',
-        requested_by: TEST_USER_ID,
-        scope: 'current_user',
-        root_count: 0,
-        request_key: 'request-key',
-        payload: {},
-        diagnostics: {},
-        created_at: '2026-05-01T00:00:00.000Z',
-        updated_at: '2026-05-01T00:00:00.000Z',
-      });
       await supabase.insert('lca_package_artifacts', [
         {
           id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
@@ -954,7 +941,7 @@ Deno.test(
           artifact_byte_size: 100,
           artifact_format: 'tidas-package-zip:v1',
           content_type: 'application/zip',
-          metadata: {},
+          metadata: { requested_by: TEST_USER_ID },
           expires_at: '2020-01-01T00:00:00.000Z',
           is_pinned: false,
           created_at: '2026-05-01T00:00:00.000Z',
@@ -970,7 +957,7 @@ Deno.test(
           artifact_byte_size: 50,
           artifact_format: 'tidas-package-export-report:v1',
           content_type: 'application/json',
-          metadata: {},
+          metadata: { requested_by: TEST_USER_ID },
           expires_at: '2099-01-01T00:00:00.000Z',
           is_pinned: false,
           created_at: '2026-05-01T00:00:01.000Z',
@@ -1022,19 +1009,6 @@ Deno.test(
       const jobId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
       const objectPath = `lca-results/packages/jobs/${jobId}/export-package.zip`;
 
-      await supabase.insert('lca_package_jobs', {
-        id: jobId,
-        job_type: 'export_package',
-        status: 'ready',
-        requested_by: TEST_USER_ID,
-        scope: 'current_user',
-        root_count: 0,
-        request_key: 'request-key',
-        payload: {},
-        diagnostics: {},
-        created_at: '2026-05-01T00:00:00.000Z',
-        updated_at: '2026-05-01T00:00:00.000Z',
-      });
       await supabase.insert('lca_package_artifacts', {
         id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
         job_id: jobId,
@@ -1045,7 +1019,7 @@ Deno.test(
         artifact_byte_size: 100,
         artifact_format: 'tidas-package-zip:v1',
         content_type: 'application/zip',
-        metadata: {},
+        metadata: { requested_by: TEST_USER_ID },
         expires_at: '2099-01-01T00:00:00.000Z',
         is_pinned: false,
         created_at: '2026-05-01T00:00:00.000Z',
@@ -1093,19 +1067,6 @@ Deno.test('import_tidas_package rejects enqueue for deleted source artifacts', a
     const jobId = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
     const sourceArtifactId = '99999999-9999-4999-8999-999999999999';
 
-    await supabase.insert('lca_package_jobs', {
-      id: jobId,
-      job_type: 'import_package',
-      status: 'stale',
-      requested_by: TEST_USER_ID,
-      scope: null,
-      root_count: 0,
-      request_key: null,
-      payload: {},
-      diagnostics: {},
-      created_at: '2026-05-01T00:00:00.000Z',
-      updated_at: '2026-05-01T00:00:00.000Z',
-    });
     await supabase.insert('lca_package_artifacts', {
       id: sourceArtifactId,
       job_id: jobId,
@@ -1116,7 +1077,7 @@ Deno.test('import_tidas_package rejects enqueue for deleted source artifacts', a
       artifact_byte_size: 100,
       artifact_format: 'tidas-package-zip:v1',
       content_type: 'application/zip',
-      metadata: {},
+      metadata: { requested_by: TEST_USER_ID },
       expires_at: '2099-01-01T00:00:00.000Z',
       is_pinned: false,
       created_at: '2026-05-01T00:00:00.000Z',

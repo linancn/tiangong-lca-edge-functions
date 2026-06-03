@@ -366,14 +366,7 @@ export async function queueExportTidasPackage(
           existingCache.worker_job_id,
           'tidas.export_package',
         )
-      : existingCache.job_id
-        ? await fetchOwnedPackageJobIfExists(
-            supabase,
-            userId,
-            existingCache.job_id,
-            'export_package',
-          )
-        : null;
+      : null;
     const cacheAction = resolveExportCacheAction(existingCache, existingJob);
 
     if (cacheAction === 'cache_hit' && existingCache.job_id) {
@@ -565,20 +558,12 @@ export async function enqueueImportTidasPackage(
 ) {
   const parsed = parseEnqueueImportRequest(body);
   const nowIso = new Date().toISOString();
-  const legacyJob = await fetchOwnedPackageJobIfExists(
-    supabase,
-    userId,
-    parsed.job_id,
-    'import_package',
-  );
   const sourceArtifact = await fetchPackageArtifact(
     supabase,
     parsed.source_artifact_id,
     parsed.job_id,
   );
-  if (!legacyJob) {
-    assertPackageArtifactOwnedBy(sourceArtifact, userId);
-  }
+  assertPackageArtifactOwnedBy(sourceArtifact, userId);
   assertPackageArtifactUsable(sourceArtifact);
 
   if (sourceArtifact.artifact_kind !== 'import_source') {
@@ -587,24 +572,6 @@ export async function enqueueImportTidasPackage(
       'INVALID_IMPORT_SOURCE',
       'The provided artifact is not an import source',
     );
-  }
-
-  if (legacyJob?.status === 'completed') {
-    return {
-      ok: true,
-      mode: 'completed' as const,
-      job_id: legacyJob.id,
-      source_artifact_id: sourceArtifact.id,
-    };
-  }
-
-  if (legacyJob?.status === 'queued' || legacyJob?.status === 'running') {
-    return {
-      ok: true,
-      mode: 'in_progress' as const,
-      job_id: legacyJob.id,
-      source_artifact_id: sourceArtifact.id,
-    };
   }
 
   if (sourceArtifact.worker_job_id) {
@@ -751,7 +718,6 @@ export async function lookupTidasPackageJob(
 
   const requestCacheRow = await fetchOwnedExportRequestCacheByLookupId(supabase, userId, jobId);
   const effectiveJobId = requestCacheRow?.job_id ?? jobId;
-  const legacyJob = await fetchOwnedPackageJobIfExists(supabase, userId, effectiveJobId);
   const { data: artifactRows, error: artifactError } = await supabase
     .from('lca_package_artifacts')
     .select(
@@ -793,13 +759,15 @@ export async function lookupTidasPackageJob(
   );
   const workerJob = requestCacheWorkerJob ?? lookupWorkerJob ?? artifactWorkerJob;
 
-  if (!legacyJob && !hasOwnedArtifact && !requestCacheRow && !workerJob) {
+  if (!hasOwnedArtifact && !requestCacheRow && !workerJob) {
     throw new TidasPackageError(404, 'JOB_NOT_FOUND', 'Package job not found');
   }
 
-  const job =
-    legacyJob ??
-    buildPackageJobRowFromWorkerOrArtifacts(effectiveJobId, workerJob, artifactDomainRows);
+  const job = buildPackageJobRowFromWorkerOrArtifacts(
+    effectiveJobId,
+    workerJob,
+    artifactDomainRows,
+  );
 
   const artifacts = await Promise.all(
     (artifactRows ?? []).map((row) => toArtifactResponse(supabase, row)),
@@ -1601,127 +1569,6 @@ function parseEnqueueImportRequest(body: unknown): NormalizedEnqueueImportReques
     artifact_byte_size: normalizedArtifactByteSize,
     filename,
     content_type: contentType,
-  };
-}
-
-async function fetchOwnedPackageJobIfExists(
-  supabase: SupabaseClient,
-  userId: string,
-  jobId: string,
-  expectedJobType?: TidasPackageJobType,
-): Promise<PackageJobRow | null> {
-  const { data, error } = await supabase
-    .from('lca_package_jobs')
-    .select(
-      'id,job_type,status,scope,root_count,request_key,payload,diagnostics,created_at,started_at,finished_at,updated_at',
-    )
-    .eq('id', jobId)
-    .eq('requested_by', userId)
-    .maybeSingle();
-
-  if (error) {
-    if (isMissingLegacyPackageJobTableError(error)) {
-      return null;
-    }
-
-    console.error('query lca_package_jobs failed during cache reconciliation', {
-      error: error.message,
-      code: error.code,
-      job_id: jobId,
-      user_id: userId,
-    });
-    throw new TidasPackageError(500, 'JOB_LOOKUP_FAILED', 'Failed to query package job');
-  }
-
-  if (!data) {
-    return null;
-  }
-
-  const row = toPackageJobRow(data);
-  if (expectedJobType && row.job_type !== expectedJobType) {
-    return null;
-  }
-
-  return row;
-}
-
-async function fetchOwnedPackageJob(
-  supabase: SupabaseClient,
-  userId: string,
-  jobId: string,
-  expectedJobType?: TidasPackageJobType,
-): Promise<PackageJobRow> {
-  const { data, error } = await supabase
-    .from('lca_package_jobs')
-    .select(
-      'id,job_type,status,scope,root_count,request_key,payload,diagnostics,created_at,started_at,finished_at,updated_at',
-    )
-    .eq('id', jobId)
-    .eq('requested_by', userId)
-    .maybeSingle();
-
-  if (error) {
-    if (isMissingLegacyPackageJobTableError(error)) {
-      throw new TidasPackageError(404, 'JOB_NOT_FOUND', 'Package job not found');
-    }
-
-    console.error('query lca_package_jobs failed', {
-      error: error.message,
-      code: error.code,
-      job_id: jobId,
-      user_id: userId,
-    });
-    throw new TidasPackageError(500, 'JOB_LOOKUP_FAILED', 'Failed to query package job');
-  }
-
-  if (!data) {
-    throw new TidasPackageError(404, 'JOB_NOT_FOUND', 'Package job not found');
-  }
-
-  const row = toPackageJobRow(data);
-  if (expectedJobType && row.job_type !== expectedJobType) {
-    throw new TidasPackageError(400, 'JOB_TYPE_MISMATCH', 'Package job type mismatch');
-  }
-
-  return row;
-}
-
-function isMissingLegacyPackageJobTableError(error: {
-  code?: unknown;
-  message?: unknown;
-  details?: unknown;
-  hint?: unknown;
-}): boolean {
-  const code = normalizeString(error.code);
-  const message = normalizeString(error.message).toLowerCase();
-  const details = normalizeString(error.details).toLowerCase();
-  const hint = normalizeString(error.hint).toLowerCase();
-  const combined = `${message} ${details} ${hint}`;
-
-  return (
-    code === '42P01' ||
-    code === 'PGRST205' ||
-    (combined.includes('lca_package_jobs') &&
-      (combined.includes('schema cache') ||
-        combined.includes('does not exist') ||
-        combined.includes('not found')))
-  );
-}
-
-function toPackageJobRow(data: Record<string, unknown>): PackageJobRow {
-  return {
-    id: String(data.id),
-    job_type: String(data.job_type) as TidasPackageJobType,
-    status: String(data.status) as TidasPackageJobStatus,
-    scope: data.scope ? String(data.scope) : null,
-    root_count: Number(data.root_count ?? 0),
-    request_key: data.request_key ? String(data.request_key) : null,
-    payload: data.payload ?? {},
-    diagnostics: data.diagnostics ?? {},
-    created_at: data.created_at ? String(data.created_at) : null,
-    started_at: data.started_at ? String(data.started_at) : null,
-    finished_at: data.finished_at ? String(data.finished_at) : null,
-    updated_at: data.updated_at ? String(data.updated_at) : null,
   };
 }
 
