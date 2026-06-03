@@ -606,11 +606,7 @@ async function fetchCacheJobState(
     return await fetchWorkerCacheJobState(row.worker_job_id);
   }
 
-  if (!row.job_id) {
-    return { ok: false };
-  }
-
-  return await fetchLegacyCacheJobState(row.job_id);
+  return { ok: false };
 }
 
 async function fetchWorkerCacheJobState(
@@ -648,56 +644,6 @@ async function fetchWorkerCacheJobState(
       console.warn('fetch contribution path result by worker_job_id failed', {
         error: resultError.message,
         worker_job_id: workerJobId,
-      });
-      return { ok: false };
-    }
-    resultId = resultData?.id ? String(resultData.id) : null;
-  }
-
-  return {
-    ok: true,
-    data: {
-      status: String(jobData.status),
-      result_id: resultId,
-    },
-  };
-}
-
-async function fetchLegacyCacheJobState(
-  jobId: string,
-): Promise<{ ok: true; data: CacheJobState } | { ok: false }> {
-  const { data: jobData, error: jobError } = await supabaseClient
-    .from('lca_jobs')
-    .select('id,status')
-    .eq('id', jobId)
-    .maybeSingle();
-
-  if (jobError) {
-    console.warn('fetch cache job state failed', {
-      error: jobError.message,
-      job_id: jobId,
-    });
-    return { ok: false };
-  }
-
-  if (!jobData) {
-    return { ok: false };
-  }
-
-  let resultId: string | null = null;
-  if (jobData.status === 'ready' || jobData.status === 'completed') {
-    const { data: resultData, error: resultError } = await supabaseClient
-      .from('lca_results')
-      .select('id')
-      .eq('job_id', jobId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (resultError) {
-      console.warn('fetch contribution path result by job_id failed', {
-        error: resultError.message,
-        job_id: jobId,
       });
       return { ok: false };
     }

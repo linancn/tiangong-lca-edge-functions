@@ -3,6 +3,7 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
+import { callLcaReadLatestSingleSolveResultRpc } from '../_shared/db_rpc/lca_results.ts';
 import { ensureLcaAllUnitSolveQueued } from '../_shared/lca_all_unit_solve_queue.ts';
 import {
   fetchProcessScopeLookup,
@@ -832,97 +833,58 @@ async function fetchLatestSingleSolveForProcess(
   userId: string,
   processIndex: number,
 ): Promise<{ ok: true; row: LatestSingleSolveRow | null } | { ok: false; error: string }> {
-  const { data: jobs, error: jobsError } = await supabaseClient
-    .from('lca_jobs')
-    .select('id,payload,created_at')
-    .eq('snapshot_id', snapshotId)
-    .eq('job_type', 'solve_one')
-    .eq('status', 'completed')
-    .eq('requested_by', userId)
-    .order('created_at', { ascending: false })
-    .limit(20);
+  const projection = await callLcaReadLatestSingleSolveResultRpc(supabaseClient, {
+    requestedBy: userId,
+    snapshotId,
+    processIndex,
+  });
 
-  if (jobsError) {
-    console.warn('query latest solve_one jobs failed', {
-      error: jobsError.message,
+  if (!projection.ok) {
+    console.warn('query latest solve_one projection failed', {
+      error: projection.message,
+      code: projection.code,
+      details: projection.details,
       snapshot_id: snapshotId,
       user_id: userId,
     });
     return { ok: false, error: 'latest_single_lookup_failed' };
   }
 
-  for (const row of jobs ?? []) {
-    const jobId = String((row as { id?: unknown }).id ?? '').trim();
-    if (!jobId) {
-      continue;
-    }
-
-    const amount = amountForProcessIndex((row as { payload?: unknown }).payload, processIndex);
-    if (amount === null) {
-      continue;
-    }
-
-    const { data: resultRow, error: resultError } = await supabaseClient
-      .from('lca_results')
-      .select('id,created_at')
-      .eq('job_id', jobId)
-      .maybeSingle();
-
-    if (resultError) {
-      console.warn('query result by solve_one job failed', {
-        error: resultError.message,
-        snapshot_id: snapshotId,
-        user_id: userId,
-        job_id: jobId,
-      });
-      continue;
-    }
-    if (!resultRow) {
-      continue;
-    }
-
-    return {
-      ok: true,
-      row: {
-        result_id: String(resultRow.id),
-        computed_at: String(resultRow.created_at),
-        amount,
-      },
-    };
+  const data = asRecord(projection.data);
+  if (!data) {
+    return { ok: true, row: null };
   }
 
-  return { ok: true, row: null };
+  const result = asRecord(data.result);
+  if (!result) {
+    console.warn('latest solve_one projection missing result payload', {
+      snapshot_id: snapshotId,
+      user_id: userId,
+      process_index: processIndex,
+    });
+    return { ok: false, error: 'latest_single_lookup_failed' };
+  }
+
+  const amount = Number(data.amount ?? 1);
+  return {
+    ok: true,
+    row: {
+      result_id: stringField(result, 'resultId'),
+      computed_at: stringField(result, 'createdAt'),
+      amount: Number.isFinite(amount) && amount !== 0 ? amount : 1,
+    },
+  };
 }
 
-function amountForProcessIndex(payload: unknown, processIndex: number): number | null {
-  const obj = (payload ?? {}) as {
-    demand?: unknown;
-    rhs?: unknown;
-  };
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
 
-  const demand = obj.demand as { process_index?: unknown; amount?: unknown } | undefined;
-  if (
-    demand &&
-    Number.isInteger(demand.process_index) &&
-    Number(demand.process_index) === processIndex
-  ) {
-    const amount = Number(demand.amount ?? 1);
-    if (Number.isFinite(amount) && amount !== 0) {
-      return amount;
-    }
-  }
-
-  if (!Array.isArray(obj.rhs)) {
-    return null;
-  }
-  if (!Number.isInteger(processIndex) || processIndex < 0 || processIndex >= obj.rhs.length) {
-    return null;
-  }
-  const amount = Number(obj.rhs[processIndex]);
-  if (!Number.isFinite(amount) || amount === 0) {
-    return null;
-  }
-  return amount;
+function stringField(record: Record<string, unknown>, field: string): string {
+  const value = record[field];
+  return typeof value === 'string' && value.trim().length > 0 ? value : '';
 }
 
 function processEntryForId(
