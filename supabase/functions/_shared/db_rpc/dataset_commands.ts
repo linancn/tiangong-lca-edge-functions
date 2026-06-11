@@ -4,6 +4,7 @@ import type { CommandAuditPayload } from '../command_runtime/audit_log.ts';
 import type {
   AssignTeamRequest,
   CreateRequest,
+  CreateVersionRequest,
   DatasetCommandFailure,
   DeleteRequest,
   PublishRequest,
@@ -106,6 +107,21 @@ export function buildDatasetCreateRpcArgs(
   return {
     p_table: request.table,
     p_id: request.id,
+    p_json_ordered: request.jsonOrdered,
+    p_model_id: request.modelId ?? null,
+    p_rule_verification: request.ruleVerification ?? null,
+    p_audit: audit,
+  };
+}
+
+export function buildDatasetCreateVersionRpcArgs(
+  request: CreateVersionRequest,
+  audit: CommandAuditPayload,
+): Record<string, unknown> {
+  return {
+    p_table: request.table,
+    p_id: request.id,
+    p_source_version: request.sourceVersion,
     p_json_ordered: request.jsonOrdered,
     p_model_id: request.modelId ?? null,
     p_rule_verification: request.ruleVerification ?? null,
@@ -271,6 +287,18 @@ export function callDatasetCreateRpc(
   audit: CommandAuditPayload,
 ) {
   return callDatasetRpc(supabase, 'cmd_dataset_create', buildDatasetCreateRpcArgs(request, audit));
+}
+
+export function callDatasetCreateVersionRpc(
+  supabase: RpcClient,
+  request: CreateVersionRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDatasetRpc(
+    supabase,
+    'cmd_dataset_create_version',
+    buildDatasetCreateVersionRpcArgs(request, audit),
+  );
 }
 
 export function callDatasetDeleteRpc(

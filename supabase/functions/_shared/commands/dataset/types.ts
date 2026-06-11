@@ -27,6 +27,15 @@ export type CreateRequest = {
   ruleVerification?: boolean | null;
 };
 
+export type CreateVersionRequest = {
+  table: DatasetTable;
+  id: string;
+  sourceVersion: string;
+  jsonOrdered: unknown;
+  modelId?: string | null;
+  ruleVerification?: boolean | null;
+};
+
 export type DeleteRequest = {
   table: DatasetTable;
   id: string;

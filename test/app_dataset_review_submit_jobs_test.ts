@@ -35,6 +35,7 @@ class FakeReviewSubmitJobRepository implements DatasetCommandRepository {
   }
 
   create = () => this.unimplemented();
+  createVersion = () => this.unimplemented();
   delete = () => this.unimplemented();
   saveDraft = () => this.unimplemented();
   assignTeam = () => this.unimplemented();

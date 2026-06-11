@@ -121,6 +121,26 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_verify
       ]
     }'
 
+### @name Dataset_Create_Version：Local
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_create_version' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --data '{
+      "table": "processes",
+      "id": "012fc8f6-9a30-4d98-9b03-34ddec3a6f10",
+      "sourceVersion": "01.01.002",
+      "jsonOrdered": {
+        "processDataSet": {
+          "administrativeInformation": {
+            "publicationAndOwnership": {
+              "common:dataSetVersion": "will-be-overwritten-by-server"
+            }
+          }
+        }
+      },
+      "ruleVerification": true
+    }'
+
 ### @name Dataset_Review_Submit_Gate：Local
 # Worker-owned gate reports may still contain legacy payload fields such as calculatorReport.
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_review_submit_gate' \
