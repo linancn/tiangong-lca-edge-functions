@@ -1,6 +1,7 @@
 import type {
   AssignTeamRequest,
   CreateRequest,
+  CreateVersionRequest,
   DatasetCommandFailure,
   DeleteRequest,
   PublishRequest,
@@ -35,6 +36,19 @@ export function assertCreatePolicy(request: CreateRequest): { ok: true } | Datas
     return invalidInput(
       'MODEL_ID_NOT_ALLOWED',
       'modelId is only allowed for process dataset creates',
+    );
+  }
+
+  return { ok: true };
+}
+
+export function assertCreateVersionPolicy(
+  request: CreateVersionRequest,
+): { ok: true } | DatasetCommandFailure {
+  if (request.table !== 'processes' && request.modelId) {
+    return invalidInput(
+      'MODEL_ID_NOT_ALLOWED',
+      'modelId is only allowed for process dataset version creates',
     );
   }
 

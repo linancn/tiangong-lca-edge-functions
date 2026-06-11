@@ -4,6 +4,7 @@ import type { CommandParseResult } from '../../command_runtime/command.ts';
 import {
   type AssignTeamRequest,
   type CreateRequest,
+  type CreateVersionRequest,
   DATASET_TABLES,
   type DeleteRequest,
   type PublishRequest,
@@ -46,6 +47,15 @@ export const saveDraftRequestSchema = datasetBaseRequestSchema
 
 export const createRequestSchema = datasetIdTableSchema
   .extend({
+    jsonOrdered: z.unknown(),
+    modelId: z.string().uuid().nullable().optional(),
+    ruleVerification: z.boolean().nullable().optional(),
+  })
+  .strict();
+
+export const createVersionRequestSchema = datasetIdTableSchema
+  .extend({
+    sourceVersion: versionSchema,
     jsonOrdered: z.unknown(),
     modelId: z.string().uuid().nullable().optional(),
     ruleVerification: z.boolean().nullable().optional(),
@@ -115,6 +125,18 @@ export function parseCreateRequest(body: unknown): CommandParseResult<CreateRequ
   const parsed = createRequestSchema.safeParse(body);
   if (!parsed.success) {
     return invalidPayload('Invalid dataset create payload', parsed.error);
+  }
+
+  return {
+    ok: true,
+    value: parsed.data,
+  };
+}
+
+export function parseCreateVersionRequest(body: unknown): CommandParseResult<CreateVersionRequest> {
+  const parsed = createVersionRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload('Invalid dataset create-version payload', parsed.error);
   }
 
   return {

@@ -4,6 +4,7 @@ import type { CommandAuditPayload } from '../../command_runtime/audit_log.ts';
 import {
   callDatasetAssignTeamRpc,
   callDatasetCreateRpc,
+  callDatasetCreateVersionRpc,
   callDatasetDeleteRpc,
   callDatasetPublishRpc,
   callDatasetReviewSubmitGateRpc,
@@ -17,6 +18,7 @@ import {
 import type {
   AssignTeamRequest,
   CreateRequest,
+  CreateVersionRequest,
   DeleteRequest,
   PublishRequest,
   ReviewSubmitGateRequest,
@@ -31,6 +33,10 @@ type RpcClient = Pick<SupabaseClient, 'rpc'>;
 
 export type DatasetCommandRepository = {
   create: (request: CreateRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
+  createVersion: (
+    request: CreateVersionRequest,
+    audit: CommandAuditPayload,
+  ) => Promise<DatasetRpcResult>;
   delete: (request: DeleteRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
   saveDraft: (request: SaveDraftRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
   assignTeam: (request: AssignTeamRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
@@ -66,6 +72,7 @@ export function createDatasetCommandRepository(supabase: RpcClient): DatasetComm
 
   return {
     create: (request, audit) => callDatasetCreateRpc(client, request, audit),
+    createVersion: (request, audit) => callDatasetCreateVersionRpc(client, request, audit),
     delete: (request, audit) => callDatasetDeleteRpc(client, request, audit),
     saveDraft: (request, audit) => callDatasetSaveDraftRpc(client, request, audit),
     assignTeam: (request, audit) => callDatasetAssignTeamRpc(client, request, audit),
