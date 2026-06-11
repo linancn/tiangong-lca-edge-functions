@@ -2,6 +2,7 @@ import { assertEquals, assertThrows } from 'jsr:@std/assert';
 
 import { buildCommandAuditPayload } from '../supabase/functions/_shared/command_runtime/audit_log.ts';
 import { createRequestSchema } from '../supabase/functions/_shared/commands/dataset/create.ts';
+import { createVersionRequestSchema } from '../supabase/functions/_shared/commands/dataset/create_version.ts';
 import { deleteRequestSchema } from '../supabase/functions/_shared/commands/dataset/delete.ts';
 import { createDatasetCommandRepository } from '../supabase/functions/_shared/commands/dataset/repository.ts';
 import { reviewSubmitGateRequestSchema } from '../supabase/functions/_shared/commands/dataset/review_submit_gate.ts';
@@ -10,6 +11,7 @@ import { saveDraftRequestSchema } from '../supabase/functions/_shared/commands/d
 import { submitReviewRequestSchema } from '../supabase/functions/_shared/commands/dataset/submit_review.ts';
 import {
   callDatasetCreateRpc,
+  callDatasetCreateVersionRpc,
   callDatasetDeleteRpc,
   callDatasetReviewSubmitGateRpc,
   callDatasetReviewSubmitJobEnqueueRpc,
@@ -111,6 +113,32 @@ Deno.test('createRequestSchema accepts optional ruleVerification', () => {
   assertEquals(parsed.success, true);
 });
 
+Deno.test(
+  'createVersionRequestSchema requires sourceVersion and rejects target version fields',
+  () => {
+    const parsed = createVersionRequestSchema.safeParse({
+      table: 'flows',
+      id: '11111111-1111-4111-8111-111111111111',
+      version: '01.00.001',
+      jsonOrdered: {},
+    });
+
+    assertEquals(parsed.success, false);
+  },
+);
+
+Deno.test('createVersionRequestSchema accepts sourceVersion and optional ruleVerification', () => {
+  const parsed = createVersionRequestSchema.safeParse({
+    table: 'flows',
+    id: '11111111-1111-4111-8111-111111111111',
+    sourceVersion: '01.00.000',
+    jsonOrdered: {},
+    ruleVerification: false,
+  });
+
+  assertEquals(parsed.success, true);
+});
+
 Deno.test('deleteRequestSchema rejects unexpected payload fields', () => {
   const parsed = deleteRequestSchema.safeParse({
     table: 'flows',
@@ -153,6 +181,15 @@ const createRequest = {
   id: '11111111-1111-4111-8111-111111111111',
   jsonOrdered: { foo: 'bar' },
   modelId: '33333333-3333-4333-8333-333333333333',
+};
+
+const createVersionRequest = {
+  table: 'processes' as const,
+  id: '11111111-1111-4111-8111-111111111111',
+  sourceVersion: '01.00.000',
+  jsonOrdered: { foo: 'bar' },
+  modelId: '33333333-3333-4333-8333-333333333333',
+  ruleVerification: false,
 };
 
 const deleteRequest = {
@@ -228,6 +265,49 @@ Deno.test(
         version: '01.00.000',
       },
     });
+  },
+);
+
+Deno.test(
+  'callDatasetCreateVersionRpc forwards create-version RPC args and unwraps success envelopes',
+  async () => {
+    const supabase = new FakeRpcSupabase({
+      data: {
+        ok: true,
+        data: {
+          id: createVersionRequest.id,
+          version: '01.00.001',
+        },
+      },
+      error: null,
+    });
+    const result = (await callDatasetCreateVersionRpc(
+      supabase as never,
+      createVersionRequest,
+      auditPayload,
+    )) as DatasetRpcResult;
+
+    assertEquals(result, {
+      ok: true,
+      data: {
+        id: createVersionRequest.id,
+        version: '01.00.001',
+      },
+    });
+    assertEquals(supabase.calls, [
+      {
+        fn: 'cmd_dataset_create_version',
+        args: {
+          p_table: 'processes',
+          p_id: createVersionRequest.id,
+          p_source_version: createVersionRequest.sourceVersion,
+          p_json_ordered: createVersionRequest.jsonOrdered,
+          p_model_id: createVersionRequest.modelId,
+          p_rule_verification: false,
+          p_audit: auditPayload,
+        },
+      },
+    ]);
   },
 );
 
