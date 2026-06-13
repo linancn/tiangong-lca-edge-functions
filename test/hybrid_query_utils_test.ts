@@ -69,6 +69,36 @@ Deno.test('buildHybridFulltextQueryString preserves raw-query aliases in RPC que
 
   assertEquals(
     buildHybridFulltextQueryString(sanitized),
-    '(交流电) OR (alternating current) OR (electricity) OR (AC power)',
+    '("交流电") OR ("alternating current") OR ("electricity") OR ("AC power")',
+  );
+});
+
+Deno.test('buildHybridFulltextQueryString quotes PGroonga query-syntax characters', () => {
+  const rawChemicalQuery =
+    '(111479-05-1) OR (Propanoic acid, 2-[4-[(6-chloro-2-quinoxalinyl)oxy]phenoxy]-, 2-[[(1-methylethylidene)amino]oxy]ethyl ester, (2R)-)';
+
+  const sanitized = sanitizeHybridQueryOutput(
+    {
+      semantic_query_en: 'quizalofop-P-tefuryl',
+      fulltext_query_en: ['111479-05-1', 'quizalofop-P-tefuryl'],
+      fulltext_query_zh: [],
+    },
+    rawChemicalQuery,
+  );
+
+  assertEquals(
+    buildHybridFulltextQueryString(sanitized),
+    `("${rawChemicalQuery}") OR ("quizalofop-P-tefuryl") OR ("${rawChemicalQuery}") OR ("111479-05-1")`,
+  );
+});
+
+Deno.test('buildHybridFulltextQueryString escapes quotes and backslashes inside terms', () => {
+  assertEquals(
+    buildHybridFulltextQueryString({
+      semantic_query_en: 'quoted solvent',
+      fulltext_query_en: ['a "quoted" \\ solvent'],
+      fulltext_query_zh: [],
+    }),
+    '("a \\"quoted\\" \\\\ solvent")',
   );
 });

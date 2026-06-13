@@ -182,6 +182,11 @@ function prependSeedTerm(terms: string[], seed: string): string[] {
   return uniqueTerms([normalizedSeed, ...terms]);
 }
 
+function quotePgroongaQueryTerm(term: string): string {
+  const escaped = normalizeTerm(term).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
 export function sanitizeHybridQueryOutput(
   raw: HybridSearchQuery,
   userQuery: string,
@@ -242,6 +247,6 @@ export function sanitizeHybridQueryOutput(
 export function buildHybridFulltextQueryString(query: HybridSearchQuery): string {
   return [...query.fulltext_query_zh, ...query.fulltext_query_en]
     .filter((term) => term.trim().length > 0)
-    .map((term) => `(${term})`)
+    .map((term) => `(${quotePgroongaQueryTerm(term)})`)
     .join(' OR ');
 }

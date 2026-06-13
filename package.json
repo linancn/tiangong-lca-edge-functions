@@ -1,6 +1,6 @@
 {
   "config": {
-    "supabaseCliVersion": "2.85.0",
+    "supabaseCliVersion": "2.106.0",
     "supabaseProjectRefDev": "fotofiyqnuyvgtotswie",
     "supabaseProjectRefMain": "qgzvkongdjqiiamzbbts"
   },
@@ -15,9 +15,9 @@
     "lint": "prettier --check \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\""
   },
   "devDependencies": {
-    "prettier": "^3.8.1",
+    "prettier": "^3.8.4",
     "prettier-plugin-organize-imports": "^4.3.0",
-    "supabase": "2.85.0",
+    "supabase": "2.106.0",
     "typescript": "^5.9.3"
   }
 }
