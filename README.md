@@ -12,13 +12,14 @@ whenToUse:
 whenToUpdate:
   - when setup, local serve, request examples, or operator-facing runtime guidance changes
 checkPaths:
+  - .env.example
   - README.md
   - package.json
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-06-11
-lastReviewedCommit: 511a9e9c1019f7306e16f4ba285e86afcc1ae1cb
+lastReviewedAt: 2026-06-13
+lastReviewedCommit: 48ab390581ed832411f342a9ea8fb7ef31eb94a7
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -57,11 +58,12 @@ These files are the low-token entry path for repo ownership, branch and deploy r
 
 - Node.js 22
 - Docker Engine (required if you run local Supabase stack)
+- Supabase CLI 2.106.0, installed through this repository's `supabase` dev dependency
 
 Initialize/refresh Node dependencies:
 
 ```bash
-npm update && npm ci
+npm install --package-lock=false
 ```
 
 ## Environment Setup
@@ -74,38 +76,65 @@ Use the template under `supabase`:
 cp supabase/.env.example supabase/.env.local
 ```
 
-Required keys are managed in this file, for example:
+Required keys are managed in this file. Keep this file local-only; do not copy it to the repository root `.env`.
 
-- `OPENAI_API_KEY`
-- `OPENAI_CHAT_MODEL`
+Core entries:
+
 - `REMOTE_SUPABASE_URL`
-- `REMOTE_SUPABASE_SERVICE_ROLE_KEY` (or `REMOTE_SUPABASE_SECRET_KEY`) for privileged RPC / database execution
-- `REMOTE_SUPABASE_PUBLISHABLE_KEY` (or `REMOTE_SUPABASE_ANON_KEY`) for JWT validation and request-scoped user clients
-- `REMOTE_SERVICE_API_KEY` only for `AuthMethod.SERVICE_API_KEY` request authentication
-- `UPSTASH_REDIS_URL`
-- `UPSTASH_REDIS_TOKEN`
-- `SAGEMAKER_ENDPOINT_NAME`
-- `EMBEDDING_FT_DB_LOCK_TIMEOUT`, `EMBEDDING_FT_DB_STATEMENT_TIMEOUT`, and `EMBEDDING_FT_DB_RETRY_BACKOFF_SECONDS` for `embedding_ft` database-update backoff behavior
+- `REMOTE_SUPABASE_PUBLISHABLE_KEY` for JWT validation and request-scoped user clients.
+- `REMOTE_SUPABASE_SECRET_KEY` for privileged RPC / database execution.
+- `REMOTE_SERVICE_API_KEY` for routes that allow `AuthMethod.SERVICE_API_KEY`.
+- `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` for user API key auth caching.
+- `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`, and optional `OPENAI_BASE_URL`.
+- `SAGEMAKER_ENDPOINT_NAME` plus AWS credentials for hybrid search and embedding.
+- Feature-specific entries such as Cognito, LangGraph, TIDAS storage, national-carbon cache, and `embedding_ft` timeout knobs are grouped in `supabase/.env.example`.
 
 Credential contract:
 
 - `REMOTE_SERVICE_API_KEY` / `SERVICE_API_KEY` are custom function-level shared secrets. They are not Supabase client credentials.
-- JWT validation and user-api-key sign-in flows must use publishable / anon keys.
-- Service-role or secret keys are reserved for privileged Supabase execution paths.
+- `USER_API_KEY` is only a request credential. It can authenticate a function call, but it cannot replace `REMOTE_SUPABASE_SECRET_KEY` for RPC calls made from the function runtime.
+- JWT validation and user-api-key sign-in flows must use publishable keys.
+- Supabase secret keys are reserved for privileged Supabase execution paths and must never be exposed to browser clients.
+- Keep `REMOTE_SUPABASE_URL`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, and `REMOTE_SUPABASE_SECRET_KEY` from the same Supabase project. A mismatched or stale secret key causes local RPC calls to fail with `Invalid API key` after request authentication succeeds.
 
 ### 2. HTTP test env (repo root `.env`)
 
-`test.example.http` reads variables from repository root `.env`:
+`test.example.http` reads variables from repository root `.env`. Start from the checked-in HTTP-only template:
 
-- `LOCAL_ENDPOINT` (for local function URL)
-- `REMOTE_ENDPOINT` (for remote function URL)
-- `USER_API_KEY`
+```bash
+cp .env.example .env
+```
+
+This root `.env` is only for local HTTP clients and request collections. It should contain endpoint URLs, request credentials, and request ids such as:
+
+- `LOCAL_ENDPOINT` / `REMOTE_ENDPOINT`
 - `X_REGION`
-- and other request-only values like `X_KEY`, `SECRET_VALUE`
+- `USER_API_KEY`
+- `USER_JWT`
+- `SERVICE_API_KEY`
+- LCA request ids such as `LCA_PROCESS_ID`, `LCA_IMPACT_ID`, `LCA_JOB_ID`, and `LCA_RESULT_ID`
+- TIDAS import request ids and artifact metadata
+
+Do not put `REMOTE_SUPABASE_SECRET_KEY`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, OpenAI keys, AWS keys, Redis credentials, or other function runtime secrets in the repository root `.env`.
 
 ## Local Development
 
-### Serve Edge Functions
+### Start the local test environment
+
+Start the local Supabase stack first. This provides the local gateway at `LOCAL_ENDPOINT` and is required before `npm start` can serve functions:
+
+```bash
+./node_modules/.bin/supabase start
+```
+
+Typical local endpoints:
+
+- API URL: `http://127.0.0.1:54321`
+- Functions URL: `http://127.0.0.1:54321/functions/v1`
+- Studio URL: `http://127.0.0.1:54323`
+- DB URL: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
+
+Serve Edge Functions in another terminal:
 
 ```bash
 npm start
@@ -114,29 +143,71 @@ npm start
 `npm start` is equivalent to:
 
 ```bash
-./node_modules/.bin/supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt
+./node_modules/.bin/supabase functions serve \
+  --env-file ./supabase/.env.local \
+  --no-verify-jwt
 ```
 
-### Optional: Start full local Supabase stack
+Stop the local stack when finished:
 
 ```bash
-npx supabase start
+./node_modules/.bin/supabase stop
 ```
 
-Typical endpoints:
+The repository serves with `--no-verify-jwt` by design. Gateway JWT verification is disabled for both local and remote deploys; each function must still run its own `authenticateRequest` authorization path.
 
-- API URL: `http://127.0.0.1:54321`
-- Studio URL: `http://127.0.0.1:54323`
-- DB URL: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
+### Deploy Edge Functions
+
+Authenticate the Supabase CLI when needed:
+
+```bash
+./node_modules/.bin/supabase login
+```
+
+Deploy to the persistent `dev` project (`fotofiyqnuyvgtotswie`) from the Git `dev` line or a reviewed PR branch:
+
+```bash
+npm run deploy:dev -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
+```
+
+Deploy to the production `main` project (`qgzvkongdjqiiamzbbts`) only as part of the `dev -> main` promote flow:
+
+```bash
+npm run deploy:main -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
+```
+
+The deploy script pins the Supabase CLI version from `package.json`, sets the target `--project-ref`, and disables gateway JWT verification with `--no-verify-jwt`. Function imports are resolved from `supabase/functions/deno.json`.
+
+Recommended deploy workflow:
+
+1. Validate locally with `npm run lint`, `npm run check`, and targeted smoke requests.
+2. Confirm the target project already has the required runtime secrets.
+3. Deploy named functions only. Avoid omitting function names or using `--prune` unless the intention is to deploy/delete the whole remote function set.
+4. Smoke the deployed endpoint through `test.example.http` or equivalent curl requests.
+5. Record any deployment or smoke-test outcome on the PR.
+
+Do not patch remote secrets as part of normal function deployment. With this repository's pinned Supabase CLI, remote function secrets are managed separately through the Supabase Dashboard or explicit `supabase secrets` operations such as:
+
+```bash
+./node_modules/.bin/supabase secrets list --project-ref <project-ref>
+./node_modules/.bin/supabase secrets set KEY=value --project-ref <project-ref>
+```
+
+Treat `supabase secrets set --env-file ...` as a credential operation, not as a deploy shortcut. It can write many values at once, so use it only with an explicitly reviewed secret file and target project.
 
 ## Local Test
 
 ### Quick smoke test
 
 ```bash
-curl -i --location --request POST 'http://127.0.0.1:54321/functions/v1/embedding' \
+set -a
+. ./.env
+set +a
+
+curl -i --location --request POST "$LOCAL_ENDPOINT/process_hybrid_search" \
+  --header "Authorization: Bearer $USER_API_KEY" \
   --header 'Content-Type: application/json' \
-  --data '{"query":["Hello", "World"]}'
+  --data '{"query":"硅酸盐水泥"}'
 ```
 
 ### Request collection
