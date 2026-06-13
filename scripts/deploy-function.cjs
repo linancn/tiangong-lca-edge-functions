@@ -14,6 +14,7 @@ if (!validTargets.has(target) || functionNames.length === 0) {
 
 const repoRoot = path.resolve(__dirname, '..');
 const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+const importMapPath = path.join(repoRoot, 'supabase', 'functions', 'deno.json');
 const cliVersion = packageJson.config?.supabaseCliVersion;
 const projectRefs = {
   dev: packageJson.config?.supabaseProjectRefDev,
@@ -39,6 +40,8 @@ for (const functionName of functionNames) {
       '--project-ref',
       projectRef,
       '--no-verify-jwt',
+      '--import-map',
+      importMapPath,
     ],
     {
       cwd: repoRoot,

@@ -17,8 +17,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-06-11
-lastReviewedCommit: 511a9e9c1019f7306e16f4ba285e86afcc1ae1cb
+lastReviewedAt: 2026-06-13
+lastReviewedCommit: 37739093008eb2dc97b6c052fa628da85b0b9abc
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -57,11 +57,12 @@ These files are the low-token entry path for repo ownership, branch and deploy r
 
 - Node.js 22
 - Docker Engine (required if you run local Supabase stack)
+- Supabase CLI 2.106.0, installed through this repository's `supabase` dev dependency
 
 Initialize/refresh Node dependencies:
 
 ```bash
-npm update && npm ci
+npm install --package-lock=false
 ```
 
 ## Environment Setup
@@ -79,8 +80,8 @@ Required keys are managed in this file, for example:
 - `OPENAI_API_KEY`
 - `OPENAI_CHAT_MODEL`
 - `REMOTE_SUPABASE_URL`
-- `REMOTE_SUPABASE_SERVICE_ROLE_KEY` (or `REMOTE_SUPABASE_SECRET_KEY`) for privileged RPC / database execution
-- `REMOTE_SUPABASE_PUBLISHABLE_KEY` (or `REMOTE_SUPABASE_ANON_KEY`) for JWT validation and request-scoped user clients
+- `REMOTE_SUPABASE_SECRET_KEY` for privileged RPC / database execution. Use the Supabase secret key for the same project as `REMOTE_SUPABASE_URL`; do not use user API keys, custom service API keys, or legacy service-role keys here.
+- `REMOTE_SUPABASE_PUBLISHABLE_KEY` for JWT validation and request-scoped user clients. Use the publishable key for the same project as `REMOTE_SUPABASE_URL`; do not use legacy anon keys for new local configs.
 - `REMOTE_SERVICE_API_KEY` only for `AuthMethod.SERVICE_API_KEY` request authentication
 - `UPSTASH_REDIS_URL`
 - `UPSTASH_REDIS_TOKEN`
@@ -90,8 +91,10 @@ Required keys are managed in this file, for example:
 Credential contract:
 
 - `REMOTE_SERVICE_API_KEY` / `SERVICE_API_KEY` are custom function-level shared secrets. They are not Supabase client credentials.
-- JWT validation and user-api-key sign-in flows must use publishable / anon keys.
-- Service-role or secret keys are reserved for privileged Supabase execution paths.
+- `USER_API_KEY` is only a request credential. It can authenticate a function call, but it cannot replace `REMOTE_SUPABASE_SECRET_KEY` for RPC calls made from the function runtime.
+- JWT validation and user-api-key sign-in flows must use publishable keys.
+- Supabase secret keys are reserved for privileged Supabase execution paths and must never be exposed to browser clients.
+- Keep `REMOTE_SUPABASE_URL`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, and `REMOTE_SUPABASE_SECRET_KEY` from the same Supabase project. A mismatched or stale secret key causes local RPC calls to fail with `Invalid API key` after request authentication succeeds.
 
 ### 2. HTTP test env (repo root `.env`)
 
@@ -105,7 +108,22 @@ Credential contract:
 
 ## Local Development
 
-### Serve Edge Functions
+### Start the local test environment
+
+Start the local Supabase stack first. This provides the local gateway at `LOCAL_ENDPOINT` and is required before `npm start` can serve functions:
+
+```bash
+./node_modules/.bin/supabase start
+```
+
+Typical local endpoints:
+
+- API URL: `http://127.0.0.1:54321`
+- Functions URL: `http://127.0.0.1:54321/functions/v1`
+- Studio URL: `http://127.0.0.1:54323`
+- DB URL: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
+
+Serve Edge Functions in another terminal:
 
 ```bash
 npm start
@@ -114,20 +132,43 @@ npm start
 `npm start` is equivalent to:
 
 ```bash
-./node_modules/.bin/supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt
+./node_modules/.bin/supabase functions serve \
+  --env-file ./supabase/.env.local \
+  --import-map ./supabase/functions/deno.json \
+  --no-verify-jwt
 ```
 
-### Optional: Start full local Supabase stack
+Stop the local stack when finished:
 
 ```bash
-npx supabase start
+./node_modules/.bin/supabase stop
 ```
 
-Typical endpoints:
+The repository serves with `--no-verify-jwt` by design. Gateway JWT verification is disabled for both local and remote deploys; each function must still run its own `authenticateRequest` authorization path.
 
-- API URL: `http://127.0.0.1:54321`
-- Studio URL: `http://127.0.0.1:54323`
-- DB URL: `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
+### Deploy Edge Functions
+
+Authenticate the Supabase CLI when needed:
+
+```bash
+./node_modules/.bin/supabase login
+```
+
+Deploy to the persistent `dev` project (`fotofiyqnuyvgtotswie`) from the Git `dev` line or a reviewed PR branch:
+
+```bash
+npm run deploy:dev -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
+```
+
+Deploy to the production `main` project (`qgzvkongdjqiiamzbbts`) only as part of the `dev -> main` promote flow:
+
+```bash
+npm run deploy:main -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
+```
+
+The deploy script pins the Supabase CLI version from `package.json`, sets the target `--project-ref`, disables gateway JWT verification with `--no-verify-jwt`, and passes `--import-map ./supabase/functions/deno.json`.
+
+Do not patch remote secrets as part of normal function deployment. Remote secrets are managed separately through the Supabase Dashboard or explicit Supabase CLI secret-management operations, and those changes should be reviewed as credential operations.
 
 ## Local Test
 
