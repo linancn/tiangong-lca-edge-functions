@@ -94,10 +94,16 @@ Deno.test('buildHybridSearchRpcRequest builds the database RPC payload', () => {
     data_source: 'co',
   });
 
-  const payload = buildHybridSearchRpcRequest('[steel]', '[0.1,0.2]', parsed.rpcOptions);
+  const payload = buildHybridSearchRpcRequest(
+    'steel',
+    ['steel', 'stainless steel'],
+    '[0.1,0.2]',
+    parsed.rpcOptions,
+  );
 
   assertEquals(payload, {
-    query_text: '[steel]',
+    query_text: 'steel',
+    query_terms: ['steel', 'stainless steel'],
     query_embedding: '[0.1,0.2]',
     filter_condition: '{}',
     match_threshold: 0.5,

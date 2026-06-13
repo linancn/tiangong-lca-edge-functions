@@ -4,7 +4,7 @@ import { InvokeEndpointCommand, SageMakerRuntimeClient } from '@aws-sdk/client-s
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import {
-  buildHybridFulltextQueryString,
+  buildHybridFulltextQueryTerms,
   HYBRID_SYNONYM_RULES,
   hybridQuerySchema,
   HybridSearchQuery,
@@ -231,13 +231,14 @@ ${HYBRID_SYNONYM_RULES}`,
     throw new Error('OpenAI structured output missing semantic_query_en');
   }
 
-  const queryFulltextString = buildHybridFulltextQueryString(normalizedRes);
+  const queryFulltextTerms = buildHybridFulltextQueryTerms(normalizedRes);
 
   const embedding = await generateEmbedding(semanticQueryEn);
   const vectorStr = `[${embedding.join(',')}]`;
 
   const requestBody = buildHybridSearchRpcRequest(
-    queryFulltextString,
+    parsedRequest.queryText,
+    queryFulltextTerms,
     vectorStr,
     parsedRequest.rpcOptions,
   );
@@ -265,7 +266,7 @@ ${HYBRID_SYNONYM_RULES}`,
     semantic_query_en: semanticQueryEn,
     fulltext_query_en: fulltextQueryEn,
     fulltext_query_zh: fulltextQueryZh,
-    query_fulltext_string: queryFulltextString,
+    query_fulltext_terms: queryFulltextTerms,
     match_threshold: requestBody.match_threshold,
     data_source: requestBody.data_source,
     user_context_kind: rpcClientContext.userContextKind,
