@@ -25,6 +25,7 @@ export interface HybridSearchRpcOptions {
 
 export interface HybridSearchRpcRequest extends HybridSearchRpcOptions {
   query_text: string;
+  query_terms: string[];
   query_embedding: string;
 }
 
@@ -161,11 +162,13 @@ export function parseHybridSearchClientRequest(body: unknown): HybridSearchClien
 
 export function buildHybridSearchRpcRequest(
   queryText: string,
+  queryTerms: string[],
   queryEmbedding: string,
   options: HybridSearchRpcOptions,
 ): HybridSearchRpcRequest {
   return {
     query_text: queryText,
+    query_terms: queryTerms,
     query_embedding: queryEmbedding,
     ...options,
   };
