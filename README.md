@@ -145,7 +145,6 @@ npm start
 ```bash
 ./node_modules/.bin/supabase functions serve \
   --env-file ./supabase/.env.local \
-  --import-map ./supabase/functions/deno.json \
   --no-verify-jwt
 ```
 
@@ -177,7 +176,7 @@ Deploy to the production `main` project (`qgzvkongdjqiiamzbbts`) only as part of
 npm run deploy:main -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
 ```
 
-The deploy script pins the Supabase CLI version from `package.json`, sets the target `--project-ref`, disables gateway JWT verification with `--no-verify-jwt`, and passes `--import-map ./supabase/functions/deno.json`.
+The deploy script pins the Supabase CLI version from `package.json`, sets the target `--project-ref`, and disables gateway JWT verification with `--no-verify-jwt`. Function imports are resolved from `supabase/functions/deno.json`.
 
 Recommended deploy workflow:
 
