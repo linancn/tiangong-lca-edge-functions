@@ -108,6 +108,40 @@ Deno.test('buildHybridFulltextQueryTerms splits ordinary top-level OR expression
   );
 });
 
+Deno.test('buildHybridFulltextQueryTerms splits wrapped top-level OR expressions', () => {
+  assertEquals(
+    buildHybridFulltextQueryTerms({
+      semantic_query_en: '',
+      fulltext_query_en: ['(sodium chloride OR NaCl)'],
+      fulltext_query_zh: [],
+    }),
+    ['sodium chloride', 'NaCl'],
+  );
+
+  assertEquals(
+    buildHybridFulltextQueryTerms({
+      semantic_query_en: '',
+      fulltext_query_en: ['((sodium chloride OR NaCl))'],
+      fulltext_query_zh: [],
+    }),
+    ['sodium chloride', 'NaCl'],
+  );
+});
+
+Deno.test('buildHybridFulltextQueryTerms splits wrapped chemical OR expressions', () => {
+  const rawChemicalName =
+    'Propanoic acid, 2-[4-[(6-chloro-2-quinoxalinyl)oxy]phenoxy]-, 2-[[(1-methylethylidene)amino]oxy]ethyl ester, (2R)-';
+
+  assertEquals(
+    buildHybridFulltextQueryTerms({
+      semantic_query_en: '',
+      fulltext_query_en: [`((111479-05-1) OR (${rawChemicalName}))`],
+      fulltext_query_zh: [],
+    }),
+    ['111479-05-1', rawChemicalName],
+  );
+});
+
 Deno.test('buildHybridFulltextQueryTerms does not split words containing or', () => {
   assertEquals(
     buildHybridFulltextQueryTerms({

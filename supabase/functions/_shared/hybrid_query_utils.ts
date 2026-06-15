@@ -224,6 +224,10 @@ function splitTopLevelOrTerms(term: string): string[] {
   if (!normalized) {
     return [];
   }
+  const unwrapped = stripOneBalancedOuterParen(normalized);
+  if (unwrapped !== normalized) {
+    return splitTopLevelOrTerms(unwrapped);
+  }
 
   const parts: string[] = [];
   let partStart = 0;
