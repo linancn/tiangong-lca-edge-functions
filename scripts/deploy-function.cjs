@@ -39,6 +39,8 @@ for (const functionName of functionNames) {
       '--project-ref',
       projectRef,
       '--no-verify-jwt',
+      '--import-map',
+      path.join('supabase', 'functions', 'deno.json'),
     ],
     {
       cwd: repoRoot,

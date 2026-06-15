@@ -32,8 +32,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-06-13
-lastReviewedCommit: 8552e9b8e574d05b8cf13fa296e4a6ae23058501
+lastReviewedAt: 2026-06-15
+lastReviewedCommit: 5c48d14b29cc8473ace0b6c88078651d45111753
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -94,6 +94,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
   - `npm run deploy:main -- <function-name> [more-function-names...]`
 - auth and connectivity drift probe: `npm run probe:auth -- --remote` or `npm run probe:auth -- --local`
 - local serve and scripted remote deploys both use `--no-verify-jwt`
+- scripted remote deploys pass `supabase/functions/deno.json` as the Supabase CLI import map so remote bundling resolves shared npm/jsr imports consistently
 - gateway JWT verification being off does not make runtime auth optional; functions must still authenticate and authorize requests explicitly
 
 ## Ownership Boundaries

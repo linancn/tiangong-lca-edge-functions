@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-06-13
-lastReviewedCommit: 8552e9b8e574d05b8cf13fa296e4a6ae23058501
+lastReviewedAt: 2026-06-15
+lastReviewedCommit: 5c48d14b29cc8473ace0b6c88078651d45111753
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -60,6 +60,7 @@ This repo is organized around Edge Function families plus a shared runtime layer
 | `test/**` | stable | repo-level Deno tests for functions and shared modules |
 | `scripts/**` | stable | deno-check inventory, deploy contract, auth probe, and LCA smoke helper |
 | `supabase/config.toml` | stable | local serve and remote edge deploy config; not database schema truth |
+| `supabase/functions/deno.json` | stable | Deno config and import map used by local checks and scripted remote deploy bundling |
 | `test.example.http` | stable | checked-in smoke request collection for local and remote routes |
 | `.github/PULL_REQUEST_TEMPLATE/*.md` | stable | M2 branch-specific PR note shape for feature and promote flows |
 
@@ -83,6 +84,8 @@ The repo intentionally keeps gateway JWT verification off in its standard operat
 - scripted remote deploys: `npm run deploy:dev`, `npm run deploy:main`
 
 Both paths use `--no-verify-jwt`.
+
+Scripted remote deploys also pass `supabase/functions/deno.json` as the Supabase CLI import map. Keep shared npm/jsr import mappings there so local `deno check` and server-side Supabase bundling use the same resolution contract.
 
 The real auth boundary is therefore inside runtime code, primarily:
 
