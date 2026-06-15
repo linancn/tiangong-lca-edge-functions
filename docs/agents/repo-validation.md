@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-06-13
-lastReviewedCommit: 8552e9b8e574d05b8cf13fa296e4a6ae23058501
+lastReviewedAt: 2026-06-15
+lastReviewedCommit: 5c48d14b29cc8473ace0b6c88078651d45111753
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -72,7 +72,7 @@ If you reactivate or rely on one of those routes, update the inventory and valid
 | Hybrid search, AI suggestion, or OpenAI shared layer | `npm run lint`; `npm run check`; targeted `deno check` on changed function and shared OpenAI helper files | smoke one relevant request from `test.example.http` or equivalent local or remote call | Model defaults and query-rewrite helpers live in repo code, not only in env or README prose. |
 | LCA solve, queue, result, or scope helpers | `npm run lint`; `npm run check`; targeted `deno check` on changed `lca_*` files and `_shared/lca_*` helpers; for worker_jobs cutover changes also run `test/worker_jobs_cutover_test.ts`, `test/worker_jobs_test.ts`, and `test/lca_snapshot_scope_test.ts` | run `scripts/lca_submit_poll_fetch.sh` when the task explicitly touches the submit, poll, or fetch path; otherwise record why that proof is deferred | `worker_jobs` is the default enqueue path; `LCA_WORKER_JOBS_ENABLED=false` must fail closed instead of using legacy queue fallback. Domain rows/cache remain result metadata, not task fact. Missing worker_jobs DB-side truth is validated in `database-engine`, not here. |
 | TIDAS package import, export, or job paths | `npm run lint`; `npm run check`; targeted `deno check` on changed package files and `_shared/tidas_package.ts`; run `deno test --allow-env --config supabase/functions/deno.json test/tidas_package_test.ts test/tidas_package_api_test.ts` when package enqueue behavior changes | use the relevant requests in `test.example.http`; if auth or payload shaping changed, run a local or remote smoke path | JWT and `USER_API_KEY` coverage matters for these routes. `worker_jobs` is the default enqueue path; `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false` must fail closed instead of using legacy queue fallback. Package domain rows/cache/artifacts stay retained metadata, not task fact. |
-| Deploy script, `package.json`, `supabase/config.toml`, or PR contract files | `npm run lint`; inspect branch, project-ref, and deploy-flag changes against `AGENTS.md` and `.docpact/config.yaml`; run `npm run check` if runtime inventory or imports changed | if the task includes a real deploy, record which environment was deployed and which function names were used | Remote deploy proof is not implied by local lint or type-check. |
+| Deploy script, `package.json`, `supabase/config.toml`, or PR contract files | `npm run lint`; inspect branch, project-ref, import-map, and deploy-flag changes against `AGENTS.md` and `.docpact/config.yaml`; run `npm run check` if runtime inventory or imports changed | if the task includes a real deploy, record which environment was deployed and which function names were used | Remote deploy proof is not implied by local lint or type-check. Scripted deploys should resolve imports through `supabase/functions/deno.json`. |
 | Auth probe tooling | `npm run lint`; `node scripts/probe-functions-auth.cjs --help`; `npm run probe:auth -- --dry-run` | run `npm run probe:auth -- --remote` or `--local` when the task explicitly includes live probe validation | Dry-run is the safe default when you only changed classification or selection logic. |
 | Repo tests only | `npm run lint`; `npm run check`; targeted `deno check --config supabase/functions/deno.json <changed-test-file>` | run neighboring tests that cover the same shared module or function family | This repo keeps Deno tests in `test/**`, not under each function folder. |
 | Repo docs or docpact config only | `scripts/docpact validate-config --root . --strict`; `scripts/docpact lint --root . --worktree --mode enforce` | perform scenario-based route checks for the affected intent surface | Refresh review metadata when governed docs change without code changes. |
@@ -83,6 +83,7 @@ Facts that matter:
 
 - local serve uses `--no-verify-jwt`
 - scripted remote deploys also use `--no-verify-jwt`
+- scripted remote deploys pass `supabase/functions/deno.json` as the Supabase CLI import map
 - runtime auth still happens inside functions, primarily through `supabase/functions/_shared/auth.ts`
 - `scripts/probe-functions-auth.cjs` is the fastest way to separate gateway rejection from runtime-auth rejection
 
