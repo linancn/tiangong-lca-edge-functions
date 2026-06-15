@@ -176,7 +176,7 @@ Deploy to the production `main` project (`qgzvkongdjqiiamzbbts`) only as part of
 npm run deploy:main -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
 ```
 
-The deploy script pins the Supabase CLI version from `package.json`, sets the target `--project-ref`, and disables gateway JWT verification with `--no-verify-jwt`. Function imports are resolved from `supabase/functions/deno.json`.
+The deploy script pins the Supabase CLI version from `package.json`, sets the target `--project-ref`, disables gateway JWT verification with `--no-verify-jwt`, and passes `supabase/functions/deno.json` as the import map so server-side bundling resolves shared npm/jsr imports.
 
 Recommended deploy workflow:
 
