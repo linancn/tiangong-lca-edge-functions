@@ -182,9 +182,78 @@ function prependSeedTerm(terms: string[], seed: string): string[] {
   return uniqueTerms([normalizedSeed, ...terms]);
 }
 
-function quotePgroongaQueryTerm(term: string): string {
-  const escaped = normalizeTerm(term).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return `"${escaped}"`;
+function isOrBoundary(char: string | undefined): boolean {
+  return !char || /\s|[()]/.test(char);
+}
+
+function isTopLevelOrOperator(term: string, index: number): boolean {
+  return (
+    term.slice(index, index + 2).toLowerCase() === 'or' &&
+    isOrBoundary(term[index - 1]) &&
+    isOrBoundary(term[index + 2])
+  );
+}
+
+function stripOneBalancedOuterParen(term: string): string {
+  const normalized = normalizeTerm(term);
+  if (!normalized.startsWith('(') || !normalized.endsWith(')')) {
+    return normalized;
+  }
+
+  let depth = 0;
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index];
+    if (char === '(') {
+      depth += 1;
+    } else if (char === ')') {
+      depth -= 1;
+      if (depth === 0 && index < normalized.length - 1) {
+        return normalized;
+      }
+    }
+    if (depth < 0) {
+      return normalized;
+    }
+  }
+
+  return depth === 0 ? normalizeTerm(normalized.slice(1, -1)) : normalized;
+}
+
+function splitTopLevelOrTerms(term: string): string[] {
+  const normalized = normalizeTerm(term);
+  if (!normalized) {
+    return [];
+  }
+
+  const parts: string[] = [];
+  let partStart = 0;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const char = normalized[index];
+
+    if (parenDepth === 0 && bracketDepth === 0 && isTopLevelOrOperator(normalized, index)) {
+      parts.push(normalized.slice(partStart, index));
+      partStart = index + 2;
+      index += 1;
+      continue;
+    }
+
+    if (char === '(') {
+      parenDepth += 1;
+    } else if (char === ')') {
+      parenDepth = Math.max(0, parenDepth - 1);
+    } else if (char === '[') {
+      bracketDepth += 1;
+    } else if (char === ']') {
+      bracketDepth = Math.max(0, bracketDepth - 1);
+    }
+  }
+
+  parts.push(normalized.slice(partStart));
+
+  return parts.map(stripOneBalancedOuterParen).filter((part) => part.length > 0);
 }
 
 export function sanitizeHybridQueryOutput(
@@ -244,9 +313,8 @@ export function sanitizeHybridQueryOutput(
   };
 }
 
-export function buildHybridFulltextQueryString(query: HybridSearchQuery): string {
-  return [...query.fulltext_query_zh, ...query.fulltext_query_en]
-    .filter((term) => term.trim().length > 0)
-    .map((term) => `(${quotePgroongaQueryTerm(term)})`)
-    .join(' OR ');
+export function buildHybridFulltextQueryTerms(query: HybridSearchQuery): string[] {
+  return uniqueTerms(
+    [...query.fulltext_query_zh, ...query.fulltext_query_en].flatMap(splitTopLevelOrTerms),
+  );
 }
