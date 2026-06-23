@@ -62,7 +62,7 @@ Deno.test('data_product_results handler accepts unauthenticated public reads', a
   });
   assertEquals(calls, [
     {
-      fn: 'get_published_process_lcia_results',
+      fn: 'get_published_lcia_result_package',
       args: {
         p_process_id: TEST_PROCESS_ID,
         p_process_version: '01.00.000',

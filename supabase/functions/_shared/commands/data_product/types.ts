@@ -5,8 +5,8 @@ export type DataProductProcessSelection = {
   version: string;
 };
 
-export type DataProductRunCreateRequest = {
-  action: 'create_run';
+export type DataProductBuildCreateRequest = {
+  action: 'create_build';
   name: string;
   processes?: DataProductProcessSelection[];
   coverageMode: DataProductCoverageMode;
@@ -34,7 +34,7 @@ export type DataProductPackageUnpublishRequest = {
 };
 
 export type DataProductCommandRequest =
-  | DataProductRunCreateRequest
+  | DataProductBuildCreateRequest
   | DataProductPackagePreviewRequest
   | DataProductPackagePublishRequest
   | DataProductPackageUnpublishRequest;
@@ -52,7 +52,21 @@ export type DataProductCommandExecutionResult =
   | DataProductCommandFailure;
 
 export type DataProductPackageBuildRequest = {
-  runId: string;
-  sourceCommand: DataProductRunCreateRequest;
+  buildId: string;
+  workerJob: DataProductWorkerJobRequest;
   idempotencyKey: string;
+};
+
+export type DataProductWorkerJobRequest = {
+  jobKind: string;
+  payload: Record<string, unknown>;
+  payloadSchemaVersion: string;
+  subjectType: string;
+  subjectId: string;
+  subjectVersion?: string | null;
+  requestedBy: string;
+  requesterType: 'user' | 'system' | 'service' | 'operator';
+  requestHash?: string | null;
+  queueKey?: string | null;
+  visibility?: 'user' | 'operator' | 'system' | null;
 };

@@ -8,9 +8,10 @@ import {
   type DataProductCommandRepository,
 } from './repository.ts';
 import type {
+  DataProductBuildCreateRequest,
   DataProductCommandExecutionResult,
   DataProductCommandRequest,
-  DataProductRunCreateRequest,
+  DataProductWorkerJobRequest,
 } from './types.ts';
 
 const versionPattern = /^\d{2}\.\d{2}\.\d{3}$/;
@@ -24,9 +25,9 @@ const processSelectionSchema = z
   })
   .strict();
 
-const createRunSchema = z
+const createBuildSchema = z
   .object({
-    action: z.literal('create_run'),
+    action: z.literal('create_build'),
     name: nonEmptyTextSchema,
     processes: z.array(processSelectionSchema).min(1).optional(),
     coverageMode: z.enum(['global_eligible', 'subset']).default('global_eligible'),
@@ -61,7 +62,7 @@ const unpublishPublicationSchema = z
   .strict();
 
 export const dataProductCommandRequestSchema = z.discriminatedUnion('action', [
-  createRunSchema,
+  createBuildSchema,
   previewPackageSchema,
   publishPackageSchema,
   unpublishPublicationSchema,
@@ -88,6 +89,69 @@ function stringField(value: unknown, field: string): string | null {
   return typeof fieldValue === 'string' && fieldValue.length > 0 ? fieldValue : null;
 }
 
+function objectField(value: unknown, field: string): Record<string, unknown> | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const fieldValue = value[field];
+  return isRecord(fieldValue) ? fieldValue : null;
+}
+
+function requesterTypeFrom(
+  value: string | null,
+): DataProductWorkerJobRequest['requesterType'] | null {
+  if (value === 'user' || value === 'system' || value === 'service' || value === 'operator') {
+    return value;
+  }
+
+  return null;
+}
+
+function visibilityFrom(value: string | null): DataProductWorkerJobRequest['visibility'] {
+  if (value === 'user' || value === 'operator' || value === 'system') {
+    return value;
+  }
+
+  return null;
+}
+
+function workerJobFrom(value: Record<string, unknown>): DataProductWorkerJobRequest | null {
+  const jobKind = stringField(value, 'jobKind');
+  const payload = objectField(value, 'payload');
+  const payloadSchemaVersion = stringField(value, 'payloadSchemaVersion');
+  const subjectType = stringField(value, 'subjectType');
+  const subjectId = stringField(value, 'subjectId');
+  const requestedBy = stringField(value, 'requestedBy');
+  const requesterType = requesterTypeFrom(stringField(value, 'requesterType'));
+
+  if (
+    !jobKind ||
+    !payload ||
+    !payloadSchemaVersion ||
+    !subjectType ||
+    !subjectId ||
+    !requestedBy ||
+    !requesterType
+  ) {
+    return null;
+  }
+
+  return {
+    jobKind,
+    payload,
+    payloadSchemaVersion,
+    subjectType,
+    subjectId,
+    subjectVersion: stringField(value, 'subjectVersion'),
+    requestedBy,
+    requesterType,
+    requestHash: stringField(value, 'requestHash'),
+    queueKey: stringField(value, 'queueKey'),
+    visibility: visibilityFrom(stringField(value, 'visibility')),
+  };
+}
+
 export function parseDataProductCommand(
   body: unknown,
 ): CommandParseResult<DataProductCommandRequest> {
@@ -104,11 +168,11 @@ export function parseDataProductCommand(
 
 function auditFor(request: DataProductCommandRequest, actor: ActorContext) {
   switch (request.action) {
-    case 'create_run':
+    case 'create_build':
       return buildCommandAuditPayload({
-        command: 'data_product_run_create',
+        command: 'lcia_result_build_request',
         actorUserId: actor.userId,
-        targetTable: 'data_product_runs',
+        targetTable: 'worker_jobs',
         targetId: 'pending',
         targetVersion: '',
         payload: {
@@ -118,9 +182,9 @@ function auditFor(request: DataProductCommandRequest, actor: ActorContext) {
       });
     case 'publish_package':
       return buildCommandAuditPayload({
-        command: 'data_product_package_publish',
+        command: 'lcia_result_package_publish',
         actorUserId: actor.userId,
-        targetTable: 'data_product_packages',
+        targetTable: 'lcia_result_packages',
         targetId: request.packageId,
         targetVersion: '',
         payload: {
@@ -130,9 +194,9 @@ function auditFor(request: DataProductCommandRequest, actor: ActorContext) {
       });
     case 'unpublish_publication':
       return buildCommandAuditPayload({
-        command: 'data_product_package_unpublish',
+        command: 'lcia_result_publication_unpublish',
         actorUserId: actor.userId,
-        targetTable: 'data_product_publications',
+        targetTable: 'lcia_result_publications',
         targetId: request.publicationId,
         targetVersion: '',
         payload: {
@@ -144,33 +208,46 @@ function auditFor(request: DataProductCommandRequest, actor: ActorContext) {
   }
 }
 
-async function executeCreateRun(
-  request: DataProductRunCreateRequest,
+async function executeCreateBuild(
+  request: DataProductBuildCreateRequest,
   actor: ActorContext,
   repository: DataProductCommandRepository,
 ): Promise<DataProductCommandExecutionResult> {
   const audit = auditFor(request, actor)!;
-  const result = await repository.createRun(request, audit);
+  const result = await repository.createBuild(request, audit);
   if (!result.ok) {
     return result;
   }
 
-  const runId = stringField(result.data, 'runId');
-  if (!runId) {
+  const buildId = stringField(result.data, 'buildId');
+  if (!buildId) {
     return {
       ok: false,
-      code: 'data_product_run_id_missing',
+      code: 'lcia_result_build_id_missing',
       status: 502,
-      message: 'Data product run RPC did not return a runId',
+      message: 'LCIA result build RPC did not return a buildId',
+      details: result.data,
+    };
+  }
+
+  const workerJobEnvelope = objectField(result.data, 'workerJob');
+  const workerJobRequest = workerJobFrom(workerJobEnvelope ?? {});
+  if (!workerJobRequest) {
+    return {
+      ok: false,
+      code: 'lcia_result_worker_job_request_missing',
+      status: 502,
+      message: 'LCIA result build RPC did not return a valid worker job request',
       details: result.data,
     };
   }
 
   const workerJob = await repository.enqueuePackageBuild(
     {
-      runId,
-      sourceCommand: request,
-      idempotencyKey: `data_product.package_build:${runId}`,
+      buildId,
+      workerJob: workerJobRequest,
+      idempotencyKey:
+        stringField(workerJobEnvelope, 'idempotencyKey') ?? `lcia_result.package_build:${buildId}`,
     },
     actor,
   );
@@ -179,9 +256,9 @@ async function executeCreateRun(
       ok: false,
       code: 'worker_jobs_enqueue_failed',
       status: workerJob.status,
-      message: 'Failed to enqueue data product package build',
+      message: 'Failed to enqueue LCIA result package build',
       details: {
-        runId,
+        buildId,
         error: workerJob.error,
         details: workerJob.details ?? null,
       },
@@ -191,16 +268,11 @@ async function executeCreateRun(
   if (!workerJob.workerJobId) {
     return {
       ok: false,
-      code: 'data_product_worker_job_id_missing',
+      code: 'lcia_result_worker_job_id_missing',
       status: 502,
       message: 'Worker enqueue RPC did not return a worker job id',
       details: workerJob.data,
     };
-  }
-
-  const attached = await repository.attachRunWorkerJob(runId, workerJob.workerJobId);
-  if (!attached.ok) {
-    return attached;
   }
 
   return {
@@ -208,9 +280,9 @@ async function executeCreateRun(
     status: 200,
     body: {
       ok: true,
-      command: 'data_product_run_create',
+      command: 'lcia_result_build_request',
       data: {
-        ...(isRecord(result.data) ? result.data : { runId }),
+        ...(isRecord(result.data) ? result.data : { buildId }),
         workerJobId: workerJob.workerJobId,
       },
     },
@@ -223,8 +295,8 @@ export async function executeDataProductCommand(
   repository: DataProductCommandRepository = createDataProductCommandRepository(actor.supabase),
 ): Promise<DataProductCommandExecutionResult> {
   switch (request.action) {
-    case 'create_run':
-      return executeCreateRun(request, actor, repository);
+    case 'create_build':
+      return executeCreateBuild(request, actor, repository);
     case 'preview_package': {
       const result = await repository.previewPackage(request);
       if (!result.ok) {
@@ -234,7 +306,7 @@ export async function executeDataProductCommand(
         ok: true,
         body: {
           ok: true,
-          command: 'data_product_package_preview',
+          command: 'lcia_result_package_preview',
           data: result.data,
         },
       };
@@ -248,7 +320,7 @@ export async function executeDataProductCommand(
         ok: true,
         body: {
           ok: true,
-          command: 'data_product_package_publish',
+          command: 'lcia_result_package_publish',
           data: result.data,
         },
       };
@@ -262,7 +334,7 @@ export async function executeDataProductCommand(
         ok: true,
         body: {
           ok: true,
-          command: 'data_product_package_unpublish',
+          command: 'lcia_result_publication_unpublish',
           data: result.data,
         },
       };

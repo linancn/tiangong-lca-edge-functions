@@ -2,11 +2,11 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import type { CommandAuditPayload } from '../command_runtime/audit_log.ts';
 import type {
+  DataProductBuildCreateRequest,
   DataProductCommandFailure,
   DataProductPackagePreviewRequest,
   DataProductPackagePublishRequest,
   DataProductPackageUnpublishRequest,
-  DataProductRunCreateRequest,
 } from '../commands/data_product/types.ts';
 
 type RpcClient = Pick<SupabaseClient, 'rpc'>;
@@ -80,8 +80,8 @@ async function callDataProductRpc(
   };
 }
 
-export function buildDataProductRunCreateRpcArgs(
-  request: DataProductRunCreateRequest,
+export function buildLciaResultBuildRequestRpcArgs(
+  request: DataProductBuildCreateRequest,
   audit: CommandAuditPayload,
 ): Record<string, unknown> {
   return {
@@ -115,6 +115,8 @@ export function buildDataProductPackagePublishRpcArgs(
   };
 }
 
+export const buildLciaResultPackagePublishRpcArgs = buildDataProductPackagePublishRpcArgs;
+
 export function buildDataProductPackageUnpublishRpcArgs(
   request: DataProductPackageUnpublishRequest,
   audit: CommandAuditPayload,
@@ -136,15 +138,15 @@ export function buildDataProductPublishedResultsRpcArgs(
   };
 }
 
-export function callDataProductRunCreateRpc(
+export function callLciaResultBuildRequestRpc(
   supabase: RpcClient,
-  request: DataProductRunCreateRequest,
+  request: DataProductBuildCreateRequest,
   audit: CommandAuditPayload,
 ) {
   return callDataProductRpc(
     supabase,
-    'cmd_data_product_run_create',
-    buildDataProductRunCreateRpcArgs(request, audit),
+    'cmd_lcia_result_build_request',
+    buildLciaResultBuildRequestRpcArgs(request, audit),
   );
 }
 
@@ -154,19 +156,19 @@ export function callDataProductPackagePreviewRpc(
 ) {
   return callDataProductRpc(
     supabase,
-    'get_data_product_package_preview',
+    'get_lcia_result_package_preview',
     buildDataProductPackagePreviewRpcArgs(request),
   );
 }
 
-export function callDataProductPackagePublishRpc(
+export function callLciaResultPackagePublishRpc(
   supabase: RpcClient,
   request: DataProductPackagePublishRequest,
   audit: CommandAuditPayload,
 ) {
   return callDataProductRpc(
     supabase,
-    'cmd_data_product_package_publish',
+    'cmd_lcia_result_package_publish',
     buildDataProductPackagePublishRpcArgs(request, audit),
   );
 }
@@ -178,7 +180,7 @@ export function callDataProductPackageUnpublishRpc(
 ) {
   return callDataProductRpc(
     supabase,
-    'cmd_data_product_package_unpublish',
+    'cmd_lcia_result_publication_unpublish',
     buildDataProductPackageUnpublishRpcArgs(request, audit),
   );
 }
@@ -189,7 +191,7 @@ export function callDataProductPublishedResultsRpc(
 ) {
   return callDataProductRpc(
     supabase,
-    'get_published_process_lcia_results',
+    'get_published_lcia_result_package',
     buildDataProductPublishedResultsRpcArgs(request),
   );
 }
