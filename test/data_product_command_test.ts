@@ -173,6 +173,85 @@ Deno.test('createDataProductCommandRepository requires an explicit actor Supabas
 });
 
 Deno.test(
+  'createDataProductCommandRepository enqueues canonical data product package payloads',
+  async () => {
+    const serviceClient = new FakeRpcSupabase({
+      data: {
+        ok: true,
+        data: {
+          id: TEST_WORKER_JOB_ID,
+          status: 'queued',
+        },
+      },
+      error: null,
+    });
+    const repository = createDataProductCommandRepository(
+      new FakeRpcSupabase({ data: null, error: null }) as never,
+      serviceClient as never,
+    );
+
+    const result = await repository.enqueuePackageBuild(
+      {
+        runId: TEST_RUN_ID,
+        idempotencyKey: `data_product.package_build:${TEST_RUN_ID}`,
+        sourceCommand: {
+          action: 'create_run',
+          name: 'June public data product',
+          coverageMode: 'global_eligible',
+          defaultImpactCategory: 'climate-change',
+          lciaMethodSet: [],
+        },
+      },
+      fakeActor,
+    );
+
+    assertEquals(result, {
+      ok: true,
+      workerJobId: TEST_WORKER_JOB_ID,
+      data: {
+        id: TEST_WORKER_JOB_ID,
+        status: 'queued',
+      },
+    });
+    assertEquals(serviceClient.calls, [
+      {
+        fn: 'worker_enqueue_job',
+        args: {
+          p_job_kind: 'data_product.package_build',
+          p_payload_json: {
+            type: 'data_product_package_build',
+            run_id: TEST_RUN_ID,
+            requested_by: TEST_USER_ID,
+            coverage_mode: 'global_eligible',
+            default_impact_category: 'climate-change',
+            lcia_method_set: [],
+          },
+          p_payload_schema_version: 'data_product.package_build.request.v1',
+          p_subject_type: 'data_product_run',
+          p_subject_id: TEST_RUN_ID,
+          p_subject_version: null,
+          p_requested_by: TEST_USER_ID,
+          p_requester_type: 'operator',
+          p_team_id: null,
+          p_idempotency_key: `data_product.package_build:${TEST_RUN_ID}`,
+          p_request_hash: TEST_RUN_ID,
+          p_concurrency_key: null,
+          p_priority: null,
+          p_queue_key: TEST_RUN_ID,
+          p_run_after: null,
+          p_visibility: 'operator',
+          p_max_attempts: null,
+          p_timeout_at: null,
+          p_payload_ref: null,
+          p_parent_job_id: null,
+          p_root_job_id: null,
+        },
+      },
+    ]);
+  },
+);
+
+Deno.test(
   'executeDataProductCommand create_run enqueues package build and returns workerJobId',
   async () => {
     const calls: string[] = [];
@@ -194,6 +273,7 @@ Deno.test(
         calls.push('enqueuePackageBuild');
         assertEquals(actor.userId, TEST_USER_ID);
         assertEquals(request.runId, TEST_RUN_ID);
+        assertEquals(request.sourceCommand.action, 'create_run');
         assertEquals(request.idempotencyKey, `data_product.package_build:${TEST_RUN_ID}`);
         return Promise.resolve({
           ok: true,

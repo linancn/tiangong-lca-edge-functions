@@ -82,7 +82,7 @@ export function createDataProductCommandRepository(
       enqueueCalculatorWorkerJob(serviceSupabase, {
         jobKind: 'data_product.package_build',
         payload: {
-          type: 'data_product.package_build',
+          type: 'data_product_package_build',
           run_id: request.runId,
           requested_by: actor.userId,
           coverage_mode: request.sourceCommand.coverageMode,
