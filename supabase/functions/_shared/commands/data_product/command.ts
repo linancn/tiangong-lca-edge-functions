@@ -4,6 +4,17 @@ import type { ActorContext } from '../../command_runtime/actor_context.ts';
 import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
 import type { CommandParseResult } from '../../command_runtime/command.ts';
 import {
+  type AllUnitQueryEnvelope,
+  deriveSnapshotIndexUrl,
+  inputManifestSummaryFromPackagePreview,
+  inputScopeFromPackagePreview,
+  previewMetadataRefsFromProjection,
+  projectLciaResultPackagePreviewRows,
+  queryArtifactUrlFromPackagePreview,
+  snapshotIdFromPackagePreview,
+  type SnapshotIndexDocument,
+} from './package_preview_projection.ts';
+import {
   createDataProductCommandRepository,
   type DataProductCommandRepository,
 } from './repository.ts';
@@ -11,6 +22,7 @@ import type {
   DataProductBuildCreateRequest,
   DataProductCommandExecutionResult,
   DataProductCommandRequest,
+  DataProductPackagePreviewRequest,
   DataProductWorkerJobRequest,
 } from './types.ts';
 
@@ -41,6 +53,13 @@ const previewPackageSchema = z
   .object({
     action: z.literal('preview_package'),
     packageId: uuidSchema,
+    impactCategoryId: nonEmptyTextSchema.optional(),
+    rowOffset: z.number().int().min(0).optional(),
+    rowLimit: z.number().int().min(1).max(100).optional(),
+    inputOffset: z.number().int().min(0).optional(),
+    inputLimit: z.number().int().min(1).max(100).optional(),
+    resultOffset: z.number().int().min(0).optional(),
+    resultLimit: z.number().int().min(1).max(100).optional(),
   })
   .strict();
 
@@ -61,11 +80,19 @@ const unpublishPublicationSchema = z
   })
   .strict();
 
+const listPublicationsSchema = z
+  .object({
+    action: z.literal('list_publications'),
+    limit: z.number().int().min(1).max(200).optional(),
+  })
+  .strict();
+
 export const dataProductCommandRequestSchema = z.discriminatedUnion('action', [
   createBuildSchema,
   previewPackageSchema,
   publishPackageSchema,
   unpublishPublicationSchema,
+  listPublicationsSchema,
 ]);
 
 function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResult<T> {
@@ -114,6 +141,115 @@ function visibilityFrom(value: string | null): DataProductWorkerJobRequest['visi
   }
 
   return null;
+}
+
+function compactPackagePreviewData(data: Record<string, unknown>): Record<string, unknown> {
+  const { inputManifest: _inputManifest, ...baseData } = data;
+  const inputManifest = inputManifestSummaryFromPackagePreview(data);
+  return {
+    ...baseData,
+    ...(inputManifest ? { inputManifest } : {}),
+    inputScope: inputScopeFromPackagePreview(data),
+  };
+}
+
+async function enrichPackagePreview(
+  data: unknown,
+  request: DataProductPackagePreviewRequest,
+  repository: DataProductCommandRepository,
+): Promise<unknown> {
+  if (!isRecord(data)) {
+    return data;
+  }
+
+  const warnings: Array<Record<string, unknown>> = [];
+  let snapshotIndex: SnapshotIndexDocument | null = null;
+  let queryArtifact: AllUnitQueryEnvelope | null = null;
+  const snapshotId = snapshotIdFromPackagePreview(data);
+  const queryArtifactUrl = queryArtifactUrlFromPackagePreview(data);
+
+  if (snapshotId) {
+    const snapshotArtifact = await repository.fetchSnapshotArtifactUrl(snapshotId);
+    if (snapshotArtifact.ok) {
+      const snapshotIndexResult = await repository.fetchJsonArtifact<SnapshotIndexDocument>(
+        deriveSnapshotIndexUrl(snapshotArtifact.data.artifactUrl),
+      );
+      if (snapshotIndexResult.ok) {
+        snapshotIndex = snapshotIndexResult.data;
+      } else {
+        warnings.push({
+          code: 'snapshot_index_fetch_failed',
+          detail: snapshotIndexResult.error,
+        });
+      }
+    } else {
+      warnings.push({
+        code: snapshotArtifact.code,
+        detail: snapshotArtifact.message,
+      });
+    }
+  } else {
+    warnings.push({ code: 'snapshot_id_missing' });
+  }
+
+  if (queryArtifactUrl) {
+    const queryArtifactResult =
+      await repository.fetchJsonArtifact<AllUnitQueryEnvelope>(queryArtifactUrl);
+    if (queryArtifactResult.ok) {
+      queryArtifact = queryArtifactResult.data;
+    } else {
+      warnings.push({
+        code: 'query_artifact_fetch_failed',
+        detail: queryArtifactResult.error,
+      });
+    }
+  } else {
+    warnings.push({ code: 'query_artifact_url_missing' });
+  }
+
+  let projection = projectLciaResultPackagePreviewRows({
+    preview: data,
+    request,
+    snapshotIndex,
+    queryArtifact,
+  });
+  const previewMetadataRefs = previewMetadataRefsFromProjection(projection);
+  if (
+    previewMetadataRefs.processes.length > 0 ||
+    previewMetadataRefs.impactCategoryIds.length > 0
+  ) {
+    const metadataResult = await repository.fetchPreviewMetadata(previewMetadataRefs);
+    if (metadataResult.ok) {
+      projection = projectLciaResultPackagePreviewRows({
+        preview: data,
+        request,
+        snapshotIndex,
+        queryArtifact,
+        processMetadata: metadataResult.data.processes,
+        impactMetadata: metadataResult.data.impacts,
+      });
+      if (metadataResult.data.warnings) {
+        warnings.push(
+          ...metadataResult.data.warnings.map((warning) => ({
+            code: warning.code,
+            detail: warning.message,
+            details: warning.details,
+          })),
+        );
+      }
+    } else {
+      warnings.push({
+        code: metadataResult.code,
+        detail: metadataResult.message,
+      });
+    }
+  }
+
+  return {
+    ...compactPackagePreviewData(data),
+    ...projection,
+    ...(warnings.length > 0 ? { previewWarnings: warnings } : {}),
+  };
 }
 
 function workerJobFrom(value: Record<string, unknown>): DataProductWorkerJobRequest | null {
@@ -204,6 +340,7 @@ function auditFor(request: DataProductCommandRequest, actor: ActorContext) {
         },
       });
     case 'preview_package':
+    case 'list_publications':
       return null;
   }
 }
@@ -302,12 +439,13 @@ export async function executeDataProductCommand(
       if (!result.ok) {
         return result;
       }
+      const data = await enrichPackagePreview(result.data, request, repository);
       return {
         ok: true,
         body: {
           ok: true,
           command: 'lcia_result_package_preview',
-          data: result.data,
+          data,
         },
       };
     }
@@ -335,6 +473,20 @@ export async function executeDataProductCommand(
         body: {
           ok: true,
           command: 'lcia_result_publication_unpublish',
+          data: result.data,
+        },
+      };
+    }
+    case 'list_publications': {
+      const result = await repository.listPublications(request);
+      if (!result.ok) {
+        return result;
+      }
+      return {
+        ok: true,
+        body: {
+          ok: true,
+          command: 'lcia_result_publications_list',
           data: result.data,
         },
       };

@@ -13,6 +13,8 @@ import { createSupabaseServiceClient } from '../supabase_client.ts';
 import type { WorkerJobResult, WorkerJobStatus } from './dataset/types.ts';
 
 const uuidSchema = z.string().uuid();
+const SYSTEM_TEAM_ID = '00000000-0000-0000-0000-000000000000';
+const DATA_PRODUCT_MANAGER_ROLES = ['data_product_manager'] as const;
 const workerJobStatuses = [
   'queued',
   'running',
@@ -37,6 +39,7 @@ const listSchema = z
     subjectType: z.string().min(1).optional(),
     subjectId: uuidSchema.optional(),
     statuses: z.array(z.enum(workerJobStatuses)).optional(),
+    visibility: z.enum(['user', 'operator']).optional(),
     limit: z.number().int().min(1).max(200).optional(),
   })
   .strict();
@@ -97,6 +100,143 @@ function normalizeWorkerJobList(data: unknown): WorkerJobResult[] {
   return Array.isArray(data) ? data.map(normalizeWorkerJob) : [];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() !== '' ? value : undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  return values.find((value): value is string => stringValue(value) !== undefined);
+}
+
+function numberValue(value: unknown): number | undefined {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+function isLciaResultBuildJob(job: WorkerJobResult): boolean {
+  return job.subjectType === 'lcia_result_build' || job.jobKind === 'lcia_result.package_build';
+}
+
+function dataProductWorkerJobId(job: WorkerJobResult): string | undefined {
+  return isLciaResultBuildJob(job) ? stringValue(job.id) : undefined;
+}
+
+function payloadName(row: Record<string, unknown> | undefined): string | undefined {
+  const payload = isRecord(row?.payload_json) ? row.payload_json : {};
+  return firstString(payload.name, payload.packageName, payload.package_name);
+}
+
+function resultPackageFrom(job: WorkerJobResult): Record<string, unknown> {
+  const result = isRecord(job.result) ? job.result : {};
+  return isRecord(result.package) ? result.package : {};
+}
+
+function mergedResultPackage(
+  job: WorkerJobResult,
+  name: string | undefined,
+  packageRow: Record<string, unknown> | undefined,
+): Record<string, unknown> | null {
+  const currentPackage = resultPackageFrom(job);
+  const hasPackageMetadata = Boolean(packageRow) || Object.keys(currentPackage).length > 0;
+  if (!hasPackageMetadata) {
+    return null;
+  }
+
+  return {
+    ...currentPackage,
+    ...(packageRow?.id ? { packageId: packageRow.id } : {}),
+    ...(name ? { packageName: name } : {}),
+    ...(packageRow?.package_version ? { packageVersion: packageRow.package_version } : {}),
+    ...(packageRow?.status ? { status: packageRow.status } : {}),
+    ...(numberValue(packageRow?.eligible_input_count) !== undefined
+      ? { eligibleInputCount: numberValue(packageRow?.eligible_input_count) }
+      : {}),
+    ...(numberValue(packageRow?.included_input_count) !== undefined
+      ? { includedInputCount: numberValue(packageRow?.included_input_count) }
+      : {}),
+  };
+}
+
+export function mergeDataProductWorkerJobMetadata(
+  jobs: WorkerJobResult[],
+  workerRows: Record<string, unknown>[],
+  packageRows: Record<string, unknown>[],
+): WorkerJobResult[] {
+  const payloadByJobId = new Map<string, Record<string, unknown>>();
+  workerRows.forEach((row) => {
+    const id = stringValue(row.id);
+    if (id) {
+      payloadByJobId.set(id, row);
+    }
+  });
+
+  const packageByWorkerJobId = new Map<string, Record<string, unknown>>();
+  packageRows.forEach((row) => {
+    const workerJobId = stringValue(row.build_worker_job_id);
+    if (workerJobId) {
+      packageByWorkerJobId.set(workerJobId, row);
+    }
+  });
+
+  return jobs.map((job) => {
+    const jobId = dataProductWorkerJobId(job);
+    if (!jobId) {
+      return job;
+    }
+
+    const name = payloadName(payloadByJobId.get(jobId));
+    const packageRow = packageByWorkerJobId.get(jobId);
+    const resultPackage = mergedResultPackage(job, name, packageRow);
+    return {
+      ...job,
+      ...(name ? { packageName: name, resultSetName: name } : {}),
+      ...(resultPackage
+        ? {
+            result: {
+              ...(isRecord(job.result) ? job.result : {}),
+              package: resultPackage,
+            },
+          }
+        : {}),
+    };
+  });
+}
+
+async function enrichDataProductWorkerJobMetadata(
+  jobs: WorkerJobResult[],
+  serviceClient: SupabaseClient,
+): Promise<WorkerJobResult[]> {
+  const jobIds = Array.from(new Set(jobs.map(dataProductWorkerJobId).filter(Boolean)));
+  if (jobIds.length === 0) {
+    return jobs;
+  }
+
+  const [{ data: workerRows, error: workerError }, { data: packageRows, error: packageError }] =
+    await Promise.all([
+      serviceClient.from('worker_jobs').select('id,payload_json').in('id', jobIds),
+      serviceClient
+        .from('lcia_result_packages')
+        .select(
+          'build_worker_job_id,id,package_version,status,eligible_input_count,included_input_count',
+        )
+        .in('build_worker_job_id', jobIds),
+    ]);
+
+  if (workerError || packageError) {
+    return jobs;
+  }
+
+  return mergeDataProductWorkerJobMetadata(
+    jobs,
+    Array.isArray(workerRows) ? workerRows : [],
+    Array.isArray(packageRows) ? packageRows : [],
+  );
+}
+
 function ensureUserCanRead(
   job: WorkerJobResult,
   actor: ActorContext,
@@ -107,6 +247,41 @@ function ensureUserCanRead(
       code: 'WORKER_JOB_NOT_FOUND',
       status: 404,
       message: 'Worker job not found',
+    };
+  }
+
+  return null;
+}
+
+async function ensureDataProductManager(
+  actor: ActorContext,
+  serviceClient: SupabaseClient,
+): Promise<CommandExecutionResult | null> {
+  const { data, error } = await serviceClient
+    .from('roles')
+    .select('user_id')
+    .eq('user_id', actor.userId)
+    .eq('team_id', SYSTEM_TEAM_ID)
+    .in('role', [...DATA_PRODUCT_MANAGER_ROLES])
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      ok: false,
+      code: 'DATA_PRODUCT_MANAGER_CHECK_FAILED',
+      status: 502,
+      message: 'Unable to verify data-product-manager permissions',
+      details: error,
+    };
+  }
+
+  if (!data) {
+    return {
+      ok: false,
+      code: 'DATA_PRODUCT_MANAGER_REQUIRED',
+      status: 403,
+      message: 'Data product manager permissions are required to list operator worker jobs',
     };
   }
 
@@ -132,12 +307,20 @@ export async function executeWorkerJobCommand(
   serviceClient: SupabaseClient = createSupabaseServiceClient(),
 ): Promise<CommandExecutionResult> {
   if (request.action === 'list') {
+    const visibility = request.visibility ?? 'user';
+    if (visibility === 'operator') {
+      const aclFailure = await ensureDataProductManager(actor, serviceClient);
+      if (aclFailure) {
+        return aclFailure;
+      }
+    }
+
     const result = await callWorkerJobListRpc(serviceClient, {
       requestedBy: actor.userId,
       subjectType: request.subjectType ?? null,
       subjectId: request.subjectId ?? null,
       statuses: request.statuses ?? null,
-      visibility: 'user',
+      visibility,
       limit: request.limit ?? 50,
       includeInternal: false,
     });
@@ -145,12 +328,17 @@ export async function executeWorkerJobCommand(
       return rpcFailure(result);
     }
 
+    const jobs = await enrichDataProductWorkerJobMetadata(
+      normalizeWorkerJobList(result.data),
+      serviceClient,
+    );
+
     return {
       ok: true,
       body: {
         ok: true,
         command: 'worker_jobs_list',
-        data: normalizeWorkerJobList(result.data),
+        data: jobs,
       },
     };
   }

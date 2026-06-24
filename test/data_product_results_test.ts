@@ -6,6 +6,7 @@ import {
 } from '../supabase/functions/data_product_results/index.ts';
 
 const TEST_PROCESS_ID = '11111111-1111-4111-8111-111111111111';
+const TEST_PROCESS_B_ID = '22222222-2222-4222-8222-222222222222';
 
 Deno.test('dataProductPublishedResultsRequestSchema rejects arbitrary package ids', () => {
   const parsed = dataProductPublishedResultsRequestSchema.safeParse({
@@ -19,23 +20,23 @@ Deno.test('dataProductPublishedResultsRequestSchema rejects arbitrary package id
 });
 
 Deno.test('data_product_results handler accepts unauthenticated public reads', async () => {
-  const calls: Array<{ fn: string; args: unknown }> = [];
+  const calls: unknown[] = [];
   const handler = createDataProductResultsHandler({
-    supabase: {
-      rpc: (fn: string, args: unknown) => {
-        calls.push({ fn, args });
+    repository: {
+      queryCurrentPublicResults: (request: unknown) => {
+        calls.push(request);
         return Promise.resolve({
+          ok: true,
           data: {
-            ok: true,
-            data: {
-              rows: [{ processId: TEST_PROCESS_ID, impactCategoryId: 'climate-change' }],
-              rowCount: 1,
-            },
+            publication: { publicationId: 'publication-1' },
+            package: { packageId: 'package-1' },
+            process: { processId: TEST_PROCESS_ID, processVersion: '01.00.000' },
+            values: [{ impact_id: 'climate-change', value: 42 }],
+            rowCount: 1,
           },
-          error: null,
         });
       },
-    } as never,
+    },
   });
 
   const response = await handler(
@@ -56,20 +57,145 @@ Deno.test('data_product_results handler accepts unauthenticated public reads', a
   assertEquals(await response.json(), {
     ok: true,
     data: {
-      rows: [{ processId: TEST_PROCESS_ID, impactCategoryId: 'climate-change' }],
+      publication: { publicationId: 'publication-1' },
+      package: { packageId: 'package-1' },
+      process: { processId: TEST_PROCESS_ID, processVersion: '01.00.000' },
+      values: [{ impact_id: 'climate-change', value: 42 }],
       rowCount: 1,
     },
   });
   assertEquals(calls, [
     {
-      fn: 'get_published_lcia_result_package',
-      args: {
-        p_process_id: TEST_PROCESS_ID,
-        p_process_version: '01.00.000',
-        p_impact_category_id: 'climate-change',
-      },
+      mode: 'process_all_impacts',
+      processId: TEST_PROCESS_ID,
+      processVersion: '01.00.000',
+      impactCategoryId: 'climate-change',
     },
   ]);
+});
+
+Deno.test(
+  'data_product_results handler accepts current-public selected process impact reads',
+  async () => {
+    const calls: unknown[] = [];
+    const handler = createDataProductResultsHandler({
+      repository: {
+        queryCurrentPublicResults: (request: unknown) => {
+          calls.push(request);
+          return Promise.resolve({
+            ok: true,
+            data: {
+              mode: 'processes_one_impact',
+              impactCategoryId: 'climate-change',
+              values: {
+                [TEST_PROCESS_ID]: 42,
+                [TEST_PROCESS_B_ID]: -3,
+              },
+              rowCount: 2,
+            },
+          });
+        },
+      },
+    });
+
+    const response = await handler(
+      new Request('http://localhost/functions/v1/data_product_results', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'processes_one_impact',
+          impactCategoryId: 'climate-change',
+          processes: [
+            { id: TEST_PROCESS_ID, version: '01.00.000' },
+            { id: TEST_PROCESS_B_ID, version: '01.00.000' },
+          ],
+        }),
+      }),
+    );
+
+    assertEquals(response.status, 200);
+    assertEquals(await response.json(), {
+      ok: true,
+      data: {
+        mode: 'processes_one_impact',
+        impactCategoryId: 'climate-change',
+        values: {
+          [TEST_PROCESS_ID]: 42,
+          [TEST_PROCESS_B_ID]: -3,
+        },
+        rowCount: 2,
+      },
+    });
+    assertEquals(calls, [
+      {
+        mode: 'processes_one_impact',
+        impactCategoryId: 'climate-change',
+        processes: [
+          { id: TEST_PROCESS_ID, version: '01.00.000' },
+          { id: TEST_PROCESS_B_ID, version: '01.00.000' },
+        ],
+      },
+    ]);
+  },
+);
+
+Deno.test('data_product_results handler accepts current-public hotspot ranking reads', async () => {
+  const calls: unknown[] = [];
+  const handler = createDataProductResultsHandler({
+    repository: {
+      queryCurrentPublicResults: (request: unknown) => {
+        calls.push(request);
+        return Promise.resolve({
+          ok: true,
+          data: {
+            kind: 'ranked_processes',
+            impact_id: 'climate-change',
+            offset: 10,
+            limit: 5,
+            total_process_count: 20,
+            total_absolute_value: 100,
+            values: [
+              {
+                process_id: TEST_PROCESS_ID,
+                process_version: '01.00.000',
+                process_index: 0,
+                value: 42,
+                absolute_value: 42,
+              },
+            ],
+          },
+        });
+      },
+    },
+  });
+
+  const response = await handler(
+    new Request('http://localhost/functions/v1/data_product_results', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        mode: 'ranked_processes_one_impact',
+        impactCategoryId: 'climate-change',
+        offset: 10,
+        limit: 5,
+      }),
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(calls, [
+    {
+      mode: 'ranked_processes_one_impact',
+      impactCategoryId: 'climate-change',
+      offset: 10,
+      limit: 5,
+    },
+  ]);
+  assertEquals((await response.json()).data.kind, 'ranked_processes');
 });
 
 Deno.test('data_product_results handler rejects GET requests with package ids', async () => {
