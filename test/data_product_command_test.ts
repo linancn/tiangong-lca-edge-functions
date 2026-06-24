@@ -23,6 +23,7 @@ const TEST_USER_ID = '22222222-2222-4222-8222-222222222222';
 const TEST_BUILD_ID = '33333333-3333-4333-8333-333333333333';
 const TEST_WORKER_JOB_ID = '44444444-4444-4444-8444-444444444444';
 const TEST_PACKAGE_ID = '55555555-5555-4555-8555-555555555555';
+const TEST_PUBLICATION_ID = '66666666-6666-4666-8666-666666666666';
 
 const fakeActor: ActorContext = {
   userId: TEST_USER_ID,
@@ -52,6 +53,12 @@ const auditPayload = buildCommandAuditPayload({
   payload: {},
 });
 
+const unusedPreviewProjectionDeps = {
+  fetchSnapshotArtifactUrl: () => Promise.reject(new Error('not used')),
+  fetchJsonArtifact: () => Promise.reject(new Error('not used')),
+  fetchPreviewMetadata: () => Promise.reject(new Error('not used')),
+};
+
 Deno.test('dataProductCommandRequestSchema accepts create_build defaults', () => {
   const parsed = dataProductCommandRequestSchema.safeParse({
     action: 'create_build',
@@ -64,6 +71,27 @@ Deno.test('dataProductCommandRequestSchema accepts create_build defaults', () =>
     assertEquals(parsed.data.coverageMode, 'global_eligible');
     assertEquals(parsed.data.lciaMethodSet, []);
   }
+});
+
+Deno.test('dataProductCommandRequestSchema accepts preview pagination controls', () => {
+  const parsed = dataProductCommandRequestSchema.safeParse({
+    action: 'preview_package',
+    packageId: TEST_PACKAGE_ID,
+    impactCategoryId: 'climate-change',
+    rowOffset: 25,
+    rowLimit: 50,
+  });
+
+  assertEquals(parsed.success, true);
+});
+
+Deno.test('dataProductCommandRequestSchema accepts publication list controls', () => {
+  const parsed = dataProductCommandRequestSchema.safeParse({
+    action: 'list_publications',
+    limit: 50,
+  });
+
+  assertEquals(parsed.success, true);
 });
 
 Deno.test(
@@ -307,8 +335,10 @@ Deno.test(
         });
       },
       previewPackage: () => Promise.reject(new Error('not used')),
+      ...unusedPreviewProjectionDeps,
       publishPackage: () => Promise.reject(new Error('not used')),
       unpublishPublication: () => Promise.reject(new Error('not used')),
+      listPublications: () => Promise.reject(new Error('not used')),
     };
 
     const result = await executeDataProductCommand(
@@ -359,6 +389,260 @@ Deno.test(
   },
 );
 
+Deno.test(
+  'executeDataProductCommand preview_package returns enriched result detail rows',
+  async () => {
+    const testSnapshotId = '77777777-7777-4777-8777-777777777777';
+    const testProcessId = '88888888-8888-4888-8888-888888888888';
+    const repository: DataProductCommandRepository = {
+      createBuild: () => Promise.reject(new Error('not used')),
+      enqueuePackageBuild: () => Promise.reject(new Error('not used')),
+      previewPackage: () =>
+        Promise.resolve({
+          ok: true,
+          data: {
+            summary: {
+              packageId: TEST_PACKAGE_ID,
+              snapshotId: testSnapshotId,
+              defaultImpactCategory: 'impact-climate',
+            },
+            inputManifest: {
+              processes: [
+                {
+                  id: testProcessId,
+                  version: '01.00.000',
+                  stateCode: 100,
+                },
+              ],
+            },
+            queryArtifact: {
+              artifactUrl: 's3://lca-artifacts/results/query-sidecar.json',
+            },
+          },
+        }),
+      fetchSnapshotArtifactUrl: (snapshotId) => {
+        assertEquals(snapshotId, testSnapshotId);
+        return Promise.resolve({
+          ok: true,
+          data: {
+            snapshotId,
+            artifactUrl: 's3://lca-artifacts/snapshots/snapshot/sparse.h5',
+          },
+        });
+      },
+      fetchJsonArtifact: <T>(artifactUrl: string) => {
+        if (artifactUrl.endsWith('snapshot-index-v1.json')) {
+          const data = {
+            version: 1,
+            snapshot_id: testSnapshotId,
+            process_count: 1,
+            impact_count: 1,
+            process_map: [
+              {
+                process_id: testProcessId,
+                process_version: '01.00.000',
+                process_index: 0,
+              },
+            ],
+            impact_map: [
+              {
+                impact_id: 'impact-climate',
+                impact_key: 'climate-change',
+                impact_index: 0,
+                impact_name: 'Climate change',
+                unit: 'kg CO2 eq',
+              },
+            ],
+          };
+          return Promise.resolve({
+            ok: true,
+            data: data as T,
+          });
+        }
+        assertEquals(artifactUrl, 's3://lca-artifacts/results/query-sidecar.json');
+        const data = {
+          version: 1,
+          format: 'all-unit-query:v1',
+          snapshot_id: testSnapshotId,
+          job_id: TEST_BUILD_ID,
+          process_count: 1,
+          impact_count: 1,
+          h_matrix: [[42]],
+        };
+        return Promise.resolve({
+          ok: true,
+          data: data as T,
+        });
+      },
+      fetchPreviewMetadata: (request) => {
+        assertEquals(request, {
+          processes: [{ processId: testProcessId, processVersion: '01.00.000' }],
+          impactCategoryIds: ['impact-climate'],
+        });
+        return Promise.resolve({
+          ok: true,
+          data: {
+            processes: [
+              {
+                processId: testProcessId,
+                processVersion: '01.00.000',
+                processName: 'Portland cement production',
+              },
+            ],
+            impacts: [
+              {
+                impactCategoryId: 'impact-climate',
+                impactVersion: '01.00.000',
+                impactName: 'Climate change',
+                unit: 'kg CO2 equivalents',
+              },
+            ],
+          },
+        });
+      },
+      publishPackage: () => Promise.reject(new Error('not used')),
+      unpublishPublication: () => Promise.reject(new Error('not used')),
+      listPublications: () => Promise.reject(new Error('not used')),
+    };
+
+    const result = await executeDataProductCommand(
+      {
+        action: 'preview_package',
+        packageId: TEST_PACKAGE_ID,
+        impactCategoryId: 'impact-climate',
+        rowLimit: 25,
+      },
+      fakeActor,
+      repository,
+    );
+
+    assertEquals(result, {
+      ok: true,
+      body: {
+        ok: true,
+        command: 'lcia_result_package_preview',
+        data: {
+          summary: {
+            packageId: TEST_PACKAGE_ID,
+            snapshotId: testSnapshotId,
+            defaultImpactCategory: 'impact-climate',
+          },
+          inputManifest: {},
+          inputScope: {
+            processCount: 1,
+            selectionMode: null,
+            predicateVersion: null,
+            stateCodeCounts: [{ stateCode: '100', count: 1 }],
+          },
+          queryArtifact: {
+            artifactUrl: 's3://lca-artifacts/results/query-sidecar.json',
+          },
+          detailPage: {
+            status: 'ready',
+            impactCategoryId: 'impact-climate',
+            impactKey: 'climate-change',
+            impactIndex: 0,
+            impactName: 'Climate change',
+            impactVersion: '01.00.000',
+            unit: 'kg CO2 equivalents',
+            offset: 0,
+            limit: 25,
+            returnedCount: 1,
+            totalCount: 1,
+            omittedInputCount: 0,
+            rows: [
+              {
+                rowNumber: 1,
+                processId: testProcessId,
+                processVersion: '01.00.000',
+                processName: 'Portland cement production',
+                processIndex: 0,
+                stateCode: 100,
+                impactCategoryId: 'impact-climate',
+                impactKey: 'climate-change',
+                impactIndex: 0,
+                impactName: 'Climate change',
+                impactVersion: '01.00.000',
+                unit: 'kg CO2 equivalents',
+                value: 42,
+              },
+            ],
+          },
+          impactOptions: [
+            {
+              impactCategoryId: 'impact-climate',
+              impactKey: 'climate-change',
+              impactIndex: 0,
+              impactName: 'Climate change',
+              impactVersion: '01.00.000',
+              unit: 'kg CO2 equivalents',
+            },
+          ],
+        },
+      },
+    });
+  },
+);
+
+Deno.test(
+  'executeDataProductCommand list_publications returns publication management rows',
+  async () => {
+    const repository = {
+      createBuild: () => Promise.reject(new Error('not used')),
+      enqueuePackageBuild: () => Promise.reject(new Error('not used')),
+      previewPackage: () => Promise.reject(new Error('not used')),
+      ...unusedPreviewProjectionDeps,
+      publishPackage: () => Promise.reject(new Error('not used')),
+      unpublishPublication: () => Promise.reject(new Error('not used')),
+      listPublications: () =>
+        Promise.resolve({
+          ok: true,
+          data: [
+            {
+              publicationId: TEST_PUBLICATION_ID,
+              packageId: TEST_PACKAGE_ID,
+              packageName: 'June result set',
+              packageVersion: '2026-06-public',
+              status: 'published',
+              isCurrent: true,
+              displayDefaultImpactCategory: 'climate-change',
+              publishedAt: '2026-06-24T09:00:00Z',
+            },
+          ],
+        }),
+    } as unknown as DataProductCommandRepository;
+
+    const result = await executeDataProductCommand(
+      {
+        action: 'list_publications',
+        limit: 50,
+      } as unknown as DataProductCommandRequest,
+      fakeActor,
+      repository,
+    );
+
+    assertEquals(result, {
+      ok: true,
+      body: {
+        ok: true,
+        command: 'lcia_result_publications_list',
+        data: [
+          {
+            publicationId: TEST_PUBLICATION_ID,
+            packageId: TEST_PACKAGE_ID,
+            packageName: 'June result set',
+            packageVersion: '2026-06-public',
+            status: 'published',
+            isCurrent: true,
+            displayDefaultImpactCategory: 'climate-change',
+            publishedAt: '2026-06-24T09:00:00Z',
+          },
+        ],
+      },
+    });
+  },
+);
+
 Deno.test('executeDataProductCommand propagates manager authorization failures', async () => {
   const repository: DataProductCommandRepository = {
     createBuild: () =>
@@ -370,8 +654,10 @@ Deno.test('executeDataProductCommand propagates manager authorization failures',
       }),
     enqueuePackageBuild: () => Promise.reject(new Error('not used')),
     previewPackage: () => Promise.reject(new Error('not used')),
+    ...unusedPreviewProjectionDeps,
     publishPackage: () => Promise.reject(new Error('not used')),
     unpublishPublication: () => Promise.reject(new Error('not used')),
+    listPublications: () => Promise.reject(new Error('not used')),
   };
 
   const result = await executeDataProductCommand(

@@ -18,6 +18,13 @@ export type DataProductBuildCreateRequest = {
 export type DataProductPackagePreviewRequest = {
   action: 'preview_package';
   packageId: string;
+  impactCategoryId?: string;
+  rowOffset?: number;
+  rowLimit?: number;
+  inputOffset?: number;
+  inputLimit?: number;
+  resultOffset?: number;
+  resultLimit?: number;
 };
 
 export type DataProductPackagePublishRequest = {
@@ -33,11 +40,17 @@ export type DataProductPackageUnpublishRequest = {
   reason?: string;
 };
 
+export type DataProductPublicationListRequest = {
+  action: 'list_publications';
+  limit?: number;
+};
+
 export type DataProductCommandRequest =
   | DataProductBuildCreateRequest
   | DataProductPackagePreviewRequest
   | DataProductPackagePublishRequest
-  | DataProductPackageUnpublishRequest;
+  | DataProductPackageUnpublishRequest
+  | DataProductPublicationListRequest;
 
 export type DataProductCommandFailure = {
   ok: false;
