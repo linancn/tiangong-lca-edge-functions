@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-06-15'
-lastReviewedCommit: '5c48d14b29cc8473ace0b6c88078651d45111753'
+lastReviewedAt: '2026-06-24'
+lastReviewedCommit: 'a8053128974b95993793e1cb2f51f015edec3368'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -339,7 +339,7 @@ rules:
       - path: README.md
         mode: review_or_update
       - path: test.example.http
-        mode: review_or_update
+        mode: must_exist
     reason: Review-submit gate API and submit-review assertion metadata define the edge contract consumed by Next and backed by database-engine RPC truth.
   - id: edge-functions-proof-and-ci-contract
     scope: repo
