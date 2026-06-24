@@ -157,12 +157,14 @@ function buildPackagePreviewEnvelope(packageRow: Record<string, unknown>) {
   };
 }
 
-function impactCategoryIdsForRequest(
+export function impactCategoryIdsForRequest(
   request: DataProductPublishedResultsRequest,
   snapshotIndex: SnapshotIndexDocument,
 ): string[] {
   if (request.mode === 'process_all_impacts' && !request.impactCategoryId) {
-    return snapshotIndex.impact_map.map((entry) => entry.impact_id).filter(Boolean);
+    // The snapshot index already carries names and units for all impact rows. Fetching method
+    // metadata for every impact can turn a single-process read into a large DB fanout.
+    return [];
   }
   return [request.impactCategoryId].filter((impactCategoryId): impactCategoryId is string =>
     Boolean(impactCategoryId),
