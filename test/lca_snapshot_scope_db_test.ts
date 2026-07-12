@@ -56,8 +56,12 @@ Deno.test(
   async () => {
     const broad = await buildSnapshotProcessFilter('current_user', 'user-1');
     const foreignActor = await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-2');
+    const supersededCombinedScope = {
+      ...(await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-1')),
+      scope_manifest_sha256: '348b347f1bc962707aa69010b1e8e2e9f1cdfbc9eff2ca075d4bb625a4309f7d',
+    };
 
-    for (const processFilter of [broad, foreignActor, null]) {
+    for (const processFilter of [broad, foreignActor, supersededCombinedScope, null]) {
       const state: MockState = {
         row: processFilter ? { process_filter: processFilter } : null,
         error: null,
