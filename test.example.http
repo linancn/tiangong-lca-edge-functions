@@ -270,6 +270,26 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
       "print_level": 0
     }'
 
+### @name LCA_Solve：Local (public state 100 + current-owner draft state 0)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --header 'X-Idempotency-Key: local-public-owner-draft-001' \
+    --data '{
+      "scope": "prod",
+      "data_scope": "public_plus_owner_draft",
+      "demand": {
+        "process_id": "{{$dotenv LCA_PROCESS_ID}}",
+        "amount": 1.0
+      },
+      "solve": {
+        "return_x": true,
+        "return_g": true,
+        "return_h": true
+      },
+      "print_level": 0
+    }'
+
 
 ### @name LCA_Job_Status：Local (path param)
 curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_jobs/{{$dotenv LCA_JOB_ID}}' \
