@@ -1,12 +1,12 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
-import { supabaseServiceClient } from '../_shared/supabase_client.ts';
+import { APP_CODE, applyActionToDesiredState } from '../_shared/identity_center.ts';
 import {
   decideWebhookAction,
   verifyWebhookSignature,
   type WebhookEnvelope,
 } from '../_shared/identity_center_core.ts';
-import { applyActionToDesiredState, APP_CODE } from '../_shared/identity_center.ts';
+import { supabaseServiceClient } from '../_shared/supabase_client.ts';
 
 const SECRET = Deno.env.get('IDENTITY_CENTER_WEBHOOK_SECRET') ?? '';
 
@@ -61,7 +61,9 @@ Deno.serve(async (req: Request) => {
   } catch (e) {
     // 处理失败:删除幂等记录以允许平台重试
     await supabaseServiceClient
-      .from('identity_center_processed_events').delete().eq('event_id', dedupeKey);
+      .from('identity_center_processed_events')
+      .delete()
+      .eq('event_id', dedupeKey);
     return json(500, { error: e instanceof Error ? e.message : String(e) });
   }
 });

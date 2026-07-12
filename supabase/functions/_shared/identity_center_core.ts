@@ -8,7 +8,11 @@ export type WebhookEnvelope = {
 
 export type WebhookAction =
   | { kind: 'ignore'; reason: string }
-  | { kind: 'set-status'; keycloakSub: string; status: 'active' | 'disabled' | 'revoked' | 'deleted' }
+  | {
+      kind: 'set-status';
+      keycloakSub: string;
+      status: 'active' | 'disabled' | 'revoked' | 'deleted';
+    }
   | { kind: 'assign-role'; keycloakSub: string; roleCode: string }
   | { kind: 'revoke-role'; keycloakSub: string; roleCode: string | null }
   | { kind: 'sync-profile'; keycloakSub: string; displayName?: string }
@@ -73,7 +77,11 @@ export function decideWebhookAction(e: WebhookEnvelope, appCode: string): Webhoo
         ? { kind: 'assign-role', keycloakSub, roleCode: e.roleCode }
         : { kind: 'ignore', reason: 'no roleCode' };
     case 'application.role.revoked':
-      return { kind: 'revoke-role', keycloakSub, roleCode: typeof e.roleCode === 'string' ? e.roleCode : null };
+      return {
+        kind: 'revoke-role',
+        keycloakSub,
+        roleCode: typeof e.roleCode === 'string' ? e.roleCode : null,
+      };
     default:
       return { kind: 'ignore', reason: `unhandled eventType ${e.eventType}` };
   }
@@ -86,8 +94,11 @@ export function decideLocalRole(
 ): { write: false } | { write: true; role: string } {
   if (action.kind === 'assign-role') return { write: true, role: action.roleCode };
   if (action.kind === 'revoke-role') {
-    if (current && (action.roleCode === null || current === action.roleCode)
-      && (MANAGED_ROLES as readonly string[]).includes(current)) {
+    if (
+      current &&
+      (action.roleCode === null || current === action.roleCode) &&
+      (MANAGED_ROLES as readonly string[]).includes(current)
+    ) {
       return { write: true, role: 'member' };
     }
     return { write: false };
@@ -115,13 +126,20 @@ export async function verifyWebhookSignature(input: {
   const now = input.nowSeconds ?? Math.floor(Date.now() / 1000);
   const ts = Number(input.timestamp);
   if (!Number.isFinite(ts)) return { valid: false, reason: 'invalid timestamp' };
-  if (Math.abs(now - ts) > TOLERANCE_SECONDS) return { valid: false, reason: 'timestamp out of window' };
+  if (Math.abs(now - ts) > TOLERANCE_SECONDS)
+    return { valid: false, reason: 'timestamp out of window' };
 
   const key = await globalThis.crypto.subtle.importKey(
-    'raw', encoder.encode(input.secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+    'raw',
+    encoder.encode(input.secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
   );
   const mac = await globalThis.crypto.subtle.sign(
-    'HMAC', key, encoder.encode(`${input.timestamp}.${input.rawBody}`),
+    'HMAC',
+    key,
+    encoder.encode(`${input.timestamp}.${input.rawBody}`),
   );
   const expected = `sha256=${btoa(String.fromCharCode(...new Uint8Array(mac)))}`;
   return timingSafeEqualStr(expected, input.signature)
@@ -131,6 +149,7 @@ export async function verifyWebhookSignature(input: {
 
 /** resource_access[clientId].roles 是否含准入/指定角色 */
 export function hasAccessRole(claims: unknown, clientId: string, role: string): boolean {
-  const ra = (claims as { resource_access?: Record<string, { roles?: string[] }> })?.resource_access;
+  const ra = (claims as { resource_access?: Record<string, { roles?: string[] }> })
+    ?.resource_access;
   return Boolean(ra?.[clientId]?.roles?.includes(role));
 }

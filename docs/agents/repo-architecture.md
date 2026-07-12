@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-04
-lastReviewedCommit: 2545c522c8b5f03cd5c94471c1891126f10e432b
+lastReviewedAt: 2026-07-12
+lastReviewedCommit: 7615906b40fdbd7602b78f6f28339bf5ed764697
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -157,6 +157,8 @@ Shared scope logic lives in:
 - `supabase/functions/_shared/lca_snapshot_scope.ts`
 
 `supabase/functions/_shared/worker_jobs_cutover.ts` owns the handoff from Edge runtime requests to database-owned `worker_jobs`, and `supabase/functions/_shared/lca_snapshot_build_queue.ts` owns shared snapshot-build enqueue/reuse. The default path enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `worker_enqueue_job` without creating new `lca_jobs` rows. `lca_result_cache` remains retained result/cache metadata and stores both compatibility `job_id` and canonical `worker_job_id` where applicable. Setting `LCA_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new LCA worker submissions and fails closed with `legacy_queue_disabled`; it must not fall back to legacy `lca_enqueue_job`. Edge still owns auth and request normalization only; `tiangong-lca-worker` owns execution.
+
+The named `public_plus_owner_draft` calculation scope is a distinct versioned snapshot family. Edge freezes the authenticated actor and exact public-state-100 plus owner-state-0 predicate in a manifest and SHA-256; the owner-draft branch additionally requires null `team_id` and `review_id` on process/flow rows so team/reviewer visibility cannot leak into account-local calculation. Edge rejects explicit snapshots with any different binding and passes the same proof to the worker together with database LCIA source-snapshot and incomplete-coverage contracts. Worker execution must independently enforce that contract and return matching `lca.calculation_evidence.v1`; solve, query, and contribution-path routes reject missing, drifted, or internally inconsistent evidence before returning numeric values. Missing characterization factors are never represented as complete zero impact.
 
 ### TIDAS package flows
 

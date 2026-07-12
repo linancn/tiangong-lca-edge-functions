@@ -2,14 +2,14 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { AuthMethod, authenticateRequest, handleCors } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
-import { supabaseAuthClient, supabaseServiceClient } from '../_shared/supabase_client.ts';
-import { assertOk, hasAccessRole } from '../_shared/identity_center_core.ts';
 import {
   ACCESS_ROLE,
   KC_CLIENT_ID,
   materializeForUser,
   verifyKeycloakToken,
 } from '../_shared/identity_center.ts';
+import { assertOk, hasAccessRole } from '../_shared/identity_center_core.ts';
+import { supabaseAuthClient, supabaseServiceClient } from '../_shared/supabase_client.ts';
 
 function json(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
@@ -29,7 +29,8 @@ Deno.serve(async (req: Request) => {
     authClient: supabaseAuthClient,
     allowedMethods: [AuthMethod.JWT],
   });
-  if (!auth.isAuthenticated || !auth.user) return auth.response ?? json(401, { code: 'UNAUTHENTICATED' });
+  if (!auth.isAuthenticated || !auth.user)
+    return auth.response ?? json(401, { code: 'UNAUTHENTICATED' });
 
   const { providerToken } = await req.json().catch(() => ({}));
   if (typeof providerToken !== 'string' || !providerToken) {
@@ -37,7 +38,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const payload = await verifyKeycloakToken(providerToken);
-  if (!payload?.sub) return json(401, { code: 'UNAUTHENTICATED', reason: 'invalid provider token' });
+  if (!payload?.sub)
+    return json(401, { code: 'UNAUTHENTICATED', reason: 'invalid provider token' });
 
   // token 主体必须就是当前 Supabase 用户的 keycloak 身份(防挪用他人 token)。
   // `UserIdentity.id`(@supabase/auth-js 2.98.0 `src/lib/types.ts`)是身份提供方自身的
@@ -62,7 +64,12 @@ Deno.serve(async (req: Request) => {
     // 使写失败抛入下方 catch → 503 SYNC_PENDING(可重试),而非静默返回 200。
     assertOk(
       await supabaseServiceClient.from('identity_center_users').upsert(
-        { keycloak_sub: payload.sub, user_id: auth.user.id, status: 'active', modified_at: new Date().toISOString() },
+        {
+          keycloak_sub: payload.sub,
+          user_id: auth.user.id,
+          status: 'active',
+          modified_at: new Date().toISOString(),
+        },
         { onConflict: 'keycloak_sub' },
       ),
       '绑定映射',
