@@ -1,5 +1,7 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
+import type { LcaCalculationEvidenceBinding } from './lca_snapshot_scope.ts';
+
 import {
   enqueueCalculatorWorkerJob,
   isWorkerJobsCutoverEnabled,
@@ -27,6 +29,7 @@ type AllUnitSolvePayload = {
   snapshot_id: string;
   solve: { return_x: false; return_g: false; return_h: true };
   print_level: number;
+  calculation_evidence_binding?: LcaCalculationEvidenceBinding;
 };
 
 type AllUnitSolveNormalizedRequest = {
@@ -36,6 +39,7 @@ type AllUnitSolveNormalizedRequest = {
   demand_mode: 'all_unit';
   solve: { return_x: false; return_g: false; return_h: true };
   print_level: number;
+  calculation_evidence_binding?: LcaCalculationEvidenceBinding;
 };
 
 export type LcaAllUnitSolveQueueResult =
@@ -55,6 +59,7 @@ export async function ensureLcaAllUnitSolveQueued(
     scope: string;
     snapshotId: string;
     userId: string;
+    calculationEvidenceBinding?: LcaCalculationEvidenceBinding | null;
     readEnv?: EnvReader;
   },
 ): Promise<LcaAllUnitSolveQueueResult> {
@@ -66,6 +71,9 @@ export async function ensureLcaAllUnitSolveQueued(
     demand_mode: 'all_unit',
     solve,
     print_level: 0,
+    ...(args.calculationEvidenceBinding
+      ? { calculation_evidence_binding: args.calculationEvidenceBinding }
+      : {}),
   };
   const requestKey = await sha256Hex(JSON.stringify(normalizedRequest));
   const nowIso = new Date().toISOString();
@@ -118,11 +126,16 @@ export async function ensureLcaAllUnitSolveQueued(
     snapshot_id: args.snapshotId,
     solve,
     print_level: 0,
+    ...(args.calculationEvidenceBinding
+      ? { calculation_evidence_binding: args.calculationEvidenceBinding }
+      : {}),
   };
   const workerJob = await enqueueCalculatorWorkerJob(supabase, {
     jobKind,
     payload,
-    payloadSchemaVersion: workerJobPayloadSchemaVersion(jobKind),
+    payloadSchemaVersion: args.calculationEvidenceBinding
+      ? 'lca.solve_all_unit.request.v2'
+      : workerJobPayloadSchemaVersion(jobKind),
     subjectType: 'lca_job',
     subjectId: newJobId,
     subjectVersion: args.snapshotId,

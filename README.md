@@ -385,10 +385,14 @@ Job response states map to HTTP status as follows:
 ## LCA Function Call Patterns
 
 - `lca_solve`: `POST` only.
-  - optional `data_scope`: `"current_user"` (default), `"open_data"`, `"all_data"`
+  - optional `data_scope`: `"current_user"` (default), `"open_data"`, `"all_data"`, `"public_plus_owner_draft"`
   - body can combine `data_scope` with normal solve payload, for example `{ "data_scope": "current_user", "demand": { "process_index": 0, "amount": 1.0 } }`
-  - snapshot family semantics: all three scopes reuse the same user-enhanced snapshot family, i.e. published data plus the current user's private data
+  - legacy snapshot family semantics: `current_user`, `open_data`, and `all_data` reuse the same user-enhanced snapshot family, i.e. published data plus the current user's private data
   - root-process semantics stay distinct: `current_user` only accepts current-user processes, `open_data` only accepts published processes, `all_data` accepts published plus current-user processes
+  - `public_plus_owner_draft` is a separate versioned scope: it admits exactly public `state_code=100` rows plus authenticated-owner `state_code=0` rows that are not team-assigned or review-linked, and rejects public 101–199, foreign/team/reviewer drafts, and owner nonzero states
+  - its snapshot request carries an actor-bound scope manifest and SHA-256, a database `public.lciamethods` method/factor source-snapshot requirement, and an LCIA coverage contract where unmatched, invalid, or unsupported-direction factors mean incomplete coverage rather than zero impact
+  - explicit snapshot IDs are accepted for this scope only when their stored process filter exactly matches the same actor-bound manifest and hash
+  - solve, query, and contribution-path routes fail closed unless the snapshot index returns matching `lca.calculation_evidence.v1`; successful responses bind the database source hashes and complete/incomplete coverage counts
   - missing snapshot auto-build is attempted for every `data_scope`
 - `lca_jobs`: retained compatibility route, supports `GET` and `POST`.
   - `GET`: `/functions/v1/lca_jobs/{jobId}` or `?job_id=...`

@@ -13,15 +13,21 @@ import {
 } from '../_shared/lca_process_scope.ts';
 import { ensureLcaSnapshotBuildQueued } from '../_shared/lca_snapshot_build_queue.ts';
 import {
+  buildLcaCalculationEvidenceBinding,
   buildSnapshotContainsFilter,
   buildSnapshotProcessFilter,
+  buildSnapshotVisibilityOrExpression,
   matchesSnapshotProcessFilter,
   parseLcaDataScope,
   parseSnapshotProcessFilter,
+  PUBLIC_PLUS_OWNER_DRAFT_SCOPE,
   shouldAutoBuildSnapshot,
+  validateCalculationEvidenceForDataScope,
+  type LcaCalculationEvidenceBinding,
   type LcaDataScope,
   type ParsedSnapshotProcessFilter,
 } from '../_shared/lca_snapshot_scope.ts';
+import { verifySnapshotMatchesDataScope } from '../_shared/lca_snapshot_scope_db.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient, supabaseClient } from '../_shared/supabase_client.ts';
 
@@ -71,6 +77,7 @@ type SnapshotIndexDocument = {
   impact_count: number;
   process_map: SnapshotIndexProcessEntry[];
   impact_map: SnapshotIndexImpactEntry[];
+  calculation_evidence?: unknown;
 };
 
 type AllUnitQueryEnvelope = {
@@ -190,6 +197,7 @@ Deno.serve(async (req) => {
           build_job_id: queued.job_id,
           build_worker_job_id: queued.worker_job_id ?? null,
           build_snapshot_id: queued.snapshot_id,
+          calculation_contract: queued.calculation_contract,
         },
         409,
       );
@@ -211,6 +219,15 @@ Deno.serve(async (req) => {
   if (snapshotIndex.data.snapshot_id !== snapshotId) {
     return json({ error: 'snapshot_index_mismatch' }, 500);
   }
+  const calculationEvidence = await resolveCalculationEvidenceBinding(
+    snapshotIndex.data.calculation_evidence,
+    dataScope,
+    userId,
+  );
+  if (!calculationEvidence.ok) {
+    return json({ error: calculationEvidence.error }, 409);
+  }
+  const calculationEvidenceBinding = calculationEvidence.binding;
 
   const latestAllUnit = await fetchLatestAllUnit(snapshotId);
   if (!latestAllUnit.ok) {
@@ -221,6 +238,7 @@ Deno.serve(async (req) => {
       scope,
       snapshotId,
       userId,
+      calculationEvidenceBinding,
     });
     if (!queued.ok) {
       return json({ error: queued.error, details: queued.details ?? null }, queued.status);
@@ -234,6 +252,7 @@ Deno.serve(async (req) => {
         solve_job_id: queued.job_id,
         solve_worker_job_id: queued.worker_job_id,
         fallback_requested: allowFallback,
+        ...(calculationEvidenceBinding ? { calculation_evidence: calculationEvidenceBinding } : {}),
       },
       409,
     );
@@ -335,6 +354,9 @@ Deno.serve(async (req) => {
           cache_hit: false,
           computed_at: computedAt,
           query_artifact_format: latestAllUnit.row.query_artifact_format,
+          ...(calculationEvidenceBinding
+            ? { calculation_evidence: calculationEvidenceBinding }
+            : {}),
           ...(source === 'fallback_solve_one'
             ? {
                 scaled_from_all_unit_result_id: latestAllUnit.row.result_id,
@@ -473,6 +495,9 @@ Deno.serve(async (req) => {
           cache_hit: false,
           computed_at: latestAllUnit.row.computed_at,
           query_artifact_format: latestAllUnit.row.query_artifact_format,
+          ...(calculationEvidenceBinding
+            ? { calculation_evidence: calculationEvidenceBinding }
+            : {}),
         },
       },
       200,
@@ -534,11 +559,29 @@ Deno.serve(async (req) => {
         cache_hit: false,
         computed_at: latestAllUnit.row.computed_at,
         query_artifact_format: latestAllUnit.row.query_artifact_format,
+        ...(calculationEvidenceBinding ? { calculation_evidence: calculationEvidenceBinding } : {}),
       },
     },
     200,
   );
 });
+
+async function resolveCalculationEvidenceBinding(
+  raw: unknown,
+  dataScope: LcaDataScope,
+  userId: string,
+): Promise<
+  { ok: true; binding: LcaCalculationEvidenceBinding | null } | { ok: false; error: string }
+> {
+  const validation = await validateCalculationEvidenceForDataScope(dataScope, userId, raw);
+  if (!validation.ok) {
+    return validation;
+  }
+  return {
+    ok: true,
+    binding: validation.evidence ? buildLcaCalculationEvidenceBinding(validation.evidence) : null,
+  };
+}
 
 async function resolveReadySnapshot(
   scope: string,
@@ -555,6 +598,23 @@ async function resolveReadySnapshot(
     const ready = await fetchSnapshotArtifactMeta(explicit);
     if (!ready.ok) {
       return { ok: false, error: ready.error, status: ready.status };
+    }
+    if (dataScope === PUBLIC_PLUS_OWNER_DRAFT_SCOPE && userId) {
+      const scopeVerification = await verifySnapshotMatchesDataScope(supabaseClient, {
+        snapshotId: explicit,
+        dataScope,
+        userId,
+      });
+      if (!scopeVerification.ok) {
+        return {
+          ok: false,
+          error: scopeVerification.error,
+          status: scopeVerification.status,
+        };
+      }
+      if (!scopeVerification.matches) {
+        return { ok: false, error: 'snapshot_not_in_data_scope', status: 403 };
+      }
     }
     return { ok: true, data: { snapshot_id: ready.data.snapshot_id } };
   }
@@ -616,7 +676,7 @@ async function fetchReadySnapshotForDataScope(
   userId: string,
   dataScope: LcaDataScope,
 ): Promise<ScopedSnapshotResolution> {
-  const expectedProcessFilter = buildSnapshotProcessFilter(dataScope, userId);
+  const expectedProcessFilter = await buildSnapshotProcessFilter(dataScope, userId);
   const { data, error } = await supabaseClient
     .from('lca_network_snapshots')
     .select('id,created_at,process_filter')
@@ -704,16 +764,9 @@ async function fetchProcessMaxModifiedAt(
     .order('modified_at', { ascending: false })
     .limit(1);
 
-  if (!filter.allStates) {
-    if (filter.processStates.length > 0 && filter.includeUserId) {
-      query = query.or(
-        `state_code.in.(${filter.processStates.join(',')}),user_id.eq.${filter.includeUserId}`,
-      );
-    } else if (filter.processStates.length > 0) {
-      query = query.in('state_code', filter.processStates);
-    } else if (filter.includeUserId) {
-      query = query.eq('user_id', filter.includeUserId);
-    }
+  const visibilityExpression = buildSnapshotVisibilityOrExpression(filter);
+  if (!filter.allStates && visibilityExpression) {
+    query = query.or(visibilityExpression);
   }
 
   const { data, error } = await query.maybeSingle();
@@ -734,16 +787,11 @@ async function fetchTableMaxModifiedAt(
     .order('modified_at', { ascending: false })
     .limit(1);
 
-  if (!filter.allStates) {
-    if (filter.processStates.length > 0 && filter.includeUserId) {
-      query = query.or(
-        `state_code.in.(${filter.processStates.join(',')}),user_id.eq.${filter.includeUserId}`,
-      );
-    } else if (filter.processStates.length > 0) {
-      query = query.in('state_code', filter.processStates);
-    } else if (filter.includeUserId) {
-      query = query.eq('user_id', filter.includeUserId);
-    }
+  const visibilityExpression = buildSnapshotVisibilityOrExpression(filter, {
+    supportsCollaborationColumns: table === 'flows',
+  });
+  if (!filter.allStates && visibilityExpression) {
+    query = query.or(visibilityExpression);
   }
 
   const { data, error } = await query.maybeSingle();

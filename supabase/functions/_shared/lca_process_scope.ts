@@ -1,8 +1,16 @@
-import { DEFAULT_PUBLISHED_PROCESS_STATES, type LcaDataScope } from './lca_snapshot_scope.ts';
+import {
+  DEFAULT_PUBLISHED_PROCESS_STATES,
+  OWNER_DRAFT_PROCESS_STATE,
+  PUBLIC_PLUS_OWNER_DRAFT_SCOPE,
+  PUBLIC_PROCESS_STATE,
+  type LcaDataScope,
+} from './lca_snapshot_scope.ts';
 
 export type ProcessScopeMeta = {
   state_code: number | null;
   user_id: string | null;
+  team_id: string | null;
+  review_id: string | null;
 };
 
 export type ProcessScopeEntry = {
@@ -32,6 +40,14 @@ export function matchesProcessDataScope(
   const isOwnedByCurrentUser = meta.user_id === userId;
 
   switch (dataScope) {
+    case PUBLIC_PLUS_OWNER_DRAFT_SCOPE:
+      return (
+        meta.state_code === PUBLIC_PROCESS_STATE ||
+        (meta.state_code === OWNER_DRAFT_PROCESS_STATE &&
+          isOwnedByCurrentUser &&
+          meta.team_id === null &&
+          meta.review_id === null)
+      );
     case 'open_data':
       return isPublished;
     case 'all_data':
@@ -58,7 +74,7 @@ export async function fetchProcessScopeLookup(
     const chunk = uniqueIds.slice(index, index + chunkSize);
     const { data, error } = await supabaseClient
       .from('processes')
-      .select('id,version,state_code,user_id')
+      .select('id,version,state_code,user_id,team_id,review_id')
       .in('id', chunk);
 
     if (error) {
@@ -88,10 +104,20 @@ export async function fetchProcessScopeLookup(
         typeof (row as { user_id?: unknown }).user_id === 'string'
           ? String((row as { user_id?: unknown }).user_id).trim() || null
           : null;
+      const teamId =
+        typeof (row as { team_id?: unknown }).team_id === 'string'
+          ? String((row as { team_id?: unknown }).team_id).trim() || null
+          : null;
+      const reviewId =
+        typeof (row as { review_id?: unknown }).review_id === 'string'
+          ? String((row as { review_id?: unknown }).review_id).trim() || null
+          : null;
 
       lookup.set(processScopeLookupKey(processId, processVersion), {
         state_code: stateCode,
         user_id: userId,
+        team_id: teamId,
+        review_id: reviewId,
       });
     }
   }

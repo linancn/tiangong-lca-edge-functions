@@ -6,15 +6,21 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { validateProcessEntriesInDataScope } from '../_shared/lca_process_scope.ts';
 import { ensureLcaSnapshotBuildQueued } from '../_shared/lca_snapshot_build_queue.ts';
 import {
+  buildLcaCalculationEvidenceBinding,
   buildSnapshotContainsFilter,
   buildSnapshotProcessFilter,
+  buildSnapshotVisibilityOrExpression,
   matchesSnapshotProcessFilter,
   parseLcaDataScope,
   parseSnapshotProcessFilter,
+  PUBLIC_PLUS_OWNER_DRAFT_SCOPE,
   shouldAutoBuildSnapshot,
+  validateCalculationEvidenceForDataScope,
+  type LcaCalculationEvidenceBinding,
   type LcaDataScope,
   type ParsedSnapshotProcessFilter,
 } from '../_shared/lca_snapshot_scope.ts';
+import { verifySnapshotMatchesDataScope } from '../_shared/lca_snapshot_scope_db.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient, supabaseClient } from '../_shared/supabase_client.ts';
 import {
@@ -52,6 +58,7 @@ type SolveResponse = {
   job_id?: string;
   worker_job_id?: string | null;
   result_id?: string;
+  calculation_evidence?: LcaCalculationEvidenceBinding;
 };
 
 type ReadySnapshotMeta = {
@@ -69,6 +76,7 @@ type SnapshotIndexProcessEntry = {
 type SnapshotIndexDocument = {
   snapshot_id: string;
   process_map: SnapshotIndexProcessEntry[];
+  calculation_evidence?: unknown;
 };
 
 type ScopedSnapshotResolution =
@@ -155,6 +163,7 @@ Deno.serve(async (req) => {
           build_job_id: queued.job_id,
           build_worker_job_id: queued.worker_job_id ?? null,
           build_snapshot_id: queued.snapshot_id,
+          calculation_contract: queued.calculation_contract,
         },
         409,
       );
@@ -163,6 +172,16 @@ Deno.serve(async (req) => {
   }
 
   const { snapshot_id: snapshotId, process_count: processCount } = snapshotMeta.data;
+  const calculationEvidence = await resolveCalculationEvidenceBinding({
+    dataScope,
+    userId,
+    snapshotId,
+    artifactUrl: snapshotMeta.data.artifact_url,
+  });
+  if (!calculationEvidence.ok) {
+    return json({ error: calculationEvidence.error }, calculationEvidence.status);
+  }
+  const calculationEvidenceBinding = calculationEvidence.binding;
   const newJobId = crypto.randomUUID();
   let jobType: 'solve_one' | 'solve_all_unit' = 'solve_one';
   let payload:
@@ -173,6 +192,7 @@ Deno.serve(async (req) => {
         rhs: number[];
         solve: { return_x: boolean; return_g: boolean; return_h: boolean };
         print_level: number;
+        calculation_evidence_binding?: LcaCalculationEvidenceBinding;
       }
     | {
         type: 'solve_all_unit';
@@ -181,6 +201,7 @@ Deno.serve(async (req) => {
         solve: { return_x: boolean; return_g: boolean; return_h: boolean };
         unit_batch_size?: number;
         print_level: number;
+        calculation_evidence_binding?: LcaCalculationEvidenceBinding;
       };
   let normalizedRequest:
     | {
@@ -191,6 +212,7 @@ Deno.serve(async (req) => {
         demand: { process_index: number; amount: number };
         solve: { return_x: boolean; return_g: boolean; return_h: boolean };
         print_level: number;
+        calculation_evidence_binding?: LcaCalculationEvidenceBinding;
       }
     | {
         version: string;
@@ -199,6 +221,7 @@ Deno.serve(async (req) => {
         demand_mode: 'all_unit';
         solve: { return_x: boolean; return_g: boolean; return_h: boolean };
         print_level: number;
+        calculation_evidence_binding?: LcaCalculationEvidenceBinding;
       };
 
   if (demandMode === 'single') {
@@ -280,6 +303,9 @@ Deno.serve(async (req) => {
       rhs,
       solve,
       print_level: printLevel,
+      ...(calculationEvidenceBinding
+        ? { calculation_evidence_binding: calculationEvidenceBinding }
+        : {}),
     };
     normalizedRequest = {
       version: REQUEST_VERSION,
@@ -292,6 +318,9 @@ Deno.serve(async (req) => {
       },
       solve,
       print_level: printLevel,
+      ...(calculationEvidenceBinding
+        ? { calculation_evidence_binding: calculationEvidenceBinding }
+        : {}),
     };
     jobType = 'solve_one';
   } else {
@@ -316,6 +345,9 @@ Deno.serve(async (req) => {
       solve,
       unit_batch_size: unitBatchSize === undefined ? undefined : Number(unitBatchSize),
       print_level: printLevel,
+      ...(calculationEvidenceBinding
+        ? { calculation_evidence_binding: calculationEvidenceBinding }
+        : {}),
     };
     normalizedRequest = {
       version: REQUEST_VERSION,
@@ -324,6 +356,9 @@ Deno.serve(async (req) => {
       demand_mode: 'all_unit',
       solve,
       print_level: printLevel,
+      ...(calculationEvidenceBinding
+        ? { calculation_evidence_binding: calculationEvidenceBinding }
+        : {}),
     };
     jobType = 'solve_all_unit';
   }
@@ -354,6 +389,7 @@ Deno.serve(async (req) => {
         snapshot_id: snapshotId,
         cache_key: requestKey,
         result_id: existingCache.row.result_id,
+        ...(calculationEvidenceBinding ? { calculation_evidence: calculationEvidenceBinding } : {}),
       };
       return json(cacheHit, 200);
     }
@@ -368,6 +404,7 @@ Deno.serve(async (req) => {
         cache_key: requestKey,
         job_id: existingCache.row.job_id ?? undefined,
         worker_job_id: existingCache.row.worker_job_id,
+        ...(calculationEvidenceBinding ? { calculation_evidence: calculationEvidenceBinding } : {}),
       };
       return json(inProgress, 200);
     }
@@ -390,7 +427,9 @@ Deno.serve(async (req) => {
   const workerJob = await enqueueCalculatorWorkerJob(supabaseClient, {
     jobKind,
     payload,
-    payloadSchemaVersion: workerJobPayloadSchemaVersion(jobKind),
+    payloadSchemaVersion: calculationEvidenceBinding
+      ? `${jobKind}.request.v2`
+      : workerJobPayloadSchemaVersion(jobKind),
     subjectType: 'lca_job',
     subjectId: newJobId,
     subjectVersion: snapshotId,
@@ -467,10 +506,46 @@ Deno.serve(async (req) => {
     cache_key: requestKey,
     job_id: finalJobId,
     worker_job_id: finalWorkerJobId,
+    ...(calculationEvidenceBinding ? { calculation_evidence: calculationEvidenceBinding } : {}),
   };
 
   return json(queued, 202);
 });
+
+async function resolveCalculationEvidenceBinding(input: {
+  dataScope: LcaDataScope;
+  userId: string;
+  snapshotId: string;
+  artifactUrl: string;
+}): Promise<
+  | { ok: true; binding: LcaCalculationEvidenceBinding | null }
+  | { ok: false; error: string; status: number }
+> {
+  if (input.dataScope !== PUBLIC_PLUS_OWNER_DRAFT_SCOPE) {
+    return { ok: true, binding: null };
+  }
+
+  const snapshotIndex = await fetchSnapshotIndex(input.snapshotId, input.artifactUrl);
+  if (!snapshotIndex.ok) {
+    return { ok: false, error: 'snapshot_index_fetch_failed', status: 502 };
+  }
+  if (snapshotIndex.data.snapshot_id !== input.snapshotId) {
+    return { ok: false, error: 'snapshot_index_mismatch', status: 500 };
+  }
+
+  const validation = await validateCalculationEvidenceForDataScope(
+    input.dataScope,
+    input.userId,
+    snapshotIndex.data.calculation_evidence,
+  );
+  if (!validation.ok) {
+    return { ok: false, error: validation.error, status: 409 };
+  }
+  return {
+    ok: true,
+    binding: validation.evidence ? buildLcaCalculationEvidenceBinding(validation.evidence) : null,
+  };
+}
 
 async function fetchResultCache(
   scope: string,
@@ -549,6 +624,23 @@ async function resolveReadySnapshot(
     if (!ready) {
       return { ok: false, error: 'snapshot_not_ready', status: 404 };
     }
+    if (dataScope === PUBLIC_PLUS_OWNER_DRAFT_SCOPE && userId) {
+      const scopeVerification = await verifySnapshotMatchesDataScope(supabaseClient, {
+        snapshotId: explicit,
+        dataScope,
+        userId,
+      });
+      if (!scopeVerification.ok) {
+        return {
+          ok: false,
+          error: scopeVerification.error,
+          status: scopeVerification.status,
+        };
+      }
+      if (!scopeVerification.matches) {
+        return { ok: false, error: 'snapshot_not_in_data_scope', status: 403 };
+      }
+    }
     return { ok: true, data: ready };
   }
 
@@ -612,7 +704,7 @@ async function fetchScopedReadySnapshot(
   dataScope: LcaDataScope,
   userId: string,
 ): Promise<ScopedSnapshotResolution> {
-  const expectedProcessFilter = buildSnapshotProcessFilter(dataScope, userId);
+  const expectedProcessFilter = await buildSnapshotProcessFilter(dataScope, userId);
   const { data, error } = await supabaseClient
     .from('lca_network_snapshots')
     .select('id,created_at,process_filter')
@@ -725,16 +817,9 @@ async function fetchProcessMaxModifiedAt(
     .order('modified_at', { ascending: false })
     .limit(1);
 
-  if (!filter.allStates) {
-    if (filter.processStates.length > 0 && filter.includeUserId) {
-      query = query.or(
-        `state_code.in.(${filter.processStates.join(',')}),user_id.eq.${filter.includeUserId}`,
-      );
-    } else if (filter.processStates.length > 0) {
-      query = query.in('state_code', filter.processStates);
-    } else if (filter.includeUserId) {
-      query = query.eq('user_id', filter.includeUserId);
-    }
+  const visibilityExpression = buildSnapshotVisibilityOrExpression(filter);
+  if (!filter.allStates && visibilityExpression) {
+    query = query.or(visibilityExpression);
   }
 
   const { data, error } = await query.maybeSingle();
@@ -755,16 +840,11 @@ async function fetchTableMaxModifiedAt(
     .order('modified_at', { ascending: false })
     .limit(1);
 
-  if (!filter.allStates) {
-    if (filter.processStates.length > 0 && filter.includeUserId) {
-      query = query.or(
-        `state_code.in.(${filter.processStates.join(',')}),user_id.eq.${filter.includeUserId}`,
-      );
-    } else if (filter.processStates.length > 0) {
-      query = query.in('state_code', filter.processStates);
-    } else if (filter.includeUserId) {
-      query = query.eq('user_id', filter.includeUserId);
-    }
+  const visibilityExpression = buildSnapshotVisibilityOrExpression(filter, {
+    supportsCollaborationColumns: table === 'flows',
+  });
+  if (!filter.allStates && visibilityExpression) {
+    query = query.or(visibilityExpression);
   }
 
   const { data, error } = await query.maybeSingle();

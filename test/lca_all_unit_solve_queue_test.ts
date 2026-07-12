@@ -1,6 +1,7 @@
 import { assert, assertEquals } from 'jsr:@std/assert';
 
 import { ensureLcaAllUnitSolveQueued } from '../supabase/functions/_shared/lca_all_unit_solve_queue.ts';
+import type { LcaCalculationEvidenceBinding } from '../supabase/functions/_shared/lca_snapshot_scope.ts';
 
 type MockError = { code: string; message: string };
 type MockCacheRow = {
@@ -185,6 +186,55 @@ Deno.test(
     assertEquals(state.updateCalls[1].patch.worker_job_id, 'worker-job-1');
   },
 );
+
+Deno.test('ensureLcaAllUnitSolveQueued binds validated scope and LCIA evidence', async () => {
+  const state = createMockState();
+  const calculationEvidenceBinding: LcaCalculationEvidenceBinding = {
+    schema_version: 'lca.calculation_evidence.v1',
+    scope_manifest_sha256: 'a'.repeat(64),
+    lcia_method_factor_source: {
+      schema_version: 'lca.method_factor_source.snapshot.v1',
+      source_kind: 'database',
+      relation: 'public.lciamethods',
+      source_snapshot_sha256: 'b'.repeat(64),
+      method_manifest_sha256: 'c'.repeat(64),
+      factor_manifest_sha256: 'd'.repeat(64),
+    },
+    lcia_factor_coverage: {
+      schema_version: 'lcia.factor_coverage.v1',
+      coverage_status: 'incomplete_coverage',
+      missing_factor_semantics: 'incomplete_coverage_not_zero',
+      counts: { matched: 9, unmatched: 1, invalid: 0, unsupported_direction: 0 },
+      uncharacterized_evidence: {
+        artifact_url: 'https://example.invalid/uncharacterized.jsonl',
+        artifact_format: 'lcia-uncharacterized-jsonl:v1',
+        artifact_sha256: 'e'.repeat(64),
+        record_count: 1,
+      },
+    },
+  };
+
+  const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
+    scope: 'dev-v1',
+    snapshotId: 'snapshot-1',
+    userId: 'user-1',
+    calculationEvidenceBinding,
+  });
+
+  assert(result.ok);
+  const payload = state.rpcCalls[0].args.p_payload_json as Record<string, unknown>;
+  assertEquals(state.rpcCalls[0].args.p_payload_schema_version, 'lca.solve_all_unit.request.v2');
+  assertEquals(payload.calculation_evidence_binding, calculationEvidenceBinding);
+  assertEquals(state.insertCalls[0].row.request_payload, {
+    version: 'lca_solve_v2',
+    scope: 'dev-v1',
+    snapshot_id: 'snapshot-1',
+    demand_mode: 'all_unit',
+    solve: { return_x: false, return_g: false, return_h: true },
+    print_level: 0,
+    calculation_evidence_binding: calculationEvidenceBinding,
+  });
+});
 
 Deno.test(
   'ensureLcaAllUnitSolveQueued fails closed when worker jobs cutover is disabled',
