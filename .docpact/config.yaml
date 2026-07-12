@@ -155,6 +155,9 @@ routing:
         - supabase/functions/lca_*/**
         - supabase/functions/_shared/lca_process_scope.ts
         - supabase/functions/_shared/lca_snapshot_scope.ts
+        - supabase/functions/_shared/lca_snapshot_build_queue.ts
+        - supabase/functions/_shared/lca_all_unit_solve_queue.ts
+        - supabase/functions/_shared/lca_static_cache_bundle_manifest.json
         - scripts/lca_submit_poll_fetch.sh
     tidas-package:
       paths:

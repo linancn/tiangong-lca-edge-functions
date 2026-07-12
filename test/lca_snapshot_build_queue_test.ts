@@ -1,6 +1,10 @@
 import { assert, assertEquals, assertMatch } from 'jsr:@std/assert';
 
 import { ensureLcaSnapshotBuildQueued } from '../supabase/functions/_shared/lca_snapshot_build_queue.ts';
+import {
+  LCA_STATIC_CACHE_BUNDLE_MANIFEST_PATH,
+  LCA_STATIC_CACHE_BUNDLE_MANIFEST_SHA256,
+} from '../supabase/functions/_shared/lca_snapshot_scope.ts';
 
 type MockState = {
   rpcCalls: Array<{ fn: string; args: Record<string, unknown> }>;
@@ -102,9 +106,44 @@ Deno.test(
       true,
     );
     assertEquals(
+      (payload.lcia_method_factor_source as { bundle_manifest_path: string }).bundle_manifest_path,
+      LCA_STATIC_CACHE_BUNDLE_MANIFEST_PATH,
+    );
+    assertEquals(
+      (payload.lcia_method_factor_source as { bundle_manifest_sha256: string })
+        .bundle_manifest_sha256,
+      LCA_STATIC_CACHE_BUNDLE_MANIFEST_SHA256,
+    );
+    assertEquals(
       (payload.lcia_factor_coverage_contract as { missing_factor_semantics: string })
         .missing_factor_semantics,
       'incomplete_coverage_not_zero',
     );
   },
 );
+
+Deno.test('snapshot queue ignores client source locator and no-LCIA override fields', async () => {
+  const state: MockState = { rpcCalls: [], insertCalls: [] };
+  const enqueue = ensureLcaSnapshotBuildQueued as unknown as (
+    supabase: ReturnType<typeof createSupabaseMock>,
+    args: Record<string, unknown>,
+  ) => ReturnType<typeof ensureLcaSnapshotBuildQueued>;
+  const result = await enqueue(createSupabaseMock(state), {
+    scope: 'prod',
+    dataScope: 'public_plus_owner_draft',
+    userId: 'user-1',
+    no_lcia: true,
+    bundle_manifest_path: '../../attacker.json',
+    bundle_manifest_sha256: '0'.repeat(64),
+    base_url: 'https://attacker.invalid/',
+  });
+
+  assert(result.ok);
+  const payload = state.rpcCalls[0].args.p_payload_json as Record<string, unknown>;
+  const source = payload.lcia_method_factor_source as Record<string, unknown>;
+  assertEquals(payload.no_lcia, false);
+  assertEquals(source.bundle_manifest_path, LCA_STATIC_CACHE_BUNDLE_MANIFEST_PATH);
+  assertEquals(source.bundle_manifest_sha256, LCA_STATIC_CACHE_BUNDLE_MANIFEST_SHA256);
+  assertEquals(source.base_url_binding, 'worker_trusted_configuration');
+  assertEquals('base_url' in source, false);
+});
