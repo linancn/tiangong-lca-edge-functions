@@ -93,8 +93,7 @@ class FakeFlowQuery implements PromiseLike<{ data: unknown; error: unknown }> {
 
   then<TResult1 = { data: unknown; error: unknown }, TResult2 = never>(
     onfulfilled?:
-      | ((value: { data: unknown; error: unknown }) => TResult1 | PromiseLike<TResult1>)
-      | null,
+      ((value: { data: unknown; error: unknown }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     const result =

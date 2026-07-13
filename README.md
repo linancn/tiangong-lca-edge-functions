@@ -18,8 +18,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-06-24
-lastReviewedCommit: a8053128974b95993793e1cb2f51f015edec3368
+lastReviewedAt: 2026-07-13
+lastReviewedCommit: dde848eae6c9163065be604ffd14f38ceca5cb06
 ---
 
 # TianGong-LCA-Edge-Functions
