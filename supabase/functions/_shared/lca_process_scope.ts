@@ -19,8 +19,7 @@ export type ProcessScopeEntry = {
 };
 
 export type ProcessScopeValidationResult =
-  | { ok: true }
-  | { ok: false; status: number; body: Record<string, unknown> };
+  { ok: true } | { ok: false; status: number; body: Record<string, unknown> };
 
 export function processScopeLookupKey(processId: string, processVersion?: string): string {
   return `${processId}:${String(processVersion ?? '').trim()}`;

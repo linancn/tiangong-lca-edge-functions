@@ -31,17 +31,9 @@ export type TidasPackageScope = 'current_user' | 'open_data' | 'current_user_and
 export type TidasPackageManifestScope = TidasPackageScope | 'selected_roots';
 export type TidasPackageJobType = 'export_package' | 'import_package';
 export type TidasPackageJobStatus =
-  | 'queued'
-  | 'running'
-  | 'ready'
-  | 'completed'
-  | 'failed'
-  | 'stale';
+  'queued' | 'running' | 'ready' | 'completed' | 'failed' | 'stale';
 export type TidasPackageArtifactKind =
-  | 'import_source'
-  | 'export_zip'
-  | 'export_report'
-  | 'import_report';
+  'import_source' | 'export_zip' | 'export_report' | 'import_report';
 
 export type TidasPackageRoot = {
   table: SupportedTidasTable;

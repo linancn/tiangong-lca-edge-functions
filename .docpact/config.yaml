@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-07-12'
-lastReviewedCommit: '7615906b40fdbd7602b78f6f28339bf5ed764697'
+lastReviewedAt: '2026-07-13'
+lastReviewedCommit: 'dde848eae6c9163065be604ffd14f38ceca5cb06'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -155,6 +155,9 @@ routing:
         - supabase/functions/lca_*/**
         - supabase/functions/_shared/lca_process_scope.ts
         - supabase/functions/_shared/lca_snapshot_scope.ts
+        - supabase/functions/_shared/lca_snapshot_build_queue.ts
+        - supabase/functions/_shared/lca_all_unit_solve_queue.ts
+        - supabase/functions/_shared/lca_static_cache_bundle_manifest.json
         - scripts/lca_submit_poll_fetch.sh
     tidas-package:
       paths:

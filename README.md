@@ -18,8 +18,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-06-24
-lastReviewedCommit: a8053128974b95993793e1cb2f51f015edec3368
+lastReviewedAt: 2026-07-13
+lastReviewedCommit: dde848eae6c9163065be604ffd14f38ceca5cb06
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -390,9 +390,11 @@ Job response states map to HTTP status as follows:
   - legacy snapshot family semantics: `current_user`, `open_data`, and `all_data` reuse the same user-enhanced snapshot family, i.e. published data plus the current user's private data
   - root-process semantics stay distinct: `current_user` only accepts current-user processes, `open_data` only accepts published processes, `all_data` accepts published plus current-user processes
   - `public_plus_owner_draft` is a separate versioned scope: it admits exactly public `state_code=100` rows plus authenticated-owner `state_code=0` rows that are not team-assigned or review-linked, and rejects public 101–199, foreign/team/reviewer drafts, and owner nonzero states
-  - its snapshot request carries an actor-bound scope manifest and SHA-256, a database `public.lciamethods` method/factor source-snapshot requirement, and an LCIA coverage contract where unmatched, invalid, or unsupported-direction factors mean incomplete coverage rather than zero impact
+  - its actor-bound scope manifest applies only to process and flow visibility. LCIA methods/factors are a separate reviewed static-cache source: Edge embeds exact `lciamethods/cache_manifest.json` bytes and SHA-256, while the worker alone resolves the trusted base URL; callers cannot supply a source URL, path, or hash
+  - its LCIA coverage contract counts `exchange_method_pair` outcomes for every one of the 25 reviewed method identities. Every method row must cover the same nonzero exchange-pair cardinality, aggregate counts must equal the row sums, and unmatched, invalid, or unsupported-direction pairs mean incomplete coverage rather than zero impact
   - explicit snapshot IDs are accepted for this scope only when their stored process filter exactly matches the same actor-bound manifest and hash
-  - solve, query, and contribution-path routes fail closed unless the snapshot index returns matching `lca.calculation_evidence.v1`; successful responses bind the database source hashes and complete/incomplete coverage counts
+  - solve, query, and contribution-path routes fail closed unless the snapshot index returns exact `lca.calculation_evidence.v2`, static source snapshot v2, and 25-row method coverage evidence. V1 database-source/union evidence and the superseded combined-scope hash are rejected
+  - incomplete evidence binds a `lcia-uncharacterized-jsonl:v2` artifact URL, SHA-256, and record count. The immutable raw private-storage URL is not a browser download contract; clients must not expose it as a production link until an authenticated signed projection is available
   - missing snapshot auto-build is attempted for every `data_scope`
 - `lca_jobs`: retained compatibility route, supports `GET` and `POST`.
   - `GET`: `/functions/v1/lca_jobs/{jobId}` or `?job_id=...`
