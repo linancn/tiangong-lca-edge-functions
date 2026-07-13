@@ -8,6 +8,7 @@ import {
   type LcaDataScope,
   type LcaMethodFactorSourceContract,
   type LcaScopeManifest,
+  type LcaSnapshotRequestRoot,
   type LciaFactorCoverageContract,
   type SnapshotProcessFilter,
 } from './lca_snapshot_scope.ts';
@@ -48,9 +49,14 @@ export async function ensureLcaSnapshotBuildQueued(
     scope: string;
     dataScope: LcaDataScope;
     userId: string;
+    requestRoots?: readonly LcaSnapshotRequestRoot[];
   },
 ): Promise<LcaSnapshotBuildQueueResult> {
-  const processFilter = await buildSnapshotProcessFilter(args.dataScope, args.userId);
+  const processFilter = await buildSnapshotProcessFilter(
+    args.dataScope,
+    args.userId,
+    args.requestRoots,
+  );
   const calculationContract = buildCalculationContract(args.dataScope, processFilter);
   const requestVersion = processFilter.scope_manifest
     ? VERSIONED_SCOPE_SNAPSHOT_BUILD_REQUEST_VERSION

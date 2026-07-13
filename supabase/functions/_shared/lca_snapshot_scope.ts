@@ -12,6 +12,8 @@ export const DEFAULT_PUBLISHED_PROCESS_STATES: readonly number[] = Array.from(
 export const PUBLIC_PROCESS_STATE = 100;
 export const OWNER_DRAFT_PROCESS_STATE = 0;
 export const PUBLIC_PLUS_OWNER_DRAFT_SCOPE = 'public_plus_owner_draft';
+export const FILTERED_LIBRARY_SELECTION_MODE = 'filtered_library';
+export const REQUEST_ROOTS_CLOSURE_SELECTION_MODE = 'request_roots_closure';
 export const LCA_SCOPE_MANIFEST_SCHEMA_VERSION = 'lca.data_scope.manifest.v1';
 export const PUBLIC_PLUS_OWNER_DRAFT_PREDICATE_VERSION =
   'public_state_100_or_authenticated_owner_state_0.v1';
@@ -43,6 +45,14 @@ export const LCIA_UNCHARACTERIZED_ARTIFACT_FORMAT = 'lcia-uncharacterized-jsonl:
 
 export type LcaDataScope =
   'current_user' | 'open_data' | 'all_data' | typeof PUBLIC_PLUS_OWNER_DRAFT_SCOPE;
+
+export type LcaSnapshotSelectionMode =
+  typeof FILTERED_LIBRARY_SELECTION_MODE | typeof REQUEST_ROOTS_CLOSURE_SELECTION_MODE;
+
+export type LcaSnapshotRequestRoot = {
+  process_id: string;
+  process_version: string;
+};
 
 export type LcaScopeManifest = {
   schema_version: typeof LCA_SCOPE_MANIFEST_SCHEMA_VERSION;
@@ -240,6 +250,8 @@ export type SnapshotProcessFilter = {
   include_user_review_free_only?: boolean;
   scope_manifest?: LcaScopeManifest;
   scope_manifest_sha256?: string;
+  selection_mode: LcaSnapshotSelectionMode;
+  request_roots: LcaSnapshotRequestRoot[];
 };
 
 export type ParsedSnapshotProcessFilter = {
@@ -251,6 +263,8 @@ export type ParsedSnapshotProcessFilter = {
   includeUserReviewFreeOnly: boolean;
   scopeManifest: LcaScopeManifest | null;
   scopeManifestSha256: string | null;
+  selectionMode: LcaSnapshotSelectionMode;
+  requestRoots: LcaSnapshotRequestRoot[];
 };
 
 export function parseLcaDataScope(raw: unknown): LcaDataScope {
@@ -309,7 +323,17 @@ export async function buildPublicPlusOwnerDraftScopeBinding(
 export async function buildSnapshotProcessFilter(
   dataScope: LcaDataScope,
   userId: string,
+  requestRoots: readonly LcaSnapshotRequestRoot[] = [],
 ): Promise<SnapshotProcessFilter> {
+  const normalizedRequestRoots = normalizeSnapshotRequestRoots(requestRoots);
+  const selectionFields = {
+    selection_mode:
+      normalizedRequestRoots.length > 0
+        ? REQUEST_ROOTS_CLOSURE_SELECTION_MODE
+        : FILTERED_LIBRARY_SELECTION_MODE,
+    request_roots: normalizedRequestRoots,
+  } as const;
+
   if (dataScope === PUBLIC_PLUS_OWNER_DRAFT_SCOPE) {
     const binding = await buildPublicPlusOwnerDraftScopeBinding(userId);
     return {
@@ -321,6 +345,7 @@ export async function buildSnapshotProcessFilter(
       include_user_review_free_only: true,
       scope_manifest: binding.manifest,
       scope_manifest_sha256: binding.manifest_sha256,
+      ...selectionFields,
     };
   }
 
@@ -330,6 +355,7 @@ export async function buildSnapshotProcessFilter(
     all_states: false,
     process_states: [...DEFAULT_PUBLISHED_PROCESS_STATES],
     include_user_id: userId,
+    ...selectionFields,
   };
 }
 
@@ -371,6 +397,8 @@ export function buildSnapshotContainsFilter(
   if (!parsed.allStates && parsed.scopeManifestSha256) {
     containsFilter.scope_manifest_sha256 = parsed.scopeManifestSha256;
   }
+  containsFilter.selection_mode = parsed.selectionMode;
+  containsFilter.request_roots = parsed.requestRoots;
 
   return containsFilter;
 }
@@ -404,6 +432,9 @@ export function buildSnapshotBuildPayloadFields(
     payloadFields.scope_manifest_sha256 = parsed.scopeManifestSha256;
     payloadFields.lcia_method_factor_source = buildLcaMethodFactorSourceContract();
     payloadFields.lcia_factor_coverage_contract = buildLciaFactorCoverageContract();
+  }
+  if (parsed.selectionMode === REQUEST_ROOTS_CLOSURE_SELECTION_MODE) {
+    payloadFields.request_roots = parsed.requestRoots;
   }
 
   return payloadFields;
@@ -540,7 +571,15 @@ export function parseSnapshotProcessFilter(raw: unknown): ParsedSnapshotProcessF
     include_user_review_free_only?: unknown;
     scope_manifest?: unknown;
     scope_manifest_sha256?: unknown;
+    selection_mode?: unknown;
+    request_roots?: unknown;
   };
+
+  const requestRoots = normalizeSnapshotRequestRoots(obj.request_roots, { strict: false });
+  const selectionMode =
+    obj.selection_mode === REQUEST_ROOTS_CLOSURE_SELECTION_MODE
+      ? REQUEST_ROOTS_CLOSURE_SELECTION_MODE
+      : FILTERED_LIBRARY_SELECTION_MODE;
 
   if (obj.all_states === true) {
     return {
@@ -552,6 +591,8 @@ export function parseSnapshotProcessFilter(raw: unknown): ParsedSnapshotProcessF
       includeUserReviewFreeOnly: false,
       scopeManifest: null,
       scopeManifestSha256: null,
+      selectionMode,
+      requestRoots,
     };
   }
 
@@ -564,10 +605,12 @@ export function parseSnapshotProcessFilter(raw: unknown): ParsedSnapshotProcessF
     includeUserReviewFreeOnly: obj.include_user_review_free_only === true,
     scopeManifest: normalizeScopeManifest(obj.scope_manifest),
     scopeManifestSha256: normalizeSha256(obj.scope_manifest_sha256),
+    selectionMode,
+    requestRoots,
   };
 }
 
-export function matchesSnapshotProcessFilter(
+export function matchesSnapshotDataScopeFilter(
   raw: unknown,
   expected: SnapshotProcessFilter,
 ): boolean {
@@ -597,6 +640,76 @@ export function matchesSnapshotProcessFilter(
   }
 
   return canonicalJson(actual.scopeManifest) === canonicalJson(normalizedExpected.scopeManifest);
+}
+
+export function matchesSnapshotProcessFilter(
+  raw: unknown,
+  expected: SnapshotProcessFilter,
+): boolean {
+  const actual = parseSnapshotProcessFilter(raw);
+  const normalizedExpected = parseSnapshotProcessFilter(expected);
+
+  return (
+    matchesSnapshotDataScopeFilter(raw, expected) &&
+    actual.selectionMode === normalizedExpected.selectionMode &&
+    canonicalJson(actual.requestRoots) === canonicalJson(normalizedExpected.requestRoots)
+  );
+}
+
+export function normalizeSnapshotRequestRoots(
+  raw: unknown,
+  options: { strict?: boolean } = {},
+): LcaSnapshotRequestRoot[] {
+  const strict = options.strict !== false;
+  if (!Array.isArray(raw)) {
+    if (strict && raw !== undefined && raw !== null) {
+      throw new Error('request_roots must be an array');
+    }
+    return [];
+  }
+
+  const normalized: LcaSnapshotRequestRoot[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      if (strict) {
+        throw new Error('request root must be an object');
+      }
+      continue;
+    }
+    const processId = String((item as { process_id?: unknown }).process_id ?? '')
+      .trim()
+      .toLowerCase();
+    const processVersion = String(
+      (item as { process_version?: unknown }).process_version ?? '',
+    ).trim();
+    if (!isUuid(processId) || !isTidasVersion(processVersion)) {
+      if (strict) {
+        throw new Error('request root must contain a valid process_id and process_version');
+      }
+      continue;
+    }
+    normalized.push({ process_id: processId, process_version: processVersion });
+  }
+
+  normalized.sort(
+    (left, right) =>
+      left.process_id.localeCompare(right.process_id) ||
+      left.process_version.localeCompare(right.process_version),
+  );
+  return normalized.filter(
+    (root, index) =>
+      index === 0 ||
+      root.process_id !== normalized[index - 1].process_id ||
+      root.process_version !== normalized[index - 1].process_version,
+  );
+}
+
+export function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+export function isTidasVersion(value: string): boolean {
+  return /^\d{2}\.\d{2}\.\d{3}$/.test(value);
 }
 
 export function buildSnapshotVisibilityOrExpression(

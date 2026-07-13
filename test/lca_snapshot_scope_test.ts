@@ -10,13 +10,16 @@ import {
   LCIA_FACTOR_COVERAGE_CONTRACT_SCHEMA_VERSION,
   LCIA_UNCHARACTERIZED_ARTIFACT_FORMAT,
   PUBLIC_PLUS_OWNER_DRAFT_PREDICATE_VERSION,
+  REQUEST_ROOTS_CLOSURE_SELECTION_MODE,
   buildLcaCalculationEvidenceBinding,
   buildPublicPlusOwnerDraftScopeBinding,
   buildSnapshotBuildPayloadFields,
   buildSnapshotContainsFilter,
   buildSnapshotProcessFilter,
   buildSnapshotVisibilityOrExpression,
+  matchesSnapshotDataScopeFilter,
   matchesSnapshotProcessFilter,
+  normalizeSnapshotRequestRoots,
   parseLcaDataScope,
   parseSnapshotProcessFilter,
   shouldAutoBuildSnapshot,
@@ -43,16 +46,22 @@ Deno.test('buildSnapshotProcessFilter preserves existing shared snapshot family'
     all_states: false,
     process_states: expectedStates,
     include_user_id: 'user-1',
+    selection_mode: 'filtered_library',
+    request_roots: [],
   });
   assertEquals(await buildSnapshotProcessFilter('open_data', 'user-1'), {
     all_states: false,
     process_states: expectedStates,
     include_user_id: 'user-1',
+    selection_mode: 'filtered_library',
+    request_roots: [],
   });
   assertEquals(await buildSnapshotProcessFilter('all_data', 'user-1'), {
     all_states: false,
     process_states: expectedStates,
     include_user_id: 'user-1',
+    selection_mode: 'filtered_library',
+    request_roots: [],
   });
 });
 
@@ -70,6 +79,8 @@ Deno.test(
     assertEquals(first.include_user_state_codes, [0]);
     assertEquals(first.include_user_unassigned_only, true);
     assertEquals(first.include_user_review_free_only, true);
+    assertEquals(first.selection_mode, 'filtered_library');
+    assertEquals(first.request_roots, []);
     assertEquals(first.scope_manifest?.schema_version, LCA_SCOPE_MANIFEST_SCHEMA_VERSION);
     assertEquals(first.scope_manifest?.scope, 'public_plus_owner_draft');
     assertEquals(
@@ -167,6 +178,47 @@ Deno.test(
   },
 );
 
+Deno.test(
+  'snapshot identity strictly separates full library and canonical request roots',
+  async () => {
+    const rootA = {
+      process_id: '11111111-1111-4111-8111-111111111111',
+      process_version: '00.00.001',
+    };
+    const rootB = {
+      process_id: '22222222-2222-4222-8222-222222222222',
+      process_version: '01.00.000',
+    };
+    const full = await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-1');
+    const rootedA = await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-1', [rootA]);
+    const rootedB = await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-1', [rootB]);
+
+    assertEquals(rootedA.selection_mode, REQUEST_ROOTS_CLOSURE_SELECTION_MODE);
+    assertEquals(rootedA.request_roots, [rootA]);
+    assertEquals(matchesSnapshotProcessFilter(rootedA, full), false);
+    assertEquals(matchesSnapshotProcessFilter(full, rootedA), false);
+    assertEquals(matchesSnapshotProcessFilter(rootedA, rootedB), false);
+    assertEquals(matchesSnapshotDataScopeFilter(rootedA, full), true);
+
+    const canonical = normalizeSnapshotRequestRoots([
+      rootB,
+      { ...rootA, process_id: rootA.process_id.toUpperCase() },
+      rootA,
+    ]);
+    assertEquals(canonical, [rootA, rootB]);
+    const rootedCanonical = await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-1', [
+      rootB,
+      rootA,
+      rootA,
+    ]);
+    const rootedSorted = await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-1', [
+      rootA,
+      rootB,
+    ]);
+    assertEquals(rootedCanonical, rootedSorted);
+  },
+);
+
 Deno.test('query/build helpers carry exact worker and LCIA proof contracts', async () => {
   const filter = await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-1');
   assertEquals(buildSnapshotContainsFilter(filter), filter);
@@ -212,6 +264,21 @@ Deno.test('query/build helpers carry exact worker and LCIA proof contracts', asy
       .missing_factor_semantics,
     'incomplete_coverage_not_zero',
   );
+});
+
+Deno.test('root-scoped build payload sends normalized request_roots to Worker', async () => {
+  const root = {
+    process_id: '11111111-1111-4111-8111-111111111111',
+    process_version: '00.00.001',
+  };
+  const filter = await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-1', [root]);
+  const payload = buildSnapshotBuildPayloadFields(filter);
+
+  assertEquals(filter.selection_mode, 'request_roots_closure');
+  assertEquals(filter.request_roots, [root]);
+  assertEquals(payload.request_roots, [root]);
+  assertEquals(buildSnapshotContainsFilter(filter).selection_mode, 'request_roots_closure');
+  assertEquals(buildSnapshotContainsFilter(filter).request_roots, [root]);
 });
 
 Deno.test('freshness visibility expression preserves owner state zero restriction', async () => {

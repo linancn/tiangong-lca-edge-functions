@@ -52,6 +52,37 @@ Deno.test(
 );
 
 Deno.test(
+  'explicit snapshot verification accepts full and root identities inside the same data scope',
+  async () => {
+    const rootScoped = await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-1', [
+      {
+        process_id: '11111111-1111-4111-8111-111111111111',
+        process_version: '00.00.001',
+      },
+    ]);
+    const state: MockState = {
+      row: { process_filter: rootScoped },
+      error: null,
+      snapshotIds: [],
+    };
+    const result = await verifySnapshotMatchesDataScope(createSupabaseMock(state) as never, {
+      snapshotId: 'snapshot-root',
+      dataScope: 'public_plus_owner_draft',
+      userId: 'user-1',
+    });
+
+    assertEquals(result.ok, true);
+    if (result.ok) {
+      assertEquals(result.matches, true);
+      if (result.matches) {
+        assertEquals(result.process_filter.selection_mode, 'filtered_library');
+        assertEquals(result.process_filter.request_roots, []);
+      }
+    }
+  },
+);
+
+Deno.test(
   'verifySnapshotMatchesDataScope rejects old broad and foreign-actor snapshots',
   async () => {
     const broad = await buildSnapshotProcessFilter('current_user', 'user-1');
