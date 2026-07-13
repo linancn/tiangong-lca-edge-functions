@@ -19,7 +19,7 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-07-13
-lastReviewedCommit: dde848eae6c9163065be604ffd14f38ceca5cb06
+lastReviewedCommit: 633d58c7ed548dbbe5915ff7175b365013913db6
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -112,7 +112,7 @@ This root `.env` is only for local HTTP clients and request collections. It shou
 - `USER_API_KEY`
 - `USER_JWT`
 - `SERVICE_API_KEY`
-- LCA request ids such as `LCA_PROCESS_ID`, `LCA_IMPACT_ID`, `LCA_JOB_ID`, and `LCA_RESULT_ID`
+- LCA request ids such as `LCA_PROCESS_ID`, `LCA_PROCESS_VERSION`, `LCA_IMPACT_ID`, `LCA_JOB_ID`, and `LCA_RESULT_ID`
 - TIDAS import request ids and artifact metadata
 
 Do not put `REMOTE_SUPABASE_SECRET_KEY`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, OpenAI keys, AWS keys, Redis credentials, or other function runtime secrets in the repository root `.env`.
@@ -386,16 +386,21 @@ Job response states map to HTTP status as follows:
 
 - `lca_solve`: `POST` only.
   - optional `data_scope`: `"current_user"` (default), `"open_data"`, `"all_data"`, `"public_plus_owner_draft"`
-  - body can combine `data_scope` with normal solve payload, for example `{ "data_scope": "current_user", "demand": { "process_index": 0, "amount": 1.0 } }`
+  - body can combine `data_scope` with normal solve payload, for example `{ "data_scope": "current_user", "demand": { "process_id": "<uuid>", "process_version": "00.00.001", "amount": 1.0 } }`
   - legacy snapshot family semantics: `current_user`, `open_data`, and `all_data` reuse the same user-enhanced snapshot family, i.e. published data plus the current user's private data
   - root-process semantics stay distinct: `current_user` only accepts current-user processes, `open_data` only accepts published processes, `all_data` accepts published plus current-user processes
   - `public_plus_owner_draft` is a separate versioned scope: it admits exactly public `state_code=100` rows plus authenticated-owner `state_code=0` rows that are not team-assigned or review-linked, and rejects public 101–199, foreign/team/reviewer drafts, and owner nonzero states
   - its actor-bound scope manifest applies only to process and flow visibility. LCIA methods/factors are a separate reviewed static-cache source: Edge embeds exact `lciamethods/cache_manifest.json` bytes and SHA-256, while the worker alone resolves the trusted base URL; callers cannot supply a source URL, path, or hash
   - its LCIA coverage contract counts `exchange_method_pair` outcomes for every one of the 25 reviewed method identities. Every method row must cover the same nonzero exchange-pair cardinality, aggregate counts must equal the row sums, and unmatched, invalid, or unsupported-direction pairs mean incomplete coverage rather than zero impact
-  - explicit snapshot IDs are accepted for this scope only when their stored process filter exactly matches the same actor-bound manifest and hash
+  - without an explicit snapshot, single-process solve derives exactly one normalized request root from authenticated `demand.process_id` plus `demand.process_version`; the root must exist in the actor's exact data scope before any snapshot job is enqueued
+  - callers cannot provide `request_roots` / `requestRoots`; Edge derives roots from the authenticated demand and binds them into the Worker payload, build hash/idempotency, and snapshot process-filter identity
+  - request-root snapshots and filtered full-library snapshots are separate identities and are never auto-reused for each other. Different roots are also separate identities
+  - if the exact root snapshot is not ready, the first valid request returns HTTP `409` with `error=snapshot_build_queued`; retry the same solve only after that exact snapshot becomes ready
+  - a snapshot-less single request that supplies only `process_index`, or a `process_id` without `process_version`, does not enqueue a full-library fallback. `process_index` remains compatible when an eligible full-library snapshot is already ready, and explicit snapshot requests retain their existing index/ID resolution behavior
+  - explicit snapshot IDs are accepted for this scope only when their stored process filter matches the same actor-bound data-scope manifest and hash; explicit selection identity may be full-library or request-root, but the demanded process is still checked against actor scope
   - solve, query, and contribution-path routes fail closed unless the snapshot index returns exact `lca.calculation_evidence.v2`, static source snapshot v2, and 25-row method coverage evidence. V1 database-source/union evidence and the superseded combined-scope hash are rejected
   - incomplete evidence binds a `lcia-uncharacterized-jsonl:v2` artifact URL, SHA-256, and record count. The immutable raw private-storage URL is not a browser download contract; clients must not expose it as a production link until an authenticated signed projection is available
-  - missing snapshot auto-build is attempted for every `data_scope`
+  - missing snapshot auto-build is attempted for every `data_scope`: exact request-root closure for snapshot-less single-process ID/version demand, and filtered-library scope for `all_unit`
 - `lca_jobs`: retained compatibility route, supports `GET` and `POST`.
   - `GET`: `/functions/v1/lca_jobs/{jobId}` or `?job_id=...`
   - `POST`: body `{ "job_id": "<uuid>" }`

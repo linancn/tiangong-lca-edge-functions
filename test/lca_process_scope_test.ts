@@ -1,8 +1,12 @@
 import { assertEquals } from 'jsr:@std/assert';
 
 import {
+  hasClientSuppliedSnapshotRoots,
   matchesProcessDataScope,
+  normalizeSingleProcessDemand,
   processScopeLookupKey,
+  requestRootFromSingleProcessDemand,
+  validateProcessEntriesInDataScope,
 } from '../supabase/functions/_shared/lca_process_scope.ts';
 
 Deno.test('processScopeLookupKey normalizes missing versions', () => {
@@ -115,3 +119,145 @@ Deno.test('matchesProcessDataScope enforces root-process semantics per scope', (
   );
   assertEquals(matchesProcessDataScope(undefined, 'public_plus_owner_draft', 'user-1'), false);
 });
+
+Deno.test('single-process demand derives one exact root and rejects malformed selectors', () => {
+  const exact = normalizeSingleProcessDemand({
+    process_id: '11111111-1111-4111-8111-111111111111',
+    process_version: '00.00.001',
+    amount: 2,
+  });
+  assertEquals(exact, {
+    ok: true,
+    demand: {
+      selector: 'process_id',
+      process_id: '11111111-1111-4111-8111-111111111111',
+      process_version: '00.00.001',
+      amount: 2,
+    },
+  });
+  if (exact.ok) {
+    assertEquals(requestRootFromSingleProcessDemand(exact.demand), {
+      process_id: '11111111-1111-4111-8111-111111111111',
+      process_version: '00.00.001',
+    });
+  }
+
+  const indexDemand = normalizeSingleProcessDemand({ process_index: 7 });
+  assertEquals(indexDemand, {
+    ok: true,
+    demand: { selector: 'process_index', process_index: 7, amount: 1 },
+  });
+  if (indexDemand.ok) {
+    assertEquals(requestRootFromSingleProcessDemand(indexDemand.demand), null);
+  }
+
+  const versionless = normalizeSingleProcessDemand({
+    process_id: '11111111-1111-4111-8111-111111111111',
+  });
+  assertEquals(versionless.ok, true);
+  if (versionless.ok) {
+    assertEquals(requestRootFromSingleProcessDemand(versionless.demand), null);
+  }
+
+  assertEquals(
+    normalizeSingleProcessDemand({
+      process_id: '11111111-1111-4111-8111-111111111111',
+      process_version: '1',
+    }),
+    { ok: false, status: 400, body: { error: 'invalid_process_version' } },
+  );
+  assertEquals(normalizeSingleProcessDemand({ process_id: 'not-a-uuid' }), {
+    ok: false,
+    status: 400,
+    body: { error: 'invalid_process_id' },
+  });
+  assertEquals(normalizeSingleProcessDemand({ process_index: -1 }), {
+    ok: false,
+    status: 400,
+    body: { error: 'invalid_process_index' },
+  });
+});
+
+Deno.test('client-supplied snapshot roots are detected instead of trusted', () => {
+  assertEquals(hasClientSuppliedSnapshotRoots({ request_roots: [] }), true);
+  assertEquals(hasClientSuppliedSnapshotRoots({ requestRoots: [] }), true);
+  assertEquals(
+    hasClientSuppliedSnapshotRoots({
+      demand: {
+        process_id: '11111111-1111-4111-8111-111111111111',
+        process_version: '00.00.001',
+      },
+    }),
+    false,
+  );
+});
+
+Deno.test(
+  'pre-enqueue process scope validation rejects foreign or collaboration-bound drafts',
+  async () => {
+    const root = {
+      process_id: '11111111-1111-4111-8111-111111111111',
+      process_version: '00.00.001',
+    };
+    const createClient = (row: Record<string, unknown> | null) => ({
+      from(table: string) {
+        assertEquals(table, 'processes');
+        return {
+          select(columns: string) {
+            assertEquals(columns, 'id,version,state_code,user_id,team_id,review_id');
+            return this;
+          },
+          in(column: string, values: unknown[]) {
+            assertEquals(column, 'id');
+            assertEquals(values, [root.process_id]);
+            return Promise.resolve({ data: row ? [row] : [], error: null });
+          },
+        };
+      },
+    });
+    const row = (overrides: Record<string, unknown>) => ({
+      id: root.process_id,
+      version: root.process_version,
+      state_code: 0,
+      user_id: 'user-1',
+      team_id: null,
+      review_id: null,
+      ...overrides,
+    });
+
+    assertEquals(
+      await validateProcessEntriesInDataScope(
+        [root],
+        'public_plus_owner_draft',
+        'user-1',
+        createClient(row({})) as never,
+      ),
+      { ok: true },
+    );
+
+    for (const rejected of [
+      row({ user_id: 'user-2' }),
+      row({ team_id: 'team-1' }),
+      row({ review_id: 'review-1' }),
+      null,
+    ]) {
+      assertEquals(
+        await validateProcessEntriesInDataScope(
+          [root],
+          'public_plus_owner_draft',
+          'user-1',
+          createClient(rejected) as never,
+        ),
+        {
+          ok: false,
+          status: 403,
+          body: {
+            error: 'process_not_in_data_scope',
+            data_scope: 'public_plus_owner_draft',
+            process_id: root.process_id,
+          },
+        },
+      );
+    }
+  },
+);

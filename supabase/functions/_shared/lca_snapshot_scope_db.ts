@@ -2,7 +2,7 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import {
   buildSnapshotProcessFilter,
-  matchesSnapshotProcessFilter,
+  matchesSnapshotDataScopeFilter,
   type LcaDataScope,
   type SnapshotProcessFilter,
 } from './lca_snapshot_scope.ts';
@@ -39,7 +39,7 @@ export async function verifySnapshotMatchesDataScope(
   }
 
   const processFilter = (data as { process_filter?: unknown } | null)?.process_filter;
-  if (!matchesSnapshotProcessFilter(processFilter, expectedProcessFilter)) {
+  if (!matchesSnapshotDataScopeFilter(processFilter, expectedProcessFilter)) {
     return { ok: true, matches: false };
   }
 
