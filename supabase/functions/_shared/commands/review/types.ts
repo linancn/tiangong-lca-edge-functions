@@ -49,5 +49,4 @@ export type ReviewCommandFailure = {
 };
 
 export type ReviewCommandExecutionResult =
-  | { ok: true; body: unknown; status?: number }
-  | ReviewCommandFailure;
+  { ok: true; body: unknown; status?: number } | ReviewCommandFailure;
