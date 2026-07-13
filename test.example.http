@@ -222,7 +222,8 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
       "scope": "prod",
       "data_scope": "current_user",
       "demand": {
-        "process_index": 0,
+        "process_id": "{{$dotenv LCA_PROCESS_ID}}",
+        "process_version": "{{$dotenv LCA_PROCESS_VERSION}}",
         "amount": 1.0
       },
       "solve": {
@@ -242,7 +243,8 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
       "scope": "prod",
       "data_scope": "current_user",
       "demand": {
-        "process_index": 0,
+        "process_id": "{{$dotenv LCA_PROCESS_ID}}",
+        "process_version": "{{$dotenv LCA_PROCESS_VERSION}}",
         "amount": 1.0
       },
       "solve": {
@@ -280,6 +282,7 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
       "data_scope": "public_plus_owner_draft",
       "demand": {
         "process_id": "{{$dotenv LCA_PROCESS_ID}}",
+        "process_version": "{{$dotenv LCA_PROCESS_VERSION}}",
         "amount": 1.0
       },
       "solve": {

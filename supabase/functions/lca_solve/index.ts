@@ -3,7 +3,13 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
-import { validateProcessEntriesInDataScope } from '../_shared/lca_process_scope.ts';
+import {
+  hasClientSuppliedSnapshotRoots,
+  normalizeSingleProcessDemand,
+  requestRootFromSingleProcessDemand,
+  validateProcessEntriesInDataScope,
+  type NormalizedSingleProcessDemand,
+} from '../_shared/lca_process_scope.ts';
 import { ensureLcaSnapshotBuildQueued } from '../_shared/lca_snapshot_build_queue.ts';
 import {
   buildLcaCalculationEvidenceBinding,
@@ -18,6 +24,7 @@ import {
   validateCalculationEvidenceForDataScope,
   type LcaCalculationEvidenceBinding,
   type LcaDataScope,
+  type LcaSnapshotRequestRoot,
   type ParsedSnapshotProcessFilter,
 } from '../_shared/lca_snapshot_scope.ts';
 import { verifySnapshotMatchesDataScope } from '../_shared/lca_snapshot_scope_db.ts';
@@ -94,7 +101,6 @@ type ResultCacheRow = {
 };
 
 const REQUEST_VERSION = 'lca_solve_v2';
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -128,8 +134,12 @@ Deno.serve(async (req) => {
   } catch (_error) {
     return json({ error: 'invalid_json' }, 400);
   }
+  if (hasClientSuppliedSnapshotRoots(body)) {
+    return json({ error: 'request_roots_not_allowed' }, 400);
+  }
 
   const scope = (body.scope ?? 'prod').trim() || 'prod';
+  const requestedSnapshotId = body.snapshot_id?.trim() || undefined;
   const dataScope = parseLcaDataScope(body.data_scope);
   const demandMode = body.demand_mode ?? 'single';
   const printLevel = body.print_level ?? 0.0;
@@ -141,18 +151,57 @@ Deno.serve(async (req) => {
     return json({ error: 'invalid_print_level' }, 400);
   }
 
-  const snapshotMeta = await resolveReadySnapshot(scope, dataScope, body.snapshot_id, userId);
+  let normalizedSingleDemand: NormalizedSingleProcessDemand | null = null;
+  let requestRoots: LcaSnapshotRequestRoot[] = [];
+  if (demandMode === 'single') {
+    const normalizedDemand = normalizeSingleProcessDemand(body.demand);
+    if (!normalizedDemand.ok) {
+      return json(normalizedDemand.body, normalizedDemand.status);
+    }
+    normalizedSingleDemand = normalizedDemand.demand;
+
+    if (!requestedSnapshotId) {
+      const requestRoot = requestRootFromSingleProcessDemand(normalizedDemand.demand);
+      if (normalizedDemand.demand.selector === 'process_id' && !requestRoot) {
+        return json({ error: 'process_version_required_for_snapshot_build' }, 400);
+      }
+      if (requestRoot) {
+        const processScopeValidation = await validateProcessEntriesInDataScope(
+          [requestRoot],
+          dataScope,
+          userId,
+          supabaseClient,
+        );
+        if (!processScopeValidation.ok) {
+          return json(processScopeValidation.body, processScopeValidation.status);
+        }
+        requestRoots = [requestRoot];
+      }
+    }
+  }
+
+  const snapshotMeta = await resolveReadySnapshot(
+    scope,
+    dataScope,
+    requestedSnapshotId,
+    userId,
+    requestRoots,
+  );
   if (!snapshotMeta.ok) {
     const shouldQueueBuild =
       shouldAutoBuildSnapshot(dataScope) &&
-      !body.snapshot_id &&
+      !requestedSnapshotId &&
       (snapshotMeta.error === 'no_ready_snapshot' ||
         snapshotMeta.error === 'snapshot_stale_rebuild_required');
     if (shouldQueueBuild) {
+      if (demandMode === 'single' && requestRoots.length !== 1) {
+        return json({ error: 'process_id_and_version_required_for_snapshot_build' }, 400);
+      }
       const queued = await ensureLcaSnapshotBuildQueued(supabaseClient, {
         scope,
         dataScope,
         userId,
+        requestRoots,
       });
       if (!queued.ok) {
         return json({ error: queued.error }, queued.status);
@@ -225,40 +274,28 @@ Deno.serve(async (req) => {
       };
 
   if (demandMode === 'single') {
-    const demandIndex = body.demand?.process_index;
-    const demandProcessId = body.demand?.process_id?.trim();
-    const demandProcessVersion = body.demand?.process_version?.trim();
-    const demandAmount = body.demand?.amount ?? 1.0;
+    if (!normalizedSingleDemand) {
+      return json({ error: 'invalid_demand' }, 400);
+    }
+    const demandProcessVersion =
+      normalizedSingleDemand.selector === 'process_id'
+        ? normalizedSingleDemand.process_version
+        : undefined;
+    const demandAmount = normalizedSingleDemand.amount;
     const solve = {
       return_x: body.solve?.return_x ?? true,
       return_g: body.solve?.return_g ?? true,
       return_h: body.solve?.return_h ?? true,
     };
 
-    if (!Number.isFinite(demandAmount)) {
-      return json({ error: 'invalid_amount' }, 400);
-    }
-
-    const hasIndexDemand = demandIndex !== undefined && demandIndex !== null;
-    const hasProcessIdDemand = !!demandProcessId;
-    if (!hasIndexDemand && !hasProcessIdDemand) {
-      return json({ error: 'process_index_or_process_id_required' }, 400);
-    }
-    if (hasIndexDemand && hasProcessIdDemand) {
-      return json({ error: 'provide_process_index_or_process_id' }, 400);
-    }
-
     let processIndex: number;
-    if (hasProcessIdDemand) {
-      if (!UUID_RE.test(demandProcessId)) {
-        return json({ error: 'invalid_process_id' }, 400);
-      }
+    if (normalizedSingleDemand.selector === 'process_id') {
       const resolved = await resolveProcessIndexFromSnapshot({
         data_scope: dataScope,
         user_id: userId,
         snapshot_id: snapshotId,
         artifact_url: snapshotMeta.data.artifact_url,
-        process_id: demandProcessId,
+        process_id: normalizedSingleDemand.process_id,
         process_version: demandProcessVersion || undefined,
       });
       if (!resolved.ok) {
@@ -266,10 +303,7 @@ Deno.serve(async (req) => {
       }
       processIndex = resolved.process_index;
     } else {
-      if (!Number.isInteger(demandIndex) || (demandIndex as number) < 0) {
-        return json({ error: 'invalid_process_index' }, 400);
-      }
-      processIndex = Number(demandIndex);
+      processIndex = normalizedSingleDemand.process_index;
     }
 
     if (processIndex >= processCount) {
@@ -282,7 +316,7 @@ Deno.serve(async (req) => {
         400,
       );
     }
-    if (!hasProcessIdDemand) {
+    if (normalizedSingleDemand.selector === 'process_index') {
       const scopeValidation = await validateProcessIndexForDataScope({
         data_scope: dataScope,
         user_id: userId,
@@ -616,6 +650,7 @@ async function resolveReadySnapshot(
   dataScope: LcaDataScope,
   requestedSnapshotId?: string,
   userId?: string,
+  requestRoots: readonly LcaSnapshotRequestRoot[] = [],
 ): Promise<{ ok: true; data: ReadySnapshotMeta } | { ok: false; error: string; status: number }> {
   const explicit = requestedSnapshotId?.trim();
 
@@ -645,7 +680,7 @@ async function resolveReadySnapshot(
   }
 
   if (userId) {
-    const scopedReady = await fetchScopedReadySnapshot(scope, dataScope, userId);
+    const scopedReady = await fetchScopedReadySnapshot(scope, dataScope, userId, requestRoots);
     if (scopedReady.kind === 'fresh') {
       return { ok: true, data: scopedReady.data };
     }
@@ -703,8 +738,9 @@ async function fetchScopedReadySnapshot(
   scope: string,
   dataScope: LcaDataScope,
   userId: string,
+  requestRoots: readonly LcaSnapshotRequestRoot[] = [],
 ): Promise<ScopedSnapshotResolution> {
-  const expectedProcessFilter = await buildSnapshotProcessFilter(dataScope, userId);
+  const expectedProcessFilter = await buildSnapshotProcessFilter(dataScope, userId, requestRoots);
   const { data, error } = await supabaseClient
     .from('lca_network_snapshots')
     .select('id,created_at,process_filter')
