@@ -357,7 +357,6 @@ Deno.test(
       'cmd_lca_release_publish',
       'cmd_lca_release_readback_verify',
       'cmd_lca_release_unpublish',
-      'get_lcia_result_calculation_bundle',
     ]) {
       actorSupabase.rpcResults.set(fn, rpcSuccess({ fn }));
     }
@@ -413,7 +412,6 @@ Deno.test(
         publicationId: '77777777-7777-4777-8777-777777777777',
         reason: 'Operator rollback',
       },
-      { action: 'get_calculation_bundle' as const, packageId: PACKAGE_ID },
     ];
     for (const command of commands) {
       const result = await executeLcaReleaseCommand(command, actor, repository);
@@ -427,11 +425,145 @@ Deno.test(
         'cmd_lca_release_publish',
         'cmd_lca_release_readback_verify',
         'cmd_lca_release_unpublish',
-        'get_lcia_result_calculation_bundle',
       ],
     );
   },
 );
+
+Deno.test(
+  'calculation bundle read verifies its private manifest and signs every chunk',
+  async () => {
+    const actorSupabase = new FakeSupabase();
+    const serviceSupabase = new FakeSupabase();
+    const bundleContentHash = '1'.repeat(64);
+    const chunkHash = '2'.repeat(64);
+    const manifest = {
+      schemaVersion: 'tiangong.calculation-bundle.v1',
+      bundleContentHash,
+      scope: { coverageMode: 'global_eligible', processCount: 1 },
+      artifacts: [
+        {
+          kind: 'lci-results',
+          path: 'chunks/lci-00000.jsonl.gz',
+          mediaType: 'application/x-ndjson',
+          compression: 'gzip',
+          sha256: chunkHash,
+          byteSize: 123,
+          recordCount: 1,
+        },
+      ],
+    };
+    const manifestBlob = new Blob([JSON.stringify(manifest)]);
+    const manifestSha256 = await sha256Blob(manifestBlob);
+    const manifestObjectKey = `calculation-bundles/${RELEASE_RUN_ID}/${bundleContentHash}/calculation-bundle.json`;
+    actorSupabase.rpcResults.set(
+      'get_lcia_result_calculation_bundle',
+      rpcSuccess({
+        packageId: PACKAGE_ID,
+        calculationBundle: {
+          schemaVersion: 'tiangong.calculation-bundle.v1',
+          calculationId: RELEASE_RUN_ID,
+          bundleContentHash,
+          manifestUrl: `https://example.supabase.co/storage/v1/s3/lca_results/${manifestObjectKey}`,
+          manifestSha256,
+          manifestByteSize: manifestBlob.size,
+          artifactCount: 1,
+        },
+      }),
+    );
+    serviceSupabase.downloadedObjects.set(`lca_results/${manifestObjectKey}`, manifestBlob);
+
+    const result = await executeLcaReleaseCommand(
+      { action: 'get_calculation_bundle', packageId: PACKAGE_ID },
+      actorFor(actorSupabase),
+      createLcaReleaseCommandRepository(actorSupabase as never, serviceSupabase as never),
+    );
+
+    assertEquals(result.ok, true);
+    assertEquals(serviceSupabase.signedDownloadCalls, [
+      { bucket: 'lca_results', objectKey: manifestObjectKey, expiresIn: 900 },
+      {
+        bucket: 'lca_results',
+        objectKey: `calculation-bundles/${RELEASE_RUN_ID}/${bundleContentHash}/chunks/lci-00000.jsonl.gz`,
+        expiresIn: 900,
+      },
+    ]);
+    if (result.ok) {
+      const body = result.body as {
+        data: { calculationBundle: { artifacts: Array<{ signedDownloadUrl: string }> } };
+      };
+      assertEquals(
+        body.data.calculationBundle.artifacts[0].signedDownloadUrl,
+        'https://download.example/lca_results/' +
+          `calculation-bundles/${RELEASE_RUN_ID}/${bundleContentHash}/chunks/lci-00000.jsonl.gz`,
+      );
+    }
+  },
+);
+
+Deno.test('calculation bundle read rejects path traversal and manifest hash drift', async () => {
+  const actorSupabase = new FakeSupabase();
+  const serviceSupabase = new FakeSupabase();
+  const bundleContentHash = '3'.repeat(64);
+  const manifest = {
+    schemaVersion: 'tiangong.calculation-bundle.v1',
+    bundleContentHash,
+    artifacts: [
+      {
+        path: '../private-object',
+        sha256: '4'.repeat(64),
+        byteSize: 10,
+      },
+    ],
+  };
+  const manifestBlob = new Blob([JSON.stringify(manifest)]);
+  const manifestObjectKey = 'calculation-bundles/unsafe/calculation-bundle.json';
+  actorSupabase.rpcResults.set(
+    'get_lcia_result_calculation_bundle',
+    rpcSuccess({
+      calculationBundle: {
+        manifestUrl: `https://example.supabase.co/storage/v1/s3/lca_results/${manifestObjectKey}`,
+        manifestSha256: await sha256Blob(manifestBlob),
+        manifestByteSize: manifestBlob.size,
+        bundleContentHash,
+        artifactCount: 1,
+      },
+    }),
+  );
+  serviceSupabase.downloadedObjects.set(`lca_results/${manifestObjectKey}`, manifestBlob);
+  const repository = createLcaReleaseCommandRepository(
+    actorSupabase as never,
+    serviceSupabase as never,
+  );
+
+  const unsafe = await executeLcaReleaseCommand(
+    { action: 'get_calculation_bundle', packageId: PACKAGE_ID },
+    actorFor(actorSupabase),
+    repository,
+  );
+  assertEquals(unsafe.ok, false);
+  if (!unsafe.ok) assertEquals(unsafe.code, 'calculation_bundle_artifact_ref_invalid');
+
+  actorSupabase.rpcResults.set(
+    'get_lcia_result_calculation_bundle',
+    rpcSuccess({
+      calculationBundle: {
+        manifestUrl: `https://example.supabase.co/storage/v1/s3/lca_results/${manifestObjectKey}`,
+        manifestSha256: '5'.repeat(64),
+        manifestByteSize: manifestBlob.size,
+        bundleContentHash,
+        artifactCount: 1,
+      },
+    }),
+  );
+  const drift = await executeLcaReleaseCommand(
+    { action: 'get_calculation_bundle', packageId: PACKAGE_ID },
+    actorFor(actorSupabase),
+    repository,
+  );
+  assertEquals(drift.ok, false);
+  if (!drift.ok) assertEquals(drift.code, 'calculation_bundle_manifest_hash_mismatch');
+});
 
 Deno.test('artifact download signs only the actor-authorized DB storage ref', async () => {
   const actorSupabase = new FakeSupabase();

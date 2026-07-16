@@ -416,6 +416,7 @@ Job response states map to HTTP status as follows:
   - authenticated reads: `get_release`, `get_current`, `get_calculation_bundle`, `create_artifact_download`
   - exactly four ZIPs are accepted: Unit Process and standalone LifecycleModel+Result, each in TIDAS and ILCD. Maximum size is 50 MiB per ZIP.
   - `create_artifact_uploads` returns short-lived signed upload URLs for private, content-addressed, server-derived paths. `finalize_artifacts` downloads every object and verifies its exact byte size and SHA-256 before the service-only finalize RPC.
+  - `get_calculation_bundle` verifies the private Calculation Bundle manifest against its durable byte size, SHA-256, content hash, artifact count, and safe relative paths, then returns 15-minute signed URLs for the manifest and each LCI/LCIA chunk.
 - `lca_release_results`: `GET` or `POST` read endpoint.
   - no payload or `mode=current` returns the current public release
   - `mode=release&releaseRunId=<uuid>` returns public/superseded metadata anonymously and private metadata only to an authenticated manager

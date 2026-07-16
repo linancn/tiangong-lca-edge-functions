@@ -487,6 +487,8 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_contribution_p
 curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_release_results?mode=current'
 
 ### @name LCA_Release_Calculation_Bundle：Local (data_product_manager JWT)
+# Response verifies the private manifest and includes 15-minute signedDownloadUrl values for the
+# manifest plus every LCI/LCIA chunk; raw worker object URLs are not browser download contracts.
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_lca_release_commands' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \

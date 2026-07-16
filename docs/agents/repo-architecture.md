@@ -181,6 +181,8 @@ The default TIDAS package path enqueues `tidas.import_package` and `tidas.export
 
 The artifact path deliberately has two identities. Actor-bound RPCs authorize the requested release and bind its exact publish-plan hash. The Edge service client then creates signed uploads under a server-derived private object key, downloads each of the four TIDAS/ILCD profile ZIPs, verifies byte size and SHA-256, repeats the actor-bound role check, and invokes the service-only finalize RPC. Release clients never receive the Supabase secret/service-role key and cannot select a storage bucket or object key.
 
+Calculation Bundle reads follow the same projection rule. The database returns only the manager-authorized immutable bundle ref. Edge downloads the private manifest, verifies its exact size and SHA-256 plus schema/content-hash/artifact-count binding, rejects unsafe child paths, and returns short-lived signed URLs for the manifest and each LCI/LCIA chunk. Raw worker object URLs are never browser download contracts.
+
 `lca_release_results` exposes current or superseded public release metadata and signed artifact downloads without requiring a session. When an Authorization header is supplied it must authenticate successfully, and private release reads remain subject to the database projection's manager check. The endpoint never signs an object until the database returns an authorized bucket/object-key projection.
 
 ## Database Boundary

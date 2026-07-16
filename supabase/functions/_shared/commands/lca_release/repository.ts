@@ -33,6 +33,7 @@ import type {
 
 export const LCA_RELEASE_MAX_ARTIFACT_BYTES = 50 * 1024 * 1024;
 export const LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS = 15 * 60;
+export const LCA_CALCULATION_BUNDLE_MAX_MANIFEST_BYTES = 5 * 1024 * 1024;
 const DEFAULT_RELEASE_STORAGE_BUCKET = 'lca_results';
 const RELEASE_STORAGE_PREFIX = 'lca-releases/v1';
 
@@ -102,6 +103,48 @@ function recordValue(value: unknown): Record<string, unknown> | null {
 
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function finiteInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function parseStoragePathFromArtifactUrl(
+  artifactUrl: string,
+): { bucket: string; objectPath: string } | null {
+  try {
+    const url = new URL(artifactUrl);
+    if (url.protocol === 's3:') {
+      const objectPath = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+      return url.hostname && objectPath ? { bucket: url.hostname, objectPath } : null;
+    }
+
+    const marker = '/storage/v1/s3/';
+    const markerIndex = url.pathname.indexOf(marker);
+    if (markerIndex < 0) return null;
+    const remainder = url.pathname.slice(markerIndex + marker.length);
+    const splitIndex = remainder.indexOf('/');
+    if (splitIndex <= 0 || splitIndex >= remainder.length - 1) return null;
+    const bucket = decodeURIComponent(remainder.slice(0, splitIndex));
+    const objectPath = decodeURIComponent(remainder.slice(splitIndex + 1));
+    return bucket && objectPath ? { bucket, objectPath } : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function childObjectPath(manifestObjectPath: string, relativePath: string): string | null {
+  const segments = relativePath.split('/');
+  if (
+    !relativePath ||
+    relativePath.startsWith('/') ||
+    segments.some((segment) => !segment || segment === '.' || segment === '..')
+  ) {
+    return null;
+  }
+  const splitIndex = manifestObjectPath.lastIndexOf('/');
+  if (splitIndex <= 0) return null;
+  return `${manifestObjectPath.slice(0, splitIndex)}/${relativePath}`;
 }
 
 export function resolveLcaReleaseStorageBucket(): string {
@@ -294,6 +337,177 @@ async function createArtifactDownload(
   };
 }
 
+async function getCalculationBundle(
+  actorSupabase: LcaReleaseRpcClient,
+  serviceSupabase: SupabaseClient,
+  packageId: string,
+): Promise<LcaReleaseRpcResult> {
+  const projection = await callLciaResultCalculationBundleRpc(actorSupabase, packageId);
+  if (!projection.ok) return projection;
+
+  const data = recordValue(projection.data);
+  const bundleRef = recordValue(data?.calculationBundle);
+  const manifestUrl = stringValue(bundleRef?.manifestUrl);
+  const manifestSha256 = stringValue(bundleRef?.manifestSha256);
+  const manifestByteSize = finiteInteger(bundleRef?.manifestByteSize);
+  const bundleContentHash = stringValue(bundleRef?.bundleContentHash);
+  const artifactCount = finiteInteger(bundleRef?.artifactCount);
+  if (
+    !data ||
+    !bundleRef ||
+    !manifestUrl ||
+    !manifestSha256 ||
+    manifestByteSize === null ||
+    !bundleContentHash ||
+    artifactCount === null
+  ) {
+    return failure(
+      'calculation_bundle_ref_invalid',
+      502,
+      'Calculation Bundle metadata is incomplete or invalid',
+      projection.data,
+    );
+  }
+  if (manifestByteSize > LCA_CALCULATION_BUNDLE_MAX_MANIFEST_BYTES) {
+    return failure(
+      'calculation_bundle_manifest_too_large',
+      409,
+      'Calculation Bundle manifest exceeds the maximum readable size',
+      { manifestByteSize, maximum: LCA_CALCULATION_BUNDLE_MAX_MANIFEST_BYTES },
+    );
+  }
+
+  const storagePath = parseStoragePathFromArtifactUrl(manifestUrl);
+  if (!storagePath) {
+    return failure(
+      'calculation_bundle_storage_ref_invalid',
+      502,
+      'Calculation Bundle manifest URL is not a supported private storage ref',
+    );
+  }
+  const downloaded = await serviceSupabase.storage
+    .from(storagePath.bucket)
+    .download(storagePath.objectPath);
+  if (downloaded.error || !downloaded.data) {
+    return failure(
+      'calculation_bundle_manifest_download_failed',
+      502,
+      'Failed to read the Calculation Bundle manifest',
+      downloaded.error?.message ?? null,
+    );
+  }
+  if (downloaded.data.size !== manifestByteSize) {
+    return failure(
+      'calculation_bundle_manifest_size_mismatch',
+      409,
+      'Calculation Bundle manifest byte size differs from its durable reference',
+      { expected: manifestByteSize, actual: downloaded.data.size },
+    );
+  }
+  const observedManifestSha256 = await sha256Blob(downloaded.data);
+  if (observedManifestSha256 !== manifestSha256) {
+    return failure(
+      'calculation_bundle_manifest_hash_mismatch',
+      409,
+      'Calculation Bundle manifest SHA-256 differs from its durable reference',
+      { expected: manifestSha256, actual: observedManifestSha256 },
+    );
+  }
+
+  let manifest: Record<string, unknown>;
+  try {
+    manifest = recordValue(JSON.parse(await downloaded.data.text())) ?? {};
+  } catch (error) {
+    return failure(
+      'calculation_bundle_manifest_invalid_json',
+      502,
+      'Calculation Bundle manifest is not valid JSON',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+  const manifestArtifacts = Array.isArray(manifest.artifacts) ? manifest.artifacts : null;
+  if (
+    manifest.schemaVersion !== 'tiangong.calculation-bundle.v1' ||
+    manifest.bundleContentHash !== bundleContentHash ||
+    !manifestArtifacts ||
+    manifestArtifacts.length !== artifactCount
+  ) {
+    return failure(
+      'calculation_bundle_manifest_binding_mismatch',
+      409,
+      'Calculation Bundle manifest does not bind its durable schema, content hash, and artifact count',
+    );
+  }
+
+  const signedManifest = await serviceSupabase.storage
+    .from(storagePath.bucket)
+    .createSignedUrl(storagePath.objectPath, LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS);
+  if (signedManifest.error || !signedManifest.data?.signedUrl) {
+    return failure(
+      'calculation_bundle_manifest_sign_failed',
+      502,
+      'Failed to create a signed Calculation Bundle manifest URL',
+      signedManifest.error?.message ?? null,
+    );
+  }
+
+  const artifacts: Array<Record<string, unknown>> = [];
+  for (const artifactValue of manifestArtifacts) {
+    const artifact = recordValue(artifactValue);
+    const relativePath = stringValue(artifact?.path);
+    const sha256 = stringValue(artifact?.sha256);
+    const byteSize = finiteInteger(artifact?.byteSize);
+    const objectPath = relativePath ? childObjectPath(storagePath.objectPath, relativePath) : null;
+    if (!artifact || !relativePath || !sha256 || byteSize === null || !objectPath) {
+      return failure(
+        'calculation_bundle_artifact_ref_invalid',
+        409,
+        'Calculation Bundle contains an invalid or unsafe artifact reference',
+        artifactValue,
+      );
+    }
+    const signed = await serviceSupabase.storage
+      .from(storagePath.bucket)
+      .createSignedUrl(objectPath, LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS);
+    if (signed.error || !signed.data?.signedUrl) {
+      return failure(
+        'calculation_bundle_artifact_sign_failed',
+        502,
+        'Failed to create a signed Calculation Bundle artifact URL',
+        { path: relativePath, detail: signed.error?.message ?? null },
+      );
+    }
+    artifacts.push({
+      ...artifact,
+      storageBucket: storagePath.bucket,
+      objectKey: objectPath,
+      signedDownloadUrl: signed.data.signedUrl,
+      signedDownloadExpiresInSeconds: LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS,
+    });
+  }
+
+  return {
+    ok: true,
+    data: {
+      ...data,
+      calculationBundle: {
+        ...bundleRef,
+        manifest,
+        manifestDownload: {
+          storageBucket: storagePath.bucket,
+          objectKey: storagePath.objectPath,
+          sha256: manifestSha256,
+          byteSize: manifestByteSize,
+          mediaType: 'application/json',
+          signedDownloadUrl: signedManifest.data.signedUrl,
+          signedDownloadExpiresInSeconds: LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS,
+        },
+        artifacts,
+      },
+    },
+  };
+}
+
 function requireExplicitActorClient(client: LcaReleaseRpcClient | null | undefined) {
   if (!client || typeof client.rpc !== 'function') {
     throw new Error('LCA release repository requires an explicit actor Supabase client');
@@ -320,7 +534,8 @@ export function createLcaReleaseCommandRepository(
     readbackVerify: (request, audit) =>
       callLcaReleaseReadbackVerifyRpc(actorClient, request, audit),
     unpublish: (request, audit) => callLcaReleaseUnpublishRpc(actorClient, request, audit),
-    getCalculationBundle: (packageId) => callLciaResultCalculationBundleRpc(actorClient, packageId),
+    getCalculationBundle: (packageId) =>
+      getCalculationBundle(actorClient, serviceSupabase, packageId),
     createArtifactDownload: (artifactId) =>
       createArtifactDownload(actorClient, serviceSupabase, artifactId),
   };
