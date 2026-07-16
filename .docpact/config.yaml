@@ -1,6 +1,6 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-07-13'
+lastReviewedAt: '2026-07-16'
 lastReviewedCommit: '633d58c7ed548dbbe5915ff7175b365013913db6'
 
 # Keep deterministic governance facts here.
@@ -115,6 +115,19 @@ routing:
         - supabase/functions/_shared/command_runtime/**
         - supabase/functions/_shared/commands/**
         - supabase/functions/_shared/db_rpc/**
+    lca-release-runtime:
+      paths:
+        - supabase/functions/app_lca_release_commands/**
+        - supabase/functions/lca_release_results/**
+        - supabase/functions/_shared/commands/lca_release/**
+        - supabase/functions/_shared/db_rpc/lca_release_commands.ts
+        - test/lca_release_command_test.ts
+        - test/lca_release_results_test.ts
+        - supabase/.env.example
+        - README.md
+        - docs/agents/repo-architecture.md
+        - docs/agents/repo-validation.md
+        - test.example.http
     review-submit-gate:
       paths:
         - supabase/functions/app_dataset_review_submit_gate/**
@@ -344,6 +357,36 @@ rules:
       - path: test.example.http
         mode: must_exist
     reason: Review-submit gate API and submit-review assertion metadata define the edge contract consumed by Next and backed by database-engine RPC truth.
+  - id: edge-functions-lca-release-runtime-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: supabase/functions/app_lca_release_commands/**
+        kind: runtime-code
+      - path: supabase/functions/lca_release_results/**
+        kind: runtime-code
+      - path: supabase/functions/_shared/commands/lca_release/**
+        kind: runtime-code
+      - path: supabase/functions/_shared/db_rpc/lca_release_commands.ts
+        kind: runtime-code
+      - path: test/lca_release_command_test.ts
+        kind: runtime-test
+      - path: test/lca_release_results_test.ts
+        kind: runtime-test
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: docs/agents/repo-validation.md
+        mode: review_or_update
+      - path: docs/agents/repo-architecture.md
+        mode: review_or_update
+      - path: README.md
+        mode: review_or_update
+      - path: test.example.http
+        mode: review_or_update
+    reason: The release command and read projections jointly define actor authorization, service-only artifact verification, and the public immutable download boundary.
   - id: edge-functions-proof-and-ci-contract
     scope: repo
     repo: edge-functions

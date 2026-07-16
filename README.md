@@ -18,7 +18,7 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-07-13
+lastReviewedAt: 2026-07-16
 lastReviewedCommit: 633d58c7ed548dbbe5915ff7175b365013913db6
 ---
 
@@ -408,3 +408,17 @@ Job response states map to HTTP status as follows:
   - `GET`: `/functions/v1/lca_results/{resultId}` or `?result_id=...`
   - `POST`: body `{ "result_id": "<uuid>" }`
 - `lca_query_results`: `POST` only.
+
+## LCI/LCIA Release Function Call Patterns
+
+- `app_lca_release_commands`: authenticated `POST` command endpoint. It accepts a user JWT session and delegates authorization/state changes to the database-owned release RPCs. A User API key is first exchanged for a session by the public CLI; the API key and Supabase service-role key are never included in command payloads.
+  - lifecycle actions: `prepare`, `create_artifact_uploads`, `finalize_artifacts`, `approve`, `publish`, `readback_verify`, `unpublish`
+  - authenticated reads: `get_release`, `get_current`, `get_calculation_bundle`, `create_artifact_download`
+  - exactly four ZIPs are accepted: Unit Process and standalone LifecycleModel+Result, each in TIDAS and ILCD. Maximum size is 50 MiB per ZIP.
+  - `create_artifact_uploads` returns short-lived signed upload URLs for private, content-addressed, server-derived paths. `finalize_artifacts` downloads every object and verifies its exact byte size and SHA-256 before the service-only finalize RPC.
+- `lca_release_results`: `GET` or `POST` read endpoint.
+  - no payload or `mode=current` returns the current public release
+  - `mode=release&releaseRunId=<uuid>` returns public/superseded metadata anonymously and private metadata only to an authenticated manager
+  - `mode=artifact_download&artifactId=<uuid>` returns a 15-minute signed download URL only after the database authorizes the artifact projection
+
+Set `LCA_RELEASE_STORAGE_BUCKET` only when release artifacts should not use the normal `S3_BUCKET`/`lca_results` private bucket. The release CLI/project needs only the public API URL, publishable key, and a User API key for a `data_product_manager`; it must never receive `REMOTE_SUPABASE_SECRET_KEY`.

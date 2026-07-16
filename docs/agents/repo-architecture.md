@@ -29,7 +29,7 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-13
+lastReviewedAt: 2026-07-16
 lastReviewedCommit: 633d58c7ed548dbbe5915ff7175b365013913db6
 related:
   - ../../AGENTS.md
@@ -174,6 +174,14 @@ Shared behavior lives in:
 - `supabase/functions/_shared/redis_client.ts`
 
 The default TIDAS package path enqueues `tidas.import_package` and `tidas.export_package` through `worker_enqueue_job` without creating new `lca_package_jobs` rows. Import prepare creates an `import_source` artifact row for upload coordination; import enqueue links that artifact to the canonical `worker_jobs` row. Export request cache stores both compatibility `job_id` and canonical `worker_job_id` where applicable. Setting `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new package worker submissions and fails closed with `LEGACY_QUEUE_DISABLED`; it must not fall back to legacy `lca_package_enqueue_job`. Existing package domain rows, request cache, artifacts, and lookup APIs remain retained compatibility metadata; `worker_jobs` is the canonical task lifecycle projection and worker delivery mechanism.
+
+### LCI/LCIA release control plane
+
+`app_lca_release_commands` is the authenticated control-plane boundary for deterministic LCI/LCIA releases. It accepts JWT sessions only; a caller that starts with a TianGong User API key must exchange that key for a user session before invoking the function. Database RPCs re-evaluate the current account's `data_product_manager` role for prepare, approval, publish, readback verification, unpublish, private reads, and Calculation Bundle reads.
+
+The artifact path deliberately has two identities. Actor-bound RPCs authorize the requested release and bind its exact publish-plan hash. The Edge service client then creates signed uploads under a server-derived private object key, downloads each of the four TIDAS/ILCD profile ZIPs, verifies byte size and SHA-256, repeats the actor-bound role check, and invokes the service-only finalize RPC. Release clients never receive the Supabase secret/service-role key and cannot select a storage bucket or object key.
+
+`lca_release_results` exposes current or superseded public release metadata and signed artifact downloads without requiring a session. When an Authorization header is supplied it must authenticate successfully, and private release reads remain subject to the database projection's manager check. The endpoint never signs an object until the database returns an authorized bucket/object-key projection.
 
 ## Database Boundary
 
