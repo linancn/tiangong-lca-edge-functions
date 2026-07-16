@@ -30,7 +30,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-07-16
-lastReviewedCommit: 633d58c7ed548dbbe5915ff7175b365013913db6
+lastReviewedCommit: 39971596f4ba5506546cc653674a69ef7ac5f291
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -179,7 +179,7 @@ The default TIDAS package path enqueues `tidas.import_package` and `tidas.export
 
 `app_lca_release_commands` is the authenticated control-plane boundary for deterministic LCI/LCIA releases. It accepts JWT sessions only; a caller that starts with a TianGong User API key must exchange that key for a user session before invoking the function. Database RPCs re-evaluate the current account's `data_product_manager` role for prepare, approval, publish, readback verification, unpublish, private reads, and Calculation Bundle reads.
 
-The artifact path deliberately has two identities. Actor-bound RPCs authorize the requested release and bind its exact publish-plan hash. The Edge service client then creates signed uploads under a server-derived private object key, downloads each of the four TIDAS/ILCD profile ZIPs, verifies byte size and SHA-256, repeats the actor-bound role check, and invokes the service-only finalize RPC. Release clients never receive the Supabase secret/service-role key and cannot select a storage bucket or object key.
+The artifact path deliberately has two identities. Actor-bound RPCs authorize the requested release and bind its exact publish-plan hash. The Edge service client then creates retryable signed uploads under a server-derived private object key; upsert is confined to that content-addressed release/plan/profile/format/hash identity. It downloads each of the four TIDAS/ILCD profile ZIPs, verifies byte size and SHA-256, repeats the actor-bound role check, and invokes the service-only finalize RPC. Release clients never receive the Supabase secret/service-role key and cannot select a storage bucket or object key.
 
 Calculation Bundle reads follow the same projection rule. The database returns only the manager-authorized immutable bundle ref. Edge downloads the private manifest, verifies its exact size and SHA-256 plus schema/content-hash/artifact-count binding, rejects unsafe child paths, and returns short-lived signed URLs for the manifest and each LCI/LCIA chunk. Raw worker object URLs are never browser download contracts.
 

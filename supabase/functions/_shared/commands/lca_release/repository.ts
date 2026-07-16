@@ -191,7 +191,7 @@ async function createArtifactUploads(
     const objectKey = lcaReleaseObjectKey(request.releaseRunId, request.publishPlanHash, artifact);
     const { data, error } = await serviceSupabase.storage
       .from(bucket)
-      .createSignedUploadUrl(objectKey);
+      .createSignedUploadUrl(objectKey, { upsert: true });
     if (error || !data?.token || !data.path) {
       return failure(
         'release_signed_upload_create_failed',

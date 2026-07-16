@@ -484,6 +484,8 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_contribution_p
     }'
 
 ### @name LCA_Release_Current：Local (public)
+# Artifact upload retries reuse only the server-derived content-addressed object identity;
+# finalize always re-downloads and validates the exact size and SHA-256 after any retry.
 curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_release_results?mode=current'
 
 ### @name LCA_Release_Calculation_Bundle：Local (data_product_manager JWT)

@@ -28,7 +28,7 @@ type RpcResponse = { data: unknown; error: unknown };
 class FakeSupabase {
   rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
   rpcResults = new Map<string, RpcResponse>();
-  signedUploadCalls: Array<{ bucket: string; objectKey: string }> = [];
+  signedUploadCalls: Array<{ bucket: string; objectKey: string; upsert: boolean }> = [];
   signedDownloadCalls: Array<{ bucket: string; objectKey: string; expiresIn: number }> = [];
   downloadedObjects = new Map<string, Blob>();
   storageError: { message: string } | null = null;
@@ -40,8 +40,8 @@ class FakeSupabase {
 
   storage = {
     from: (bucket: string) => ({
-      createSignedUploadUrl: async (objectKey: string) => {
-        this.signedUploadCalls.push({ bucket, objectKey });
+      createSignedUploadUrl: async (objectKey: string, options?: { upsert?: boolean }) => {
+        this.signedUploadCalls.push({ bucket, objectKey, upsert: options?.upsert === true });
         if (this.storageError) return { data: null, error: this.storageError };
         return {
           data: {
@@ -193,6 +193,7 @@ Deno.test(
     assertEquals(serviceSupabase.signedUploadCalls[0], {
       bucket: 'lca_results',
       objectKey: lcaReleaseObjectKey(RELEASE_RUN_ID, PLAN_HASH, artifactInputs[0]),
+      upsert: true,
     });
     assertMatch(serviceSupabase.signedUploadCalls[0].objectKey, new RegExp(`${sha256}\\.zip$`));
   },
