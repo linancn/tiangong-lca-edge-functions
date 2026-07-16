@@ -29,7 +29,12 @@ class FakeSupabase {
   rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
   rpcResults = new Map<string, RpcResponse>();
   signedUploadCalls: Array<{ bucket: string; objectKey: string; upsert: boolean }> = [];
-  signedDownloadCalls: Array<{ bucket: string; objectKey: string; expiresIn: number }> = [];
+  signedDownloadCalls: Array<{
+    bucket: string;
+    objectKey: string;
+    expiresIn: number;
+    download?: string | boolean;
+  }> = [];
   downloadedObjects = new Map<string, Blob>();
   storageError: { message: string } | null = null;
 
@@ -59,8 +64,17 @@ class FakeSupabase {
           ? { data, error: null }
           : { data: null, error: { message: 'Object not found' } };
       },
-      createSignedUrl: async (objectKey: string, expiresIn: number) => {
-        this.signedDownloadCalls.push({ bucket, objectKey, expiresIn });
+      createSignedUrl: async (
+        objectKey: string,
+        expiresIn: number,
+        options?: { download?: string | boolean },
+      ) => {
+        this.signedDownloadCalls.push({
+          bucket,
+          objectKey,
+          expiresIn,
+          ...(options?.download === undefined ? {} : { download: options.download }),
+        });
         if (this.storageError) return { data: null, error: this.storageError };
         return {
           data: { signedUrl: `https://download.example/${bucket}/${objectKey}` },
@@ -584,10 +598,17 @@ Deno.test('artifact download signs only the actor-authorized DB storage ref', as
     'get_lca_release_artifact_download',
     rpcSuccess({
       artifactId: ARTIFACT_ID,
+      releaseRunId: RELEASE_RUN_ID,
+      profileId: 'standalone-lifecyclemodel-result-full-closure.v1',
+      format: 'ilcd',
       storageBucket: 'lca_results',
       objectKey: 'lca-releases/v1/readable.zip',
       sha256: 'f'.repeat(64),
     }),
+  );
+  actorSupabase.rpcResults.set(
+    'get_lca_release_run',
+    rpcSuccess({ releaseRunId: RELEASE_RUN_ID, releaseVersion: '01.00.000' }),
   );
   const result = await executeLcaReleaseCommand(
     { action: 'create_artifact_download', artifactId: ARTIFACT_ID },
@@ -600,12 +621,14 @@ Deno.test('artifact download signs only the actor-authorized DB storage ref', as
       bucket: 'lca_results',
       objectKey: 'lca-releases/v1/readable.zip',
       expiresIn: 900,
+      download: 'tiangong-lca-01.00.000-model-result.ilcd.zip',
     },
   ]);
   if (result.ok) {
     const body = result.body as { data: Record<string, unknown> };
     assertEquals(body.data.storageBucket, undefined);
     assertEquals(body.data.objectKey, undefined);
+    assertEquals(body.data.downloadFilename, 'tiangong-lca-01.00.000-model-result.ilcd.zip');
     assertEquals(
       body.data.signedDownloadUrl,
       'https://download.example/lca_results/lca-releases/v1/readable.zip',

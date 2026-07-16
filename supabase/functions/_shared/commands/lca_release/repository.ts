@@ -119,6 +119,22 @@ function withoutStorageLocator(value: Record<string, unknown>): Record<string, u
   return sanitized;
 }
 
+function releaseArtifactDownloadFilename(
+  releaseVersion: string,
+  profileId: string,
+  format: string,
+): string | null {
+  if (!/^\d{2}\.\d{2}\.\d{3}$/.test(releaseVersion)) return null;
+  const profile =
+    profileId === 'unit-process-full-closure.v1'
+      ? 'unit-process'
+      : profileId === 'standalone-lifecyclemodel-result-full-closure.v1'
+        ? 'model-result'
+        : null;
+  if (!profile || (format !== 'tidas' && format !== 'ilcd')) return null;
+  return `tiangong-lca-${releaseVersion}-${profile}.${format}.zip`;
+}
+
 function parseStoragePathFromArtifactUrl(
   artifactUrl: string,
 ): { bucket: string; objectPath: string } | null {
@@ -318,7 +334,10 @@ async function createArtifactDownload(
   const value = recordValue(metadata.data);
   const bucket = stringValue(value?.storageBucket);
   const objectKey = stringValue(value?.objectKey);
-  if (!value || !bucket || !objectKey) {
+  const releaseRunId = stringValue(value?.releaseRunId);
+  const profileId = stringValue(value?.profileId);
+  const format = stringValue(value?.format);
+  if (!value || !bucket || !objectKey || !releaseRunId || !profileId || !format) {
     return failure(
       'release_artifact_storage_ref_missing',
       502,
@@ -326,9 +345,25 @@ async function createArtifactDownload(
       metadata.data,
     );
   }
+  const release = await callLcaReleaseRunRpc(actorSupabase, releaseRunId);
+  if (!release.ok) return release;
+  const releaseVersion = stringValue(recordValue(release.data)?.releaseVersion);
+  const downloadFilename = releaseVersion
+    ? releaseArtifactDownloadFilename(releaseVersion, profileId, format)
+    : null;
+  if (!downloadFilename) {
+    return failure(
+      'release_artifact_filename_invalid',
+      502,
+      'Release artifact metadata cannot produce a safe download filename',
+      { releaseRunId, profileId, format, releaseVersion },
+    );
+  }
   const { data, error } = await serviceSupabase.storage
     .from(bucket)
-    .createSignedUrl(objectKey, LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS);
+    .createSignedUrl(objectKey, LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS, {
+      download: downloadFilename,
+    });
   if (error || !data?.signedUrl) {
     return failure(
       'release_artifact_signed_download_failed',
@@ -341,6 +376,7 @@ async function createArtifactDownload(
     ok: true,
     data: {
       ...withoutStorageLocator(value),
+      downloadFilename,
       signedDownloadUrl: data.signedUrl,
       signedDownloadExpiresInSeconds: LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS,
     },
