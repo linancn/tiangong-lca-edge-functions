@@ -111,6 +111,14 @@ function finiteInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
+function withoutStorageLocator(value: Record<string, unknown>): Record<string, unknown> {
+  const sanitized = { ...value };
+  delete sanitized.storageBucket;
+  delete sanitized.objectKey;
+  delete sanitized.manifestUrl;
+  return sanitized;
+}
+
 function parseStoragePathFromArtifactUrl(
   artifactUrl: string,
 ): { bucket: string; objectPath: string } | null {
@@ -332,7 +340,7 @@ async function createArtifactDownload(
   return {
     ok: true,
     data: {
-      ...value,
+      ...withoutStorageLocator(value),
       signedDownloadUrl: data.signedUrl,
       signedDownloadExpiresInSeconds: LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS,
     },
@@ -480,9 +488,7 @@ async function getCalculationBundle(
       );
     }
     artifacts.push({
-      ...artifact,
-      storageBucket: storagePath.bucket,
-      objectKey: objectPath,
+      ...withoutStorageLocator(artifact),
       signedDownloadUrl: signed.data.signedUrl,
       signedDownloadExpiresInSeconds: LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS,
     });
@@ -491,13 +497,11 @@ async function getCalculationBundle(
   return {
     ok: true,
     data: {
-      ...data,
+      ...withoutStorageLocator(data),
       calculationBundle: {
-        ...bundleRef,
+        ...withoutStorageLocator(bundleRef),
         manifest,
         manifestDownload: {
-          storageBucket: storagePath.bucket,
-          objectKey: storagePath.objectPath,
           sha256: manifestSha256,
           byteSize: manifestByteSize,
           mediaType: 'application/json',

@@ -491,13 +491,24 @@ Deno.test(
     ]);
     if (result.ok) {
       const body = result.body as {
-        data: { calculationBundle: { artifacts: Array<{ signedDownloadUrl: string }> } };
+        data: {
+          calculationBundle: {
+            manifestUrl?: string;
+            manifestDownload: Record<string, unknown>;
+            artifacts: Array<Record<string, unknown> & { signedDownloadUrl: string }>;
+          };
+        };
       };
       assertEquals(
         body.data.calculationBundle.artifacts[0].signedDownloadUrl,
         'https://download.example/lca_results/' +
           `calculation-bundles/${RELEASE_RUN_ID}/${bundleContentHash}/chunks/lci-00000.jsonl.gz`,
       );
+      assertEquals(body.data.calculationBundle.manifestUrl, undefined);
+      assertEquals('storageBucket' in body.data.calculationBundle.manifestDownload, false);
+      assertEquals('objectKey' in body.data.calculationBundle.manifestDownload, false);
+      assertEquals('storageBucket' in body.data.calculationBundle.artifacts[0], false);
+      assertEquals('objectKey' in body.data.calculationBundle.artifacts[0], false);
     }
   },
 );
@@ -591,6 +602,15 @@ Deno.test('artifact download signs only the actor-authorized DB storage ref', as
       expiresIn: 900,
     },
   ]);
+  if (result.ok) {
+    const body = result.body as { data: Record<string, unknown> };
+    assertEquals(body.data.storageBucket, undefined);
+    assertEquals(body.data.objectKey, undefined);
+    assertEquals(
+      body.data.signedDownloadUrl,
+      'https://download.example/lca_results/lca-releases/v1/readable.zip',
+    );
+  }
 });
 
 Deno.test('LCA release repository requires an explicit actor client', () => {
