@@ -4,8 +4,8 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 import { z } from 'zod';
 
 import {
-  resolveActorContext,
   type ActorContextResult,
+  resolveActorContext,
 } from '../_shared/command_runtime/actor_context.ts';
 import { commandError, json } from '../_shared/command_runtime/http.ts';
 import { readJsonBody } from '../_shared/command_runtime/request.ts';
@@ -31,6 +31,13 @@ export const lcaReleaseResultsRequestSchema = z.preprocess(
   },
   z.discriminatedUnion('mode', [
     z.object({ mode: z.literal('current') }).strict(),
+    z
+      .object({
+        mode: z.literal('process'),
+        processId: uuidSchema,
+        processVersion: z.string().regex(/^\d{2}\.\d{2}\.\d{3}$/),
+      })
+      .strict(),
     z.object({ mode: z.literal('release'), releaseRunId: uuidSchema }).strict(),
     z.object({ mode: z.literal('artifact_download'), artifactId: uuidSchema }).strict(),
   ]),
@@ -39,7 +46,7 @@ export const lcaReleaseResultsRequestSchema = z.preprocess(
 export type LcaReleaseResultsRequest = z.infer<typeof lcaReleaseResultsRequestSchema>;
 type ResultsRepository = Pick<
   LcaReleaseCommandRepository,
-  'getRun' | 'getCurrent' | 'createArtifactDownload'
+  'getRun' | 'getCurrent' | 'getCurrentProcess' | 'createArtifactDownload'
 >;
 
 export type LcaReleaseResultsHandlerOptions = {
@@ -117,9 +124,14 @@ export function createLcaReleaseResultsHandler(options: LcaReleaseResultsHandler
     const result =
       parsed.data.mode === 'current'
         ? await resolved.value.getCurrent()
-        : parsed.data.mode === 'release'
-          ? await resolved.value.getRun(parsed.data.releaseRunId)
-          : await resolved.value.createArtifactDownload(parsed.data.artifactId);
+        : parsed.data.mode === 'process'
+          ? await resolved.value.getCurrentProcess(
+              parsed.data.processId,
+              parsed.data.processVersion,
+            )
+          : parsed.data.mode === 'release'
+            ? await resolved.value.getRun(parsed.data.releaseRunId)
+            : await resolved.value.createArtifactDownload(parsed.data.artifactId);
 
     if (!result.ok) {
       return commandError(result.code, result.message, result.status, result.details);

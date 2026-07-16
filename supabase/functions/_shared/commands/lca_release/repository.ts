@@ -3,6 +3,7 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 import type { ActorContext } from '../../command_runtime/actor_context.ts';
 import type { CommandAuditPayload } from '../../command_runtime/audit_log.ts';
 import {
+  callCurrentLcaReleaseProcessRpc,
   callCurrentLcaReleaseRpc,
   callLcaReleaseApproveRpc,
   callLcaReleaseArtifactDownloadRpc,
@@ -50,6 +51,7 @@ export type LcaReleaseCommandRepository = {
   ) => Promise<LcaReleaseRpcResult>;
   getRun: (releaseRunId: string) => Promise<LcaReleaseRpcResult>;
   getCurrent: () => Promise<LcaReleaseRpcResult>;
+  getCurrentProcess: (processId: string, processVersion: string) => Promise<LcaReleaseRpcResult>;
   createArtifactUploads: (
     request: LcaReleaseCreateArtifactUploadsRequest,
   ) => Promise<{ ok: true; data: LcaReleaseArtifactUpload[] } | LcaReleaseCommandFailure>;
@@ -525,6 +527,8 @@ export function createLcaReleaseCommandRepository(
     prepare: (request, audit) => callLcaReleasePrepareRpc(actorClient, request, audit),
     getRun: (releaseRunId) => callLcaReleaseRunRpc(actorClient, releaseRunId),
     getCurrent: () => callCurrentLcaReleaseRpc(actorClient),
+    getCurrentProcess: (processId, processVersion) =>
+      callCurrentLcaReleaseProcessRpc(actorClient, processId, processVersion),
     createArtifactUploads: (request) => createArtifactUploads(serviceSupabase, request),
     verifyArtifacts: (request) => verifyArtifacts(serviceSupabase, request),
     finalizeArtifacts: (request, audit) =>
@@ -543,10 +547,15 @@ export function createLcaReleaseCommandRepository(
 
 export function createPublicLcaReleaseRepository(
   serviceSupabase: SupabaseClient = createSupabaseServiceClient(),
-): Pick<LcaReleaseCommandRepository, 'getRun' | 'getCurrent' | 'createArtifactDownload'> {
+): Pick<
+  LcaReleaseCommandRepository,
+  'getRun' | 'getCurrent' | 'getCurrentProcess' | 'createArtifactDownload'
+> {
   return {
     getRun: (releaseRunId) => callLcaReleaseRunRpc(serviceSupabase, releaseRunId),
     getCurrent: () => callCurrentLcaReleaseRpc(serviceSupabase),
+    getCurrentProcess: (processId, processVersion) =>
+      callCurrentLcaReleaseProcessRpc(serviceSupabase, processId, processVersion),
     createArtifactDownload: (artifactId) =>
       createArtifactDownload(serviceSupabase, serviceSupabase, artifactId),
   };

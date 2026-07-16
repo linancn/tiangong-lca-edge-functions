@@ -419,6 +419,7 @@ Job response states map to HTTP status as follows:
   - `get_calculation_bundle` verifies the private Calculation Bundle manifest against its durable byte size, SHA-256, content hash, artifact count, and safe relative paths, then returns 15-minute signed URLs for the manifest and each LCI/LCIA chunk.
 - `lca_release_results`: `GET` or `POST` read endpoint.
   - no payload or `mode=current` returns the current public release
+  - `mode=process&processId=<uuid>&processVersion=<XX.XX.XXX>` returns the current public release plus the exact Unit Process, generated LifecycleModel, and Result Process identities for that source Process
   - `mode=release&releaseRunId=<uuid>` returns public/superseded metadata anonymously and private metadata only to an authenticated manager
   - `mode=artifact_download&artifactId=<uuid>` returns a 15-minute signed download URL only after the database authorizes the artifact projection
 

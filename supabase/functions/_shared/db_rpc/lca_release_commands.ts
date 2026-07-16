@@ -32,7 +32,9 @@ function isCommandFailure(data: unknown): data is LcaReleaseCommandFailure {
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     return false;
   }
-  const candidate = data as Partial<LcaReleaseCommandFailure> & { ok?: unknown };
+  const candidate = data as Partial<LcaReleaseCommandFailure> & {
+    ok?: unknown;
+  };
   return (
     candidate.ok === false &&
     typeof candidate.code === 'string' &&
@@ -168,6 +170,17 @@ export function callLcaReleaseManagerAssertionRpc(supabase: LcaReleaseRpcClient)
 
 export function callCurrentLcaReleaseRpc(supabase: LcaReleaseRpcClient) {
   return callLcaReleaseRpc(supabase, 'get_current_lca_release', {});
+}
+
+export function callCurrentLcaReleaseProcessRpc(
+  supabase: LcaReleaseRpcClient,
+  processId: string,
+  processVersion: string,
+) {
+  return callLcaReleaseRpc(supabase, 'get_current_lca_release_process', {
+    p_process_uuid: processId,
+    p_process_version: processVersion,
+  });
 }
 
 export function callLcaReleaseArtifactDownloadRpc(
