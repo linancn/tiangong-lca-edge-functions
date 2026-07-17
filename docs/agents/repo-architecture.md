@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-13
-lastReviewedCommit: 633d58c7ed548dbbe5915ff7175b365013913db6
+lastReviewedAt: 2026-07-16
+lastReviewedCommit: 39971596f4ba5506546cc653674a69ef7ac5f291
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -174,6 +174,16 @@ Shared behavior lives in:
 - `supabase/functions/_shared/redis_client.ts`
 
 The default TIDAS package path enqueues `tidas.import_package` and `tidas.export_package` through `worker_enqueue_job` without creating new `lca_package_jobs` rows. Import prepare creates an `import_source` artifact row for upload coordination; import enqueue links that artifact to the canonical `worker_jobs` row. Export request cache stores both compatibility `job_id` and canonical `worker_job_id` where applicable. Setting `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new package worker submissions and fails closed with `LEGACY_QUEUE_DISABLED`; it must not fall back to legacy `lca_package_enqueue_job`. Existing package domain rows, request cache, artifacts, and lookup APIs remain retained compatibility metadata; `worker_jobs` is the canonical task lifecycle projection and worker delivery mechanism.
+
+### LCI/LCIA release control plane
+
+`app_lca_release_commands` is the authenticated control-plane boundary for deterministic LCI/LCIA releases. It accepts JWT sessions only; a caller that starts with a TianGong User API key must exchange that key for a user session before invoking the function. Database RPCs re-evaluate the current account's `data_product_manager` role for prepare, approval, publish, readback verification, unpublish, private reads, and Calculation Bundle reads.
+
+The artifact path deliberately has two identities. Actor-bound RPCs authorize the requested release and bind its exact publish-plan hash. The Edge service client then creates retryable signed uploads under a server-derived private object key; upsert is confined to that content-addressed release/plan/profile/format/hash identity. It downloads each of the four TIDAS/ILCD profile ZIPs, verifies byte size and SHA-256, repeats the actor-bound role check, and invokes the service-only finalize RPC. Release clients never receive the Supabase secret/service-role key and cannot select a storage bucket or object key.
+
+Calculation Bundle reads follow the same projection rule. The database returns only the manager-authorized immutable bundle ref. Edge downloads the private manifest, verifies its exact size and SHA-256 plus schema/content-hash/artifact-count binding, rejects unsafe child paths, and returns short-lived signed URLs for the manifest and each LCI/LCIA chunk. Raw worker object URLs are never browser download contracts.
+
+`lca_release_results` exposes current or superseded public release metadata, source-Process-to-Model/Result identity projections, and signed artifact downloads without requiring a session. Process projections bind an exact Process UUID/version and return no storage locator. A matching Supabase project publishable key, including the configured legacy anon key, may appear as a Bearer credential on ordinary browser-client requests and remains a public read rather than actor authentication. Any other Authorization header must authenticate successfully, and private release reads remain subject to the database projection's manager check. The endpoint never signs an object until the database returns an authorized bucket/object-key projection. It resolves the authoritative release version and profile before signing, returns a server-derived `downloadFilename`, and binds that same semantic filename into the signed URL rather than exposing the content-addressed object name to browser downloads.
 
 ## Database Boundary
 

@@ -482,3 +482,39 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_contribution_p
     --data '{
       "result_id": "{{$dotenv LCA_RESULT_ID}}"
     }'
+
+### @name LCA_Release_Current：Local (public)
+# Artifact upload retries reuse only the server-derived content-addressed object identity;
+# finalize always re-downloads and validates the exact size and SHA-256 after any retry.
+curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_release_results?mode=current'
+
+### @name LCA_Release_Current：Local (Supabase browser-style public request)
+# A matching project publishable/legacy anon key is a public project credential, not actor auth.
+curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_release_results?mode=current' \
+    --header 'apikey: {{$dotenv SUPABASE_PUBLISHABLE_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv SUPABASE_PUBLISHABLE_KEY}}'
+
+### @name LCA_Release_Artifact_Download：Local (public)
+# Response includes a server-derived downloadFilename and a 15-minute signedDownloadUrl whose
+# Content-Disposition uses the same semantic name instead of the content-addressed object key.
+curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_release_results?mode=artifact_download&artifactId={{$dotenv LCA_RELEASE_ARTIFACT_ID}}'
+
+### @name LCA_Release_Calculation_Bundle：Local (data_product_manager JWT)
+# Response verifies the private manifest and includes 15-minute signedDownloadUrl values for the
+# manifest plus every LCI/LCIA chunk; raw worker object URLs are not browser download contracts.
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_lca_release_commands' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --data '{
+      "action": "get_calculation_bundle",
+      "packageId": "{{$dotenv LCA_RESULT_PACKAGE_ID}}"
+    }'
+
+### @name LCA_Release_Run：Local (data_product_manager JWT)
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_lca_release_commands' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
+    --data '{
+      "action": "get_release",
+      "releaseRunId": "{{$dotenv LCA_RELEASE_RUN_ID}}"
+    }'

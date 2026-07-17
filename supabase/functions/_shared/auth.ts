@@ -43,7 +43,10 @@ function readPublishableApiKey(): string | undefined {
   );
 }
 
-function isSupabasePublishableApiKey(apiKey: string, publishableApiKey?: string): boolean {
+export function isSupabasePublishableApiKey(
+  apiKey: string,
+  publishableApiKey: string | undefined = readPublishableApiKey(),
+): boolean {
   if (!apiKey) {
     return false;
   }
