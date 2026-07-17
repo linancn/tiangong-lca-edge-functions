@@ -3,6 +3,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 import { z } from 'zod';
 
+import { isSupabasePublishableApiKey } from '../_shared/auth.ts';
 import {
   type ActorContextResult,
   resolveActorContext,
@@ -54,6 +55,7 @@ export type LcaReleaseResultsHandlerOptions = {
   publicRepository?: ResultsRepository;
   repositoryForActor?: (supabase: SupabaseClient) => ResultsRepository;
   resolveActor?: (req: Request) => Promise<ActorContextResult>;
+  publishableApiKey?: string;
 };
 
 function parseQuery(req: Request): Record<string, string> {
@@ -69,7 +71,12 @@ async function resolveRepository(
   options: LcaReleaseResultsHandlerOptions,
 ): Promise<{ ok: true; value: ResultsRepository } | { ok: false; response: Response }> {
   const authorization = req.headers.get('Authorization');
-  if (authorization) {
+  const bearerToken = authorization?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  const usesProjectCredential =
+    bearerToken !== undefined &&
+    isSupabasePublishableApiKey(bearerToken, options.publishableApiKey);
+
+  if (authorization && !usesProjectCredential) {
     const actor = await (options.resolveActor ?? resolveActorContext)(req);
     if (!actor.ok) {
       return actor;

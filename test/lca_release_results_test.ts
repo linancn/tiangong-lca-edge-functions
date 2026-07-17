@@ -10,6 +10,8 @@ const USER_ID = '11111111-1111-4111-8111-111111111111';
 const RELEASE_RUN_ID = '22222222-2222-4222-8222-222222222222';
 const ARTIFACT_ID = '33333333-3333-4333-8333-333333333333';
 const PROCESS_ID = '44444444-4444-4444-8444-444444444444';
+const PUBLISHABLE_KEY = 'sb_publishable_local_test';
+const LEGACY_ANON_KEY = 'legacy-anon-jwt-fixture';
 
 function repository(label: string, privateFailure = false) {
   return {
@@ -57,6 +59,54 @@ Deno.test('anonymous current release lookup uses the public repository', async (
   const response = await handler(
     new Request('http://localhost/functions/v1/lca_release_results', {
       method: 'GET',
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), {
+    ok: true,
+    mode: 'current',
+    data: { label: 'public', status: 'current' },
+  });
+});
+
+Deno.test('publishable-key current lookup uses the public repository', async () => {
+  const handler = createLcaReleaseResultsHandler({
+    publicRepository: repository('public'),
+    publishableApiKey: PUBLISHABLE_KEY,
+    resolveActor: () => Promise.reject(new Error('publishable key must not resolve a user actor')),
+  });
+  const response = await handler(
+    new Request('http://localhost/functions/v1/lca_release_results', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${PUBLISHABLE_KEY}`,
+        apikey: PUBLISHABLE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ mode: 'current' }),
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(await response.json(), {
+    ok: true,
+    mode: 'current',
+    data: { label: 'public', status: 'current' },
+  });
+});
+
+Deno.test('configured legacy anon key current lookup uses the public repository', async () => {
+  const handler = createLcaReleaseResultsHandler({
+    publicRepository: repository('public'),
+    publishableApiKey: LEGACY_ANON_KEY,
+    resolveActor: () => Promise.reject(new Error('legacy anon key must not resolve a user actor')),
+  });
+  const response = await handler(
+    new Request('http://localhost/functions/v1/lca_release_results', {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${LEGACY_ANON_KEY}`,
+        apikey: LEGACY_ANON_KEY,
+      },
     }),
   );
   assertEquals(response.status, 200);
