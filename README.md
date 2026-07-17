@@ -18,8 +18,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-07-13
-lastReviewedCommit: 633d58c7ed548dbbe5915ff7175b365013913db6
+lastReviewedAt: 2026-07-16
+lastReviewedCommit: 39971596f4ba5506546cc653674a69ef7ac5f291
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -408,3 +408,19 @@ Job response states map to HTTP status as follows:
   - `GET`: `/functions/v1/lca_results/{resultId}` or `?result_id=...`
   - `POST`: body `{ "result_id": "<uuid>" }`
 - `lca_query_results`: `POST` only.
+
+## LCI/LCIA Release Function Call Patterns
+
+- `app_lca_release_commands`: authenticated `POST` command endpoint. It accepts a user JWT session and delegates authorization/state changes to the database-owned release RPCs. A User API key is first exchanged for a session by the public CLI; the API key and Supabase service-role key are never included in command payloads.
+  - lifecycle actions: `prepare`, `create_artifact_uploads`, `finalize_artifacts`, `approve`, `publish`, `readback_verify`, `unpublish`
+  - authenticated reads: `get_release`, `get_current`, `get_calculation_bundle`, `create_artifact_download`
+  - exactly four ZIPs are accepted: Unit Process and standalone LifecycleModel+Result, each in TIDAS and ILCD. Maximum size is 50 MiB per ZIP.
+  - `create_artifact_uploads` returns short-lived signed upload URLs for private, content-addressed, server-derived paths. The signed upload permits idempotent replacement at the same immutable plan/profile/format/hash identity so an interrupted upload can be retried; `finalize_artifacts` still downloads every object and verifies its exact byte size and SHA-256 before the service-only finalize RPC.
+  - `get_calculation_bundle` verifies the private Calculation Bundle manifest against its durable byte size, SHA-256, content hash, artifact count, and safe relative paths, then returns 15-minute signed URLs for the manifest and each LCI/LCIA chunk.
+- `lca_release_results`: `GET` or `POST` read endpoint.
+  - no payload or `mode=current` returns the current public release
+  - `mode=process&processId=<uuid>&processVersion=<XX.XX.XXX>` returns the current public release plus the exact Unit Process, generated LifecycleModel, and Result Process identities for that source Process
+  - `mode=release&releaseRunId=<uuid>` returns public/superseded metadata anonymously and private metadata only to an authenticated manager
+  - `mode=artifact_download&artifactId=<uuid>` returns a 15-minute signed download URL only after the database authorizes the artifact projection. The response includes a server-derived `downloadFilename`, and the signed URL sets the same semantic filename in `Content-Disposition`; internal storage locators are omitted.
+
+Set `LCA_RELEASE_STORAGE_BUCKET` only when release artifacts should not use the normal `S3_BUCKET`/`lca_results` private bucket. The release CLI/project needs only the public API URL, publishable key, and a User API key for a `data_product_manager`; it must never receive `REMOTE_SUPABASE_SECRET_KEY`.
