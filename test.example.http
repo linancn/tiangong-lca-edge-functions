@@ -488,6 +488,12 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_contribution_p
 # finalize always re-downloads and validates the exact size and SHA-256 after any retry.
 curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_release_results?mode=current'
 
+### @name LCA_Release_Current：Local (Supabase browser-style public request)
+# A matching project publishable/legacy anon key is a public project credential, not actor auth.
+curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/lca_release_results?mode=current' \
+    --header 'apikey: {{$dotenv SUPABASE_PUBLISHABLE_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv SUPABASE_PUBLISHABLE_KEY}}'
+
 ### @name LCA_Release_Artifact_Download：Local (public)
 # Response includes a server-derived downloadFilename and a 15-minute signedDownloadUrl whose
 # Content-Disposition uses the same semantic name instead of the content-addressed object key.
