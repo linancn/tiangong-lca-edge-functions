@@ -24,6 +24,7 @@ import {
 const TEST_USER_ID = '22222222-2222-4222-8222-222222222222';
 const TEST_BUILD_ID = '33333333-3333-4333-8333-333333333333';
 const TEST_WORKER_JOB_ID = '44444444-4444-4444-8444-444444444444';
+const TEST_CLOSURE_CHECK_ID = '45454545-4545-4454-8454-454545454545';
 const TEST_PACKAGE_ID = '55555555-5555-4555-8555-555555555555';
 const TEST_PUBLICATION_ID = '66666666-6666-4666-8666-666666666666';
 
@@ -468,6 +469,66 @@ Deno.test(
             visibility: 'operator',
           },
           workerJobId: TEST_WORKER_JOB_ID,
+        },
+      },
+    });
+  },
+);
+
+Deno.test(
+  'executeDataProductCommand create_build does not enqueue a second job when Build V2 persisted it atomically',
+  async () => {
+    const calls: string[] = [];
+    const repository: DataProductCommandRepository = {
+      createBuild: () => {
+        calls.push('createBuild');
+        return Promise.resolve({
+          ok: true,
+          data: {
+            buildId: TEST_BUILD_ID,
+            workerJobId: TEST_WORKER_JOB_ID,
+            workerJob: { jobId: TEST_WORKER_JOB_ID, status: 'queued' },
+            closureCheckId: TEST_CLOSURE_CHECK_ID,
+          },
+        });
+      },
+      enqueuePackageBuild: () =>
+        Promise.reject(new Error('must not double-enqueue persisted Build V2 job')),
+      previewPackage: () => Promise.reject(new Error('not used')),
+      ...unusedPreviewProjectionDeps,
+      ...unusedClosureCommandDeps,
+      publishPackage: () => Promise.reject(new Error('not used')),
+      unpublishPublication: () => Promise.reject(new Error('not used')),
+      listPublications: () => Promise.reject(new Error('not used')),
+    };
+
+    const result = await executeDataProductCommand(
+      {
+        action: 'create_build',
+        name: 'Closure-bound public LCIA results',
+        coverageMode: 'global_eligible',
+        defaultImpactCategory: 'climate-change',
+        lciaMethodSet: [],
+        closureCheckId: TEST_CLOSURE_CHECK_ID,
+        requestedScopeHash: 'server-owned-scope-hash',
+        policyFingerprint: 'server-owned-policy-fingerprint',
+      },
+      fakeActor,
+      repository,
+    );
+
+    assertEquals(calls, ['createBuild']);
+    assertEquals(result, {
+      ok: true,
+      status: 200,
+      body: {
+        ok: true,
+        command: 'lcia_result_build_request',
+        data: {
+          buildId: TEST_BUILD_ID,
+          workerJobId: TEST_WORKER_JOB_ID,
+          workerJob: { jobId: TEST_WORKER_JOB_ID, status: 'queued' },
+          closureCheckId: TEST_CLOSURE_CHECK_ID,
         },
       },
     });

@@ -483,6 +483,24 @@ async function executeCreateBuild(
     };
   }
 
+  // Certificate-bound Build V2 persists the worker job inside its database
+  // transaction.  Do not enqueue a second, unbound job from Edge.
+  const persistedWorkerJobId = stringField(result.data, 'workerJobId');
+  if (persistedWorkerJobId) {
+    return {
+      ok: true,
+      status: 200,
+      body: {
+        ok: true,
+        command: 'lcia_result_build_request',
+        data: {
+          ...(isRecord(result.data) ? result.data : { buildId }),
+          workerJobId: persistedWorkerJobId,
+        },
+      },
+    };
+  }
+
   const workerJobEnvelope = objectField(result.data, 'workerJob');
   const workerJobRequest = workerJobFrom(workerJobEnvelope ?? {});
   if (!workerJobRequest) {
