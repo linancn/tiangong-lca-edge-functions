@@ -13,6 +13,44 @@ export type DataProductBuildCreateRequest = {
   defaultImpactCategory?: string;
   lciaMethodSet: unknown[];
   idempotencyKey?: string;
+  closureCheckId?: string;
+  requestedScopeHash?: string;
+  policyFingerprint?: string;
+};
+
+export type DataProductClosureCheckCreateRequest = {
+  action: 'create_closure_check';
+  requestedScopeHash: string;
+  policyFingerprint: string;
+  requestIdempotencyToken: string;
+};
+
+export type DataProductClosureCheckReadRequest = {
+  action: 'get_closure_check';
+  closureCheckId: string;
+};
+
+export type DataProductClosureIssuesRequest = {
+  action: 'list_closure_issues';
+  closureCheckId: string;
+  afterIssueId?: string;
+  limit?: number;
+};
+
+export type DataProductClosureReportDownloadRequest = {
+  action: 'create_closure_report_download';
+  closureCheckId: string;
+};
+
+export type DataProductTaskFeedRequest = {
+  action: 'list_task_feed';
+  category?: string;
+  jobKinds?: string[];
+  statuses?: string[];
+  updatedSince?: string;
+  cursor?: { updatedAt: string; jobId: string };
+  limit?: number;
+  rootOnly?: boolean;
 };
 
 export type DataProductPackagePreviewRequest = {
@@ -47,6 +85,11 @@ export type DataProductPublicationListRequest = {
 
 export type DataProductCommandRequest =
   | DataProductBuildCreateRequest
+  | DataProductClosureCheckCreateRequest
+  | DataProductClosureCheckReadRequest
+  | DataProductClosureIssuesRequest
+  | DataProductClosureReportDownloadRequest
+  | DataProductTaskFeedRequest
   | DataProductPackagePreviewRequest
   | DataProductPackagePublishRequest
   | DataProductPackageUnpublishRequest

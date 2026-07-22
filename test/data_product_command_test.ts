@@ -15,6 +15,8 @@ import type { DataProductCommandRequest } from '../supabase/functions/_shared/co
 import {
   buildLciaResultBuildRequestRpcArgs,
   buildLciaResultPackagePublishRpcArgs,
+  buildLciaScopeClosureCheckRequestRpcArgs,
+  buildTaskSummaryV2FeedRpcArgs,
   callLciaResultPackagePublishRpc,
   type DataProductRpcResult,
 } from '../supabase/functions/_shared/db_rpc/data_product_commands.ts';
@@ -59,6 +61,14 @@ const unusedPreviewProjectionDeps = {
   fetchPreviewMetadata: () => Promise.reject(new Error('not used')),
 };
 
+const unusedClosureCommandDeps = {
+  createClosureCheck: () => Promise.reject(new Error('not used')),
+  getClosureCheck: () => Promise.reject(new Error('not used')),
+  listClosureIssues: () => Promise.reject(new Error('not used')),
+  createClosureReportDownload: () => Promise.reject(new Error('not used')),
+  listTaskFeed: () => Promise.reject(new Error('not used')),
+};
+
 Deno.test('dataProductCommandRequestSchema accepts create_build defaults', () => {
   const parsed = dataProductCommandRequestSchema.safeParse({
     action: 'create_build',
@@ -93,6 +103,72 @@ Deno.test('dataProductCommandRequestSchema accepts publication list controls', (
 
   assertEquals(parsed.success, true);
 });
+
+Deno.test(
+  'dataProductCommandRequestSchema accepts closure commands without client snapshot or validator state',
+  () => {
+    const parsed = dataProductCommandRequestSchema.safeParse({
+      action: 'create_closure_check',
+      requestedScopeHash: 'requested-scope-hash',
+      policyFingerprint: 'policy-fingerprint',
+      requestIdempotencyToken: 'new-check-token',
+    });
+    assertEquals(parsed.success, true);
+  },
+);
+
+Deno.test(
+  'dataProductCommandRequestSchema rejects a partial certificate binding on create_build',
+  () => {
+    const parsed = dataProductCommandRequestSchema.safeParse({
+      action: 'create_build',
+      name: 'partial binding',
+      closureCheckId: TEST_BUILD_ID,
+    });
+    assertEquals(parsed.success, false);
+  },
+);
+
+Deno.test(
+  'closure and task feed RPC args preserve keyset cursor and do not accept server-derived state',
+  () => {
+    assertEquals(
+      buildLciaScopeClosureCheckRequestRpcArgs(
+        {
+          action: 'create_closure_check',
+          requestedScopeHash: 'scope',
+          policyFingerprint: 'policy',
+          requestIdempotencyToken: 'token',
+        },
+        auditPayload,
+      ),
+      {
+        p_requested_scope_hash: 'scope',
+        p_policy_fingerprint: 'policy',
+        p_request_idempotency_token: 'token',
+        p_audit: auditPayload,
+      },
+    );
+    assertEquals(
+      buildTaskSummaryV2FeedRpcArgs({
+        action: 'list_task_feed',
+        category: 'data_product',
+        cursor: { updatedAt: '2026-07-22T00:00:00.000Z', jobId: TEST_WORKER_JOB_ID },
+        rootOnly: true,
+      }),
+      {
+        p_category: 'data_product',
+        p_job_kinds: null,
+        p_statuses: null,
+        p_updated_since: null,
+        p_cursor_updated_at: '2026-07-22T00:00:00.000Z',
+        p_cursor_job_id: TEST_WORKER_JOB_ID,
+        p_limit: 50,
+        p_root_only: true,
+      },
+    );
+  },
+);
 
 Deno.test(
   'dataProductCommandRequestSchema rejects package ids on create_build process selections',
@@ -336,6 +412,7 @@ Deno.test(
       },
       previewPackage: () => Promise.reject(new Error('not used')),
       ...unusedPreviewProjectionDeps,
+      ...unusedClosureCommandDeps,
       publishPackage: () => Promise.reject(new Error('not used')),
       unpublishPublication: () => Promise.reject(new Error('not used')),
       listPublications: () => Promise.reject(new Error('not used')),
@@ -500,6 +577,7 @@ Deno.test(
           },
         });
       },
+      ...unusedClosureCommandDeps,
       publishPackage: () => Promise.reject(new Error('not used')),
       unpublishPublication: () => Promise.reject(new Error('not used')),
       listPublications: () => Promise.reject(new Error('not used')),
@@ -592,6 +670,7 @@ Deno.test(
       enqueuePackageBuild: () => Promise.reject(new Error('not used')),
       previewPackage: () => Promise.reject(new Error('not used')),
       ...unusedPreviewProjectionDeps,
+      ...unusedClosureCommandDeps,
       publishPackage: () => Promise.reject(new Error('not used')),
       unpublishPublication: () => Promise.reject(new Error('not used')),
       listPublications: () =>
@@ -655,6 +734,7 @@ Deno.test('executeDataProductCommand propagates manager authorization failures',
     enqueuePackageBuild: () => Promise.reject(new Error('not used')),
     previewPackage: () => Promise.reject(new Error('not used')),
     ...unusedPreviewProjectionDeps,
+    ...unusedClosureCommandDeps,
     publishPackage: () => Promise.reject(new Error('not used')),
     unpublishPublication: () => Promise.reject(new Error('not used')),
     listPublications: () => Promise.reject(new Error('not used')),

@@ -7,6 +7,11 @@ import {
   callDataProductPackageUnpublishRpc,
   callLciaResultBuildRequestRpc,
   callLciaResultPackagePublishRpc,
+  callLciaScopeClosureCheckReadRpc,
+  callLciaScopeClosureCheckRequestRpc,
+  callLciaScopeClosureIssuesRpc,
+  callLciaScopeClosureReportDownloadRpc,
+  callTaskSummaryV2FeedRpc,
   type DataProductRpcResult,
 } from '../../db_rpc/data_product_commands.ts';
 import { createSupabaseServiceClient } from '../../supabase_client.ts';
@@ -20,11 +25,16 @@ import type {
 } from './package_preview_projection.ts';
 import type {
   DataProductBuildCreateRequest,
+  DataProductClosureCheckCreateRequest,
+  DataProductClosureCheckReadRequest,
+  DataProductClosureIssuesRequest,
+  DataProductClosureReportDownloadRequest,
   DataProductPackageBuildRequest,
   DataProductPackagePreviewRequest,
   DataProductPackagePublishRequest,
   DataProductPackageUnpublishRequest,
   DataProductPublicationListRequest,
+  DataProductTaskFeedRequest,
 } from './types.ts';
 
 type RpcClient = Pick<SupabaseClient, 'rpc'>;
@@ -60,6 +70,16 @@ export type DataProductCommandRepository = {
     request: DataProductBuildCreateRequest,
     audit: CommandAuditPayload,
   ) => Promise<DataProductRpcResult>;
+  createClosureCheck: (
+    request: DataProductClosureCheckCreateRequest,
+    audit: CommandAuditPayload,
+  ) => Promise<DataProductRpcResult>;
+  getClosureCheck: (request: DataProductClosureCheckReadRequest) => Promise<DataProductRpcResult>;
+  listClosureIssues: (request: DataProductClosureIssuesRequest) => Promise<DataProductRpcResult>;
+  createClosureReportDownload: (
+    request: DataProductClosureReportDownloadRequest,
+  ) => Promise<DataProductRpcResult>;
+  listTaskFeed: (request: DataProductTaskFeedRequest) => Promise<DataProductRpcResult>;
   enqueuePackageBuild: (
     request: DataProductPackageBuildRequest,
     actor: ActorContext,
@@ -108,6 +128,52 @@ export function createDataProductCommandRepository(
 
   return {
     createBuild: (request, audit) => callLciaResultBuildRequestRpc(actorClient, request, audit),
+    createClosureCheck: (request, audit) =>
+      callLciaScopeClosureCheckRequestRpc(actorClient, request, audit),
+    getClosureCheck: (request) => callLciaScopeClosureCheckReadRpc(actorClient, request),
+    listClosureIssues: (request) => callLciaScopeClosureIssuesRpc(actorClient, request),
+    createClosureReportDownload: async (request) => {
+      const artifact = await callLciaScopeClosureReportDownloadRpc(
+        actorClient,
+        request.closureCheckId,
+      );
+      if (!artifact.ok) return artifact;
+      const details = artifact.data as Record<string, unknown>;
+      const bucket = stringValue(details.bucket);
+      const objectPath = stringValue(details.objectPath);
+      if (!bucket || !objectPath) {
+        return {
+          ok: false,
+          code: 'closure_report_unavailable',
+          status: 404,
+          message: 'Closure report is not available',
+        };
+      }
+      const { data, error } = await serviceSupabase.storage
+        .from(bucket)
+        .createSignedUrl(objectPath, 900);
+      if (error || !data?.signedUrl) {
+        return {
+          ok: false,
+          code: 'closure_report_sign_failed',
+          status: 502,
+          message: 'Unable to create closure report download',
+          details: error?.message ?? null,
+        };
+      }
+      return {
+        ok: true,
+        data: {
+          artifactId: stringValue(details.artifactId),
+          mediaType: stringValue(details.mediaType),
+          size: numberValue(details.size),
+          checksumSha256: stringValue(details.checksumSha256),
+          signedDownloadUrl: data.signedUrl,
+          expiresInSeconds: 900,
+        },
+      };
+    },
+    listTaskFeed: (request) => callTaskSummaryV2FeedRpc(actorClient, request),
     enqueuePackageBuild: (request, actor) =>
       enqueueCalculatorWorkerJob(serviceSupabase, {
         jobKind: request.workerJob.jobKind,

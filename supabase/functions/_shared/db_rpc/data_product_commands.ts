@@ -3,10 +3,14 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 import type { CommandAuditPayload } from '../command_runtime/audit_log.ts';
 import type {
   DataProductBuildCreateRequest,
+  DataProductClosureCheckCreateRequest,
+  DataProductClosureCheckReadRequest,
+  DataProductClosureIssuesRequest,
   DataProductCommandFailure,
   DataProductPackagePreviewRequest,
   DataProductPackagePublishRequest,
   DataProductPackageUnpublishRequest,
+  DataProductTaskFeedRequest,
 } from '../commands/data_product/types.ts';
 
 type RpcClient = Pick<SupabaseClient, 'rpc'>;
@@ -95,6 +99,43 @@ export function buildLciaResultBuildRequestRpcArgs(
   };
 }
 
+export function buildLciaScopeClosureCheckRequestRpcArgs(
+  request: DataProductClosureCheckCreateRequest,
+  audit: CommandAuditPayload,
+): Record<string, unknown> {
+  return {
+    p_requested_scope_hash: request.requestedScopeHash,
+    p_policy_fingerprint: request.policyFingerprint,
+    p_request_idempotency_token: request.requestIdempotencyToken,
+    p_audit: audit,
+  };
+}
+
+export function buildLciaScopeClosureIssuesRpcArgs(
+  request: DataProductClosureIssuesRequest,
+): Record<string, unknown> {
+  return {
+    p_closure_check_id: request.closureCheckId,
+    p_after_issue_id: request.afterIssueId ?? null,
+    p_limit: request.limit ?? 100,
+  };
+}
+
+export function buildTaskSummaryV2FeedRpcArgs(
+  request: DataProductTaskFeedRequest,
+): Record<string, unknown> {
+  return {
+    p_category: request.category ?? null,
+    p_job_kinds: request.jobKinds ?? null,
+    p_statuses: request.statuses ?? null,
+    p_updated_since: request.updatedSince ?? null,
+    p_cursor_updated_at: request.cursor?.updatedAt ?? null,
+    p_cursor_job_id: request.cursor?.jobId ?? null,
+    p_limit: request.limit ?? 50,
+    p_root_only: request.rootOnly ?? false,
+  };
+}
+
 export function buildDataProductPackagePreviewRpcArgs(
   request: DataProductPackagePreviewRequest,
 ): Record<string, unknown> {
@@ -143,10 +184,64 @@ export function callLciaResultBuildRequestRpc(
   request: DataProductBuildCreateRequest,
   audit: CommandAuditPayload,
 ) {
+  if (request.closureCheckId && request.requestedScopeHash && request.policyFingerprint) {
+    return callDataProductRpc(supabase, 'cmd_lcia_result_build_request_v2', {
+      ...buildLciaResultBuildRequestRpcArgs(request, audit),
+      p_closure_check_id: request.closureCheckId,
+      p_requested_scope_hash: request.requestedScopeHash,
+      p_policy_fingerprint: request.policyFingerprint,
+    });
+  }
   return callDataProductRpc(
     supabase,
     'cmd_lcia_result_build_request',
     buildLciaResultBuildRequestRpcArgs(request, audit),
+  );
+}
+
+export function callLciaScopeClosureCheckRequestRpc(
+  supabase: RpcClient,
+  request: DataProductClosureCheckCreateRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDataProductRpc(
+    supabase,
+    'cmd_lcia_scope_closure_check_request',
+    buildLciaScopeClosureCheckRequestRpcArgs(request, audit),
+  );
+}
+
+export function callLciaScopeClosureCheckReadRpc(
+  supabase: RpcClient,
+  request: DataProductClosureCheckReadRequest,
+) {
+  return callDataProductRpc(supabase, 'get_lcia_scope_closure_check', {
+    p_closure_check_id: request.closureCheckId,
+  });
+}
+
+export function callLciaScopeClosureIssuesRpc(
+  supabase: RpcClient,
+  request: DataProductClosureIssuesRequest,
+) {
+  return callDataProductRpc(
+    supabase,
+    'list_lcia_scope_closure_issues',
+    buildLciaScopeClosureIssuesRpcArgs(request),
+  );
+}
+
+export function callLciaScopeClosureReportDownloadRpc(supabase: RpcClient, closureCheckId: string) {
+  return callDataProductRpc(supabase, 'get_lcia_scope_closure_report_download', {
+    p_closure_check_id: closureCheckId,
+  });
+}
+
+export function callTaskSummaryV2FeedRpc(supabase: RpcClient, request: DataProductTaskFeedRequest) {
+  return callDataProductRpc(
+    supabase,
+    'get_task_summary_v2_feed',
+    buildTaskSummaryV2FeedRpcArgs(request),
   );
 }
 

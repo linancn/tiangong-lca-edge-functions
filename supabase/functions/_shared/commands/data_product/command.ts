@@ -46,6 +46,62 @@ const createBuildSchema = z
     defaultImpactCategory: nonEmptyTextSchema.optional(),
     lciaMethodSet: z.array(z.unknown()).default([]),
     idempotencyKey: z.string().trim().min(1).max(200).optional(),
+    closureCheckId: uuidSchema.optional(),
+    requestedScopeHash: z.string().trim().min(1).max(256).optional(),
+    policyFingerprint: z.string().trim().min(1).max(256).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const supplied = [
+      value.closureCheckId,
+      value.requestedScopeHash,
+      value.policyFingerprint,
+    ].filter(Boolean).length;
+    if (supplied !== 0 && supplied !== 3) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'closureCheckId, requestedScopeHash, and policyFingerprint must be supplied together',
+      });
+    }
+  });
+
+const createClosureCheckSchema = z
+  .object({
+    action: z.literal('create_closure_check'),
+    requestedScopeHash: z.string().trim().min(1).max(256),
+    policyFingerprint: z.string().trim().min(1).max(256),
+    requestIdempotencyToken: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
+const getClosureCheckSchema = z
+  .object({ action: z.literal('get_closure_check'), closureCheckId: uuidSchema })
+  .strict();
+const listClosureIssuesSchema = z
+  .object({
+    action: z.literal('list_closure_issues'),
+    closureCheckId: uuidSchema,
+    afterIssueId: uuidSchema.optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+  })
+  .strict();
+const createClosureReportDownloadSchema = z
+  .object({ action: z.literal('create_closure_report_download'), closureCheckId: uuidSchema })
+  .strict();
+const listTaskFeedSchema = z
+  .object({
+    action: z.literal('list_task_feed'),
+    category: nonEmptyTextSchema.optional(),
+    jobKinds: z.array(nonEmptyTextSchema).max(50).optional(),
+    statuses: z.array(nonEmptyTextSchema).max(20).optional(),
+    updatedSince: z.string().datetime({ offset: true }).optional(),
+    cursor: z
+      .object({ updatedAt: z.string().datetime({ offset: true }), jobId: uuidSchema })
+      .strict()
+      .optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+    rootOnly: z.boolean().optional(),
   })
   .strict();
 
@@ -89,6 +145,11 @@ const listPublicationsSchema = z
 
 export const dataProductCommandRequestSchema = z.discriminatedUnion('action', [
   createBuildSchema,
+  createClosureCheckSchema,
+  getClosureCheckSchema,
+  listClosureIssuesSchema,
+  createClosureReportDownloadSchema,
+  listTaskFeedSchema,
   previewPackageSchema,
   publishPackageSchema,
   unpublishPublicationSchema,
@@ -316,6 +377,18 @@ function auditFor(request: DataProductCommandRequest, actor: ActorContext) {
           defaultImpactCategory: request.defaultImpactCategory ?? null,
         },
       });
+    case 'create_closure_check':
+      return buildCommandAuditPayload({
+        command: 'lcia_scope_closure_check_request',
+        actorUserId: actor.userId,
+        targetTable: 'lcia_scope_closure_checks',
+        targetId: 'pending',
+        targetVersion: '',
+        payload: {
+          requestedScopeHash: request.requestedScopeHash,
+          policyFingerprint: request.policyFingerprint,
+        },
+      });
     case 'publish_package':
       return buildCommandAuditPayload({
         command: 'lcia_result_package_publish',
@@ -341,6 +414,10 @@ function auditFor(request: DataProductCommandRequest, actor: ActorContext) {
       });
     case 'preview_package':
     case 'list_publications':
+    case 'get_closure_check':
+    case 'list_closure_issues':
+    case 'create_closure_report_download':
+    case 'list_task_feed':
       return null;
   }
 }
@@ -432,6 +509,52 @@ export async function executeDataProductCommand(
   repository: DataProductCommandRepository = createDataProductCommandRepository(actor.supabase),
 ): Promise<DataProductCommandExecutionResult> {
   switch (request.action) {
+    case 'create_closure_check': {
+      const result = await repository.createClosureCheck(request, auditFor(request, actor)!);
+      return result.ok
+        ? {
+            ok: true,
+            body: { ok: true, command: 'lcia_scope_closure_check_request', data: result.data },
+          }
+        : result;
+    }
+    case 'get_closure_check': {
+      const result = await repository.getClosureCheck(request);
+      return result.ok
+        ? {
+            ok: true,
+            body: { ok: true, command: 'lcia_scope_closure_check_get', data: result.data },
+          }
+        : result;
+    }
+    case 'list_closure_issues': {
+      const result = await repository.listClosureIssues(request);
+      return result.ok
+        ? {
+            ok: true,
+            body: { ok: true, command: 'lcia_scope_closure_issues_list', data: result.data },
+          }
+        : result;
+    }
+    case 'create_closure_report_download': {
+      const result = await repository.createClosureReportDownload(request);
+      return result.ok
+        ? {
+            ok: true,
+            body: {
+              ok: true,
+              command: 'lcia_scope_closure_report_download_create',
+              data: result.data,
+            },
+          }
+        : result;
+    }
+    case 'list_task_feed': {
+      const result = await repository.listTaskFeed(request);
+      return result.ok
+        ? { ok: true, body: { ok: true, command: 'task_summary_v2_feed_list', data: result.data } }
+        : result;
+    }
     case 'create_build':
       return executeCreateBuild(request, actor, repository);
     case 'preview_package': {
