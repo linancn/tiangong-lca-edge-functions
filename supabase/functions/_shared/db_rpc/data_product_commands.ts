@@ -104,8 +104,7 @@ export function buildLciaScopeClosureCheckRequestRpcArgs(
   audit: CommandAuditPayload,
 ): Record<string, unknown> {
   return {
-    p_requested_scope_hash: request.requestedScopeHash,
-    p_policy_fingerprint: request.policyFingerprint,
+    p_requested_scope: request.requestedScope,
     p_request_idempotency_token: request.requestIdempotencyToken,
     p_audit: audit,
   };
@@ -206,7 +205,7 @@ export function callLciaScopeClosureCheckRequestRpc(
 ) {
   return callDataProductRpc(
     supabase,
-    'cmd_lcia_scope_closure_check_request',
+    'cmd_lcia_scope_closure_check_request_v2',
     buildLciaScopeClosureCheckRequestRpcArgs(request, audit),
   );
 }

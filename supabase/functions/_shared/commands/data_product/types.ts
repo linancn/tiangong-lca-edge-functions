@@ -5,6 +5,20 @@ export type DataProductProcessSelection = {
   version: string;
 };
 
+export type DataProductClosureRequestedScope = {
+  coverageMode: DataProductCoverageMode;
+  processes?: DataProductProcessSelection[];
+  lciaMethods: DataProductProcessSelection[];
+  certificateFreshnessPolicy?: 'frozen-artifact-reusable-v1' | 'current-membership-required-v1';
+  linkPolicy?: {
+    linkSemanticsVersion?: 'signed-flow-balance-v1';
+    flowIdentityPolicy?: 'exact-flow-version-reference-unit-v2';
+    allocationSemanticsVersion?: 'tidas-reference-allocation-v3';
+    technosphereBoundaryPolicy?: 'closed' | 'open' | 'cutoff';
+    providerUniversePolicy?: 'scope_only' | 'eligible_transitive_expansion-v1';
+  };
+};
+
 export type DataProductBuildCreateRequest = {
   action: 'create_build';
   name: string;
@@ -20,8 +34,7 @@ export type DataProductBuildCreateRequest = {
 
 export type DataProductClosureCheckCreateRequest = {
   action: 'create_closure_check';
-  requestedScopeHash: string;
-  policyFingerprint: string;
+  requestedScope: DataProductClosureRequestedScope;
   requestIdempotencyToken: string;
 };
 

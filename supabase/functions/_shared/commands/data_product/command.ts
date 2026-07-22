@@ -37,6 +37,45 @@ const processSelectionSchema = z
   })
   .strict();
 
+const closureLinkPolicySchema = z
+  .object({
+    linkSemanticsVersion: z.literal('signed-flow-balance-v1').optional(),
+    flowIdentityPolicy: z.literal('exact-flow-version-reference-unit-v2').optional(),
+    allocationSemanticsVersion: z.literal('tidas-reference-allocation-v3').optional(),
+    technosphereBoundaryPolicy: z.enum(['closed', 'open', 'cutoff']).optional(),
+    providerUniversePolicy: z.enum(['scope_only', 'eligible_transitive_expansion-v1']).optional(),
+  })
+  .strict();
+
+// This is user intent, not a client-created Certificate binding.  The database
+// resolves exact identities, applies the visibility policy and computes both
+// hashes before it persists the immutable Requested Scope Manifest.
+const closureRequestedScopeSchema = z
+  .object({
+    coverageMode: z.enum(['global_eligible', 'subset']),
+    processes: z.array(processSelectionSchema).optional(),
+    lciaMethods: z.array(processSelectionSchema).min(1),
+    certificateFreshnessPolicy: z
+      .enum(['frozen-artifact-reusable-v1', 'current-membership-required-v1'])
+      .optional(),
+    linkPolicy: closureLinkPolicySchema.optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.coverageMode === 'global_eligible' && (value.processes?.length ?? 0) > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'global_eligible scope must not provide processes',
+      });
+    }
+    if (value.coverageMode === 'subset' && (value.processes?.length ?? 0) === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'subset scope requires at least one process',
+      });
+    }
+  });
+
 const createBuildSchema = z
   .object({
     action: z.literal('create_build'),
@@ -69,8 +108,7 @@ const createBuildSchema = z
 const createClosureCheckSchema = z
   .object({
     action: z.literal('create_closure_check'),
-    requestedScopeHash: z.string().trim().min(1).max(256),
-    policyFingerprint: z.string().trim().min(1).max(256),
+    requestedScope: closureRequestedScopeSchema,
     requestIdempotencyToken: z.string().trim().min(1).max(200),
   })
   .strict();
@@ -385,8 +423,9 @@ function auditFor(request: DataProductCommandRequest, actor: ActorContext) {
         targetId: 'pending',
         targetVersion: '',
         payload: {
-          requestedScopeHash: request.requestedScopeHash,
-          policyFingerprint: request.policyFingerprint,
+          coverageMode: request.requestedScope.coverageMode,
+          processCount: request.requestedScope.processes?.length ?? 0,
+          lciaMethodCount: request.requestedScope.lciaMethods.length,
         },
       });
     case 'publish_package':

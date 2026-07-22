@@ -105,12 +105,16 @@ Deno.test('dataProductCommandRequestSchema accepts publication list controls', (
 });
 
 Deno.test(
-  'dataProductCommandRequestSchema accepts closure commands without client snapshot or validator state',
+  'dataProductCommandRequestSchema accepts closure intent without client-created bindings',
   () => {
     const parsed = dataProductCommandRequestSchema.safeParse({
       action: 'create_closure_check',
-      requestedScopeHash: 'requested-scope-hash',
-      policyFingerprint: 'policy-fingerprint',
+      requestedScope: {
+        coverageMode: 'subset',
+        processes: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+        lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+        linkPolicy: { technosphereBoundaryPolicy: 'closed' },
+      },
       requestIdempotencyToken: 'new-check-token',
     });
     assertEquals(parsed.success, true);
@@ -130,21 +134,25 @@ Deno.test(
 );
 
 Deno.test(
-  'closure and task feed RPC args preserve keyset cursor and do not accept server-derived state',
+  'closure and task feed RPC args preserve keyset cursor and keep bindings server-derived',
   () => {
     assertEquals(
       buildLciaScopeClosureCheckRequestRpcArgs(
         {
           action: 'create_closure_check',
-          requestedScopeHash: 'scope',
-          policyFingerprint: 'policy',
+          requestedScope: {
+            coverageMode: 'global_eligible',
+            lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+          },
           requestIdempotencyToken: 'token',
         },
         auditPayload,
       ),
       {
-        p_requested_scope_hash: 'scope',
-        p_policy_fingerprint: 'policy',
+        p_requested_scope: {
+          coverageMode: 'global_eligible',
+          lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+        },
         p_request_idempotency_token: 'token',
         p_audit: auditPayload,
       },
