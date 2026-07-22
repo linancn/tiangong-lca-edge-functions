@@ -135,6 +135,35 @@ Deno.test(
 );
 
 Deno.test(
+  'dataProductCommandRequestSchema rejects unknown and unbounded closure-scope fields',
+  () => {
+    const extraField = dataProductCommandRequestSchema.safeParse({
+      action: 'create_closure_check',
+      requestedScope: {
+        coverageMode: 'global_eligible',
+        lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+        requestedScopeHash: 'client-must-not-bind-this',
+      },
+      requestIdempotencyToken: 'token',
+    });
+    assertEquals(extraField.success, false);
+
+    const oversizedMethods = dataProductCommandRequestSchema.safeParse({
+      action: 'create_closure_check',
+      requestedScope: {
+        coverageMode: 'global_eligible',
+        lciaMethods: Array.from({ length: 1_001 }, () => ({
+          id: '11111111-1111-4111-8111-111111111111',
+          version: '01.00.000',
+        })),
+      },
+      requestIdempotencyToken: 'token',
+    });
+    assertEquals(oversizedMethods.success, false);
+  },
+);
+
+Deno.test(
   'closure and task feed RPC args preserve keyset cursor and keep bindings server-derived',
   () => {
     assertEquals(
@@ -373,6 +402,109 @@ Deno.test('createDataProductCommandRepository enqueues LCIA result package paylo
     },
   ]);
 });
+
+Deno.test(
+  'closure report download rejects an incomplete database descriptor before signing',
+  async () => {
+    const actorClient = new FakeRpcSupabase({
+      data: {
+        ok: true,
+        data: {
+          artifactId: TEST_BUILD_ID,
+          bucket: 'private-reports',
+          objectPath: 'reports/check.xlsx',
+          mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          size: null,
+          checksumSha256: 'abc',
+        },
+      },
+      error: null,
+    });
+    const repository = createDataProductCommandRepository(
+      actorClient as never,
+      {
+        storage: {
+          from: () => ({
+            createSignedUrl: () => Promise.reject(new Error('must not sign an invalid descriptor')),
+          }),
+        },
+      } as never,
+    );
+
+    const result = await repository.createClosureReportDownload({
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+    });
+
+    assertEquals(result, {
+      ok: false,
+      code: 'closure_report_descriptor_invalid',
+      status: 502,
+      message: 'Closure report descriptor is incomplete',
+    });
+    assertEquals(actorClient.calls[0], {
+      fn: 'get_lcia_scope_closure_report_download',
+      args: { p_closure_check_id: TEST_CLOSURE_CHECK_ID },
+    });
+  },
+);
+
+Deno.test(
+  'closure report download signs only the actor-authorized descriptor for 900 seconds',
+  async () => {
+    const actorClient = new FakeRpcSupabase({
+      data: {
+        ok: true,
+        data: {
+          artifactId: TEST_BUILD_ID,
+          bucket: 'private-reports',
+          objectPath: 'reports/check.xlsx',
+          mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          size: 42,
+          checksumSha256: 'abc',
+        },
+      },
+      error: null,
+    });
+    const signingCalls: Array<{ bucket: string; objectPath: string; expiresIn: number }> = [];
+    const repository = createDataProductCommandRepository(
+      actorClient as never,
+      {
+        storage: {
+          from: (bucket: string) => ({
+            createSignedUrl: (objectPath: string, expiresIn: number) => {
+              signingCalls.push({ bucket, objectPath, expiresIn });
+              return Promise.resolve({
+                data: { signedUrl: 'https://signed.example/report' },
+                error: null,
+              });
+            },
+          }),
+        },
+      } as never,
+    );
+
+    const result = await repository.createClosureReportDownload({
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+    });
+
+    assertEquals(signingCalls, [
+      { bucket: 'private-reports', objectPath: 'reports/check.xlsx', expiresIn: 900 },
+    ]);
+    assertEquals(result, {
+      ok: true,
+      data: {
+        artifactId: TEST_BUILD_ID,
+        mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        size: 42,
+        checksumSha256: 'abc',
+        signedDownloadUrl: 'https://signed.example/report',
+        expiresInSeconds: 900,
+      },
+    });
+  },
+);
 
 Deno.test(
   'executeDataProductCommand create_build enqueues package build and returns workerJobId',

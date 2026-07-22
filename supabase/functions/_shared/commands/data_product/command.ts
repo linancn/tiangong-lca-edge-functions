@@ -29,6 +29,12 @@ import type {
 const versionPattern = /^\d{2}\.\d{2}\.\d{3}$/;
 const uuidSchema = z.string().uuid();
 const nonEmptyTextSchema = z.string().trim().min(1).max(200);
+// Keep the command boundary bounded even though a global-eligible scope is
+// expanded server-side.  The limits are deliberately above the current public
+// catalogue size, so they protect the Edge runtime without constraining normal
+// product selections.
+const maxClosureProcessSelections = 10_000;
+const maxClosureMethodSelections = 1_000;
 
 const processSelectionSchema = z
   .object({
@@ -53,8 +59,8 @@ const closureLinkPolicySchema = z
 const closureRequestedScopeSchema = z
   .object({
     coverageMode: z.enum(['global_eligible', 'subset']),
-    processes: z.array(processSelectionSchema).optional(),
-    lciaMethods: z.array(processSelectionSchema).min(1),
+    processes: z.array(processSelectionSchema).max(maxClosureProcessSelections).optional(),
+    lciaMethods: z.array(processSelectionSchema).min(1).max(maxClosureMethodSelections),
     certificateFreshnessPolicy: z
       .enum(['frozen-artifact-reusable-v1', 'current-membership-required-v1'])
       .optional(),

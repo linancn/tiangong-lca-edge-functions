@@ -115,6 +115,14 @@ routing:
         - supabase/functions/_shared/command_runtime/**
         - supabase/functions/_shared/commands/**
         - supabase/functions/_shared/db_rpc/**
+    data-product-runtime:
+      paths:
+        - supabase/functions/app_data_product_commands/**
+        - supabase/functions/data_product_results/**
+        - supabase/functions/_shared/commands/data_product/**
+        - supabase/functions/_shared/db_rpc/data_product_commands.ts
+        - test/data_product_command_test.ts
+        - test/data_product_results_test.ts
     lca-release-runtime:
       paths:
         - supabase/functions/app_lca_release_commands/**

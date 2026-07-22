@@ -139,14 +139,32 @@ export function createDataProductCommandRepository(
       );
       if (!artifact.ok) return artifact;
       const details = artifact.data as Record<string, unknown>;
+      const artifactId = stringValue(details.artifactId);
       const bucket = stringValue(details.bucket);
       const objectPath = stringValue(details.objectPath);
-      if (!bucket || !objectPath) {
+      const mediaType = stringValue(details.mediaType);
+      // RPC JSON numbers are decoded as numbers. Do not coerce null (or a
+      // string) here: Number(null) is zero and would turn an incomplete
+      // descriptor into a seemingly valid empty artifact.
+      const size =
+        typeof details.size === 'number' && Number.isSafeInteger(details.size)
+          ? details.size
+          : null;
+      const checksumSha256 = stringValue(details.checksumSha256);
+      if (
+        !artifactId ||
+        !bucket ||
+        !objectPath ||
+        !mediaType ||
+        size === null ||
+        size < 0 ||
+        !checksumSha256
+      ) {
         return {
           ok: false,
-          code: 'closure_report_unavailable',
-          status: 404,
-          message: 'Closure report is not available',
+          code: 'closure_report_descriptor_invalid',
+          status: 502,
+          message: 'Closure report descriptor is incomplete',
         };
       }
       const { data, error } = await serviceSupabase.storage
@@ -164,10 +182,10 @@ export function createDataProductCommandRepository(
       return {
         ok: true,
         data: {
-          artifactId: stringValue(details.artifactId),
-          mediaType: stringValue(details.mediaType),
-          size: numberValue(details.size),
-          checksumSha256: stringValue(details.checksumSha256),
+          artifactId,
+          mediaType,
+          size,
+          checksumSha256,
           signedDownloadUrl: data.signedUrl,
           expiresInSeconds: 900,
         },
