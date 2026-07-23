@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-16
-lastReviewedCommit: 39971596f4ba5506546cc653674a69ef7ac5f291
+lastReviewedAt: 2026-07-22
+lastReviewedCommit: b4525e9eac3711f5573f3c71e92520b286500441
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -120,6 +120,8 @@ The shared layers that matter most are:
 - `supabase/functions/_shared/db_rpc/**`
 
 `app_dataset_review_submit_gate` is the edge API boundary for dataset review-submit numerical stability checks. It normalizes request and response semantics for Next, derives the authoritative revision checksum from the authorized persisted `json_ordered` row, and calls database-owned RPCs for persisted gate runs. Client-provided revision checksums are compatibility/diagnostic input only. Edge does not own worker blocker heuristics or database schema. `app_dataset_review_submit_jobs` is the user-facing orchestration API for persisted review-submit jobs, and `process_dataset_review_submit_jobs` is the service-key-only worker that advances those jobs after gate results are available. New review-submit jobs use database-owned `worker_jobs` gate records through `gateWorkerJobId` / `gateWorkerJob`; the legacy `gateRunId` path remains compatibility-only until cutover is complete. `app_worker_jobs` is the authenticated task-center API for listing, reading, and cancelling user-visible worker jobs through service-role DB RPCs with Edge ownership checks. `app_dataset_submit_review` remains the direct compatibility path carrying gate assertion metadata for process submit-review so DB truth can reject stale, wrong-policy, wrong-checksum, or blocked gate runs before a review is created.
+
+`app_data_product_commands` is the JWT-only command boundary for Data Product scope-closure checks and result-build requests. It forwards only user scope intent to actor-bound database RPCs; the database derives snapshot, policy, and certificate bindings. The shared data-product repository returns the database-owned versioned check/issues/feed projections unchanged, and it signs a closure report only after the actor-bound descriptor lookup authorizes the caller. The service client may see the private bucket/path solely for that signing step and never returns either field to the browser. Task feed visibility is database-owned ACL, not a consequence of task-center category or presenter metadata.
 
 ### Search, embedding, and AI-backed routes
 
