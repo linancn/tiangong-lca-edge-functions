@@ -15,6 +15,8 @@ import type { DataProductCommandRequest } from '../supabase/functions/_shared/co
 import {
   buildLciaResultBuildRequestRpcArgs,
   buildLciaResultPackagePublishRpcArgs,
+  buildLciaScopeClosureCheckRequestRpcArgs,
+  buildTaskSummaryV2FeedRpcArgs,
   callLciaResultPackagePublishRpc,
   type DataProductRpcResult,
 } from '../supabase/functions/_shared/db_rpc/data_product_commands.ts';
@@ -22,6 +24,7 @@ import {
 const TEST_USER_ID = '22222222-2222-4222-8222-222222222222';
 const TEST_BUILD_ID = '33333333-3333-4333-8333-333333333333';
 const TEST_WORKER_JOB_ID = '44444444-4444-4444-8444-444444444444';
+const TEST_CLOSURE_CHECK_ID = '45454545-4545-4454-8454-454545454545';
 const TEST_PACKAGE_ID = '55555555-5555-4555-8555-555555555555';
 const TEST_PUBLICATION_ID = '66666666-6666-4666-8666-666666666666';
 
@@ -59,6 +62,14 @@ const unusedPreviewProjectionDeps = {
   fetchPreviewMetadata: () => Promise.reject(new Error('not used')),
 };
 
+const unusedClosureCommandDeps = {
+  createClosureCheck: () => Promise.reject(new Error('not used')),
+  getClosureCheck: () => Promise.reject(new Error('not used')),
+  listClosureIssues: () => Promise.reject(new Error('not used')),
+  createClosureReportDownload: () => Promise.reject(new Error('not used')),
+  listTaskFeed: () => Promise.reject(new Error('not used')),
+};
+
 Deno.test('dataProductCommandRequestSchema accepts create_build defaults', () => {
   const parsed = dataProductCommandRequestSchema.safeParse({
     action: 'create_build',
@@ -93,6 +104,109 @@ Deno.test('dataProductCommandRequestSchema accepts publication list controls', (
 
   assertEquals(parsed.success, true);
 });
+
+Deno.test(
+  'dataProductCommandRequestSchema accepts closure intent without client-created bindings',
+  () => {
+    const parsed = dataProductCommandRequestSchema.safeParse({
+      action: 'create_closure_check',
+      requestedScope: {
+        coverageMode: 'subset',
+        processes: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+        lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+        linkPolicy: { technosphereBoundaryPolicy: 'closed' },
+      },
+      requestIdempotencyToken: 'new-check-token',
+    });
+    assertEquals(parsed.success, true);
+  },
+);
+
+Deno.test(
+  'dataProductCommandRequestSchema rejects a partial certificate binding on create_build',
+  () => {
+    const parsed = dataProductCommandRequestSchema.safeParse({
+      action: 'create_build',
+      name: 'partial binding',
+      closureCheckId: TEST_BUILD_ID,
+    });
+    assertEquals(parsed.success, false);
+  },
+);
+
+Deno.test(
+  'dataProductCommandRequestSchema rejects unknown and unbounded closure-scope fields',
+  () => {
+    const extraField = dataProductCommandRequestSchema.safeParse({
+      action: 'create_closure_check',
+      requestedScope: {
+        coverageMode: 'global_eligible',
+        lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+        requestedScopeHash: 'client-must-not-bind-this',
+      },
+      requestIdempotencyToken: 'token',
+    });
+    assertEquals(extraField.success, false);
+
+    const oversizedMethods = dataProductCommandRequestSchema.safeParse({
+      action: 'create_closure_check',
+      requestedScope: {
+        coverageMode: 'global_eligible',
+        lciaMethods: Array.from({ length: 1_001 }, () => ({
+          id: '11111111-1111-4111-8111-111111111111',
+          version: '01.00.000',
+        })),
+      },
+      requestIdempotencyToken: 'token',
+    });
+    assertEquals(oversizedMethods.success, false);
+  },
+);
+
+Deno.test(
+  'closure and task feed RPC args preserve keyset cursor and keep bindings server-derived',
+  () => {
+    assertEquals(
+      buildLciaScopeClosureCheckRequestRpcArgs(
+        {
+          action: 'create_closure_check',
+          requestedScope: {
+            coverageMode: 'global_eligible',
+            lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+          },
+          requestIdempotencyToken: 'token',
+        },
+        auditPayload,
+      ),
+      {
+        p_requested_scope: {
+          coverageMode: 'global_eligible',
+          lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+        },
+        p_request_idempotency_token: 'token',
+        p_audit: auditPayload,
+      },
+    );
+    assertEquals(
+      buildTaskSummaryV2FeedRpcArgs({
+        action: 'list_task_feed',
+        category: 'data_product',
+        cursor: { updatedAt: '2026-07-22T00:00:00.000Z', jobId: TEST_WORKER_JOB_ID },
+        rootOnly: true,
+      }),
+      {
+        p_category: 'data_product',
+        p_job_kinds: null,
+        p_statuses: null,
+        p_updated_since: null,
+        p_cursor_updated_at: '2026-07-22T00:00:00.000Z',
+        p_cursor_job_id: TEST_WORKER_JOB_ID,
+        p_limit: 50,
+        p_root_only: true,
+      },
+    );
+  },
+);
 
 Deno.test(
   'dataProductCommandRequestSchema rejects package ids on create_build process selections',
@@ -290,6 +404,109 @@ Deno.test('createDataProductCommandRepository enqueues LCIA result package paylo
 });
 
 Deno.test(
+  'closure report download rejects an incomplete database descriptor before signing',
+  async () => {
+    const actorClient = new FakeRpcSupabase({
+      data: {
+        ok: true,
+        data: {
+          artifactId: TEST_BUILD_ID,
+          bucket: 'private-reports',
+          objectPath: 'reports/check.xlsx',
+          mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          size: null,
+          checksumSha256: 'abc',
+        },
+      },
+      error: null,
+    });
+    const repository = createDataProductCommandRepository(
+      actorClient as never,
+      {
+        storage: {
+          from: () => ({
+            createSignedUrl: () => Promise.reject(new Error('must not sign an invalid descriptor')),
+          }),
+        },
+      } as never,
+    );
+
+    const result = await repository.createClosureReportDownload({
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+    });
+
+    assertEquals(result, {
+      ok: false,
+      code: 'closure_report_descriptor_invalid',
+      status: 502,
+      message: 'Closure report descriptor is incomplete',
+    });
+    assertEquals(actorClient.calls[0], {
+      fn: 'get_lcia_scope_closure_report_download',
+      args: { p_closure_check_id: TEST_CLOSURE_CHECK_ID },
+    });
+  },
+);
+
+Deno.test(
+  'closure report download signs only the actor-authorized descriptor for 900 seconds',
+  async () => {
+    const actorClient = new FakeRpcSupabase({
+      data: {
+        ok: true,
+        data: {
+          artifactId: TEST_BUILD_ID,
+          bucket: 'private-reports',
+          objectPath: 'reports/check.xlsx',
+          mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          size: 42,
+          checksumSha256: 'abc',
+        },
+      },
+      error: null,
+    });
+    const signingCalls: Array<{ bucket: string; objectPath: string; expiresIn: number }> = [];
+    const repository = createDataProductCommandRepository(
+      actorClient as never,
+      {
+        storage: {
+          from: (bucket: string) => ({
+            createSignedUrl: (objectPath: string, expiresIn: number) => {
+              signingCalls.push({ bucket, objectPath, expiresIn });
+              return Promise.resolve({
+                data: { signedUrl: 'https://signed.example/report' },
+                error: null,
+              });
+            },
+          }),
+        },
+      } as never,
+    );
+
+    const result = await repository.createClosureReportDownload({
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+    });
+
+    assertEquals(signingCalls, [
+      { bucket: 'private-reports', objectPath: 'reports/check.xlsx', expiresIn: 900 },
+    ]);
+    assertEquals(result, {
+      ok: true,
+      data: {
+        artifactId: TEST_BUILD_ID,
+        mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        size: 42,
+        checksumSha256: 'abc',
+        signedDownloadUrl: 'https://signed.example/report',
+        expiresInSeconds: 900,
+      },
+    });
+  },
+);
+
+Deno.test(
   'executeDataProductCommand create_build enqueues package build and returns workerJobId',
   async () => {
     const calls: string[] = [];
@@ -336,6 +553,7 @@ Deno.test(
       },
       previewPackage: () => Promise.reject(new Error('not used')),
       ...unusedPreviewProjectionDeps,
+      ...unusedClosureCommandDeps,
       publishPackage: () => Promise.reject(new Error('not used')),
       unpublishPublication: () => Promise.reject(new Error('not used')),
       listPublications: () => Promise.reject(new Error('not used')),
@@ -383,6 +601,66 @@ Deno.test(
             visibility: 'operator',
           },
           workerJobId: TEST_WORKER_JOB_ID,
+        },
+      },
+    });
+  },
+);
+
+Deno.test(
+  'executeDataProductCommand create_build does not enqueue a second job when Build V2 persisted it atomically',
+  async () => {
+    const calls: string[] = [];
+    const repository: DataProductCommandRepository = {
+      createBuild: () => {
+        calls.push('createBuild');
+        return Promise.resolve({
+          ok: true,
+          data: {
+            buildId: TEST_BUILD_ID,
+            workerJobId: TEST_WORKER_JOB_ID,
+            workerJob: { jobId: TEST_WORKER_JOB_ID, status: 'queued' },
+            closureCheckId: TEST_CLOSURE_CHECK_ID,
+          },
+        });
+      },
+      enqueuePackageBuild: () =>
+        Promise.reject(new Error('must not double-enqueue persisted Build V2 job')),
+      previewPackage: () => Promise.reject(new Error('not used')),
+      ...unusedPreviewProjectionDeps,
+      ...unusedClosureCommandDeps,
+      publishPackage: () => Promise.reject(new Error('not used')),
+      unpublishPublication: () => Promise.reject(new Error('not used')),
+      listPublications: () => Promise.reject(new Error('not used')),
+    };
+
+    const result = await executeDataProductCommand(
+      {
+        action: 'create_build',
+        name: 'Closure-bound public LCIA results',
+        coverageMode: 'global_eligible',
+        defaultImpactCategory: 'climate-change',
+        lciaMethodSet: [],
+        closureCheckId: TEST_CLOSURE_CHECK_ID,
+        requestedScopeHash: 'server-owned-scope-hash',
+        policyFingerprint: 'server-owned-policy-fingerprint',
+      },
+      fakeActor,
+      repository,
+    );
+
+    assertEquals(calls, ['createBuild']);
+    assertEquals(result, {
+      ok: true,
+      status: 200,
+      body: {
+        ok: true,
+        command: 'lcia_result_build_request',
+        data: {
+          buildId: TEST_BUILD_ID,
+          workerJobId: TEST_WORKER_JOB_ID,
+          workerJob: { jobId: TEST_WORKER_JOB_ID, status: 'queued' },
+          closureCheckId: TEST_CLOSURE_CHECK_ID,
         },
       },
     });
@@ -500,6 +778,7 @@ Deno.test(
           },
         });
       },
+      ...unusedClosureCommandDeps,
       publishPackage: () => Promise.reject(new Error('not used')),
       unpublishPublication: () => Promise.reject(new Error('not used')),
       listPublications: () => Promise.reject(new Error('not used')),
@@ -592,6 +871,7 @@ Deno.test(
       enqueuePackageBuild: () => Promise.reject(new Error('not used')),
       previewPackage: () => Promise.reject(new Error('not used')),
       ...unusedPreviewProjectionDeps,
+      ...unusedClosureCommandDeps,
       publishPackage: () => Promise.reject(new Error('not used')),
       unpublishPublication: () => Promise.reject(new Error('not used')),
       listPublications: () =>
@@ -655,6 +935,7 @@ Deno.test('executeDataProductCommand propagates manager authorization failures',
     enqueuePackageBuild: () => Promise.reject(new Error('not used')),
     previewPackage: () => Promise.reject(new Error('not used')),
     ...unusedPreviewProjectionDeps,
+    ...unusedClosureCommandDeps,
     publishPackage: () => Promise.reject(new Error('not used')),
     unpublishPublication: () => Promise.reject(new Error('not used')),
     listPublications: () => Promise.reject(new Error('not used')),

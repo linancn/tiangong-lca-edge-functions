@@ -32,8 +32,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-17
-lastReviewedCommit: 2e1fc86247914c201f77f6c104a6a6243937f1cc
+lastReviewedAt: 2026-07-22
+lastReviewedCommit: b4525e9eac3711f5573f3c71e92520b286500441
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -78,7 +78,7 @@ Do not start from repo landing prose or raw function inventories when the core c
 - human setup and request-example guidance stay in `README.md`
 - `test.example.http` is a supporting request collection for concrete payloads, not a governed source doc
 - repo-local documentation maintenance is enforced locally by the pre-push docpact gate; `.github/workflows/ai-doc-lint.yml` is manual-dispatch fallback
-- the main routing intents are `function-runtime`, `auth-runtime`, `command-runtime`, `review-submit-gate`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
+- the main routing intents are `function-runtime`, `auth-runtime`, `command-runtime`, `data-product-runtime`, `review-submit-gate`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
 
 ## Minimal Execution Facts
 

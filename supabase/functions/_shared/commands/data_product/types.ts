@@ -5,6 +5,20 @@ export type DataProductProcessSelection = {
   version: string;
 };
 
+export type DataProductClosureRequestedScope = {
+  coverageMode: DataProductCoverageMode;
+  processes?: DataProductProcessSelection[];
+  lciaMethods: DataProductProcessSelection[];
+  certificateFreshnessPolicy?: 'frozen-artifact-reusable-v1' | 'current-membership-required-v1';
+  linkPolicy?: {
+    linkSemanticsVersion?: 'signed-flow-balance-v1';
+    flowIdentityPolicy?: 'exact-flow-version-reference-unit-v2';
+    allocationSemanticsVersion?: 'tidas-reference-allocation-v3';
+    technosphereBoundaryPolicy?: 'closed' | 'open' | 'cutoff';
+    providerUniversePolicy?: 'scope_only' | 'eligible_transitive_expansion-v1';
+  };
+};
+
 export type DataProductBuildCreateRequest = {
   action: 'create_build';
   name: string;
@@ -13,6 +27,43 @@ export type DataProductBuildCreateRequest = {
   defaultImpactCategory?: string;
   lciaMethodSet: unknown[];
   idempotencyKey?: string;
+  closureCheckId?: string;
+  requestedScopeHash?: string;
+  policyFingerprint?: string;
+};
+
+export type DataProductClosureCheckCreateRequest = {
+  action: 'create_closure_check';
+  requestedScope: DataProductClosureRequestedScope;
+  requestIdempotencyToken: string;
+};
+
+export type DataProductClosureCheckReadRequest = {
+  action: 'get_closure_check';
+  closureCheckId: string;
+};
+
+export type DataProductClosureIssuesRequest = {
+  action: 'list_closure_issues';
+  closureCheckId: string;
+  afterIssueId?: string;
+  limit?: number;
+};
+
+export type DataProductClosureReportDownloadRequest = {
+  action: 'create_closure_report_download';
+  closureCheckId: string;
+};
+
+export type DataProductTaskFeedRequest = {
+  action: 'list_task_feed';
+  category?: string;
+  jobKinds?: string[];
+  statuses?: string[];
+  updatedSince?: string;
+  cursor?: { updatedAt: string; jobId: string };
+  limit?: number;
+  rootOnly?: boolean;
 };
 
 export type DataProductPackagePreviewRequest = {
@@ -47,6 +98,11 @@ export type DataProductPublicationListRequest = {
 
 export type DataProductCommandRequest =
   | DataProductBuildCreateRequest
+  | DataProductClosureCheckCreateRequest
+  | DataProductClosureCheckReadRequest
+  | DataProductClosureIssuesRequest
+  | DataProductClosureReportDownloadRequest
+  | DataProductTaskFeedRequest
   | DataProductPackagePreviewRequest
   | DataProductPackagePublishRequest
   | DataProductPackageUnpublishRequest
