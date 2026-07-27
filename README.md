@@ -167,13 +167,13 @@ Authenticate the Supabase CLI when needed:
 Deploy to the persistent `dev` project (`fotofiyqnuyvgtotswie`) from the Git `dev` line or a reviewed PR branch:
 
 ```bash
-npm run deploy:dev -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
+npm run deploy:dev -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
 ```
 
 Deploy to the production `main` project (`qgzvkongdjqiiamzbbts`) only as part of the `dev -> main` promote flow:
 
 ```bash
-npm run deploy:main -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search
+npm run deploy:main -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
 ```
 
 The deploy script pins the Supabase CLI version from `package.json`, sets the target `--project-ref`, disables gateway JWT verification with `--no-verify-jwt`, and passes `supabase/functions/deno.json` as the import map so server-side bundling resolves shared npm/jsr imports.
@@ -217,6 +217,10 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 - `flow_hybrid_search`
 - `process_hybrid_search`
 - `lifecyclemodel_hybrid_search`
+- `contact_hybrid_search`
+- `flowproperty_hybrid_search`
+- `source_hybrid_search`
+- `unitgroup_hybrid_search`
 - `app_dataset_verify_remote`
 - `app_dataset_review_submit_gate`
 - `app_dataset_review_submit_jobs`

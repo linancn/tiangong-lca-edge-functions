@@ -54,6 +54,34 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lifecyclemodel_hyb
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
     --data '{"query": "烧结砖"}'
 
+### @name Contact_Hybrid_Search：Local
+
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/contact_hybrid_search' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --data '{"query": "aluminium association", "data_source": "tg"}'
+
+### @name FlowProperty_Hybrid_Search：Local
+
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flowproperty_hybrid_search' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --data '{"query": "net calorific value", "data_source": "tg"}'
+
+### @name Source_Hybrid_Search：Local
+
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/source_hybrid_search' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --data '{"query": "IPCC inventory guidelines", "data_source": "tg"}'
+
+### @name UnitGroup_Hybrid_Search：Local
+
+curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/unitgroup_hybrid_search' \
+    --header 'Content-Type: application/json' \
+    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --data '{"query": "units of mass", "data_source": "tg"}'
+
 ### @name Dataset_Verify_Remote：Local
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_verify_remote' \
     --header 'Content-Type: application/json' \

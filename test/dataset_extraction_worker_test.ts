@@ -1,7 +1,11 @@
-import { assertEquals } from 'jsr:@std/assert';
+import { assertEquals, assertStringIncludes } from 'jsr:@std/assert';
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import { processDatasetExtractionJobs } from '../supabase/functions/_shared/dataset_extraction_worker.ts';
+import {
+  type DatasetEntityKind,
+  processDatasetExtractionJobs,
+  type SupportedDatasetEntityKind,
+} from '../supabase/functions/_shared/dataset_extraction_worker.ts';
 import {
   generateFlowMarkdown,
   normalizeJsonOrdered,
@@ -10,62 +14,103 @@ import {
 type JsonRecord = Record<string, unknown>;
 type Filter = { field: string; value: unknown };
 
-const FLOW_JSON = {
-  flowDataSet: {
-    flowInformation: {
-      dataSetInformation: {
-        'common:UUID': '97000000-0000-0000-0000-000000000001',
-        name: {
-          baseName: [{ '@xml:lang': 'en', '#text': 'Test flow' }],
+const FIXTURES: Record<SupportedDatasetEntityKind, unknown> = {
+  flow: {
+    flowDataSet: {
+      flowInformation: {
+        dataSetInformation: {
+          'common:UUID': '97000000-0000-0000-0000-000000000001',
+          name: { baseName: [{ '@xml:lang': 'en', '#text': 'Test flow' }] },
+        },
+      },
+      administrativeInformation: {
+        publicationAndOwnership: { 'common:dataSetVersion': '01.00.000' },
+      },
+    },
+  },
+  contact: {
+    contactDataSet: {
+      contactInformation: {
+        dataSetInformation: {
+          'common:name': [{ '@xml:lang': 'en', '#text': 'Alice Example' }],
+          email: 'alice@example.test',
         },
       },
     },
-    administrativeInformation: {
-      publicationAndOwnership: {
-        'common:dataSetVersion': '01.00.000',
+  },
+  flowproperty: {
+    flowPropertyDataSet: {
+      flowPropertiesInformation: {
+        dataSetInformation: {
+          'common:name': [{ '@xml:lang': 'en', '#text': 'Mass' }],
+        },
+        quantitativeReference: {
+          referenceToReferenceUnitGroup: {
+            'common:shortDescription': [{ '@xml:lang': 'en', '#text': 'Units of mass' }],
+          },
+        },
       },
+    },
+  },
+  source: {
+    sourceDataSet: {
+      sourceInformation: {
+        dataSetInformation: {
+          'common:shortName': [{ '@xml:lang': 'en', '#text': 'Reference source' }],
+          sourceCitation: 'Example et al. 2026',
+        },
+      },
+    },
+  },
+  unitgroup: {
+    unitGroupDataSet: {
+      unitGroupInformation: {
+        dataSetInformation: {
+          'common:name': [{ '@xml:lang': 'en', '#text': 'Units of length' }],
+        },
+        quantitativeReference: { referenceToReferenceUnit: '1' },
+      },
+      units: { unit: { '@dataSetInternalID': '1', name: 'm', meanValue: 1 } },
     },
   },
 };
 
+const TABLE_BY_KIND: Record<SupportedDatasetEntityKind, string> = {
+  flow: 'flows',
+  contact: 'contacts',
+  flowproperty: 'flowproperties',
+  source: 'sources',
+  unitgroup: 'unitgroups',
+};
+
 class FakeSupabase {
-  flows: JsonRecord[] = [];
+  rows: Record<string, JsonRecord[]> = {};
   claimedJobs: JsonRecord[] = [];
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
 
   rpc(fn: string, args: unknown) {
     this.rpcCalls.push({ fn, args: structuredClone(args) });
-
     if (fn === 'cmd_dataset_extraction_claim') {
       return Promise.resolve({
-        data: {
-          ok: true,
-          data: this.claimedJobs.map((job) => structuredClone(job)),
-        },
+        data: { ok: true, data: this.claimedJobs.map((job) => structuredClone(job)) },
         error: null,
       });
     }
-
-    return Promise.resolve({
-      data: { ok: true },
-      error: null,
-    });
+    return Promise.resolve({ data: { ok: true }, error: null });
   }
 
-  from(table: string): FakeFlowQuery {
-    if (table !== 'flows') {
-      throw new Error(`unexpected table ${table}`);
-    }
-    return new FakeFlowQuery(this);
+  from(table: string): FakeDatasetQuery {
+    this.rows[table] ??= [];
+    return new FakeDatasetQuery(this.rows[table]);
   }
 }
 
-class FakeFlowQuery implements PromiseLike<{ data: unknown; error: unknown }> {
+class FakeDatasetQuery implements PromiseLike<{ data: unknown; error: unknown }> {
   private filters: Filter[] = [];
   private mode: 'select' | 'update' | null = null;
   private updateValues: JsonRecord = {};
 
-  constructor(private readonly supabase: FakeSupabase) {}
+  constructor(private readonly rows: JsonRecord[]) {}
 
   select(_columns: string): this {
     this.mode = 'select';
@@ -84,11 +129,8 @@ class FakeFlowQuery implements PromiseLike<{ data: unknown; error: unknown }> {
   }
 
   maybeSingle() {
-    const rows = this.matchingRows();
-    return Promise.resolve({
-      data: rows[0] ? structuredClone(rows[0]) : null,
-      error: null,
-    });
+    const row = this.matchingRows()[0];
+    return Promise.resolve({ data: row ? structuredClone(row) : null, error: null });
   }
 
   then<TResult1 = { data: unknown; error: unknown }, TResult2 = never>(
@@ -104,160 +146,200 @@ class FakeFlowQuery implements PromiseLike<{ data: unknown; error: unknown }> {
   }
 
   private matchingRows(): JsonRecord[] {
-    return this.supabase.flows.filter((row) =>
+    return this.rows.filter((row) =>
       this.filters.every((filter) => row[filter.field] === filter.value),
     );
   }
 
   private executeUpdate() {
-    for (const row of this.matchingRows()) {
-      Object.assign(row, structuredClone(this.updateValues));
-    }
+    for (const row of this.matchingRows()) Object.assign(row, structuredClone(this.updateValues));
     return { data: null, error: null };
   }
 }
 
-function buildFlowJob(
+function buildJob(
   msgId: number,
-  extractionKind: 'extracted_md' | 'extracted_text',
+  entityKind: DatasetEntityKind,
+  table: string,
+  id = `97000000-0000-0000-0000-${String(msgId).padStart(12, '0')}`,
+  version = '01.00.000',
+  extractionKind: 'extracted_md' | 'extracted_text' = 'extracted_md',
   readCt = 1,
-) {
+): JsonRecord {
   return {
     msg_id: msgId,
     read_ct: readCt,
     message: {
       schema: 'public',
-      table: 'flows',
-      id: '97000000-0000-0000-0000-000000000001',
-      version: '01.00.000',
-      entity_kind: 'flow',
+      table,
+      id,
+      version,
+      entity_kind: entityKind,
       extraction_kind: extractionKind,
-      created_at: '2026-05-26T00:00:00Z',
+      created_at: '2026-07-27T00:00:00Z',
     },
   };
 }
 
-Deno.test(
-  'processDatasetExtractionJobs updates flow markdown jobs and acks successes',
-  async () => {
-    const supabase = new FakeSupabase();
-    supabase.flows.push({
-      id: '97000000-0000-0000-0000-000000000001',
-      version: '01.00.000',
-      json_ordered: FLOW_JSON,
-    });
-    supabase.claimedJobs = [buildFlowJob(1, 'extracted_md')];
-
-    const result = await processDatasetExtractionJobs({
-      supabase: supabase as unknown as SupabaseClient,
-      markdownGenerator: () => '# Test flow',
-    });
-
-    assertEquals(result.claimed, 1);
-    assertEquals(result.acked, 1);
-    assertEquals(supabase.flows[0].extracted_md, '# Test flow');
-    assertEquals('extracted_text' in supabase.flows[0], false);
-    assertEquals(supabase.rpcCalls.at(-1), {
-      fn: 'cmd_dataset_extraction_ack',
-      args: { p_msg_ids: [1] },
-    });
-  },
-);
-
-Deno.test('processDatasetExtractionJobs leaves transient failures unacked for retry', async () => {
+Deno.test('processDatasetExtractionJobs writes and ACKs all four foundation datasets', async () => {
   const supabase = new FakeSupabase();
-  supabase.flows.push({
-    id: '97000000-0000-0000-0000-000000000001',
-    version: '01.00.000',
-    json_ordered: FLOW_JSON,
+  const kinds: SupportedDatasetEntityKind[] = ['contact', 'flowproperty', 'source', 'unitgroup'];
+  kinds.forEach((kind, index) => {
+    const msgId = index + 1;
+    const id = `97000000-0000-0000-0000-${String(msgId).padStart(12, '0')}`;
+    supabase.rows[TABLE_BY_KIND[kind]] = [
+      { id, version: '01.00.000', json_ordered: FIXTURES[kind] },
+    ];
+    supabase.claimedJobs.push(buildJob(msgId, kind, TABLE_BY_KIND[kind], id));
   });
-  supabase.claimedJobs = [buildFlowJob(3, 'extracted_md', 1)];
 
   const result = await processDatasetExtractionJobs({
     supabase: supabase as unknown as SupabaseClient,
-    markdownGenerator: () => {
-      throw new Error('temporary markdown failure');
-    },
   });
 
-  assertEquals(result.acked, 0);
-  assertEquals(result.results[0].status, 'retry');
+  assertEquals(result.claimed, 4);
+  assertEquals(result.acked, 4);
   assertEquals(
-    supabase.rpcCalls.some((call) => call.fn === 'cmd_dataset_extraction_ack'),
-    false,
+    result.results.map((item) => item.status),
+    ['success', 'success', 'success', 'success'],
   );
-  assertEquals(
-    supabase.rpcCalls.some((call) => call.fn === 'cmd_dataset_extraction_record_failure'),
-    false,
+  assertStringIncludes(String(supabase.rows.contacts[0].extracted_md), '**Entity:** Contact');
+  assertStringIncludes(
+    String(supabase.rows.flowproperties[0].extracted_md),
+    '**Entity:** Flow Property',
   );
+  assertStringIncludes(String(supabase.rows.sources[0].extracted_md), '**Entity:** Source');
+  assertStringIncludes(String(supabase.rows.unitgroups[0].extracted_md), '**Entity:** Unit Group');
+  assertEquals(supabase.rpcCalls.at(-1), {
+    fn: 'cmd_dataset_extraction_ack',
+    args: { p_msg_ids: [1, 2, 3, 4] },
+  });
 });
 
-Deno.test('processDatasetExtractionJobs records terminal retry failures', async () => {
+Deno.test('dataset extraction updates only the exact id and version', async () => {
   const supabase = new FakeSupabase();
-  supabase.flows.push({
-    id: '97000000-0000-0000-0000-000000000001',
-    version: '01.00.000',
-    json_ordered: FLOW_JSON,
-  });
-  supabase.claimedJobs = [buildFlowJob(4, 'extracted_md', 5)];
+  const id = '97000000-0000-0000-0000-000000000010';
+  supabase.rows.sources = [
+    { id, version: '01.00.000', json_ordered: FIXTURES.source },
+    { id, version: '01.01.000', json_ordered: FIXTURES.source },
+  ];
+  supabase.claimedJobs = [buildJob(10, 'source', 'sources', id, '01.01.000')];
 
-  const result = await processDatasetExtractionJobs({
-    supabase: supabase as unknown as SupabaseClient,
-    maxReadCount: 5,
-    markdownGenerator: () => {
-      throw new Error('terminal markdown failure');
-    },
-  });
+  await processDatasetExtractionJobs({ supabase: supabase as unknown as SupabaseClient });
 
-  assertEquals(result.acked, 0);
-  assertEquals(result.results[0].status, 'failed');
-  assertEquals(supabase.rpcCalls.at(-1)?.fn, 'cmd_dataset_extraction_record_failure');
+  assertEquals(supabase.rows.sources[0].extracted_md, undefined);
+  assertStringIncludes(String(supabase.rows.sources[1].extracted_md), '# Reference source');
 });
 
-Deno.test('processDatasetExtractionJobs records extracted_text jobs as unsupported', async () => {
+Deno.test('missing or expired dataset identities are ACKed as stale no-ops', async () => {
   const supabase = new FakeSupabase();
-  supabase.claimedJobs = [buildFlowJob(6, 'extracted_text', 1)];
-
-  const result = await processDatasetExtractionJobs({
-    supabase: supabase as unknown as SupabaseClient,
-  });
-
-  assertEquals(result.acked, 0);
-  assertEquals(result.results[0].status, 'unsupported');
-  assertEquals(result.results[0].error_code, 'UNSUPPORTED_EXTRACTION_KIND');
-  assertEquals(supabase.rpcCalls.at(-1)?.fn, 'cmd_dataset_extraction_record_failure');
-});
-
-Deno.test('processDatasetExtractionJobs records process jobs as unsupported in v1', async () => {
-  const supabase = new FakeSupabase();
-  supabase.claimedJobs = [
+  supabase.rows.contacts = [
     {
-      msg_id: 5,
-      read_ct: 1,
-      message: {
-        schema: 'public',
-        table: 'processes',
-        id: '98000000-0000-0000-0000-000000000001',
-        version: '01.00.000',
-        entity_kind: 'process',
-        extraction_kind: 'extracted_md',
-      },
+      id: '97000000-0000-0000-0000-000000000020',
+      version: '02.00.000',
+      json_ordered: FIXTURES.contact,
     },
+  ];
+  supabase.claimedJobs = [
+    buildJob(20, 'contact', 'contacts', '97000000-0000-0000-0000-000000000020', '01.00.000'),
   ];
 
   const result = await processDatasetExtractionJobs({
     supabase: supabase as unknown as SupabaseClient,
   });
 
+  assertEquals(result.results[0].status, 'stale');
+  assertEquals(result.acked, 1);
+  assertEquals(
+    supabase.rpcCalls.some((call) => call.fn === 'cmd_dataset_extraction_record_failure'),
+    false,
+  );
+});
+
+Deno.test('wrong table/entity combinations are terminal unsupported jobs', async () => {
+  const supabase = new FakeSupabase();
+  supabase.claimedJobs = [buildJob(30, 'source', 'contacts')];
+
+  const result = await processDatasetExtractionJobs({
+    supabase: supabase as unknown as SupabaseClient,
+  });
+
   assertEquals(result.acked, 0);
   assertEquals(result.results[0].status, 'unsupported');
+  assertEquals(result.results[0].error_code, 'UNSUPPORTED_ENTITY_KIND');
   assertEquals(supabase.rpcCalls.at(-1)?.fn, 'cmd_dataset_extraction_record_failure');
 });
 
-Deno.test('flow extraction helpers keep legacy string json_ordered payloads compatible', () => {
-  const parsed = normalizeJsonOrdered(JSON.stringify(FLOW_JSON));
+Deno.test('transient generator failures remain visible for retry', async () => {
+  const supabase = new FakeSupabase();
+  const id = '97000000-0000-0000-0000-000000000040';
+  supabase.rows.sources = [{ id, version: '01.00.000', json_ordered: FIXTURES.source }];
+  supabase.claimedJobs = [buildJob(40, 'source', 'sources', id)];
+
+  const result = await processDatasetExtractionJobs({
+    supabase: supabase as unknown as SupabaseClient,
+    markdownGenerators: {
+      source: () => {
+        throw new Error('temporary failure');
+      },
+    },
+  });
+
+  assertEquals(result.results[0].status, 'retry');
+  assertEquals(result.acked, 0);
+  assertEquals(
+    supabase.rpcCalls.some((call) => call.fn === 'cmd_dataset_extraction_record_failure'),
+    false,
+  );
+});
+
+Deno.test('max-read generator failures are recorded and removed', async () => {
+  const supabase = new FakeSupabase();
+  const id = '97000000-0000-0000-0000-000000000050';
+  supabase.rows.unitgroups = [{ id, version: '01.00.000', json_ordered: FIXTURES.unitgroup }];
+  supabase.claimedJobs = [
+    buildJob(50, 'unitgroup', 'unitgroups', id, '01.00.000', 'extracted_md', 5),
+  ];
+
+  const result = await processDatasetExtractionJobs({
+    supabase: supabase as unknown as SupabaseClient,
+    maxReadCount: 5,
+    markdownGenerators: {
+      unitgroup: () => {
+        throw new Error('terminal failure');
+      },
+    },
+  });
+
+  assertEquals(result.results[0].status, 'failed');
+  assertEquals(supabase.rpcCalls.at(-1)?.fn, 'cmd_dataset_extraction_record_failure');
+});
+
+Deno.test('unsupported extraction kind and process jobs fail deterministically', async () => {
+  const supabase = new FakeSupabase();
+  supabase.claimedJobs = [
+    buildJob(60, 'flow', 'flows', undefined, '01.00.000', 'extracted_text'),
+    buildJob(61, 'process', 'processes'),
+  ];
+
+  const result = await processDatasetExtractionJobs({
+    supabase: supabase as unknown as SupabaseClient,
+  });
+
+  assertEquals(
+    result.results.map((item) => item.status),
+    ['unsupported', 'unsupported'],
+  );
+  assertEquals(
+    result.results.map((item) => item.error_code),
+    ['UNSUPPORTED_EXTRACTION_KIND', 'UNSUPPORTED_ENTITY_KIND'],
+  );
+});
+
+Deno.test('flow extraction helpers retain string json_ordered compatibility', () => {
+  const parsed = normalizeJsonOrdered(JSON.stringify(FIXTURES.flow));
   const markdown = generateFlowMarkdown(parsed);
 
-  assertEquals(markdown.includes('# Test flow'), true);
-  assertEquals(markdown.includes('**Version:** 01.00.000'), true);
+  assertStringIncludes(markdown, '# Test flow');
+  assertStringIncludes(markdown, '**Version:** 01.00.000');
 });

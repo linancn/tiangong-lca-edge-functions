@@ -1,9 +1,17 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import { generateFlowMarkdown, normalizeJsonOrdered } from './flow_extraction.ts';
+import {
+  generateContactMarkdown,
+  generateFlowPropertyMarkdown,
+  generateSourceMarkdown,
+  generateUnitGroupMarkdown,
+} from './foundation_dataset_extraction.ts';
 
 export type DatasetExtractionKind = 'extracted_md' | 'extracted_text';
-export type DatasetEntityKind = 'flow' | 'process';
+export type DatasetEntityKind =
+  'flow' | 'process' | 'contact' | 'flowproperty' | 'source' | 'unitgroup';
+export type SupportedDatasetEntityKind = Exclude<DatasetEntityKind, 'process'>;
 
 export interface DatasetExtractionJobMessage {
   schema: string;
@@ -28,7 +36,7 @@ export interface DatasetExtractionJobResult {
   table?: string;
   id?: string;
   version?: string;
-  status: 'success' | 'retry' | 'failed' | 'unsupported';
+  status: 'success' | 'stale' | 'retry' | 'failed' | 'unsupported';
   duration_ms: number;
   error_code?: string;
   error_message?: string;
@@ -40,12 +48,15 @@ export interface DatasetExtractionWorkerResult {
   results: DatasetExtractionJobResult[];
 }
 
+type MarkdownGenerator = (jsonOrdered: unknown) => string;
+
 export interface DatasetExtractionWorkerOptions {
   supabase: SupabaseClient;
   batchSize?: number;
   visibilityTimeoutSeconds?: number;
   maxReadCount?: number;
-  markdownGenerator?: (flowJson: unknown) => string;
+  markdownGenerator?: MarkdownGenerator;
+  markdownGenerators?: Partial<Record<SupportedDatasetEntityKind, MarkdownGenerator>>;
 }
 
 interface RpcEnvelope<T> {
@@ -55,6 +66,21 @@ interface RpcEnvelope<T> {
   status?: number;
   message?: string;
 }
+
+interface DatasetExtractionTarget {
+  table: string;
+  generator: MarkdownGenerator;
+}
+
+const DATASET_EXTRACTION_TARGETS: Readonly<
+  Record<SupportedDatasetEntityKind, DatasetExtractionTarget>
+> = {
+  flow: { table: 'flows', generator: generateFlowMarkdown },
+  contact: { table: 'contacts', generator: generateContactMarkdown },
+  flowproperty: { table: 'flowproperties', generator: generateFlowPropertyMarkdown },
+  source: { table: 'sources', generator: generateSourceMarkdown },
+  unitgroup: { table: 'unitgroups', generator: generateUnitGroupMarkdown },
+};
 
 function positiveInteger(value: number | undefined, fallback: number, max: number): number {
   if (!Number.isFinite(value ?? NaN)) return fallback;
@@ -93,11 +119,11 @@ function parseClaimedJob(value: unknown): ClaimedDatasetExtractionJob {
   };
 }
 
-function assertFlowJob(job: ClaimedDatasetExtractionJob): void {
+function resolveTarget(job: ClaimedDatasetExtractionJob): DatasetExtractionTarget {
   const message = job.message;
-  if (message.schema !== 'public' || message.table !== 'flows' || message.entity_kind !== 'flow') {
-    throw Object.assign(new Error('Unsupported dataset extraction job entity'), {
-      code: 'UNSUPPORTED_ENTITY_KIND',
+  if (!message.id || !message.version || !Number.isSafeInteger(job.msg_id) || job.msg_id < 1) {
+    throw Object.assign(new Error('Dataset extraction job is missing a valid identity'), {
+      code: 'INVALID_JOB_MESSAGE',
     });
   }
   if (message.extraction_kind !== 'extracted_md') {
@@ -105,11 +131,14 @@ function assertFlowJob(job: ClaimedDatasetExtractionJob): void {
       code: 'UNSUPPORTED_EXTRACTION_KIND',
     });
   }
-  if (!message.id || !message.version) {
-    throw Object.assign(new Error('Dataset extraction job is missing id or version'), {
-      code: 'INVALID_JOB_MESSAGE',
+
+  const target = DATASET_EXTRACTION_TARGETS[message.entity_kind as SupportedDatasetEntityKind];
+  if (message.schema !== 'public' || !target || target.table !== message.table) {
+    throw Object.assign(new Error('Unsupported dataset extraction job entity'), {
+      code: 'UNSUPPORTED_ENTITY_KIND',
     });
   }
+  return target;
 }
 
 function errorCode(error: unknown): string {
@@ -138,61 +167,59 @@ async function recordTerminalFailure(
     p_last_error: message,
     p_delete: true,
   });
-
   if (error) throw error;
 }
 
-async function fetchFlowJson(
+async function fetchDatasetJson(
   supabase: SupabaseClient,
+  table: string,
   id: string,
   version: string,
-): Promise<unknown> {
+): Promise<unknown | null> {
   const { data, error } = await supabase
-    .from('flows')
+    .from(table)
     .select('id,version,json_ordered')
     .eq('id', id)
     .eq('version', version)
     .maybeSingle();
 
   if (error) throw error;
-  if (!data) {
-    throw Object.assign(new Error('Flow row was not found for dataset extraction job'), {
-      code: 'FLOW_NOT_FOUND',
-    });
-  }
-
-  return normalizeJsonOrdered((data as { json_ordered?: unknown }).json_ordered);
+  return data ? normalizeJsonOrdered((data as { json_ordered?: unknown }).json_ordered) : null;
 }
 
-async function updateFlowExtraction(
+async function updateDatasetExtraction(
   supabase: SupabaseClient,
+  table: string,
   id: string,
   version: string,
-  values: { extracted_md: string },
+  extractedMarkdown: string,
 ): Promise<void> {
-  const { error } = await supabase.from('flows').update(values).eq('id', id).eq('version', version);
+  const { error } = await supabase
+    .from(table)
+    .update({ extracted_md: extractedMarkdown })
+    .eq('id', id)
+    .eq('version', version);
   if (error) throw error;
 }
 
-async function processFlowJob(
+async function processDatasetJob(
   supabase: SupabaseClient,
   job: ClaimedDatasetExtractionJob,
-  markdownGenerator: (flowJson: unknown) => string,
-): Promise<void> {
-  assertFlowJob(job);
-  const { id, version, extraction_kind } = job.message;
-  const flowJson = await fetchFlowJson(supabase, id, version);
+  generators: Record<SupportedDatasetEntityKind, MarkdownGenerator>,
+): Promise<'success' | 'stale'> {
+  const target = resolveTarget(job);
+  const { id, version, entity_kind: entityKind } = job.message;
+  const datasetJson = await fetchDatasetJson(supabase, target.table, id, version);
+  if (datasetJson === null) return 'stale';
 
-  if (extraction_kind === 'extracted_md') {
-    const markdown = markdownGenerator(flowJson);
-    if (!markdown.trim()) {
-      throw Object.assign(new Error('Empty extracted markdown'), {
-        code: 'EMPTY_EXTRACTED_MD',
-      });
-    }
-    await updateFlowExtraction(supabase, id, version, { extracted_md: markdown });
-    return;
+  const markdown = generators[entityKind as SupportedDatasetEntityKind](datasetJson);
+  if (!markdown.trim()) {
+    throw Object.assign(new Error('Empty extracted markdown'), {
+      code: 'EMPTY_EXTRACTED_MD',
+    });
   }
+  await updateDatasetExtraction(supabase, target.table, id, version, markdown);
+  return 'success';
 }
 
 export async function processDatasetExtractionJobs(
@@ -201,14 +228,20 @@ export async function processDatasetExtractionJobs(
   const batchSize = positiveInteger(options.batchSize, 5, 50);
   const visibilityTimeoutSeconds = positiveInteger(options.visibilityTimeoutSeconds, 300, 3600);
   const maxReadCount = positiveInteger(options.maxReadCount, 5, 100);
-  const markdownGenerator = options.markdownGenerator ?? generateFlowMarkdown;
+  const generators: Record<SupportedDatasetEntityKind, MarkdownGenerator> = {
+    flow: options.markdownGenerator ?? DATASET_EXTRACTION_TARGETS.flow.generator,
+    contact: DATASET_EXTRACTION_TARGETS.contact.generator,
+    flowproperty: DATASET_EXTRACTION_TARGETS.flowproperty.generator,
+    source: DATASET_EXTRACTION_TARGETS.source.generator,
+    unitgroup: DATASET_EXTRACTION_TARGETS.unitgroup.generator,
+    ...options.markdownGenerators,
+  };
 
   const { data, error } = await options.supabase.rpc('cmd_dataset_extraction_claim', {
     p_qty: batchSize,
     p_vt_seconds: visibilityTimeoutSeconds,
     p_max_read_count: maxReadCount,
   });
-
   if (error) throw error;
 
   const envelope = data as RpcEnvelope<unknown[]>;
@@ -224,7 +257,7 @@ export async function processDatasetExtractionJobs(
   const results: DatasetExtractionJobResult[] = [];
 
   for (const job of jobs) {
-    const start = Date.now();
+    const startedAt = Date.now();
     const baseLog = {
       msg_id: job.msg_id,
       entity_kind: job.message.entity_kind,
@@ -236,36 +269,27 @@ export async function processDatasetExtractionJobs(
     };
 
     try {
-      await processFlowJob(options.supabase, job, markdownGenerator);
+      const status = await processDatasetJob(options.supabase, job, generators);
       ackIds.push(job.msg_id);
-      const result = {
-        ...baseLog,
-        status: 'success' as const,
-        duration_ms: Date.now() - start,
-      };
-      console.log('[dataset_extraction_job]', { ...result, stage: 'success' });
+      const result = { ...baseLog, status, duration_ms: Date.now() - startedAt };
+      console.log('[dataset_extraction_job]', { ...result, stage: status });
       results.push(result);
     } catch (caught) {
       const code = errorCode(caught);
       const message = errorMessage(caught);
-      const terminal =
-        code === 'UNSUPPORTED_ENTITY_KIND' ||
-        code === 'UNSUPPORTED_EXTRACTION_KIND' ||
-        job.read_ct >= maxReadCount;
-
-      if (terminal) {
-        await recordTerminalFailure(options.supabase, job, code, message);
-      }
+      const unsupported =
+        code === 'UNSUPPORTED_ENTITY_KIND' || code === 'UNSUPPORTED_EXTRACTION_KIND';
+      const terminal = unsupported || code === 'INVALID_JOB_MESSAGE' || job.read_ct >= maxReadCount;
+      if (terminal) await recordTerminalFailure(options.supabase, job, code, message);
 
       const result = {
         ...baseLog,
-        status:
-          code === 'UNSUPPORTED_ENTITY_KIND' || code === 'UNSUPPORTED_EXTRACTION_KIND'
-            ? ('unsupported' as const)
-            : terminal
-              ? ('failed' as const)
-              : ('retry' as const),
-        duration_ms: Date.now() - start,
+        status: unsupported
+          ? ('unsupported' as const)
+          : terminal
+            ? ('failed' as const)
+            : ('retry' as const),
+        duration_ms: Date.now() - startedAt,
         error_code: code,
         error_message: message,
       };
@@ -281,9 +305,5 @@ export async function processDatasetExtractionJobs(
     if (ackError) throw ackError;
   }
 
-  return {
-    claimed: jobs.length,
-    acked: ackIds.length,
-    results,
-  };
+  return { claimed: jobs.length, acked: ackIds.length, results };
 }

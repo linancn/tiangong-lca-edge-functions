@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-07-22'
-lastReviewedCommit: 'b4525e9eac3711f5573f3c71e92520b286500441'
+lastReviewedAt: '2026-07-27'
+lastReviewedCommit: '5b61006bb18a1f66768bc0ab5faabe5f84741dc4'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -166,9 +166,22 @@ routing:
         - supabase/functions/flow_hybrid_search/**
         - supabase/functions/process_hybrid_search/**
         - supabase/functions/lifecyclemodel_hybrid_search/**
+        - supabase/functions/contact_hybrid_search/**
+        - supabase/functions/flowproperty_hybrid_search/**
+        - supabase/functions/source_hybrid_search/**
+        - supabase/functions/unitgroup_hybrid_search/**
+        - supabase/functions/process_dataset_extraction_jobs/**
         - supabase/functions/ai_suggest/**
         - supabase/functions/embedding*
         - supabase/functions/webhook_*embedding*
+        - supabase/functions/_shared/dataset_extraction_worker.ts
+        - supabase/functions/_shared/embedding_ft_job.ts
+        - supabase/functions/_shared/embedding_vector.ts
+        - supabase/functions/_shared/flow_extraction.ts
+        - supabase/functions/_shared/foundation_dataset_extraction.ts
+        - supabase/functions/_shared/hybrid_search_handler.ts
+        - supabase/functions/_shared/hybrid_search_request.ts
+        - supabase/functions/_shared/hybrid_search_rpc_context.ts
         - supabase/functions/_shared/openai_*.ts
         - supabase/functions/_shared/hybrid_query_utils.ts
     lca-runtime:
