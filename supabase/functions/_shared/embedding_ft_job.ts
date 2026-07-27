@@ -1,8 +1,19 @@
 import { z } from 'zod';
 
+// PostgreSQL's uuid type preserves the canonical 8-4-4-4-12 text shape but
+// does not require RFC version or variant bits. Some imported ILCD identities
+// intentionally use those wider UUID values, so validate the database wire
+// format here instead of rejecting them with Zod's RFC-aware z.uuid().
+const postgresUuidTextSchema = z
+  .string()
+  .regex(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    'Invalid PostgreSQL UUID text',
+  );
+
 const rawEmbeddingFtJobSchema = z.object({
   jobId: z.number().int().positive(),
-  id: z.uuid(),
+  id: postgresUuidTextSchema,
   version: z.string().trim().min(1),
   schema: z.string(),
   table: z.string(),

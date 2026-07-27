@@ -52,6 +52,16 @@ Deno.test('embedding_ft retains guarded derivative content functions', () => {
   );
 });
 
+Deno.test('embedding_ft accepts canonical PostgreSQL UUID text beyond RFC version bits', () => {
+  for (const id of [
+    '00000000-0000-0000-0000-000000000001',
+    'ffffffff-ffff-ffff-ffff-ffffffffffff',
+  ]) {
+    const [parsed] = parseEmbeddingFtJobs([{ ...job('sources'), id }]);
+    assertEquals(parsed.id, id);
+  }
+});
+
 Deno.test('embedding_ft rejects arbitrary schema, table, function, and column identifiers', () => {
   for (const unsafe of [
     { ...job('contacts'), schema: 'private' },

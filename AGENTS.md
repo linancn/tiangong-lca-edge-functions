@@ -33,7 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-07-27
-lastReviewedCommit: 5b61006bb18a1f66768bc0ab5faabe5f84741dc4
+lastReviewedCommit: 7352a4dedaceba7a6a678bba621bd4d98e9fe4c2
+lastReviewedNote: 'Reviewed persistent-dev Source embedding identity compatibility; PostgreSQL UUID text acceptance remains bounded by the existing target allowlist and validation matrix.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
