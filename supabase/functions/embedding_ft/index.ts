@@ -10,6 +10,7 @@ import {
   type EmbeddingFtJobError,
   type EmbeddingFtJob as Job,
 } from '../_shared/embedding_ft_job.ts';
+import { embeddingFtPostgresOptions } from '../_shared/embedding_ft_postgres.ts';
 import {
   classifyEmbeddingJobError,
   parsePositiveInteger,
@@ -37,6 +38,7 @@ const textDecoder = new TextDecoder();
 const sql = postgres(
   // `SUPABASE_DB_URL` is a built-in environment variable
   Deno.env.get('SUPABASE_DB_URL')!,
+  embeddingFtPostgresOptions(),
 );
 
 type FailedJob = Job & { error: string };

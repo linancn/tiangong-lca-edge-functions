@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-07-27
-lastReviewedCommit: 7352a4dedaceba7a6a678bba621bd4d98e9fe4c2
-lastReviewedNote: 'Reviewed persistent-dev Source embedding identity compatibility; PostgreSQL UUID text acceptance remains bounded by the existing target allowlist and validation matrix.'
+lastReviewedCommit: b40e803d68e68c5c8d193799cb0ab826d43858e4
+lastReviewedNote: 'Reviewed persistent-dev embedding backfill connection pressure; the embedding_ft Edge isolate now owns a bounded single-connection Postgres.js lifecycle plus non-production connection and queue proof.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
