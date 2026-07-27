@@ -9,5 +9,6 @@ Deno.serve(
     entityLabel: 'Contact',
     entityPlural: 'contacts',
     rpcName: 'hybrid_search_contacts',
+    forwardVisibilityContext: true,
   }),
 );

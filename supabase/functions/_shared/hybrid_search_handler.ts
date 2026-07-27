@@ -29,6 +29,7 @@ export interface HybridSearchRouteConfig {
   entityLabel: string;
   entityPlural: string;
   rpcName: string;
+  forwardVisibilityContext?: boolean;
 }
 
 interface HybridSearchAuthResult {
@@ -204,6 +205,7 @@ export function createHybridSearchHandler(
         queryTerms,
         `[${embedding.join(',')}]`,
         parsedRequest.rpcOptions,
+        config.forwardVisibilityContext ? parsedRequest.visibilityOptions : undefined,
       );
 
       let rpcClientContext: HybridSearchRpcClientContext;

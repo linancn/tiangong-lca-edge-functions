@@ -8,6 +8,7 @@ export class HybridSearchRequestError extends Error {
 export interface HybridSearchClientRequest {
   queryText: string;
   rpcOptions: HybridSearchRpcOptions;
+  visibilityOptions: HybridSearchVisibilityOptions;
 }
 
 export interface HybridSearchRpcOptions {
@@ -29,7 +30,16 @@ export interface HybridSearchRpcRequest extends HybridSearchRpcOptions {
   query_embedding: string;
 }
 
+export interface HybridSearchVisibilityOptions {
+  state_code_filter: number | null;
+  team_id_filter: string | null;
+}
+
+export type HybridSearchRpcPayload = HybridSearchRpcRequest &
+  Partial<HybridSearchVisibilityOptions>;
+
 const VALID_DATA_SOURCES = new Set(['tg', 'co', 'my', 'te']);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -88,6 +98,31 @@ function parseDataSource(value: unknown): string {
   }
 
   return dataSource;
+}
+
+function parseNullableStateCode(value: unknown): number | null {
+  if (value === undefined || value === null || value === '' || value === 'all') {
+    return null;
+  }
+
+  const parsed =
+    typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new HybridSearchRequestError('state_code must be a non-negative integer');
+  }
+  return parsed;
+}
+
+function parseNullableTeamId(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+
+  const teamId = typeof value === 'string' ? value.trim() : '';
+  if (!UUID_PATTERN.test(teamId)) {
+    throw new HybridSearchRequestError('team_id must be a UUID');
+  }
+  return teamId;
 }
 
 function normalizeFilterCondition(value: unknown): string {
@@ -157,6 +192,10 @@ export function parseHybridSearchClientRequest(body: unknown): HybridSearchClien
       page_size: parsePositiveInteger(body.page_size, 'page_size', 10),
       page_current: parsePositiveInteger(body.page_current, 'page_current', 1),
     },
+    visibilityOptions: {
+      state_code_filter: parseNullableStateCode(body.state_code),
+      team_id_filter: parseNullableTeamId(body.team_id),
+    },
   };
 }
 
@@ -165,11 +204,13 @@ export function buildHybridSearchRpcRequest(
   queryTerms: string[],
   queryEmbedding: string,
   options: HybridSearchRpcOptions,
-): HybridSearchRpcRequest {
-  return {
+  visibilityOptions?: HybridSearchVisibilityOptions,
+): HybridSearchRpcPayload {
+  const request: HybridSearchRpcRequest = {
     query_text: queryText,
     query_terms: queryTerms,
     query_embedding: queryEmbedding,
     ...options,
   };
+  return visibilityOptions ? { ...request, ...visibilityOptions } : request;
 }

@@ -9,5 +9,6 @@ Deno.serve(
     entityLabel: 'Unit group',
     entityPlural: 'unit groups',
     rpcName: 'hybrid_search_unitgroups',
+    forwardVisibilityContext: true,
   }),
 );

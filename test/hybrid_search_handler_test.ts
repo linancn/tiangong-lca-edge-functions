@@ -12,6 +12,7 @@ const CONTACT_CONFIG: HybridSearchRouteConfig = {
   entityLabel: 'Contact',
   entityPlural: 'contacts',
   rpcName: 'hybrid_search_contacts',
+  forwardVisibilityContext: true,
 };
 
 const VECTOR = Array.from({ length: 1024 }, () => 0.001);
@@ -56,7 +57,12 @@ Deno.test(
           Authorization: 'Bearer header.payload.signature',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query: 'private contact query', data_source: 'my' }),
+        body: JSON.stringify({
+          query: 'private contact query',
+          data_source: 'my',
+          state_code: 0,
+          team_id: 'c3000000-0000-4000-8000-000000000297',
+        }),
       }),
     );
 
@@ -71,7 +77,57 @@ Deno.test(
       [0.5, 0],
     );
     assertEquals(rpcCalls[0].body.data_source, 'my');
+    assertEquals(rpcCalls[0].body.state_code_filter, 0);
+    assertEquals(rpcCalls[0].body.team_id_filter, 'c3000000-0000-4000-8000-000000000297');
+    assertEquals(rpcCalls[1].body.state_code_filter, 0);
+    assertEquals(rpcCalls[1].body.team_id_filter, 'c3000000-0000-4000-8000-000000000297');
     assertFalse(JSON.stringify(logCalls).includes('private contact query'));
+  },
+);
+
+Deno.test(
+  'shared Hybrid handler does not add visibility RPC fields for mature routes',
+  async () => {
+    let rpcBody: Record<string, unknown> | undefined;
+    const handler = createHybridSearchHandler(
+      { ...CONTACT_CONFIG, forwardVisibilityContext: false },
+      {
+        authenticate: async () => ({ isAuthenticated: true }),
+        rewriteQuery: async () => ({
+          semantic_query_en: 'contact',
+          fulltext_query_en: ['contact'],
+          fulltext_query_zh: [],
+        }),
+        generateEmbedding: async () => VECTOR,
+        createRpcClient: () => ({
+          client: {
+            rpc(_name: string, body: Record<string, unknown>) {
+              rpcBody = body;
+              return Promise.resolve({ data: [{ id: 'contact-1' }], error: null });
+            },
+          } as unknown as SupabaseClient,
+          userContextKind: 'jwt',
+          bearerToken: 'header.payload.signature',
+        }),
+        logger: { log: () => undefined, error: () => undefined },
+      },
+    );
+
+    const response = await handler(
+      new Request('http://localhost/contact_hybrid_search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: 'contact',
+          state_code: 0,
+          team_id: 'c3000000-0000-4000-8000-000000000297',
+        }),
+      }),
+    );
+
+    assertEquals(response.status, 200);
+    assertEquals(Object.hasOwn(rpcBody ?? {}, 'state_code_filter'), false);
+    assertEquals(Object.hasOwn(rpcBody ?? {}, 'team_id_filter'), false);
   },
 );
 

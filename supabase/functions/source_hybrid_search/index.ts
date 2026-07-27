@@ -9,5 +9,6 @@ Deno.serve(
     entityLabel: 'Source',
     entityPlural: 'sources',
     rpcName: 'hybrid_search_sources',
+    forwardVisibilityContext: true,
   }),
 );
