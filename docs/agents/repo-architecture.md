@@ -130,15 +130,27 @@ These routes cluster around:
 - `flow_hybrid_search`
 - `process_hybrid_search`
 - `lifecyclemodel_hybrid_search`
+- `contact_hybrid_search`
+- `flowproperty_hybrid_search`
+- `source_hybrid_search`
+- `unitgroup_hybrid_search`
 - `ai_suggest`
 - `embedding_ft`
 - `webhook_*_embedding_ft`
+- `process_dataset_extraction_jobs`
 
 Important shared helpers:
 
 - `supabase/functions/_shared/openai_chat.ts`
 - `supabase/functions/_shared/openai_structured.ts`
 - `supabase/functions/_shared/hybrid_query_utils.ts`
+- `supabase/functions/_shared/hybrid_search_handler.ts`
+- `supabase/functions/_shared/foundation_dataset_extraction.ts`
+- `supabase/functions/_shared/dataset_extraction_worker.ts`
+- `supabase/functions/_shared/embedding_ft_job.ts`
+- `supabase/functions/_shared/embedding_vector.ts`
+
+All seven Hybrid endpoints are thin route configurations over one shared handler. It owns runtime authentication, deterministic query-rewrite prompts, 1024-dimensional SageMaker validation, JWT preservation for `my`/`te`, RPC fallback, response shape, and redacted structured logs. The four foundation datasets use deterministic English-heading Markdown extractors and the compact database-owned extraction queue; missing id/version pairs are acknowledged as stale no-ops, while invalid entity/table combinations are terminal failures. The `embedding_ft` worker accepts only the seven reviewed public table, content-function, and `embedding_ft` column targets (including the guarded Flow/Process derivative input variants); request-provided SQL identifiers are never an open dynamic target surface.
 
 Legacy non-`*_ft` embedding and webhook routes still exist in the tree, but the default deno-check baseline skips them.
 

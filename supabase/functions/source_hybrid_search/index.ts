@@ -4,10 +4,10 @@ import { createHybridSearchHandler } from '../_shared/hybrid_search_handler.ts';
 
 Deno.serve(
   createHybridSearchHandler({
-    functionName: 'flow_hybrid_search',
-    entityKind: 'flow',
-    entityLabel: 'Flow',
-    entityPlural: 'flows',
-    rpcName: 'hybrid_search_flows',
+    functionName: 'source_hybrid_search',
+    entityKind: 'source',
+    entityLabel: 'Source',
+    entityPlural: 'sources',
+    rpcName: 'hybrid_search_sources',
   }),
 );
