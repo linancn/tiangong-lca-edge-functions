@@ -30,7 +30,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-07-27
-lastReviewedCommit: 5b61006bb18a1f66768bc0ab5faabe5f84741dc4
+lastReviewedCommit: 7352a4dedaceba7a6a678bba621bd4d98e9fe4c2
+lastReviewedNote: 'Reviewed persistent-dev Source backfill compatibility: embedding jobs accept canonical PostgreSQL UUID text without requiring RFC version/variant bits, while target identifiers remain allowlisted.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -150,7 +151,7 @@ Important shared helpers:
 - `supabase/functions/_shared/embedding_ft_job.ts`
 - `supabase/functions/_shared/embedding_vector.ts`
 
-All seven Hybrid endpoints are thin route configurations over one shared handler. It owns runtime authentication, deterministic query-rewrite prompts, 1024-dimensional SageMaker validation, JWT preservation for `my`/`te`, RPC fallback, response shape, and redacted structured logs. Only the four foundation routes forward the reviewed optional `state_code_filter` and `team_id_filter` fields to their matching database RPCs; the mature Process, Flow, and LifecycleModel signatures remain unchanged. Team authorization remains database-owned. The four foundation datasets use deterministic English-heading Markdown extractors and the compact database-owned extraction queue; missing id/version pairs are acknowledged as stale no-ops, while invalid entity/table combinations are terminal failures. The `embedding_ft` worker accepts only the seven reviewed public table, content-function, and `embedding_ft` column targets (including the guarded Flow/Process derivative input variants); request-provided SQL identifiers are never an open dynamic target surface.
+All seven Hybrid endpoints are thin route configurations over one shared handler. It owns runtime authentication, deterministic query-rewrite prompts, 1024-dimensional SageMaker validation, JWT preservation for `my`/`te`, RPC fallback, response shape, and redacted structured logs. Only the four foundation routes forward the reviewed optional `state_code_filter` and `team_id_filter` fields to their matching database RPCs; the mature Process, Flow, and LifecycleModel signatures remain unchanged. Team authorization remains database-owned. The four foundation datasets use deterministic English-heading Markdown extractors and the compact database-owned extraction queue; missing id/version pairs are acknowledged as stale no-ops, while invalid entity/table combinations are terminal failures. The `embedding_ft` worker accepts canonical PostgreSQL UUID text, including imported dataset identities whose version or variant bits are not RFC-classified, because the database owns those identifiers. It still accepts only the seven reviewed public table, content-function, and `embedding_ft` column targets (including the guarded Flow/Process derivative input variants); request-provided SQL identifiers are never an open dynamic target surface.
 
 Legacy non-`*_ft` embedding and webhook routes still exist in the tree, but the default deno-check baseline skips them.
 
