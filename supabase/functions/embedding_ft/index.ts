@@ -1,17 +1,22 @@
 // Setup type definitions for built-in Supabase Runtime APIs
 import '@supabase/functions-js/edge-runtime.d.ts';
 
-import { z } from 'zod';
-
 // We'll make a direct Postgres connection to update the document
 import { InvokeEndpointCommand, SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import postgres from 'postgres';
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import {
+  parseEmbeddingFtJobs,
+  type EmbeddingFtJobError,
+  type EmbeddingFtJob as Job,
+} from '../_shared/embedding_ft_job.ts';
+import { embeddingFtPostgresOptions } from '../_shared/embedding_ft_postgres.ts';
+import {
   classifyEmbeddingJobError,
   parsePositiveInteger,
   type ClassifiedEmbeddingJobError,
 } from '../_shared/embedding_queue_runtime.ts';
+import { extractEmbeddingVector } from '../_shared/embedding_vector.ts';
 import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient } from '../_shared/supabase_client.ts';
 
@@ -33,25 +38,10 @@ const textDecoder = new TextDecoder();
 const sql = postgres(
   // `SUPABASE_DB_URL` is a built-in environment variable
   Deno.env.get('SUPABASE_DB_URL')!,
+  embeddingFtPostgresOptions(),
 );
 
-// Job schema: now supports composite PK (id, version)
-const jobSchema = z.object({
-  jobId: z.number(),
-  id: z.uuid(),
-  version: z.string(),
-  schema: z.string(),
-  table: z.string(),
-  contentFunction: z.string(),
-  embeddingColumn: z.string(),
-});
-
-const failedJobSchema = jobSchema.extend({
-  error: z.string(),
-});
-
-type Job = z.infer<typeof jobSchema>;
-type FailedJob = z.infer<typeof failedJobSchema>;
+type FailedJob = Job & { error: string };
 
 type DeferredJob = FailedJob & {
   category: string;
@@ -92,80 +82,6 @@ function getSageMakerClient() {
   return sagemakerClient;
 }
 
-function isNumberArray(value: unknown): value is number[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'number');
-}
-
-/**
- * Attempts to parse a JSON string, returning undefined when parsing is not possible.
- */
-function safeParseJsonString(value: string): unknown | undefined {
-  const trimmed = value.trim();
-
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(trimmed);
-  } catch (error) {
-    console.warn('failed to parse JSON string from model response', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return undefined;
-  }
-}
-
-function findFirstNumberArray(value: unknown): number[] | undefined {
-  if (typeof value === 'string') {
-    const parsed = safeParseJsonString(value);
-    if (parsed !== undefined) {
-      return findFirstNumberArray(parsed);
-    }
-    return undefined;
-  }
-
-  if (isNumberArray(value)) {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = findFirstNumberArray(item);
-      if (found) {
-        return found;
-      }
-    }
-    return undefined;
-  }
-
-  if (value && typeof value === 'object') {
-    const obj = value as Record<string, unknown>;
-
-    for (const key of ['embedding', 'embeddings', 'data']) {
-      if (key in obj) {
-        const found = findFirstNumberArray(obj[key]);
-        if (found) {
-          return found;
-        }
-      }
-    }
-
-    for (const candidate of Object.values(obj)) {
-      const found = findFirstNumberArray(candidate);
-      if (found) {
-        return found;
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function extractEmbedding(result: unknown): number[] | undefined {
-  return findFirstNumberArray(result);
-}
-
 // Listen for HTTP requests
 Deno.serve(async (req) => {
   if (req.method !== 'POST') {
@@ -188,16 +104,17 @@ Deno.serve(async (req) => {
     return authResult.response!;
   }
 
-  // Use Zod to parse and validate the request body
-  const parseResult = z.array(jobSchema).safeParse(await req.json());
-
-  if (parseResult.error) {
-    return new Response(`invalid request body: ${parseResult.error.message}`, {
+  let pendingJobs: Job[];
+  try {
+    pendingJobs = parseEmbeddingFtJobs(await req.json());
+  } catch (error) {
+    const code = (error as EmbeddingFtJobError)?.code ?? 'INVALID_EMBEDDING_JOB_BATCH';
+    const message = error instanceof Error ? error.message : 'invalid request body';
+    return new Response(JSON.stringify({ error: message, code }), {
+      headers: { 'content-type': 'application/json' },
       status: 400,
     });
   }
-
-  const pendingJobs = parseResult.data;
 
   // Track jobs that completed successfully
   const completedJobs: Job[] = [];
@@ -339,13 +256,7 @@ async function generateEmbedding(text: string) {
   }
 
   const parsed = JSON.parse(bodyString);
-  const embedding = extractEmbedding(parsed);
-
-  if (!embedding) {
-    throw new Error('failed to generate embedding from SageMaker response');
-  }
-
-  return embedding;
+  return extractEmbeddingVector(parsed);
 }
 
 /**

@@ -29,8 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-22
-lastReviewedCommit: b4525e9eac3711f5573f3c71e92520b286500441
+lastReviewedAt: 2026-07-27
+lastReviewedCommit: b40e803d68e68c5c8d193799cb0ab826d43858e4
+lastReviewedNote: 'Reviewed persistent-dev embedding backfill connection pressure: each embedding_ft Edge isolate has one short-idle, bounded-lifetime database connection with an auditable application name.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -130,15 +131,30 @@ These routes cluster around:
 - `flow_hybrid_search`
 - `process_hybrid_search`
 - `lifecyclemodel_hybrid_search`
+- `contact_hybrid_search`
+- `flowproperty_hybrid_search`
+- `source_hybrid_search`
+- `unitgroup_hybrid_search`
 - `ai_suggest`
 - `embedding_ft`
 - `webhook_*_embedding_ft`
+- `process_dataset_extraction_jobs`
 
 Important shared helpers:
 
 - `supabase/functions/_shared/openai_chat.ts`
 - `supabase/functions/_shared/openai_structured.ts`
 - `supabase/functions/_shared/hybrid_query_utils.ts`
+- `supabase/functions/_shared/hybrid_search_handler.ts`
+- `supabase/functions/_shared/foundation_dataset_extraction.ts`
+- `supabase/functions/_shared/dataset_extraction_worker.ts`
+- `supabase/functions/_shared/embedding_ft_job.ts`
+- `supabase/functions/_shared/embedding_ft_postgres.ts`
+- `supabase/functions/_shared/embedding_vector.ts`
+
+All seven Hybrid endpoints are thin route configurations over one shared handler. It owns runtime authentication, deterministic query-rewrite prompts, 1024-dimensional SageMaker validation, JWT preservation for `my`/`te`, RPC fallback, response shape, and redacted structured logs. Only the four foundation routes forward the reviewed optional `state_code_filter` and `team_id_filter` fields to their matching database RPCs; the mature Process, Flow, and LifecycleModel signatures remain unchanged. Team authorization remains database-owned. The four foundation datasets use deterministic English-heading Markdown extractors and the compact database-owned extraction queue; missing id/version pairs are acknowledged as stale no-ops, while invalid entity/table combinations are terminal failures. The `embedding_ft` worker accepts canonical PostgreSQL UUID text, including imported dataset identities whose version or variant bits are not RFC-classified, because the database owns those identifiers. It still accepts only the seven reviewed public table, content-function, and `embedding_ft` column targets (including the guarded Flow/Process derivative input variants); request-provided SQL identifiers are never an open dynamic target surface.
+
+Each `embedding_ft` Edge isolate processes one request batch sequentially, so its Postgres.js client is intentionally capped at one connection, closes after 20 idle seconds, and has a 300-second maximum lifetime. The `embedding-ft-edge` application name makes aggregate connection evidence auditable without exposing row identities. A wider default pool or an unbounded idle lifetime can multiply retained connections across isolates and must not be used to accelerate database-owned queue backfill.
 
 Legacy non-`*_ft` embedding and webhook routes still exist in the tree, but the default deno-check baseline skips them.
 
