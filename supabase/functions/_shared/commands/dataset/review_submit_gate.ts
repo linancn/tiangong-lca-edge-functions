@@ -42,7 +42,8 @@ export const reviewSubmitGateRequestSchema = z
 type RevisionLookupClient = Pick<ActorContext['supabase'], 'from'>;
 
 type ReviewSubmitGateRevisionResult =
-  { ok: true; revisionChecksum: string } | DatasetCommandFailure;
+  | { ok: true; revisionChecksum: string }
+  | DatasetCommandFailure;
 
 export type ReviewSubmitGateRevisionResolver = (
   request: ReviewSubmitGateRequest,

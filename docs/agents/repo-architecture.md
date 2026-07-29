@@ -30,8 +30,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-07-29
-lastReviewedCommit: 4fef3933c2af9416ba86b07a6e8cb6c82a50c508
-lastReviewedNote: 'Reviewed for Issue #233 Request Changes: the Data Product boundary now allowlists public read fields, recursively rejects private projection keys, sanitizes backend/signing failures, and applies expiry-skew safety.'
+lastReviewedCommit: e11785f47731f812901d3645d3dcc6691bde15a3
+lastReviewedNote: 'Reviewed merged Issues #233 and #235: the Data Product boundary retains fail-closed locator and expiry handling; Hybrid Search now owns only request orchestration and one lexical_weight while Database owns extracted_md lexical execution and semantic storage remains embedding_ft.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -152,11 +152,11 @@ Important shared helpers:
 - `supabase/functions/_shared/embedding_ft_postgres.ts`
 - `supabase/functions/_shared/embedding_vector.ts`
 
-All seven Hybrid endpoints are thin route configurations over one shared handler. It owns runtime authentication, deterministic query-rewrite prompts, 1024-dimensional SageMaker validation, JWT preservation for `my`/`te`, RPC fallback, response shape, and redacted structured logs. Only the four foundation routes forward the reviewed optional `state_code_filter` and `team_id_filter` fields to their matching database RPCs; the mature Process, Flow, and LifecycleModel signatures remain unchanged. Team authorization remains database-owned. The four foundation datasets use deterministic English-heading Markdown extractors and the compact database-owned extraction queue; missing id/version pairs are acknowledged as stale no-ops, while invalid entity/table combinations are terminal failures. The `embedding_ft` worker accepts canonical PostgreSQL UUID text, including imported dataset identities whose version or variant bits are not RFC-classified, because the database owns those identifiers. It still accepts only the seven reviewed public table, content-function, and `embedding_ft` column targets (including the guarded Flow/Process derivative input variants); request-provided SQL identifiers are never an open dynamic target surface.
+All seven Hybrid endpoints are thin route configurations over one shared handler. It owns runtime authentication, deterministic query-rewrite prompts, 1024-dimensional SageMaker validation, JWT preservation for `my`/`te`, RPC fallback, response shape, and redacted structured logs. Each route calls its database `hybrid_search_*_v2` RPC and forwards one `lexical_weight` plus `semantic_weight`; the retired `full_text_weight` and `extracted_text_weight` request fields are not independent search branches. Only the four foundation routes forward the reviewed optional `state_code_filter` and `team_id_filter` fields. Team authorization remains database-owned. The four foundation datasets use deterministic English-heading Markdown extractors and the compact database-owned extraction queue; missing id/version pairs are acknowledged as stale no-ops, while invalid entity/table combinations are terminal failures. The `embedding_ft` worker accepts canonical PostgreSQL UUID text, including imported dataset identities whose version or variant bits are not RFC-classified, because the database owns those identifiers. It still accepts only the seven reviewed public table, content-function, and `embedding_ft` column targets (including the guarded Flow/Process derivative input variants); request-provided SQL identifiers are never an open dynamic target surface.
 
 Each `embedding_ft` Edge isolate processes one request batch sequentially, so its Postgres.js client is intentionally capped at one connection, closes after 20 idle seconds, and has a 300-second maximum lifetime. The `embedding-ft-edge` application name makes aggregate connection evidence auditable without exposing row identities. A wider default pool or an unbounded idle lifetime can multiply retained connections across isolates and must not be used to accelerate database-owned queue backfill.
 
-Legacy non-`*_ft` embedding and webhook routes still exist in the tree, but the default deno-check baseline skips them.
+The three legacy OpenAI summary webhooks `webhook_process_embedding`, `webhook_flow_embedding`, and `webhook_model_embedding` are retired from the source inventory. The deterministic `webhook_*_embedding_ft` routes remain active. The separate legacy generic `embedding` entrypoint is still disabled and excluded from the default deno-check baseline until it receives its own tracked retirement.
 
 ### LCA async job and result routes
 
