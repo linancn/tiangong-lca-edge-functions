@@ -117,7 +117,8 @@ export type DataProductCommandFailure = {
 };
 
 export type DataProductCommandExecutionResult =
-  { ok: true; body: unknown; status?: number } | DataProductCommandFailure;
+  | { ok: true; body: unknown; status?: number }
+  | DataProductCommandFailure;
 
 export type DataProductPackageBuildRequest = {
   buildId: string;
