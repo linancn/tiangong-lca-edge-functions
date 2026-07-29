@@ -1,17 +1,19 @@
+# Hybrid Search v2 accepts one lexical_weight and one semantic_weight.
+# Do not restore the retired full_text_weight or extracted_text_weight fields.
 ### @name Flow_Hybrid_Search：Remote
 
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/flow_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'x-region: {{$dotenv X_REGION}}' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
-    --data '{"query": "氯氰菊酯"}'
+    --data '{"query": "氯氰菊酯", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Flow_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
-    --data '{"query": "氯氰菊酯"}'
+    --data '{"query": "氯氰菊酯", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Flow_Hybrid_Search：Local（长文本错误示例）
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search' \
@@ -31,13 +33,13 @@ curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/process_hybrid_se
     --header 'Content-Type: application/json' \
     --header 'x-region: {{$dotenv X_REGION}}' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
-    --data '{"query": "硅酸盐水泥"}'
+    --data '{"query": "硅酸盐水泥", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Process_Hybrid_Search：Local
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
-    --data '{"query": "硅酸盐水泥"}'
+    --data '{"query": "硅酸盐水泥", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name lifecyclemodel_Hybrid_Search：Remote
 
@@ -45,42 +47,42 @@ curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/lifecyclemodel_hy
     --header 'Content-Type: application/json' \
     --header 'x-region: {{$dotenv X_REGION}}' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
-    --data '{"query": "烧结砖"}'
+    --data '{"query": "烧结砖", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name lifecyclemodel_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lifecyclemodel_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
-    --data '{"query": "烧结砖"}'
+    --data '{"query": "烧结砖", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Contact_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/contact_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
-    --data '{"query": "aluminium association", "data_source": "tg"}'
+    --data '{"query": "aluminium association", "data_source": "tg", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name FlowProperty_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flowproperty_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
-    --data '{"query": "net calorific value", "data_source": "tg"}'
+    --data '{"query": "net calorific value", "data_source": "tg", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Source_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/source_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
-    --data '{"query": "IPCC inventory guidelines", "data_source": "tg"}'
+    --data '{"query": "IPCC inventory guidelines", "data_source": "tg", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name UnitGroup_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/unitgroup_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
-    --data '{"query": "units of mass", "data_source": "tg"}'
+    --data '{"query": "units of mass", "data_source": "tg", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Dataset_Verify_Remote：Local
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_dataset_verify_remote' \
