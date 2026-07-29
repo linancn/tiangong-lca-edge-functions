@@ -25,10 +25,12 @@ import type {
 } from './package_preview_projection.ts';
 import type {
   DataProductBuildCreateRequest,
+  DataProductClosureArtifactRole,
   DataProductClosureCheckCreateRequest,
   DataProductClosureCheckReadRequest,
   DataProductClosureIssuesRequest,
   DataProductClosureReportDownloadRequest,
+  DataProductCommandFailure,
   DataProductPackageBuildRequest,
   DataProductPackagePreviewRequest,
   DataProductPackagePublishRequest,
@@ -41,7 +43,43 @@ type RpcClient = Pick<SupabaseClient, 'rpc'>;
 
 const ARTIFACT_JSON_CACHE_TTL_MS = 5 * 60 * 1000;
 const ARTIFACT_JSON_CACHE_MAX_ENTRIES = 16;
+const CLOSURE_ARTIFACT_SIGNED_URL_MAX_SECONDS = 900;
+const CLOSURE_ARTIFACT_SIGNING_SAFETY_SECONDS = 5;
+const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 const artifactJsonCache = new Map<string, { expiresAt: number; data: unknown }>();
+
+type ClosureArtifactState = 'pending' | 'ready' | 'expired' | 'deleted' | 'failed';
+
+type ClosureArtifactDownloadDescriptor = {
+  artifactId: string;
+  artifactRole: DataProductClosureArtifactRole;
+  artifactState: ClosureArtifactState;
+  filename: string;
+  format: string;
+  mediaType: string;
+  size: number;
+  checksumSha256: string;
+  artifactExpiresAt: string;
+  bucket: string;
+  objectPath: string;
+};
+
+type ClosureArtifactAvailability = {
+  artifactRole: DataProductClosureArtifactRole;
+  artifactState: ClosureArtifactState;
+  filename: string;
+  format: string;
+  mediaType: string;
+  size: number | null;
+  checksumSha256: string | null;
+  artifactExpiresAt: string | null;
+};
+
+type DataProductCommandRepositoryOptions = {
+  now?: () => number;
+};
 
 export type DataProductPreviewMetadataRequest = {
   processes: Array<{ processId: string; processVersion: string }>;
@@ -123,71 +161,108 @@ function requireExplicitActorClient(supabase: RpcClient | null | undefined): Rpc
 export function createDataProductCommandRepository(
   actorSupabase: RpcClient,
   serviceSupabase: SupabaseClient = createSupabaseServiceClient(),
+  options: DataProductCommandRepositoryOptions = {},
 ): DataProductCommandRepository {
   const actorClient = requireExplicitActorClient(actorSupabase);
+  const now = options.now ?? Date.now;
 
   return {
     createBuild: (request, audit) => callLciaResultBuildRequestRpc(actorClient, request, audit),
     createClosureCheck: (request, audit) =>
       callLciaScopeClosureCheckRequestRpc(actorClient, request, audit),
-    getClosureCheck: (request) => callLciaScopeClosureCheckReadRpc(actorClient, request),
+    getClosureCheck: async (request) => {
+      const result = await callLciaScopeClosureCheckReadRpc(actorClient, request);
+      if (!result.ok) {
+        return result;
+      }
+      const projection = decodeClosureCheckProjection(result.data);
+      return projection.ok
+        ? { ok: true, data: projection.data }
+        : {
+            ok: false,
+            code: 'closure_check_projection_invalid',
+            status: 502,
+            message: 'Closure check projection is invalid',
+          };
+    },
     listClosureIssues: (request) => callLciaScopeClosureIssuesRpc(actorClient, request),
     createClosureReportDownload: async (request) => {
-      const artifact = await callLciaScopeClosureReportDownloadRpc(
-        actorClient,
-        request.closureCheckId,
+      let artifact: DataProductRpcResult;
+      try {
+        artifact = await callLciaScopeClosureReportDownloadRpc(actorClient, request);
+      } catch {
+        return closureArtifactBackendFailure();
+      }
+      if (!artifact.ok) {
+        return normalizeClosureArtifactDownloadFailure(artifact);
+      }
+
+      const descriptor = decodeClosureArtifactDownloadDescriptor(
+        artifact.data,
+        request.artifactRole,
       );
-      if (!artifact.ok) return artifact;
-      const details = artifact.data as Record<string, unknown>;
-      const artifactId = stringValue(details.artifactId);
-      const bucket = stringValue(details.bucket);
-      const objectPath = stringValue(details.objectPath);
-      const mediaType = stringValue(details.mediaType);
-      // RPC JSON numbers are decoded as numbers. Do not coerce null (or a
-      // string) here: Number(null) is zero and would turn an incomplete
-      // descriptor into a seemingly valid empty artifact.
-      const size =
-        typeof details.size === 'number' && Number.isSafeInteger(details.size)
-          ? details.size
-          : null;
-      const checksumSha256 = stringValue(details.checksumSha256);
-      if (
-        !artifactId ||
-        !bucket ||
-        !objectPath ||
-        !mediaType ||
-        size === null ||
-        size < 0 ||
-        !checksumSha256
-      ) {
+      if (!descriptor.ok) {
         return {
           ok: false,
           code: 'closure_report_descriptor_invalid',
           status: 502,
-          message: 'Closure report descriptor is incomplete',
+          message: 'Closure report descriptor is invalid',
         };
       }
-      const { data, error } = await serviceSupabase.storage
-        .from(bucket)
-        .createSignedUrl(objectPath, 900);
-      if (error || !data?.signedUrl) {
-        return {
-          ok: false,
-          code: 'closure_report_sign_failed',
-          status: 502,
-          message: 'Unable to create closure report download',
-          details: error?.message ?? null,
-        };
+
+      if (descriptor.data.artifactState === 'expired') {
+        return closureArtifactExpired();
       }
+      if (descriptor.data.artifactState !== 'ready') {
+        return closureArtifactUnavailable();
+      }
+
+      const nowMs = now();
+      const ttlSeconds = closureArtifactSignedUrlTtlSeconds(
+        descriptor.data.artifactExpiresAt,
+        nowMs,
+      );
+      if (ttlSeconds === null) {
+        return closureArtifactExpired();
+      }
+
+      let signedUrl: string;
+      try {
+        const { data, error } = await serviceSupabase.storage
+          .from(descriptor.data.bucket)
+          .createSignedUrl(descriptor.data.objectPath, ttlSeconds, {
+            download: descriptor.data.filename,
+          });
+        const candidateSignedUrl = strictString(data?.signedUrl);
+        if (error || !candidateSignedUrl || !isValidSignedUrl(candidateSignedUrl)) {
+          return closureArtifactSigningFailure();
+        }
+        signedUrl = candidateSignedUrl;
+      } catch {
+        return closureArtifactSigningFailure();
+      }
+
+      const signingCompletedAtMs = now();
+      const signedUrlExpiresAtMs = signingCompletedAtMs + ttlSeconds * 1000;
+      if (signedUrlExpiresAtMs > Date.parse(descriptor.data.artifactExpiresAt)) {
+        return closureArtifactExpired();
+      }
+      const signedUrlExpiresAt = new Date(signedUrlExpiresAtMs).toISOString();
       return {
         ok: true,
         data: {
-          artifactId,
-          mediaType,
-          size,
-          checksumSha256,
-          signedDownloadUrl: data.signedUrl,
-          expiresInSeconds: 900,
+          artifactId: descriptor.data.artifactId,
+          artifactRole: descriptor.data.artifactRole,
+          artifactState: descriptor.data.artifactState,
+          filename: descriptor.data.filename,
+          format: descriptor.data.format,
+          mediaType: descriptor.data.mediaType,
+          size: descriptor.data.size,
+          checksumSha256: descriptor.data.checksumSha256,
+          artifactExpiresAt: descriptor.data.artifactExpiresAt,
+          signedDownloadUrl: signedUrl,
+          signedUrlExpiresAt,
+          expiresInSeconds: ttlSeconds,
         },
       };
     },
@@ -217,6 +292,395 @@ export function createDataProductCommandRepository(
       callDataProductPackageUnpublishRpc(actorClient, request, audit),
     listPublications: (request) => listLciaResultPublications(serviceSupabase, request),
   };
+}
+
+function normalizeClosureArtifactDownloadFailure(
+  failure: DataProductCommandFailure,
+): DataProductCommandFailure {
+  if (failure.code === 'closure_report_expired' && failure.status === 410) {
+    return closureArtifactExpired();
+  }
+  if (
+    (failure.code === 'closure_check_not_found' && failure.status === 404) ||
+    (failure.code === 'closure_report_unavailable' && failure.status === 404) ||
+    (failure.code === 'not_data_product_manager' && failure.status === 403)
+  ) {
+    return closureArtifactUnavailable();
+  }
+  return closureArtifactBackendFailure();
+}
+
+function closureArtifactExpired(): DataProductCommandFailure {
+  return {
+    ok: false,
+    code: 'closure_report_expired',
+    status: 410,
+    message: 'Closure report has expired',
+  };
+}
+
+function closureArtifactUnavailable(): DataProductCommandFailure {
+  return {
+    ok: false,
+    code: 'closure_report_unavailable',
+    status: 404,
+    message: 'Closure report is not available',
+  };
+}
+
+function closureArtifactBackendFailure(): DataProductCommandFailure {
+  return {
+    ok: false,
+    code: 'closure_report_backend_failed',
+    status: 502,
+    message: 'Unable to resolve closure report download',
+  };
+}
+
+function closureArtifactSigningFailure(): DataProductCommandFailure {
+  return {
+    ok: false,
+    code: 'closure_report_sign_failed',
+    status: 502,
+    message: 'Unable to create closure report download',
+  };
+}
+
+function decodeClosureCheckProjection(
+  value: unknown,
+): { ok: true; data: Record<string, unknown> } | { ok: false } {
+  if (
+    !isRecord(value) ||
+    containsPrivateProjectionField(value) ||
+    !Array.isArray(value.artifacts) ||
+    value.artifacts.length !== 2
+  ) {
+    return { ok: false };
+  }
+
+  const expectedRoles: DataProductClosureArtifactRole[] = [
+    'closure_report_xlsx',
+    'closure_issue_manifest',
+  ];
+  const artifacts: ClosureArtifactAvailability[] = [];
+  for (const [index, artifact] of value.artifacts.entries()) {
+    const decoded = decodeClosureArtifactAvailability(artifact, expectedRoles[index]);
+    if (!decoded) {
+      return { ok: false };
+    }
+    artifacts.push(decoded);
+  }
+
+  const data: Record<string, unknown> = {};
+  copyPresentFields(value, data, [
+    'schemaVersion',
+    'closureCheckId',
+    'runStatus',
+    'scanCompleteness',
+    'certificateValidity',
+    'requestedScopeHash',
+    'effectiveScopeHash',
+    'policyFingerprint',
+    'dataSnapshotToken',
+    'blockerCodes',
+    'summary',
+    'scanExecutionId',
+    'reusedFromCheckId',
+    'createdAt',
+    'updatedAt',
+    'finishedAt',
+  ]);
+
+  if ('workerJob' in value) {
+    if (!isRecord(value.workerJob)) {
+      return { ok: false };
+    }
+    const workerJob: Record<string, unknown> = {};
+    copyPresentFields(value.workerJob, workerJob, [
+      'jobId',
+      'status',
+      'phase',
+      'progressFraction',
+      'errorCode',
+      'blockerCodes',
+      'createdAt',
+      'updatedAt',
+      'finishedAt',
+    ]);
+    data.workerJob = workerJob;
+  }
+  data.artifacts = artifacts;
+
+  return { ok: true, data };
+}
+
+function copyPresentFields(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+  fields: string[],
+): void {
+  for (const field of fields) {
+    if (field in source) {
+      target[field] = source[field];
+    }
+  }
+}
+
+const PRIVATE_PROJECTION_FIELDS = new Set([
+  'artifactid',
+  'bucket',
+  'objectpath',
+  'storagebucket',
+  'storagepath',
+  'storageurl',
+  'artifacturl',
+  'signedurl',
+  'signeddownloadurl',
+  'service',
+  'servicecredential',
+  'servicecredentials',
+  'servicerolekey',
+  'credential',
+  'credentials',
+  'secret',
+  'secretkey',
+]);
+
+function containsPrivateProjectionField(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(containsPrivateProjectionField);
+  }
+  if (!isRecord(value)) {
+    return false;
+  }
+  return Object.entries(value).some(
+    ([key, nestedValue]) =>
+      PRIVATE_PROJECTION_FIELDS.has(key.toLowerCase().replaceAll(/[^a-z0-9]/g, '')) ||
+      containsPrivateProjectionField(nestedValue),
+  );
+}
+
+function decodeClosureArtifactAvailability(
+  value: unknown,
+  expectedRole: DataProductClosureArtifactRole,
+): ClosureArtifactAvailability | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const artifactRole = strictString(value.artifactRole);
+  const artifactState = strictString(value.artifactState);
+  if (artifactRole !== expectedRole || !artifactState || !isClosureArtifactState(artifactState)) {
+    return null;
+  }
+
+  if (
+    !hasExactKeys(value, [
+      'artifactRole',
+      'artifactState',
+      'filename',
+      'format',
+      'mediaType',
+      'size',
+      'checksumSha256',
+      'artifactExpiresAt',
+    ])
+  ) {
+    return null;
+  }
+
+  const filename = strictString(value.filename);
+  const format = strictString(value.format);
+  const mediaType = strictString(value.mediaType);
+  const checksumSha256 = value.checksumSha256 === null ? null : strictString(value.checksumSha256);
+  const artifactExpiresAt =
+    value.artifactExpiresAt === null ? null : strictString(value.artifactExpiresAt);
+  const size =
+    value.size === null
+      ? null
+      : typeof value.size === 'number' && Number.isSafeInteger(value.size) && value.size >= 0
+        ? value.size
+        : null;
+  if (
+    !filename ||
+    !isSemanticDownloadFilename(filename) ||
+    !format ||
+    !mediaType ||
+    (value.size !== null && size === null) ||
+    (value.checksumSha256 !== null &&
+      (!checksumSha256 || !SHA256_HEX_PATTERN.test(checksumSha256))) ||
+    (value.artifactExpiresAt !== null &&
+      (!artifactExpiresAt ||
+        !RFC3339_PATTERN.test(artifactExpiresAt) ||
+        !Number.isFinite(Date.parse(artifactExpiresAt)))) ||
+    (artifactState === 'ready' &&
+      (size === null || checksumSha256 === null || artifactExpiresAt === null)) ||
+    !isAllowedClosureDownloadRole(artifactRole, format, mediaType)
+  ) {
+    return null;
+  }
+
+  return {
+    artifactRole,
+    artifactState,
+    filename,
+    format,
+    mediaType,
+    size,
+    checksumSha256,
+    artifactExpiresAt,
+  };
+}
+
+function hasExactKeys(value: Record<string, unknown>, expectedKeys: string[]): boolean {
+  const actualKeys = Object.keys(value).sort();
+  return (
+    actualKeys.length === expectedKeys.length &&
+    expectedKeys
+      .slice()
+      .sort()
+      .every((key, index) => key === actualKeys[index])
+  );
+}
+
+function decodeClosureArtifactDownloadDescriptor(
+  value: unknown,
+  expectedArtifactRole: DataProductClosureReportDownloadRequest['artifactRole'],
+): { ok: true; data: ClosureArtifactDownloadDescriptor } | { ok: false; reason: string } {
+  if (!isRecord(value)) {
+    return { ok: false, reason: 'not_an_object' };
+  }
+  if (
+    !hasExactKeys(value, [
+      'artifactId',
+      'artifactRole',
+      'artifactState',
+      'filename',
+      'format',
+      'mediaType',
+      'size',
+      'checksumSha256',
+      'artifactExpiresAt',
+      'bucket',
+      'objectPath',
+    ])
+  ) {
+    return { ok: false, reason: 'unexpected_fields' };
+  }
+
+  const artifactId = strictString(value.artifactId);
+  const artifactRole = strictString(value.artifactRole);
+  const artifactState = strictString(value.artifactState);
+  const filename = strictString(value.filename);
+  const format = strictString(value.format);
+  const mediaType = strictString(value.mediaType);
+  const checksumSha256 = strictString(value.checksumSha256);
+  const artifactExpiresAt = strictString(value.artifactExpiresAt);
+  const bucket = strictString(value.bucket);
+  const objectPath = strictString(value.objectPath);
+  const size =
+    typeof value.size === 'number' && Number.isSafeInteger(value.size) && value.size >= 0
+      ? value.size
+      : null;
+
+  if (
+    !artifactId ||
+    !UUID_PATTERN.test(artifactId) ||
+    !artifactRole ||
+    artifactRole !== expectedArtifactRole ||
+    !artifactState ||
+    !isClosureArtifactState(artifactState) ||
+    !filename ||
+    !isSemanticDownloadFilename(filename) ||
+    !format ||
+    !mediaType ||
+    size === null ||
+    !checksumSha256 ||
+    !SHA256_HEX_PATTERN.test(checksumSha256) ||
+    !artifactExpiresAt ||
+    !RFC3339_PATTERN.test(artifactExpiresAt) ||
+    !Number.isFinite(Date.parse(artifactExpiresAt)) ||
+    !bucket ||
+    !objectPath ||
+    !isAllowedClosureDownloadRole(artifactRole, format, mediaType)
+  ) {
+    return { ok: false, reason: 'field_validation_failed' };
+  }
+
+  return {
+    ok: true,
+    data: {
+      artifactId,
+      artifactRole,
+      artifactState,
+      filename,
+      format,
+      mediaType,
+      size,
+      checksumSha256,
+      artifactExpiresAt,
+      bucket,
+      objectPath,
+    },
+  };
+}
+
+function strictString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 && value === value.trim() ? value : null;
+}
+
+function isClosureArtifactState(value: string): value is ClosureArtifactState {
+  return ['pending', 'ready', 'expired', 'deleted', 'failed'].includes(value);
+}
+
+function isSemanticDownloadFilename(value: string): boolean {
+  return (
+    value.length <= 255 &&
+    value !== '.' &&
+    value !== '..' &&
+    !value.includes('/') &&
+    !value.includes('\\') &&
+    !/[\u0000-\u001f\u007f]/.test(value)
+  );
+}
+
+function isAllowedClosureDownloadRole(
+  artifactRole: string,
+  format: string,
+  mediaType: string,
+): boolean {
+  if (artifactRole === 'closure_report_xlsx') {
+    return (
+      format === 'xlsx' &&
+      mediaType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+  }
+  if (artifactRole === 'closure_issue_manifest') {
+    return (
+      format === 'json' && mediaType === 'application/vnd.tiangong.scope-closure-manifest+json'
+    );
+  }
+  return false;
+}
+
+function closureArtifactSignedUrlTtlSeconds(
+  artifactExpiresAt: string,
+  nowMs: number,
+): number | null {
+  const remainingSeconds = Math.floor((Date.parse(artifactExpiresAt) - nowMs) / 1000);
+  const safeRemainingSeconds = remainingSeconds - CLOSURE_ARTIFACT_SIGNING_SAFETY_SECONDS;
+  if (safeRemainingSeconds < 1) {
+    return null;
+  }
+  return Math.min(CLOSURE_ARTIFACT_SIGNED_URL_MAX_SECONDS, safeRemainingSeconds);
+}
+
+function isValidSignedUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
 async function listLciaResultPublications(

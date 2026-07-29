@@ -131,7 +131,11 @@ const listClosureIssuesSchema = z
   })
   .strict();
 const createClosureReportDownloadSchema = z
-  .object({ action: z.literal('create_closure_report_download'), closureCheckId: uuidSchema })
+  .object({
+    action: z.literal('create_closure_report_download'),
+    closureCheckId: uuidSchema,
+    artifactRole: z.enum(['closure_report_xlsx', 'closure_issue_manifest']),
+  })
   .strict();
 const listTaskFeedSchema = z
   .object({

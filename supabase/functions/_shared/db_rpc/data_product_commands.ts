@@ -6,6 +6,7 @@ import type {
   DataProductClosureCheckCreateRequest,
   DataProductClosureCheckReadRequest,
   DataProductClosureIssuesRequest,
+  DataProductClosureReportDownloadRequest,
   DataProductCommandFailure,
   DataProductPackagePreviewRequest,
   DataProductPackagePublishRequest,
@@ -120,6 +121,15 @@ export function buildLciaScopeClosureIssuesRpcArgs(
   };
 }
 
+export function buildLciaScopeClosureReportDownloadRpcArgs(
+  request: DataProductClosureReportDownloadRequest,
+): Record<string, unknown> {
+  return {
+    p_closure_check_id: request.closureCheckId,
+    p_artifact_role: request.artifactRole,
+  };
+}
+
 export function buildTaskSummaryV2FeedRpcArgs(
   request: DataProductTaskFeedRequest,
 ): Record<string, unknown> {
@@ -230,10 +240,15 @@ export function callLciaScopeClosureIssuesRpc(
   );
 }
 
-export function callLciaScopeClosureReportDownloadRpc(supabase: RpcClient, closureCheckId: string) {
-  return callDataProductRpc(supabase, 'get_lcia_scope_closure_report_download', {
-    p_closure_check_id: closureCheckId,
-  });
+export function callLciaScopeClosureReportDownloadRpc(
+  supabase: RpcClient,
+  request: DataProductClosureReportDownloadRequest,
+) {
+  return callDataProductRpc(
+    supabase,
+    'get_lcia_scope_closure_report_download',
+    buildLciaScopeClosureReportDownloadRpcArgs(request),
+  );
 }
 
 export function callTaskSummaryV2FeedRpc(supabase: RpcClient, request: DataProductTaskFeedRequest) {
