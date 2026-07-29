@@ -403,77 +403,96 @@ Deno.test('createDataProductCommandRepository enqueues LCIA result package paylo
   ]);
 });
 
+function closureDownloadDescriptor(overrides: Record<string, unknown> = {}) {
+  return {
+    artifactId: TEST_BUILD_ID,
+    artifactRole: 'closure_report_xlsx',
+    artifactState: 'ready',
+    filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}.xlsx`,
+    format: 'xlsx',
+    mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    size: 42,
+    checksumSha256: 'a'.repeat(64),
+    artifactExpiresAt: '2099-07-29T00:00:00.000Z',
+    bucket: 'private-reports',
+    objectPath: 'reports/check.xlsx',
+    ...overrides,
+  };
+}
+
 Deno.test(
-  'closure report download rejects an incomplete database descriptor before signing',
+  'closure artifact download rejects malformed or unsupported database descriptors before signing',
   async () => {
-    const actorClient = new FakeRpcSupabase({
-      data: {
-        ok: true,
-        data: {
-          artifactId: TEST_BUILD_ID,
-          bucket: 'private-reports',
-          objectPath: 'reports/check.xlsx',
-          mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          size: null,
-          checksumSha256: 'abc',
-        },
-      },
-      error: null,
-    });
-    const repository = createDataProductCommandRepository(
-      actorClient as never,
-      {
-        storage: {
-          from: () => ({
-            createSignedUrl: () => Promise.reject(new Error('must not sign an invalid descriptor')),
-          }),
-        },
-      } as never,
-    );
+    const malformedDescriptors = [
+      closureDownloadDescriptor({ size: null }),
+      closureDownloadDescriptor({ size: '42' }),
+      closureDownloadDescriptor({ checksumSha256: 'abc' }),
+      closureDownloadDescriptor({ filename: '../check.xlsx' }),
+      closureDownloadDescriptor({ artifactExpiresAt: 'not-a-timestamp' }),
+      closureDownloadDescriptor({ artifactState: 'unknown' }),
+      closureDownloadDescriptor({ artifactRole: 'closure_bundle', format: 'json' }),
+      closureDownloadDescriptor({ format: 'json' }),
+      closureDownloadDescriptor({ bucket: '' }),
+      closureDownloadDescriptor({ objectPath: null }),
+    ];
 
-    const result = await repository.createClosureReportDownload({
-      action: 'create_closure_report_download',
-      closureCheckId: TEST_CLOSURE_CHECK_ID,
-    });
+    for (const descriptor of malformedDescriptors) {
+      const actorClient = new FakeRpcSupabase({
+        data: { ok: true, data: descriptor },
+        error: null,
+      });
+      const repository = createDataProductCommandRepository(
+        actorClient as never,
+        {
+          storage: {
+            from: () => ({
+              createSignedUrl: () =>
+                Promise.reject(new Error('must not sign an invalid descriptor')),
+            }),
+          },
+        } as never,
+      );
 
-    assertEquals(result, {
-      ok: false,
-      code: 'closure_report_descriptor_invalid',
-      status: 502,
-      message: 'Closure report descriptor is incomplete',
-    });
-    assertEquals(actorClient.calls[0], {
-      fn: 'get_lcia_scope_closure_report_download',
-      args: { p_closure_check_id: TEST_CLOSURE_CHECK_ID },
-    });
+      assertEquals(
+        await repository.createClosureReportDownload({
+          action: 'create_closure_report_download',
+          closureCheckId: TEST_CLOSURE_CHECK_ID,
+        }),
+        {
+          ok: false,
+          code: 'closure_report_descriptor_invalid',
+          status: 502,
+          message: 'Closure report descriptor is invalid',
+        },
+      );
+      assertEquals(actorClient.calls[0], {
+        fn: 'get_lcia_scope_closure_report_download',
+        args: { p_closure_check_id: TEST_CLOSURE_CHECK_ID },
+      });
+    }
   },
 );
 
 Deno.test(
-  'closure report download signs only the actor-authorized descriptor for 900 seconds',
+  'closure report download signs the ready actor-authorized XLSX descriptor with a semantic filename',
   async () => {
     const actorClient = new FakeRpcSupabase({
-      data: {
-        ok: true,
-        data: {
-          artifactId: TEST_BUILD_ID,
-          bucket: 'private-reports',
-          objectPath: 'reports/check.xlsx',
-          mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          size: 42,
-          checksumSha256: 'abc',
-        },
-      },
+      data: { ok: true, data: closureDownloadDescriptor() },
       error: null,
     });
-    const signingCalls: Array<{ bucket: string; objectPath: string; expiresIn: number }> = [];
+    const signingCalls: Array<{
+      bucket: string;
+      objectPath: string;
+      expiresIn: number;
+      options: unknown;
+    }> = [];
     const repository = createDataProductCommandRepository(
       actorClient as never,
       {
         storage: {
           from: (bucket: string) => ({
-            createSignedUrl: (objectPath: string, expiresIn: number) => {
-              signingCalls.push({ bucket, objectPath, expiresIn });
+            createSignedUrl: (objectPath: string, expiresIn: number, options: unknown) => {
+              signingCalls.push({ bucket, objectPath, expiresIn, options });
               return Promise.resolve({
                 data: { signedUrl: 'https://signed.example/report' },
                 error: null,
@@ -490,19 +509,289 @@ Deno.test(
     });
 
     assertEquals(signingCalls, [
-      { bucket: 'private-reports', objectPath: 'reports/check.xlsx', expiresIn: 900 },
-    ]);
-    assertEquals(result, {
-      ok: true,
-      data: {
-        artifactId: TEST_BUILD_ID,
-        mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        size: 42,
-        checksumSha256: 'abc',
-        signedDownloadUrl: 'https://signed.example/report',
-        expiresInSeconds: 900,
+      {
+        bucket: 'private-reports',
+        objectPath: 'reports/check.xlsx',
+        expiresIn: 900,
+        options: { download: `scope-closure-${TEST_CLOSURE_CHECK_ID}.xlsx` },
       },
+    ]);
+    assertEquals(result.ok, true);
+    if (!result.ok) {
+      throw new Error('expected a signed closure report');
+    }
+    const resultData = result.data as Record<string, unknown>;
+    const { signedUrlExpiresAt, ...stableResultData } = resultData;
+    assertEquals(typeof signedUrlExpiresAt, 'string');
+    assertEquals(stableResultData, {
+      artifactId: TEST_BUILD_ID,
+      artifactRole: 'closure_report_xlsx',
+      artifactState: 'ready',
+      filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}.xlsx`,
+      format: 'xlsx',
+      mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      size: 42,
+      checksumSha256: 'a'.repeat(64),
+      artifactExpiresAt: '2099-07-29T00:00:00.000Z',
+      signedDownloadUrl: 'https://signed.example/report',
+      expiresInSeconds: 900,
     });
+    assertEquals('bucket' in resultData, false);
+    assertEquals('objectPath' in resultData, false);
+  },
+);
+
+Deno.test(
+  'closure artifact download supports complete-machine manifest and partition roles',
+  async () => {
+    const descriptors = [
+      closureDownloadDescriptor({
+        artifactRole: 'closure_issue_manifest',
+        filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-manifest.json`,
+        format: 'json',
+        mediaType: 'application/vnd.tiangong.scope-closure-manifest+json',
+        objectPath: 'reports/manifest.json',
+      }),
+      closureDownloadDescriptor({
+        artifactRole: 'closure_affected_roots_partition_000007',
+        filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-affected-roots-000007.ndjson.zst`,
+        format: 'ndjson+zstd',
+        mediaType: 'application/x-ndjson+zstd',
+        objectPath: 'reports/affected-roots/part-000007.ndjson.zst',
+      }),
+    ];
+
+    for (const descriptor of descriptors) {
+      const actorClient = new FakeRpcSupabase({
+        data: { ok: true, data: descriptor },
+        error: null,
+      });
+      const signingCalls: unknown[] = [];
+      const repository = createDataProductCommandRepository(
+        actorClient as never,
+        {
+          storage: {
+            from: (bucket: string) => ({
+              createSignedUrl: (objectPath: string, expiresIn: number, options: unknown) => {
+                signingCalls.push({ bucket, objectPath, expiresIn, options });
+                return Promise.resolve({
+                  data: { signedUrl: 'https://signed.example/machine-artifact' },
+                  error: null,
+                });
+              },
+            }),
+          },
+        } as never,
+      );
+
+      const result = await repository.createClosureReportDownload({
+        action: 'create_closure_report_download',
+        closureCheckId: TEST_CLOSURE_CHECK_ID,
+      });
+
+      assertEquals(result.ok, true);
+      assertEquals(signingCalls, [
+        {
+          bucket: descriptor.bucket,
+          objectPath: descriptor.objectPath,
+          expiresIn: 900,
+          options: { download: descriptor.filename },
+        },
+      ]);
+    }
+  },
+);
+
+Deno.test(
+  'closure artifact download caps URL lifetime at artifact expiry and maps expiry to 410',
+  async () => {
+    const soonExpiresAt = new Date(Date.now() + 120_000).toISOString();
+    let signedTtl = 0;
+    const repository = createDataProductCommandRepository(
+      new FakeRpcSupabase({
+        data: {
+          ok: true,
+          data: closureDownloadDescriptor({ artifactExpiresAt: soonExpiresAt }),
+        },
+        error: null,
+      }) as never,
+      {
+        storage: {
+          from: () => ({
+            createSignedUrl: (_objectPath: string, expiresIn: number) => {
+              signedTtl = expiresIn;
+              return Promise.resolve({
+                data: { signedUrl: 'https://signed.example/report' },
+                error: null,
+              });
+            },
+          }),
+        },
+      } as never,
+    );
+
+    const result = await repository.createClosureReportDownload({
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+    });
+    assertEquals(result.ok, true);
+    assertEquals(signedTtl >= 118 && signedTtl <= 120, true);
+    if (result.ok) {
+      const data = result.data as Record<string, unknown>;
+      assertEquals(data.expiresInSeconds, signedTtl);
+      assertEquals(Date.parse(String(data.signedUrlExpiresAt)) <= Date.parse(soonExpiresAt), true);
+    }
+
+    for (const descriptor of [
+      closureDownloadDescriptor({
+        artifactState: 'expired',
+        artifactExpiresAt: '2020-01-01T00:00:00.000Z',
+      }),
+      closureDownloadDescriptor({ artifactExpiresAt: '2020-01-01T00:00:00.000Z' }),
+    ]) {
+      const expiredRepository = createDataProductCommandRepository(
+        new FakeRpcSupabase({ data: { ok: true, data: descriptor }, error: null }) as never,
+        {
+          storage: {
+            from: () => ({
+              createSignedUrl: () =>
+                Promise.reject(new Error('expired artifacts must not be signed')),
+            }),
+          },
+        } as never,
+      );
+      assertEquals(
+        await expiredRepository.createClosureReportDownload({
+          action: 'create_closure_report_download',
+          closureCheckId: TEST_CLOSURE_CHECK_ID,
+        }),
+        {
+          ok: false,
+          code: 'closure_report_expired',
+          status: 410,
+          message: 'Closure report has expired',
+        },
+      );
+    }
+
+    const databaseExpiredRepository = createDataProductCommandRepository(
+      new FakeRpcSupabase({
+        data: {
+          ok: false,
+          code: 'closure_report_expired',
+          status: 410,
+          message: 'database-owned expiry detail',
+        },
+        error: null,
+      }) as never,
+      {} as never,
+    );
+    assertEquals(
+      await databaseExpiredRepository.createClosureReportDownload({
+        action: 'create_closure_report_download',
+        closureCheckId: TEST_CLOSURE_CHECK_ID,
+      }),
+      {
+        ok: false,
+        code: 'closure_report_expired',
+        status: 410,
+        message: 'Closure report has expired',
+      },
+    );
+  },
+);
+
+Deno.test(
+  'closure artifact download keeps unauthorized, unavailable, deleted, and unready outcomes opaque',
+  async () => {
+    for (const failure of [
+      { ok: false, code: 'closure_check_not_found', status: 404, message: 'not found' },
+      { ok: false, code: 'not_data_product_manager', status: 403, message: 'forbidden' },
+    ]) {
+      const repository = createDataProductCommandRepository(
+        new FakeRpcSupabase({ data: failure, error: null }) as never,
+        {} as never,
+      );
+      assertEquals(
+        await repository.createClosureReportDownload({
+          action: 'create_closure_report_download',
+          closureCheckId: TEST_CLOSURE_CHECK_ID,
+        }),
+        {
+          ok: false,
+          code: 'closure_report_unavailable',
+          status: 404,
+          message: 'Closure report is not available',
+        },
+      );
+    }
+
+    for (const artifactState of ['pending', 'deleted', 'failed']) {
+      const repository = createDataProductCommandRepository(
+        new FakeRpcSupabase({
+          data: { ok: true, data: closureDownloadDescriptor({ artifactState }) },
+          error: null,
+        }) as never,
+        {
+          storage: {
+            from: () => ({
+              createSignedUrl: () =>
+                Promise.reject(new Error('unavailable artifacts must not be signed')),
+            }),
+          },
+        } as never,
+      );
+      assertEquals(
+        await repository.createClosureReportDownload({
+          action: 'create_closure_report_download',
+          closureCheckId: TEST_CLOSURE_CHECK_ID,
+        }),
+        {
+          ok: false,
+          code: 'closure_report_unavailable',
+          status: 404,
+          message: 'Closure report is not available',
+        },
+      );
+    }
+  },
+);
+
+Deno.test(
+  'closure artifact signing failures return a stable 502 without locator leakage',
+  async () => {
+    const repository = createDataProductCommandRepository(
+      new FakeRpcSupabase({
+        data: { ok: true, data: closureDownloadDescriptor() },
+        error: null,
+      }) as never,
+      {
+        storage: {
+          from: () => ({
+            createSignedUrl: () =>
+              Promise.resolve({
+                data: null,
+                error: {
+                  message: 'private-reports/reports/check.xlsx credential=service-secret',
+                },
+              }),
+          }),
+        },
+      } as never,
+    );
+
+    const result = await repository.createClosureReportDownload({
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+    });
+    assertEquals(result, {
+      ok: false,
+      code: 'closure_report_sign_failed',
+      status: 502,
+      message: 'Unable to create closure report download',
+    });
+    assertEquals(JSON.stringify(result).includes('private-reports'), false);
+    assertEquals(JSON.stringify(result).includes('service-secret'), false);
   },
 );
 

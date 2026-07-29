@@ -29,6 +29,7 @@ import type {
   DataProductClosureCheckReadRequest,
   DataProductClosureIssuesRequest,
   DataProductClosureReportDownloadRequest,
+  DataProductCommandFailure,
   DataProductPackageBuildRequest,
   DataProductPackagePreviewRequest,
   DataProductPackagePublishRequest,
@@ -41,7 +42,27 @@ type RpcClient = Pick<SupabaseClient, 'rpc'>;
 
 const ARTIFACT_JSON_CACHE_TTL_MS = 5 * 60 * 1000;
 const ARTIFACT_JSON_CACHE_MAX_ENTRIES = 16;
+const CLOSURE_ARTIFACT_SIGNED_URL_MAX_SECONDS = 900;
+const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
 const artifactJsonCache = new Map<string, { expiresAt: number; data: unknown }>();
+
+type ClosureArtifactState = 'pending' | 'ready' | 'expired' | 'deleted' | 'failed';
+
+type ClosureArtifactDownloadDescriptor = {
+  artifactId: string;
+  artifactRole: string;
+  artifactState: ClosureArtifactState;
+  filename: string;
+  format: string;
+  mediaType: string;
+  size: number;
+  checksumSha256: string;
+  artifactExpiresAt: string;
+  bucket: string;
+  objectPath: string;
+};
 
 export type DataProductPreviewMetadataRequest = {
   processes: Array<{ processId: string; processVersion: string }>;
@@ -137,57 +158,66 @@ export function createDataProductCommandRepository(
         actorClient,
         request.closureCheckId,
       );
-      if (!artifact.ok) return artifact;
-      const details = artifact.data as Record<string, unknown>;
-      const artifactId = stringValue(details.artifactId);
-      const bucket = stringValue(details.bucket);
-      const objectPath = stringValue(details.objectPath);
-      const mediaType = stringValue(details.mediaType);
-      // RPC JSON numbers are decoded as numbers. Do not coerce null (or a
-      // string) here: Number(null) is zero and would turn an incomplete
-      // descriptor into a seemingly valid empty artifact.
-      const size =
-        typeof details.size === 'number' && Number.isSafeInteger(details.size)
-          ? details.size
-          : null;
-      const checksumSha256 = stringValue(details.checksumSha256);
-      if (
-        !artifactId ||
-        !bucket ||
-        !objectPath ||
-        !mediaType ||
-        size === null ||
-        size < 0 ||
-        !checksumSha256
-      ) {
+      if (!artifact.ok) {
+        return normalizeClosureArtifactDownloadFailure(artifact);
+      }
+
+      const descriptor = decodeClosureArtifactDownloadDescriptor(artifact.data);
+      if (!descriptor.ok) {
         return {
           ok: false,
           code: 'closure_report_descriptor_invalid',
           status: 502,
-          message: 'Closure report descriptor is incomplete',
+          message: 'Closure report descriptor is invalid',
         };
       }
+
+      if (descriptor.data.artifactState === 'expired') {
+        return closureArtifactExpired();
+      }
+      if (descriptor.data.artifactState !== 'ready') {
+        return closureArtifactUnavailable();
+      }
+
+      const nowMs = Date.now();
+      const ttlSeconds = closureArtifactSignedUrlTtlSeconds(
+        descriptor.data.artifactExpiresAt,
+        nowMs,
+      );
+      if (ttlSeconds === null) {
+        return closureArtifactExpired();
+      }
+
       const { data, error } = await serviceSupabase.storage
-        .from(bucket)
-        .createSignedUrl(objectPath, 900);
+        .from(descriptor.data.bucket)
+        .createSignedUrl(descriptor.data.objectPath, ttlSeconds, {
+          download: descriptor.data.filename,
+        });
       if (error || !data?.signedUrl) {
         return {
           ok: false,
           code: 'closure_report_sign_failed',
           status: 502,
           message: 'Unable to create closure report download',
-          details: error?.message ?? null,
         };
       }
+
+      const signedUrlExpiresAt = new Date(nowMs + ttlSeconds * 1000).toISOString();
       return {
         ok: true,
         data: {
-          artifactId,
-          mediaType,
-          size,
-          checksumSha256,
+          artifactId: descriptor.data.artifactId,
+          artifactRole: descriptor.data.artifactRole,
+          artifactState: descriptor.data.artifactState,
+          filename: descriptor.data.filename,
+          format: descriptor.data.format,
+          mediaType: descriptor.data.mediaType,
+          size: descriptor.data.size,
+          checksumSha256: descriptor.data.checksumSha256,
+          artifactExpiresAt: descriptor.data.artifactExpiresAt,
           signedDownloadUrl: data.signedUrl,
-          expiresInSeconds: 900,
+          signedUrlExpiresAt,
+          expiresInSeconds: ttlSeconds,
         },
       };
     },
@@ -217,6 +247,151 @@ export function createDataProductCommandRepository(
       callDataProductPackageUnpublishRpc(actorClient, request, audit),
     listPublications: (request) => listLciaResultPublications(serviceSupabase, request),
   };
+}
+
+function normalizeClosureArtifactDownloadFailure(
+  failure: DataProductCommandFailure,
+): DataProductCommandFailure {
+  if (failure.code === 'closure_report_expired' && failure.status === 410) {
+    return closureArtifactExpired();
+  }
+  if (failure.status === 403 || failure.status === 404) {
+    return closureArtifactUnavailable();
+  }
+  return failure;
+}
+
+function closureArtifactExpired(): DataProductCommandFailure {
+  return {
+    ok: false,
+    code: 'closure_report_expired',
+    status: 410,
+    message: 'Closure report has expired',
+  };
+}
+
+function closureArtifactUnavailable(): DataProductCommandFailure {
+  return {
+    ok: false,
+    code: 'closure_report_unavailable',
+    status: 404,
+    message: 'Closure report is not available',
+  };
+}
+
+function decodeClosureArtifactDownloadDescriptor(
+  value: unknown,
+): { ok: true; data: ClosureArtifactDownloadDescriptor } | { ok: false; reason: string } {
+  if (!isRecord(value)) {
+    return { ok: false, reason: 'not_an_object' };
+  }
+
+  const artifactId = strictString(value.artifactId);
+  const artifactRole = strictString(value.artifactRole);
+  const artifactState = strictString(value.artifactState);
+  const filename = strictString(value.filename);
+  const format = strictString(value.format);
+  const mediaType = strictString(value.mediaType);
+  const checksumSha256 = strictString(value.checksumSha256);
+  const artifactExpiresAt = strictString(value.artifactExpiresAt);
+  const bucket = strictString(value.bucket);
+  const objectPath = strictString(value.objectPath);
+  const size =
+    typeof value.size === 'number' && Number.isSafeInteger(value.size) && value.size >= 0
+      ? value.size
+      : null;
+
+  if (
+    !artifactId ||
+    !UUID_PATTERN.test(artifactId) ||
+    !artifactRole ||
+    !artifactState ||
+    !isClosureArtifactState(artifactState) ||
+    !filename ||
+    !isSemanticDownloadFilename(filename) ||
+    !format ||
+    !mediaType ||
+    size === null ||
+    !checksumSha256 ||
+    !SHA256_HEX_PATTERN.test(checksumSha256) ||
+    !artifactExpiresAt ||
+    !RFC3339_PATTERN.test(artifactExpiresAt) ||
+    !Number.isFinite(Date.parse(artifactExpiresAt)) ||
+    !bucket ||
+    !objectPath ||
+    !isAllowedClosureDownloadRole(artifactRole, format, mediaType)
+  ) {
+    return { ok: false, reason: 'field_validation_failed' };
+  }
+
+  return {
+    ok: true,
+    data: {
+      artifactId,
+      artifactRole,
+      artifactState,
+      filename,
+      format,
+      mediaType,
+      size,
+      checksumSha256,
+      artifactExpiresAt,
+      bucket,
+      objectPath,
+    },
+  };
+}
+
+function strictString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 && value === value.trim() ? value : null;
+}
+
+function isClosureArtifactState(value: string): value is ClosureArtifactState {
+  return ['pending', 'ready', 'expired', 'deleted', 'failed'].includes(value);
+}
+
+function isSemanticDownloadFilename(value: string): boolean {
+  return (
+    value.length <= 255 &&
+    value !== '.' &&
+    value !== '..' &&
+    !value.includes('/') &&
+    !value.includes('\\') &&
+    !/[\u0000-\u001f\u007f]/.test(value)
+  );
+}
+
+function isAllowedClosureDownloadRole(
+  artifactRole: string,
+  format: string,
+  mediaType: string,
+): boolean {
+  if (artifactRole === 'closure_report_xlsx') {
+    return (
+      format === 'xlsx' &&
+      mediaType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+  }
+  if (artifactRole === 'closure_issue_manifest') {
+    return (
+      format === 'json' && mediaType === 'application/vnd.tiangong.scope-closure-manifest+json'
+    );
+  }
+  if (/^closure_(?:issues|occurrences|affected_roots)_partition_\d{6}$/.test(artifactRole)) {
+    return format === 'ndjson+zstd' && mediaType === 'application/x-ndjson+zstd';
+  }
+  return false;
+}
+
+function closureArtifactSignedUrlTtlSeconds(
+  artifactExpiresAt: string,
+  nowMs: number,
+): number | null {
+  const remainingSeconds = Math.floor((Date.parse(artifactExpiresAt) - nowMs) / 1000);
+  if (remainingSeconds < 1) {
+    return null;
+  }
+  return Math.min(CLOSURE_ARTIFACT_SIGNED_URL_MAX_SECONDS, remainingSeconds);
 }
 
 async function listLciaResultPublications(
