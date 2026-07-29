@@ -135,7 +135,8 @@ class FakeDatasetQuery implements PromiseLike<{ data: unknown; error: unknown }>
 
   then<TResult1 = { data: unknown; error: unknown }, TResult2 = never>(
     onfulfilled?:
-      ((value: { data: unknown; error: unknown }) => TResult1 | PromiseLike<TResult1>) | null,
+      | ((value: { data: unknown; error: unknown }) => TResult1 | PromiseLike<TResult1>)
+      | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     const result =
@@ -163,7 +164,7 @@ function buildJob(
   table: string,
   id = `97000000-0000-0000-0000-${String(msgId).padStart(12, '0')}`,
   version = '01.00.000',
-  extractionKind: 'extracted_md' | 'extracted_text' = 'extracted_md',
+  extractionKind: string = 'extracted_md',
   readCt = 1,
 ): JsonRecord {
   return {
@@ -318,7 +319,7 @@ Deno.test('max-read generator failures are recorded and removed', async () => {
 Deno.test('unsupported extraction kind and process jobs fail deterministically', async () => {
   const supabase = new FakeSupabase();
   supabase.claimedJobs = [
-    buildJob(60, 'flow', 'flows', undefined, '01.00.000', 'extracted_text'),
+    buildJob(60, 'flow', 'flows', undefined, '01.00.000', 'legacy_kind'),
     buildJob(61, 'process', 'processes'),
   ];
 

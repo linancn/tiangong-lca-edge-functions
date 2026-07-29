@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-07-29
-lastReviewedCommit: 4fef3933c2af9416ba86b07a6e8cb6c82a50c508
-lastReviewedNote: 'Reviewed for Issue #233 Request Changes: closure-artifact reads and downloads now fail closed across nested locator projection, unexpected RPC failures, Storage throws/rejections, and expiry-skew boundaries.'
+lastReviewedCommit: e11785f47731f812901d3645d3dcc6691bde15a3
+lastReviewedNote: 'Reviewed merged Issues #233 and #235: closure-artifact reads remain fail closed, while all seven Hybrid routes use the Database v2 lexical contract and the three legacy LLM summary webhooks are retired from source without changing embedding_ft, SageMaker, or active query rewrite ownership.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

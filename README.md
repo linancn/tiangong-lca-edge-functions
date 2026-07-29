@@ -318,7 +318,7 @@ Use `npm run format` only when you intend to rewrite files with Prettier.
 npm run check
 ```
 
-This baseline intentionally skips the currently disabled `antchain_*` functions and the legacy non-`*_ft` embedding/webhook entrypoints (`embedding`, `webhook_flow_embedding`, `webhook_process_embedding`, `webhook_model_embedding`). If you reactivate any of them, bring them back into the baseline and fix their type-check state in the same change.
+This baseline intentionally skips the currently disabled `antchain_*` functions and the legacy generic `embedding` entrypoint. If you reactivate either surface, bring it back into the baseline and fix its type-check state in the same change. The retired LLM summary webhooks are no longer part of the source inventory.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

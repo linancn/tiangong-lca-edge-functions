@@ -6,12 +6,7 @@ const path = require('node:path');
 const repoRoot = path.resolve(__dirname, '..');
 const functionsRoot = path.join(repoRoot, 'supabase', 'functions');
 
-const DISABLED_FUNCTIONS = new Set([
-  'embedding',
-  'webhook_flow_embedding',
-  'webhook_model_embedding',
-  'webhook_process_embedding',
-]);
+const DISABLED_FUNCTIONS = new Set(['embedding']);
 const LOCAL_ONLY_FUNCTIONS = new Set(['embedding_ft_local']);
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_CONCURRENCY = 4;
