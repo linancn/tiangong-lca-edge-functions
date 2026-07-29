@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-07-29
-lastReviewedCommit: 3a0e62038ff3cd09d84e0c1ec0e774ac5cf997e7
-lastReviewedNote: 'Reviewed persistent-dev embedding backfill connection pressure; the embedding_ft Edge isolate now owns a bounded single-connection Postgres.js lifecycle plus non-production connection and queue proof.'
+lastReviewedCommit: 4fef3933c2af9416ba86b07a6e8cb6c82a50c508
+lastReviewedNote: 'Reviewed for Issue #233 Request Changes: closure-artifact reads and downloads now fail closed across nested locator projection, unexpected RPC failures, Storage throws/rejections, and expiry-skew boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

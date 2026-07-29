@@ -44,6 +44,7 @@ type RpcClient = Pick<SupabaseClient, 'rpc'>;
 const ARTIFACT_JSON_CACHE_TTL_MS = 5 * 60 * 1000;
 const ARTIFACT_JSON_CACHE_MAX_ENTRIES = 16;
 const CLOSURE_ARTIFACT_SIGNED_URL_MAX_SECONDS = 900;
+const CLOSURE_ARTIFACT_SIGNING_SAFETY_SECONDS = 5;
 const SHA256_HEX_PATTERN = /^[a-f0-9]{64}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RFC3339_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
@@ -74,6 +75,10 @@ type ClosureArtifactAvailability = {
   size: number | null;
   checksumSha256: string | null;
   artifactExpiresAt: string | null;
+};
+
+type DataProductCommandRepositoryOptions = {
+  now?: () => number;
 };
 
 export type DataProductPreviewMetadataRequest = {
@@ -156,8 +161,10 @@ function requireExplicitActorClient(supabase: RpcClient | null | undefined): Rpc
 export function createDataProductCommandRepository(
   actorSupabase: RpcClient,
   serviceSupabase: SupabaseClient = createSupabaseServiceClient(),
+  options: DataProductCommandRepositoryOptions = {},
 ): DataProductCommandRepository {
   const actorClient = requireExplicitActorClient(actorSupabase);
+  const now = options.now ?? Date.now;
 
   return {
     createBuild: (request, audit) => callLciaResultBuildRequestRpc(actorClient, request, audit),
@@ -180,7 +187,12 @@ export function createDataProductCommandRepository(
     },
     listClosureIssues: (request) => callLciaScopeClosureIssuesRpc(actorClient, request),
     createClosureReportDownload: async (request) => {
-      const artifact = await callLciaScopeClosureReportDownloadRpc(actorClient, request);
+      let artifact: DataProductRpcResult;
+      try {
+        artifact = await callLciaScopeClosureReportDownloadRpc(actorClient, request);
+      } catch {
+        return closureArtifactBackendFailure();
+      }
       if (!artifact.ok) {
         return normalizeClosureArtifactDownloadFailure(artifact);
       }
@@ -205,7 +217,7 @@ export function createDataProductCommandRepository(
         return closureArtifactUnavailable();
       }
 
-      const nowMs = Date.now();
+      const nowMs = now();
       const ttlSeconds = closureArtifactSignedUrlTtlSeconds(
         descriptor.data.artifactExpiresAt,
         nowMs,
@@ -214,21 +226,28 @@ export function createDataProductCommandRepository(
         return closureArtifactExpired();
       }
 
-      const { data, error } = await serviceSupabase.storage
-        .from(descriptor.data.bucket)
-        .createSignedUrl(descriptor.data.objectPath, ttlSeconds, {
-          download: descriptor.data.filename,
-        });
-      if (error || !data?.signedUrl) {
-        return {
-          ok: false,
-          code: 'closure_report_sign_failed',
-          status: 502,
-          message: 'Unable to create closure report download',
-        };
+      let signedUrl: string;
+      try {
+        const { data, error } = await serviceSupabase.storage
+          .from(descriptor.data.bucket)
+          .createSignedUrl(descriptor.data.objectPath, ttlSeconds, {
+            download: descriptor.data.filename,
+          });
+        const candidateSignedUrl = strictString(data?.signedUrl);
+        if (error || !candidateSignedUrl || !isValidSignedUrl(candidateSignedUrl)) {
+          return closureArtifactSigningFailure();
+        }
+        signedUrl = candidateSignedUrl;
+      } catch {
+        return closureArtifactSigningFailure();
       }
 
-      const signedUrlExpiresAt = new Date(nowMs + ttlSeconds * 1000).toISOString();
+      const signingCompletedAtMs = now();
+      const signedUrlExpiresAtMs = signingCompletedAtMs + ttlSeconds * 1000;
+      if (signedUrlExpiresAtMs > Date.parse(descriptor.data.artifactExpiresAt)) {
+        return closureArtifactExpired();
+      }
+      const signedUrlExpiresAt = new Date(signedUrlExpiresAtMs).toISOString();
       return {
         ok: true,
         data: {
@@ -241,7 +260,7 @@ export function createDataProductCommandRepository(
           size: descriptor.data.size,
           checksumSha256: descriptor.data.checksumSha256,
           artifactExpiresAt: descriptor.data.artifactExpiresAt,
-          signedDownloadUrl: data.signedUrl,
+          signedDownloadUrl: signedUrl,
           signedUrlExpiresAt,
           expiresInSeconds: ttlSeconds,
         },
@@ -281,10 +300,14 @@ function normalizeClosureArtifactDownloadFailure(
   if (failure.code === 'closure_report_expired' && failure.status === 410) {
     return closureArtifactExpired();
   }
-  if (failure.status === 403 || failure.status === 404) {
+  if (
+    (failure.code === 'closure_check_not_found' && failure.status === 404) ||
+    (failure.code === 'closure_report_unavailable' && failure.status === 404) ||
+    (failure.code === 'not_data_product_manager' && failure.status === 403)
+  ) {
     return closureArtifactUnavailable();
   }
-  return failure;
+  return closureArtifactBackendFailure();
 }
 
 function closureArtifactExpired(): DataProductCommandFailure {
@@ -305,10 +328,33 @@ function closureArtifactUnavailable(): DataProductCommandFailure {
   };
 }
 
+function closureArtifactBackendFailure(): DataProductCommandFailure {
+  return {
+    ok: false,
+    code: 'closure_report_backend_failed',
+    status: 502,
+    message: 'Unable to resolve closure report download',
+  };
+}
+
+function closureArtifactSigningFailure(): DataProductCommandFailure {
+  return {
+    ok: false,
+    code: 'closure_report_sign_failed',
+    status: 502,
+    message: 'Unable to create closure report download',
+  };
+}
+
 function decodeClosureCheckProjection(
   value: unknown,
 ): { ok: true; data: Record<string, unknown> } | { ok: false } {
-  if (!isRecord(value) || !Array.isArray(value.artifacts) || value.artifacts.length !== 2) {
+  if (
+    !isRecord(value) ||
+    containsPrivateProjectionField(value) ||
+    !Array.isArray(value.artifacts) ||
+    value.artifacts.length !== 2
+  ) {
     return { ok: false };
   }
 
@@ -325,13 +371,93 @@ function decodeClosureCheckProjection(
     artifacts.push(decoded);
   }
 
-  return {
-    ok: true,
-    data: {
-      ...value,
-      artifacts,
-    },
-  };
+  const data: Record<string, unknown> = {};
+  copyPresentFields(value, data, [
+    'schemaVersion',
+    'closureCheckId',
+    'runStatus',
+    'scanCompleteness',
+    'certificateValidity',
+    'requestedScopeHash',
+    'effectiveScopeHash',
+    'policyFingerprint',
+    'dataSnapshotToken',
+    'blockerCodes',
+    'summary',
+    'scanExecutionId',
+    'reusedFromCheckId',
+    'createdAt',
+    'updatedAt',
+    'finishedAt',
+  ]);
+
+  if ('workerJob' in value) {
+    if (!isRecord(value.workerJob)) {
+      return { ok: false };
+    }
+    const workerJob: Record<string, unknown> = {};
+    copyPresentFields(value.workerJob, workerJob, [
+      'jobId',
+      'status',
+      'phase',
+      'progressFraction',
+      'errorCode',
+      'blockerCodes',
+      'createdAt',
+      'updatedAt',
+      'finishedAt',
+    ]);
+    data.workerJob = workerJob;
+  }
+  data.artifacts = artifacts;
+
+  return { ok: true, data };
+}
+
+function copyPresentFields(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+  fields: string[],
+): void {
+  for (const field of fields) {
+    if (field in source) {
+      target[field] = source[field];
+    }
+  }
+}
+
+const PRIVATE_PROJECTION_FIELDS = new Set([
+  'artifactid',
+  'bucket',
+  'objectpath',
+  'storagebucket',
+  'storagepath',
+  'storageurl',
+  'artifacturl',
+  'signedurl',
+  'signeddownloadurl',
+  'service',
+  'servicecredential',
+  'servicecredentials',
+  'servicerolekey',
+  'credential',
+  'credentials',
+  'secret',
+  'secretkey',
+]);
+
+function containsPrivateProjectionField(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(containsPrivateProjectionField);
+  }
+  if (!isRecord(value)) {
+    return false;
+  }
+  return Object.entries(value).some(
+    ([key, nestedValue]) =>
+      PRIVATE_PROJECTION_FIELDS.has(key.toLowerCase().replaceAll(/[^a-z0-9]/g, '')) ||
+      containsPrivateProjectionField(nestedValue),
+  );
 }
 
 function decodeClosureArtifactAvailability(
@@ -541,10 +667,20 @@ function closureArtifactSignedUrlTtlSeconds(
   nowMs: number,
 ): number | null {
   const remainingSeconds = Math.floor((Date.parse(artifactExpiresAt) - nowMs) / 1000);
-  if (remainingSeconds < 1) {
+  const safeRemainingSeconds = remainingSeconds - CLOSURE_ARTIFACT_SIGNING_SAFETY_SECONDS;
+  if (safeRemainingSeconds < 1) {
     return null;
   }
-  return Math.min(CLOSURE_ARTIFACT_SIGNED_URL_MAX_SECONDS, remainingSeconds);
+  return Math.min(CLOSURE_ARTIFACT_SIGNED_URL_MAX_SECONDS, safeRemainingSeconds);
+}
+
+function isValidSignedUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
 async function listLciaResultPublications(

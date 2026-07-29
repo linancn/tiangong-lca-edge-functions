@@ -467,6 +467,23 @@ function closureDownloadDescriptor(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function assertFailureContainsNone(result: unknown, sourceValues: string[]) {
+  const serialized = JSON.stringify(result);
+  for (const sourceValue of sourceValues) {
+    assertEquals(serialized.includes(sourceValue), false);
+  }
+  for (const forbiddenKey of [
+    'bucket',
+    'objectPath',
+    'storagePath',
+    'credentials',
+    'serviceCredential',
+    'details',
+  ]) {
+    assertEquals(serialized.includes(forbiddenKey), false);
+  }
+}
+
 Deno.test(
   'closure-check read preserves the exact fixed-order locator-free artifacts projection',
   async () => {
@@ -476,6 +493,13 @@ Deno.test(
       runStatus: 'passed',
       scanCompleteness: 'complete',
       certificateValidity: 'valid',
+      workerJob: {
+        jobId: TEST_WORKER_JOB_ID,
+        status: 'completed',
+        phase: 'finished',
+        internalTrace: 'must-not-cross-the-public-allowlist',
+      },
+      internalDebug: { harmlessButPrivate: true },
       artifacts: [
         {
           artifactRole: 'closure_report_xlsx',
@@ -510,7 +534,22 @@ Deno.test(
         action: 'get_closure_check',
         closureCheckId: TEST_CLOSURE_CHECK_ID,
       }),
-      { ok: true, data },
+      {
+        ok: true,
+        data: {
+          schemaVersion: 'lcia.scope-closure-check.v1',
+          closureCheckId: TEST_CLOSURE_CHECK_ID,
+          runStatus: 'passed',
+          scanCompleteness: 'complete',
+          certificateValidity: 'valid',
+          workerJob: {
+            jobId: TEST_WORKER_JOB_ID,
+            status: 'completed',
+            phase: 'finished',
+          },
+          artifacts: data.artifacts,
+        },
+      },
     );
     assertEquals(actorClient.calls, [
       {
@@ -557,6 +596,31 @@ Deno.test(
       [{ ...validArtifacts[0], checksumSha256: 'invalid' }, validArtifacts[1]],
       [validArtifacts[0], { ...validArtifacts[1], artifactState: 'ready' }],
     ];
+    const baseProjection = {
+      schemaVersion: 'lcia.scope-closure-check.v1',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+      artifacts: validArtifacts,
+    };
+    const privateProjections = [
+      { ...baseProjection, bucket: 'top-level-private-bucket' },
+      {
+        ...baseProjection,
+        summary: { nested: { objectPath: 'reports/private-summary.xlsx' } },
+      },
+      {
+        ...baseProjection,
+        workerJob: {
+          jobId: TEST_WORKER_JOB_ID,
+          storagePath: 'private/worker/job.json',
+        },
+      },
+      {
+        ...baseProjection,
+        summary: {
+          groups: [{ children: [{ serviceCredential: 'service-role-secret' }] }],
+        },
+      },
+    ];
 
     for (const artifacts of malformedArtifacts) {
       const repository = createDataProductCommandRepository(
@@ -585,6 +649,32 @@ Deno.test(
           message: 'Closure check projection is invalid',
         },
       );
+    }
+
+    for (const projection of privateProjections) {
+      const repository = createDataProductCommandRepository(
+        new FakeRpcSupabase({
+          data: { ok: true, data: projection },
+          error: null,
+        }) as never,
+        {} as never,
+      );
+      const result = await repository.getClosureCheck({
+        action: 'get_closure_check',
+        closureCheckId: TEST_CLOSURE_CHECK_ID,
+      });
+      assertEquals(result, {
+        ok: false,
+        code: 'closure_check_projection_invalid',
+        status: 502,
+        message: 'Closure check projection is invalid',
+      });
+      assertFailureContainsNone(result, [
+        'top-level-private-bucket',
+        'reports/private-summary.xlsx',
+        'private/worker/job.json',
+        'service-role-secret',
+      ]);
     }
   },
 );
@@ -808,7 +898,9 @@ Deno.test('closure artifact download supports the complete-machine manifest role
 Deno.test(
   'closure artifact download caps URL lifetime at artifact expiry and maps expiry to 410',
   async () => {
-    const soonExpiresAt = new Date(Date.now() + 120_000).toISOString();
+    const initialNowMs = Date.parse('2099-07-29T00:00:00.000Z');
+    let nowMs = initialNowMs;
+    const soonExpiresAt = new Date(initialNowMs + 120_000).toISOString();
     let signedTtl = 0;
     const repository = createDataProductCommandRepository(
       new FakeRpcSupabase({
@@ -823,6 +915,7 @@ Deno.test(
           from: () => ({
             createSignedUrl: (_objectPath: string, expiresIn: number) => {
               signedTtl = expiresIn;
+              nowMs += 4_000;
               return Promise.resolve({
                 data: { signedUrl: 'https://signed.example/report' },
                 error: null,
@@ -831,6 +924,7 @@ Deno.test(
           }),
         },
       } as never,
+      { now: () => nowMs },
     );
 
     const result = await repository.createClosureReportDownload({
@@ -839,12 +933,91 @@ Deno.test(
       artifactRole: 'closure_report_xlsx',
     });
     assertEquals(result.ok, true);
-    assertEquals(signedTtl >= 118 && signedTtl <= 120, true);
+    assertEquals(signedTtl, 115);
     if (result.ok) {
       const data = result.data as Record<string, unknown>;
       assertEquals(data.expiresInSeconds, signedTtl);
-      assertEquals(Date.parse(String(data.signedUrlExpiresAt)) <= Date.parse(soonExpiresAt), true);
+      assertEquals(data.signedUrlExpiresAt, new Date(initialNowMs + 119_000).toISOString());
+      assertEquals(Date.parse(String(data.signedUrlExpiresAt)) < Date.parse(soonExpiresAt), true);
     }
+
+    let delayedNowMs = initialNowMs;
+    const delayedRepository = createDataProductCommandRepository(
+      new FakeRpcSupabase({
+        data: {
+          ok: true,
+          data: closureDownloadDescriptor({ artifactExpiresAt: soonExpiresAt }),
+        },
+        error: null,
+      }) as never,
+      {
+        storage: {
+          from: () => ({
+            createSignedUrl: () => {
+              delayedNowMs += 6_000;
+              return Promise.resolve({
+                data: { signedUrl: 'https://signed.example/must-not-be-returned' },
+                error: null,
+              });
+            },
+          }),
+        },
+      } as never,
+      { now: () => delayedNowMs },
+    );
+    const delayedResult = await delayedRepository.createClosureReportDownload({
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+      artifactRole: 'closure_report_xlsx',
+    });
+    assertEquals(delayedResult, {
+      ok: false,
+      code: 'closure_report_expired',
+      status: 410,
+      message: 'Closure report has expired',
+    });
+    assertFailureContainsNone(delayedResult, ['must-not-be-returned']);
+
+    let nearExpirySigningCalled = false;
+    const nearExpiryRepository = createDataProductCommandRepository(
+      new FakeRpcSupabase({
+        data: {
+          ok: true,
+          data: closureDownloadDescriptor({
+            artifactExpiresAt: new Date(initialNowMs + 5_999).toISOString(),
+          }),
+        },
+        error: null,
+      }) as never,
+      {
+        storage: {
+          from: () => ({
+            createSignedUrl: () => {
+              nearExpirySigningCalled = true;
+              return Promise.resolve({
+                data: { signedUrl: 'https://signed.example/near-expiry' },
+                error: null,
+              });
+            },
+          }),
+        },
+      } as never,
+      { now: () => initialNowMs },
+    );
+    assertEquals(
+      await nearExpiryRepository.createClosureReportDownload({
+        action: 'create_closure_report_download',
+        closureCheckId: TEST_CLOSURE_CHECK_ID,
+        artifactRole: 'closure_report_xlsx',
+      }),
+      {
+        ok: false,
+        code: 'closure_report_expired',
+        status: 410,
+        message: 'Closure report has expired',
+      },
+    );
+    assertEquals(nearExpirySigningCalled, false);
 
     for (const descriptor of [
       closureDownloadDescriptor({
@@ -972,13 +1145,78 @@ Deno.test(
 );
 
 Deno.test(
+  'closure artifact DB and RPC failures return a stable 502 without source leakage',
+  async () => {
+    const sourceValues = [
+      'private-db-bucket',
+      'private/db/object.xlsx',
+      'service-role-db-secret',
+      'PGRST source rejection',
+    ];
+    const actorClients = [
+      new FakeRpcSupabase({
+        data: null,
+        error: {
+          code: 'PGRST202',
+          message: `PGRST source rejection bucket=${sourceValues[0]}`,
+          details: { objectPath: sourceValues[1], credentials: sourceValues[2] },
+        },
+      }),
+      new FakeRpcSupabase({
+        data: {
+          ok: false,
+          code: 'unknown_closure_failure',
+          status: 500,
+          message: `PGRST source rejection bucket=${sourceValues[0]}`,
+          details: { objectPath: sourceValues[1], credentials: sourceValues[2] },
+        },
+        error: null,
+      }),
+      {
+        rpc: () =>
+          Promise.reject(
+            new Error(
+              `PGRST source rejection ${sourceValues[0]}/${sourceValues[1]} ${sourceValues[2]}`,
+            ),
+          ),
+      },
+      {
+        rpc: () => {
+          throw new Error(
+            `PGRST source rejection ${sourceValues[0]}/${sourceValues[1]} ${sourceValues[2]}`,
+          );
+        },
+      },
+    ];
+
+    for (const actorClient of actorClients) {
+      const repository = createDataProductCommandRepository(actorClient as never, {} as never);
+      const result = await repository.createClosureReportDownload({
+        action: 'create_closure_report_download',
+        closureCheckId: TEST_CLOSURE_CHECK_ID,
+        artifactRole: 'closure_report_xlsx',
+      });
+      assertEquals(result, {
+        ok: false,
+        code: 'closure_report_backend_failed',
+        status: 502,
+        message: 'Unable to resolve closure report download',
+      });
+      assertFailureContainsNone(result, sourceValues);
+    }
+  },
+);
+
+Deno.test(
   'closure artifact signing failures return a stable 502 without locator leakage',
   async () => {
-    const repository = createDataProductCommandRepository(
-      new FakeRpcSupabase({
-        data: { ok: true, data: closureDownloadDescriptor() },
-        error: null,
-      }) as never,
+    const sourceValues = [
+      'private-storage-bucket',
+      'private/storage/object.xlsx',
+      'service-role-storage-secret',
+      'Storage source failure',
+    ];
+    const storageClients = [
       {
         storage: {
           from: () => ({
@@ -986,27 +1224,83 @@ Deno.test(
               Promise.resolve({
                 data: null,
                 error: {
-                  message: 'private-reports/reports/check.xlsx credential=service-secret',
+                  message: `Storage source failure ${sourceValues.join(' ')}`,
                 },
               }),
           }),
         },
-      } as never,
-    );
+      },
+      {
+        storage: {
+          from: () => ({
+            createSignedUrl: () =>
+              Promise.reject(new Error(`Storage source failure ${sourceValues.join(' ')}`)),
+          }),
+        },
+      },
+      {
+        storage: {
+          from: () => ({
+            createSignedUrl: () => {
+              throw new Error(`Storage source failure ${sourceValues.join(' ')}`);
+            },
+          }),
+        },
+      },
+      {
+        storage: {
+          from: () => {
+            throw new Error(`Storage source failure ${sourceValues.join(' ')}`);
+          },
+        },
+      },
+      {
+        storage: {
+          from: () => ({
+            createSignedUrl: () =>
+              Promise.resolve({
+                data: { signedUrl: '' },
+                error: null,
+              }),
+          }),
+        },
+      },
+      {
+        storage: {
+          from: () => ({
+            createSignedUrl: () =>
+              Promise.resolve({
+                data: {
+                  signedUrl: `not-a-url ${sourceValues.join(' ')}`,
+                },
+                error: null,
+              }),
+          }),
+        },
+      },
+    ];
 
-    const result = await repository.createClosureReportDownload({
-      action: 'create_closure_report_download',
-      closureCheckId: TEST_CLOSURE_CHECK_ID,
-      artifactRole: 'closure_report_xlsx',
-    });
-    assertEquals(result, {
-      ok: false,
-      code: 'closure_report_sign_failed',
-      status: 502,
-      message: 'Unable to create closure report download',
-    });
-    assertEquals(JSON.stringify(result).includes('private-reports'), false);
-    assertEquals(JSON.stringify(result).includes('service-secret'), false);
+    for (const serviceClient of storageClients) {
+      const repository = createDataProductCommandRepository(
+        new FakeRpcSupabase({
+          data: { ok: true, data: closureDownloadDescriptor() },
+          error: null,
+        }) as never,
+        serviceClient as never,
+      );
+      const result = await repository.createClosureReportDownload({
+        action: 'create_closure_report_download',
+        closureCheckId: TEST_CLOSURE_CHECK_ID,
+        artifactRole: 'closure_report_xlsx',
+      });
+      assertEquals(result, {
+        ok: false,
+        code: 'closure_report_sign_failed',
+        status: 502,
+        message: 'Unable to create closure report download',
+      });
+      assertFailureContainsNone(result, sourceValues);
+    }
   },
 );
 
