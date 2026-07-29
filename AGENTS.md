@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-07-29
-lastReviewedCommit: ceb462507b3f6ab4821013edd845a015340c4f3e
-lastReviewedNote: 'Reviewed persistent-dev embedding backfill connection pressure; the embedding_ft Edge isolate now owns a bounded single-connection Postgres.js lifecycle plus non-production connection and queue proof.'
+lastReviewedCommit: e11785f47731f812901d3645d3dcc6691bde15a3
+lastReviewedNote: 'Reviewed merged Issues #233 and #235: closure-artifact reads remain fail closed, while all seven Hybrid routes use the Database v2 lexical contract and the three legacy LLM summary webhooks are retired from source without changing embedding_ft, SageMaker, or active query rewrite ownership.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

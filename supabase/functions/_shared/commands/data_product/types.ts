@@ -50,9 +50,12 @@ export type DataProductClosureIssuesRequest = {
   limit?: number;
 };
 
+export type DataProductClosureArtifactRole = 'closure_report_xlsx' | 'closure_issue_manifest';
+
 export type DataProductClosureReportDownloadRequest = {
   action: 'create_closure_report_download';
   closureCheckId: string;
+  artifactRole: DataProductClosureArtifactRole;
 };
 
 export type DataProductTaskFeedRequest = {
