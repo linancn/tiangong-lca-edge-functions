@@ -16,6 +16,7 @@ import {
   buildLciaResultBuildRequestRpcArgs,
   buildLciaResultPackagePublishRpcArgs,
   buildLciaScopeClosureCheckRequestRpcArgs,
+  buildLciaScopeClosureReportDownloadRpcArgs,
   buildTaskSummaryV2FeedRpcArgs,
   callLciaResultPackagePublishRpc,
   type DataProductRpcResult,
@@ -121,6 +122,52 @@ Deno.test(
     assertEquals(parsed.success, true);
   },
 );
+
+Deno.test('closure download schema requires one of the two public artifact roles', () => {
+  for (const artifactRole of ['closure_report_xlsx', 'closure_issue_manifest']) {
+    const parsed = dataProductCommandRequestSchema.safeParse({
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+      artifactRole,
+    });
+    assertEquals(parsed.success, true);
+  }
+
+  for (const request of [
+    {
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+    },
+    {
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+      artifactRole: 'closure_bundle',
+    },
+    {
+      action: 'create_closure_report_download',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+      artifactRole: 'closure_issues_partition_000000',
+    },
+  ]) {
+    assertEquals(dataProductCommandRequestSchema.safeParse(request).success, false);
+  }
+});
+
+Deno.test('closure download RPC args preserve the exact bounded artifact selector', () => {
+  for (const artifactRole of ['closure_report_xlsx', 'closure_issue_manifest'] as const) {
+    assertEquals(
+      buildLciaScopeClosureReportDownloadRpcArgs({
+        action: 'create_closure_report_download',
+        closureCheckId: TEST_CLOSURE_CHECK_ID,
+        artifactRole,
+      }),
+      {
+        p_closure_check_id: TEST_CLOSURE_CHECK_ID,
+        p_artifact_role: artifactRole,
+      },
+    );
+  }
+});
 
 Deno.test(
   'dataProductCommandRequestSchema rejects a partial certificate binding on create_build',
@@ -421,6 +468,128 @@ function closureDownloadDescriptor(overrides: Record<string, unknown> = {}) {
 }
 
 Deno.test(
+  'closure-check read preserves the exact fixed-order locator-free artifacts projection',
+  async () => {
+    const data = {
+      schemaVersion: 'lcia.scope-closure-check.v1',
+      closureCheckId: TEST_CLOSURE_CHECK_ID,
+      runStatus: 'passed',
+      scanCompleteness: 'complete',
+      certificateValidity: 'valid',
+      artifacts: [
+        {
+          artifactRole: 'closure_report_xlsx',
+          artifactState: 'ready',
+          filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}.xlsx`,
+          format: 'xlsx',
+          mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          size: 42,
+          checksumSha256: 'a'.repeat(64),
+          artifactExpiresAt: '2099-07-29T00:00:00.000Z',
+        },
+        {
+          artifactRole: 'closure_issue_manifest',
+          artifactState: 'pending',
+          filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-manifest.json`,
+          format: 'json',
+          mediaType: 'application/vnd.tiangong.scope-closure-manifest+json',
+          size: null,
+          checksumSha256: null,
+          artifactExpiresAt: null,
+        },
+      ],
+    };
+    const actorClient = new FakeRpcSupabase({
+      data: { ok: true, data },
+      error: null,
+    });
+    const repository = createDataProductCommandRepository(actorClient as never, {} as never);
+
+    assertEquals(
+      await repository.getClosureCheck({
+        action: 'get_closure_check',
+        closureCheckId: TEST_CLOSURE_CHECK_ID,
+      }),
+      { ok: true, data },
+    );
+    assertEquals(actorClient.calls, [
+      {
+        fn: 'get_lcia_scope_closure_check',
+        args: { p_closure_check_id: TEST_CLOSURE_CHECK_ID },
+      },
+    ]);
+    assertEquals(JSON.stringify(data).includes('bucket'), false);
+    assertEquals(JSON.stringify(data).includes('objectPath'), false);
+  },
+);
+
+Deno.test(
+  'closure-check read rejects malformed or locator-bearing artifact summaries',
+  async () => {
+    const validArtifacts = [
+      {
+        artifactRole: 'closure_report_xlsx',
+        artifactState: 'ready',
+        filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}.xlsx`,
+        format: 'xlsx',
+        mediaType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        size: 42,
+        checksumSha256: 'a'.repeat(64),
+        artifactExpiresAt: '2099-07-29T00:00:00.000Z',
+      },
+      {
+        artifactRole: 'closure_issue_manifest',
+        artifactState: 'pending',
+        filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-manifest.json`,
+        format: 'json',
+        mediaType: 'application/vnd.tiangong.scope-closure-manifest+json',
+        size: null,
+        checksumSha256: null,
+        artifactExpiresAt: null,
+      },
+    ];
+    const malformedArtifacts = [
+      validArtifacts.slice(0, 1),
+      [...validArtifacts].reverse(),
+      [{ ...validArtifacts[0], artifactId: TEST_BUILD_ID }, validArtifacts[1]],
+      [{ ...validArtifacts[0], bucket: 'private-reports' }, validArtifacts[1]],
+      [{ ...validArtifacts[0], objectPath: 'reports/check.xlsx' }, validArtifacts[1]],
+      [{ ...validArtifacts[0], checksumSha256: 'invalid' }, validArtifacts[1]],
+      [validArtifacts[0], { ...validArtifacts[1], artifactState: 'ready' }],
+    ];
+
+    for (const artifacts of malformedArtifacts) {
+      const repository = createDataProductCommandRepository(
+        new FakeRpcSupabase({
+          data: {
+            ok: true,
+            data: {
+              schemaVersion: 'lcia.scope-closure-check.v1',
+              closureCheckId: TEST_CLOSURE_CHECK_ID,
+              artifacts,
+            },
+          },
+          error: null,
+        }) as never,
+        {} as never,
+      );
+      assertEquals(
+        await repository.getClosureCheck({
+          action: 'get_closure_check',
+          closureCheckId: TEST_CLOSURE_CHECK_ID,
+        }),
+        {
+          ok: false,
+          code: 'closure_check_projection_invalid',
+          status: 502,
+          message: 'Closure check projection is invalid',
+        },
+      );
+    }
+  },
+);
+
+Deno.test(
   'closure artifact download rejects malformed or unsupported database descriptors before signing',
   async () => {
     const malformedDescriptors = [
@@ -431,9 +600,22 @@ Deno.test(
       closureDownloadDescriptor({ artifactExpiresAt: 'not-a-timestamp' }),
       closureDownloadDescriptor({ artifactState: 'unknown' }),
       closureDownloadDescriptor({ artifactRole: 'closure_bundle', format: 'json' }),
+      closureDownloadDescriptor({
+        artifactRole: 'closure_issues_partition_000000',
+        filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-issues-000000.ndjson.zst`,
+        format: 'ndjson+zstd',
+        mediaType: 'application/x-ndjson+zstd',
+      }),
+      closureDownloadDescriptor({
+        artifactRole: 'closure_issue_manifest',
+        filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-manifest.json`,
+        format: 'json',
+        mediaType: 'application/vnd.tiangong.scope-closure-manifest+json',
+      }),
       closureDownloadDescriptor({ format: 'json' }),
       closureDownloadDescriptor({ bucket: '' }),
       closureDownloadDescriptor({ objectPath: null }),
+      { ...closureDownloadDescriptor(), serviceCredential: 'must-not-cross-the-boundary' },
     ];
 
     for (const descriptor of malformedDescriptors) {
@@ -457,6 +639,7 @@ Deno.test(
         await repository.createClosureReportDownload({
           action: 'create_closure_report_download',
           closureCheckId: TEST_CLOSURE_CHECK_ID,
+          artifactRole: 'closure_report_xlsx',
         }),
         {
           ok: false,
@@ -467,7 +650,10 @@ Deno.test(
       );
       assertEquals(actorClient.calls[0], {
         fn: 'get_lcia_scope_closure_report_download',
-        args: { p_closure_check_id: TEST_CLOSURE_CHECK_ID },
+        args: {
+          p_closure_check_id: TEST_CLOSURE_CHECK_ID,
+          p_artifact_role: 'closure_report_xlsx',
+        },
       });
     }
   },
@@ -506,6 +692,7 @@ Deno.test(
     const result = await repository.createClosureReportDownload({
       action: 'create_closure_report_download',
       closureCheckId: TEST_CLOSURE_CHECK_ID,
+      artifactRole: 'closure_report_xlsx',
     });
 
     assertEquals(signingCalls, [
@@ -541,66 +728,82 @@ Deno.test(
   },
 );
 
-Deno.test(
-  'closure artifact download supports complete-machine manifest and partition roles',
-  async () => {
-    const descriptors = [
-      closureDownloadDescriptor({
-        artifactRole: 'closure_issue_manifest',
-        filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-manifest.json`,
-        format: 'json',
-        mediaType: 'application/vnd.tiangong.scope-closure-manifest+json',
-        objectPath: 'reports/manifest.json',
-      }),
-      closureDownloadDescriptor({
-        artifactRole: 'closure_affected_roots_partition_000007',
-        filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-affected-roots-000007.ndjson.zst`,
-        format: 'ndjson+zstd',
-        mediaType: 'application/x-ndjson+zstd',
-        objectPath: 'reports/affected-roots/part-000007.ndjson.zst',
-      }),
-    ];
-
-    for (const descriptor of descriptors) {
-      const actorClient = new FakeRpcSupabase({
-        data: { ok: true, data: descriptor },
-        error: null,
-      });
-      const signingCalls: unknown[] = [];
-      const repository = createDataProductCommandRepository(
-        actorClient as never,
-        {
-          storage: {
-            from: (bucket: string) => ({
-              createSignedUrl: (objectPath: string, expiresIn: number, options: unknown) => {
-                signingCalls.push({ bucket, objectPath, expiresIn, options });
-                return Promise.resolve({
-                  data: { signedUrl: 'https://signed.example/machine-artifact' },
-                  error: null,
-                });
-              },
-            }),
+Deno.test('closure artifact download supports the complete-machine manifest role', async () => {
+  const descriptor = closureDownloadDescriptor({
+    artifactRole: 'closure_issue_manifest',
+    filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-manifest.json`,
+    format: 'json',
+    mediaType: 'application/vnd.tiangong.scope-closure-manifest+json',
+    objectPath: 'reports/manifest.json',
+  });
+  const actorClient = new FakeRpcSupabase({
+    data: { ok: true, data: descriptor },
+    error: null,
+  });
+  const signingCalls: unknown[] = [];
+  const repository = createDataProductCommandRepository(
+    actorClient as never,
+    {
+      storage: {
+        from: (bucket: string) => ({
+          createSignedUrl: (objectPath: string, expiresIn: number, options: unknown) => {
+            signingCalls.push({ bucket, objectPath, expiresIn, options });
+            return Promise.resolve({
+              data: { signedUrl: 'https://signed.example/machine-artifact' },
+              error: null,
+            });
           },
-        } as never,
-      );
+        }),
+      },
+    } as never,
+  );
 
-      const result = await repository.createClosureReportDownload({
-        action: 'create_closure_report_download',
-        closureCheckId: TEST_CLOSURE_CHECK_ID,
-      });
+  const result = await repository.createClosureReportDownload({
+    action: 'create_closure_report_download',
+    closureCheckId: TEST_CLOSURE_CHECK_ID,
+    artifactRole: 'closure_issue_manifest',
+  });
 
-      assertEquals(result.ok, true);
-      assertEquals(signingCalls, [
-        {
-          bucket: descriptor.bucket,
-          objectPath: descriptor.objectPath,
-          expiresIn: 900,
-          options: { download: descriptor.filename },
-        },
-      ]);
-    }
-  },
-);
+  assertEquals(result.ok, true);
+  if (!result.ok) {
+    throw new Error('expected a signed closure manifest');
+  }
+  const resultData = result.data as Record<string, unknown>;
+  const { signedUrlExpiresAt, ...stableResultData } = resultData;
+  assertEquals(typeof signedUrlExpiresAt, 'string');
+  assertEquals(stableResultData, {
+    artifactId: TEST_BUILD_ID,
+    artifactRole: 'closure_issue_manifest',
+    artifactState: 'ready',
+    filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-manifest.json`,
+    format: 'json',
+    mediaType: 'application/vnd.tiangong.scope-closure-manifest+json',
+    size: 42,
+    checksumSha256: 'a'.repeat(64),
+    artifactExpiresAt: '2099-07-29T00:00:00.000Z',
+    signedDownloadUrl: 'https://signed.example/machine-artifact',
+    expiresInSeconds: 900,
+  });
+  assertEquals('bucket' in resultData, false);
+  assertEquals('objectPath' in resultData, false);
+  assertEquals(actorClient.calls, [
+    {
+      fn: 'get_lcia_scope_closure_report_download',
+      args: {
+        p_closure_check_id: TEST_CLOSURE_CHECK_ID,
+        p_artifact_role: 'closure_issue_manifest',
+      },
+    },
+  ]);
+  assertEquals(signingCalls, [
+    {
+      bucket: descriptor.bucket,
+      objectPath: descriptor.objectPath,
+      expiresIn: 900,
+      options: { download: descriptor.filename },
+    },
+  ]);
+});
 
 Deno.test(
   'closure artifact download caps URL lifetime at artifact expiry and maps expiry to 410',
@@ -633,6 +836,7 @@ Deno.test(
     const result = await repository.createClosureReportDownload({
       action: 'create_closure_report_download',
       closureCheckId: TEST_CLOSURE_CHECK_ID,
+      artifactRole: 'closure_report_xlsx',
     });
     assertEquals(result.ok, true);
     assertEquals(signedTtl >= 118 && signedTtl <= 120, true);
@@ -664,6 +868,7 @@ Deno.test(
         await expiredRepository.createClosureReportDownload({
           action: 'create_closure_report_download',
           closureCheckId: TEST_CLOSURE_CHECK_ID,
+          artifactRole: 'closure_report_xlsx',
         }),
         {
           ok: false,
@@ -690,6 +895,7 @@ Deno.test(
       await databaseExpiredRepository.createClosureReportDownload({
         action: 'create_closure_report_download',
         closureCheckId: TEST_CLOSURE_CHECK_ID,
+        artifactRole: 'closure_report_xlsx',
       }),
       {
         ok: false,
@@ -707,6 +913,12 @@ Deno.test(
     for (const failure of [
       { ok: false, code: 'closure_check_not_found', status: 404, message: 'not found' },
       { ok: false, code: 'not_data_product_manager', status: 403, message: 'forbidden' },
+      {
+        ok: false,
+        code: 'closure_report_unavailable',
+        status: 404,
+        message: 'integrity failure',
+      },
     ]) {
       const repository = createDataProductCommandRepository(
         new FakeRpcSupabase({ data: failure, error: null }) as never,
@@ -716,6 +928,7 @@ Deno.test(
         await repository.createClosureReportDownload({
           action: 'create_closure_report_download',
           closureCheckId: TEST_CLOSURE_CHECK_ID,
+          artifactRole: 'closure_report_xlsx',
         }),
         {
           ok: false,
@@ -745,6 +958,7 @@ Deno.test(
         await repository.createClosureReportDownload({
           action: 'create_closure_report_download',
           closureCheckId: TEST_CLOSURE_CHECK_ID,
+          artifactRole: 'closure_report_xlsx',
         }),
         {
           ok: false,
@@ -783,6 +997,7 @@ Deno.test(
     const result = await repository.createClosureReportDownload({
       action: 'create_closure_report_download',
       closureCheckId: TEST_CLOSURE_CHECK_ID,
+      artifactRole: 'closure_report_xlsx',
     });
     assertEquals(result, {
       ok: false,

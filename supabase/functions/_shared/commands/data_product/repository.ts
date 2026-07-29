@@ -25,6 +25,7 @@ import type {
 } from './package_preview_projection.ts';
 import type {
   DataProductBuildCreateRequest,
+  DataProductClosureArtifactRole,
   DataProductClosureCheckCreateRequest,
   DataProductClosureCheckReadRequest,
   DataProductClosureIssuesRequest,
@@ -52,7 +53,7 @@ type ClosureArtifactState = 'pending' | 'ready' | 'expired' | 'deleted' | 'faile
 
 type ClosureArtifactDownloadDescriptor = {
   artifactId: string;
-  artifactRole: string;
+  artifactRole: DataProductClosureArtifactRole;
   artifactState: ClosureArtifactState;
   filename: string;
   format: string;
@@ -62,6 +63,17 @@ type ClosureArtifactDownloadDescriptor = {
   artifactExpiresAt: string;
   bucket: string;
   objectPath: string;
+};
+
+type ClosureArtifactAvailability = {
+  artifactRole: DataProductClosureArtifactRole;
+  artifactState: ClosureArtifactState;
+  filename: string;
+  format: string;
+  mediaType: string;
+  size: number | null;
+  checksumSha256: string | null;
+  artifactExpiresAt: string | null;
 };
 
 export type DataProductPreviewMetadataRequest = {
@@ -151,18 +163,32 @@ export function createDataProductCommandRepository(
     createBuild: (request, audit) => callLciaResultBuildRequestRpc(actorClient, request, audit),
     createClosureCheck: (request, audit) =>
       callLciaScopeClosureCheckRequestRpc(actorClient, request, audit),
-    getClosureCheck: (request) => callLciaScopeClosureCheckReadRpc(actorClient, request),
+    getClosureCheck: async (request) => {
+      const result = await callLciaScopeClosureCheckReadRpc(actorClient, request);
+      if (!result.ok) {
+        return result;
+      }
+      const projection = decodeClosureCheckProjection(result.data);
+      return projection.ok
+        ? { ok: true, data: projection.data }
+        : {
+            ok: false,
+            code: 'closure_check_projection_invalid',
+            status: 502,
+            message: 'Closure check projection is invalid',
+          };
+    },
     listClosureIssues: (request) => callLciaScopeClosureIssuesRpc(actorClient, request),
     createClosureReportDownload: async (request) => {
-      const artifact = await callLciaScopeClosureReportDownloadRpc(
-        actorClient,
-        request.closureCheckId,
-      );
+      const artifact = await callLciaScopeClosureReportDownloadRpc(actorClient, request);
       if (!artifact.ok) {
         return normalizeClosureArtifactDownloadFailure(artifact);
       }
 
-      const descriptor = decodeClosureArtifactDownloadDescriptor(artifact.data);
+      const descriptor = decodeClosureArtifactDownloadDescriptor(
+        artifact.data,
+        request.artifactRole,
+      );
       if (!descriptor.ok) {
         return {
           ok: false,
@@ -279,11 +305,140 @@ function closureArtifactUnavailable(): DataProductCommandFailure {
   };
 }
 
+function decodeClosureCheckProjection(
+  value: unknown,
+): { ok: true; data: Record<string, unknown> } | { ok: false } {
+  if (!isRecord(value) || !Array.isArray(value.artifacts) || value.artifacts.length !== 2) {
+    return { ok: false };
+  }
+
+  const expectedRoles: DataProductClosureArtifactRole[] = [
+    'closure_report_xlsx',
+    'closure_issue_manifest',
+  ];
+  const artifacts: ClosureArtifactAvailability[] = [];
+  for (const [index, artifact] of value.artifacts.entries()) {
+    const decoded = decodeClosureArtifactAvailability(artifact, expectedRoles[index]);
+    if (!decoded) {
+      return { ok: false };
+    }
+    artifacts.push(decoded);
+  }
+
+  return {
+    ok: true,
+    data: {
+      ...value,
+      artifacts,
+    },
+  };
+}
+
+function decodeClosureArtifactAvailability(
+  value: unknown,
+  expectedRole: DataProductClosureArtifactRole,
+): ClosureArtifactAvailability | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const artifactRole = strictString(value.artifactRole);
+  const artifactState = strictString(value.artifactState);
+  if (artifactRole !== expectedRole || !artifactState || !isClosureArtifactState(artifactState)) {
+    return null;
+  }
+
+  if (
+    !hasExactKeys(value, [
+      'artifactRole',
+      'artifactState',
+      'filename',
+      'format',
+      'mediaType',
+      'size',
+      'checksumSha256',
+      'artifactExpiresAt',
+    ])
+  ) {
+    return null;
+  }
+
+  const filename = strictString(value.filename);
+  const format = strictString(value.format);
+  const mediaType = strictString(value.mediaType);
+  const checksumSha256 = value.checksumSha256 === null ? null : strictString(value.checksumSha256);
+  const artifactExpiresAt =
+    value.artifactExpiresAt === null ? null : strictString(value.artifactExpiresAt);
+  const size =
+    value.size === null
+      ? null
+      : typeof value.size === 'number' && Number.isSafeInteger(value.size) && value.size >= 0
+        ? value.size
+        : null;
+  if (
+    !filename ||
+    !isSemanticDownloadFilename(filename) ||
+    !format ||
+    !mediaType ||
+    (value.size !== null && size === null) ||
+    (value.checksumSha256 !== null &&
+      (!checksumSha256 || !SHA256_HEX_PATTERN.test(checksumSha256))) ||
+    (value.artifactExpiresAt !== null &&
+      (!artifactExpiresAt ||
+        !RFC3339_PATTERN.test(artifactExpiresAt) ||
+        !Number.isFinite(Date.parse(artifactExpiresAt)))) ||
+    (artifactState === 'ready' &&
+      (size === null || checksumSha256 === null || artifactExpiresAt === null)) ||
+    !isAllowedClosureDownloadRole(artifactRole, format, mediaType)
+  ) {
+    return null;
+  }
+
+  return {
+    artifactRole,
+    artifactState,
+    filename,
+    format,
+    mediaType,
+    size,
+    checksumSha256,
+    artifactExpiresAt,
+  };
+}
+
+function hasExactKeys(value: Record<string, unknown>, expectedKeys: string[]): boolean {
+  const actualKeys = Object.keys(value).sort();
+  return (
+    actualKeys.length === expectedKeys.length &&
+    expectedKeys
+      .slice()
+      .sort()
+      .every((key, index) => key === actualKeys[index])
+  );
+}
+
 function decodeClosureArtifactDownloadDescriptor(
   value: unknown,
+  expectedArtifactRole: DataProductClosureReportDownloadRequest['artifactRole'],
 ): { ok: true; data: ClosureArtifactDownloadDescriptor } | { ok: false; reason: string } {
   if (!isRecord(value)) {
     return { ok: false, reason: 'not_an_object' };
+  }
+  if (
+    !hasExactKeys(value, [
+      'artifactId',
+      'artifactRole',
+      'artifactState',
+      'filename',
+      'format',
+      'mediaType',
+      'size',
+      'checksumSha256',
+      'artifactExpiresAt',
+      'bucket',
+      'objectPath',
+    ])
+  ) {
+    return { ok: false, reason: 'unexpected_fields' };
   }
 
   const artifactId = strictString(value.artifactId);
@@ -305,6 +460,7 @@ function decodeClosureArtifactDownloadDescriptor(
     !artifactId ||
     !UUID_PATTERN.test(artifactId) ||
     !artifactRole ||
+    artifactRole !== expectedArtifactRole ||
     !artifactState ||
     !isClosureArtifactState(artifactState) ||
     !filename ||
@@ -376,9 +532,6 @@ function isAllowedClosureDownloadRole(
     return (
       format === 'json' && mediaType === 'application/vnd.tiangong.scope-closure-manifest+json'
     );
-  }
-  if (/^closure_(?:issues|occurrences|affected_roots)_partition_\d{6}$/.test(artifactRole)) {
-    return format === 'ndjson+zstd' && mediaType === 'application/x-ndjson+zstd';
   }
   return false;
 }

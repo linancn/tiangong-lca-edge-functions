@@ -33,7 +33,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-07-29
-lastReviewedCommit: e140511982d96588b9d0f8f22e4dab33453d3934
+lastReviewedCommit: 3a0e62038ff3cd09d84e0c1ec0e774ac5cf997e7
 lastReviewedNote: 'Reviewed persistent-dev embedding backfill connection pressure; the embedding_ft Edge isolate now owns a bounded single-connection Postgres.js lifecycle plus non-production connection and queue proof.'
 related:
   - .docpact/config.yaml
