@@ -56,9 +56,6 @@ The current baseline intentionally skips:
 
 - `antchain_*`
 - `embedding`
-- `webhook_flow_embedding`
-- `webhook_model_embedding`
-- `webhook_process_embedding`
 
 If you reactivate or rely on one of those routes, update the inventory and validation story in the same change.
 

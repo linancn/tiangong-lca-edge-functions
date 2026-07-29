@@ -9,12 +9,7 @@ const functionsRoot = path.join(repoRoot, 'supabase', 'functions');
 const testRoot = path.join(repoRoot, 'test');
 const configPath = path.join('supabase', 'functions', 'deno.json');
 const disabledFunctionPrefixes = ['antchain_'];
-const disabledFunctionNames = new Set([
-  'embedding',
-  'webhook_flow_embedding',
-  'webhook_model_embedding',
-  'webhook_process_embedding',
-]);
+const disabledFunctionNames = new Set(['embedding']);
 
 const functionEntryPoints = fs
   .readdirSync(functionsRoot, { withFileTypes: true })

@@ -15,8 +15,7 @@ export interface HybridSearchRpcOptions {
   filter_condition: string;
   match_threshold: number;
   match_count: number;
-  full_text_weight: number;
-  extracted_text_weight: number;
+  lexical_weight: number;
   semantic_weight: number;
   rrf_k: number;
   data_source: string;
@@ -180,12 +179,7 @@ export function parseHybridSearchClientRequest(body: unknown): HybridSearchClien
       filter_condition: normalizeFilterCondition(filterInput),
       match_threshold: parseMatchThreshold(body.match_threshold),
       match_count: parsePositiveInteger(body.match_count, 'match_count', 20),
-      full_text_weight: parseNonNegativeNumber(body.full_text_weight, 'full_text_weight', 0.3),
-      extracted_text_weight: parseNonNegativeNumber(
-        body.extracted_text_weight,
-        'extracted_text_weight',
-        0.2,
-      ),
+      lexical_weight: parseNonNegativeNumber(body.lexical_weight, 'lexical_weight', 0.5),
       semantic_weight: parseNonNegativeNumber(body.semantic_weight, 'semantic_weight', 0.5),
       rrf_k: parsePositiveInteger(body.rrf_k, 'rrf_k', 10),
       data_source: parseDataSource(body.data_source),
