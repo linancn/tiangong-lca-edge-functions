@@ -6,7 +6,6 @@ const path = require('node:path');
 const repoRoot = path.resolve(__dirname, '..');
 const functionsRoot = path.join(repoRoot, 'supabase', 'functions');
 
-const DISABLED_FUNCTIONS = new Set(['embedding']);
 const LOCAL_ONLY_FUNCTIONS = new Set(['embedding_ft_local']);
 const DEFAULT_TIMEOUT_MS = 8000;
 const DEFAULT_CONCURRENCY = 4;
@@ -189,7 +188,7 @@ Options:
   --local                   Use LOCAL_ENDPOINT as the base URL.
   --base-url <url>          Override the probe base URL.
   --dry-run                 Print the planned probe matrix without sending requests.
-  --include-disabled        Include repo-marked disabled routes (antchain_*, legacy non-*_ft embedding/webhook).
+  --include-disabled        Include repo-marked disabled routes (currently antchain_*).
   --include-local-only      Include local-only helper routes such as embedding_ft_local.
   --only <a,b>              Only probe function names containing one of the comma-separated fragments.
   --timeout-ms <ms>         Per-request timeout in milliseconds. Default: ${DEFAULT_TIMEOUT_MS}.
@@ -306,6 +305,7 @@ function buildInventory({ includeDisabled, includeLocalOnly, onlyPatterns }) {
   const entries = fs
     .readdirSync(functionsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name !== '_shared')
+    .filter((entry) => fs.existsSync(path.join(functionsRoot, entry.name, 'index.ts')))
     .map((entry) => buildFunctionDefinition(entry.name));
 
   const afterDefaultFilters = entries.filter((entry) => {
@@ -343,7 +343,7 @@ function buildFunctionDefinition(name) {
     source.includes('createCommandHandler') || source.includes('command_runtime/command.ts');
 
   let defaultSkipped = null;
-  if (name.startsWith('antchain_') || DISABLED_FUNCTIONS.has(name)) {
+  if (name.startsWith('antchain_')) {
     defaultSkipped = 'disabled';
   } else if (LOCAL_ONLY_FUNCTIONS.has(name)) {
     defaultSkipped = 'local_only';

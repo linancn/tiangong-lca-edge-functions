@@ -18,8 +18,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-07-16
-lastReviewedCommit: 39971596f4ba5506546cc653674a69ef7ac5f291
+lastReviewedAt: 2026-07-30
+lastReviewedCommit: 60f3bd97bd3f3da161a6fda17758f21fa87cefe7
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -318,7 +318,7 @@ Use `npm run format` only when you intend to rewrite files with Prettier.
 npm run check
 ```
 
-This baseline intentionally skips the currently disabled `antchain_*` functions and the legacy generic `embedding` entrypoint. If you reactivate either surface, bring it back into the baseline and fix its type-check state in the same change. The retired LLM summary webhooks are no longer part of the source inventory.
+This baseline intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 
