@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-29
-lastReviewedCommit: e11785f47731f812901d3645d3dcc6691bde15a3
-lastReviewedNote: 'Reviewed merged Issues #233 and #235: closure-artifact reads remain fail closed, while all seven Hybrid routes use the Database v2 lexical contract and the three legacy LLM summary webhooks are retired from source without changing embedding_ft, SageMaker, or active query rewrite ownership.'
+lastReviewedAt: 2026-07-30
+lastReviewedCommit: 60f3bd97bd3f3da161a6fda17758f21fa87cefe7
+lastReviewedNote: 'Reviewed for Issue #235 Contract cleanup: all seven Hybrid routes retain the Database v2 lexical contract, embedding_ft remains active, and the generic non-FT worker plus legacy LLM summary webhooks are retired from source.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
