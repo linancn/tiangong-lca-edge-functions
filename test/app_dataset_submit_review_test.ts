@@ -47,7 +47,7 @@ function buildActor(supabase: FakeRpcSupabase) {
 }
 
 Deno.test(
-  'executeSubmitReviewCommand forwards dataset review submission to cmd_review_submit',
+  'executeSubmitReviewCommand forwards dataset review submission to cmd_review_submit_v2',
   async () => {
     const supabase = new FakeRpcSupabase();
     const result = await executeSubmitReviewCommand(
@@ -64,15 +64,17 @@ Deno.test(
     assertEquals(result.ok, true);
     assertEquals(supabase.rpcCalls, [
       {
-        fn: 'cmd_review_submit',
+        fn: 'cmd_review_submit_v2',
         args: {
-          p_table: 'processes',
-          p_id: TEST_DATASET_ID,
-          p_version: '01.00.000',
-          p_review_submit_gate_run_id: TEST_GATE_RUN_ID,
-          p_review_submit_revision_checksum: TEST_REVISION_CHECKSUM,
-          p_review_submit_policy_profile: 'review_submit_fast.v1',
-          p_review_submit_report_schema_version: 'review_submit_gate_report.v1',
+          p_target_table: 'processes',
+          p_target_id: TEST_DATASET_ID,
+          p_target_version: '01.00.000',
+          p_gate_context: {
+            reviewSubmitGateRunId: TEST_GATE_RUN_ID,
+            revisionChecksum: TEST_REVISION_CHECKSUM,
+            policyProfile: 'review_submit_fast.v1',
+            reportSchemaVersion: 'review_submit_gate_report.v1',
+          },
           p_audit: {
             command: 'dataset_submit_review',
             actorUserId: TEST_USER_ID,
@@ -97,6 +99,17 @@ Deno.test('parseSubmitReviewCommand requires process review-submit gate metadata
     table: 'processes',
     id: TEST_DATASET_ID,
     version: '01.00.000',
+  });
+
+  assertEquals(result.ok, false);
+});
+
+Deno.test('parseSubmitReviewCommand rejects gate metadata for non-Process datasets', () => {
+  const result = parseSubmitReviewCommand({
+    table: 'flows',
+    id: TEST_DATASET_ID,
+    version: '01.00.000',
+    revisionChecksum: TEST_REVISION_CHECKSUM,
   });
 
   assertEquals(result.ok, false);
