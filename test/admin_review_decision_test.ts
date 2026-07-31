@@ -33,69 +33,73 @@ function buildActor(supabase: FakeRpcSupabase) {
   };
 }
 
-Deno.test('executeApproveReviewCommand forwards approvals to cmd_review_approve', async () => {
-  const supabase = new FakeRpcSupabase();
-  const result = await executeApproveReviewCommand(
-    {
-      table: 'processes',
-      reviewId: TEST_REVIEW_ID,
-    },
-    buildActor(supabase),
-  );
-
-  assertEquals(result.ok, true);
-  assertEquals(supabase.rpcCalls, [
-    {
-      fn: 'cmd_review_approve',
-      args: {
-        p_table: 'processes',
-        p_review_id: TEST_REVIEW_ID,
-        p_audit: {
-          command: 'review_approve',
-          actorUserId: TEST_USER_ID,
-          targetTable: 'processes',
-          targetId: TEST_REVIEW_ID,
-          targetVersion: '',
-          payload: {},
-        },
+Deno.test(
+  'executeApproveReviewCommand forwards approvals to cmd_review_finalize_approve',
+  async () => {
+    const supabase = new FakeRpcSupabase();
+    const result = await executeApproveReviewCommand(
+      {
+        table: 'processes',
+        reviewId: TEST_REVIEW_ID,
       },
-    },
-  ]);
-});
+      buildActor(supabase),
+    );
 
-Deno.test('executeRejectReviewCommand forwards rejections to cmd_review_reject', async () => {
-  const supabase = new FakeRpcSupabase();
-  const result = await executeRejectReviewCommand(
-    {
-      table: 'lifecyclemodels',
-      reviewId: TEST_REVIEW_ID,
-      reason: 'Data quality issue',
-    },
-    buildActor(supabase),
-  );
-
-  assertEquals(result.ok, true);
-  assertEquals(supabase.rpcCalls, [
-    {
-      fn: 'cmd_review_reject',
-      args: {
-        p_table: 'lifecyclemodels',
-        p_review_id: TEST_REVIEW_ID,
-        p_reason: 'Data quality issue',
-        p_audit: {
-          command: 'review_reject',
-          actorUserId: TEST_USER_ID,
-          targetTable: 'lifecyclemodels',
-          targetId: TEST_REVIEW_ID,
-          targetVersion: '',
-          payload: {
-            reason: 'Data quality issue',
+    assertEquals(result.ok, true);
+    assertEquals(supabase.rpcCalls, [
+      {
+        fn: 'cmd_review_finalize_approve',
+        args: {
+          p_review_id: TEST_REVIEW_ID,
+          p_audit: {
+            command: 'review_approve',
+            actorUserId: TEST_USER_ID,
+            targetTable: 'processes',
+            targetId: TEST_REVIEW_ID,
+            targetVersion: '',
+            payload: {},
           },
         },
       },
-    },
-  ]);
-});
+    ]);
+  },
+);
+
+Deno.test(
+  'executeRejectReviewCommand forwards rejections to cmd_review_finalize_reject',
+  async () => {
+    const supabase = new FakeRpcSupabase();
+    const result = await executeRejectReviewCommand(
+      {
+        table: 'lifecyclemodels',
+        reviewId: TEST_REVIEW_ID,
+        reason: 'Data quality issue',
+      },
+      buildActor(supabase),
+    );
+
+    assertEquals(result.ok, true);
+    assertEquals(supabase.rpcCalls, [
+      {
+        fn: 'cmd_review_finalize_reject',
+        args: {
+          p_review_id: TEST_REVIEW_ID,
+          p_reason: 'Data quality issue',
+          p_audit: {
+            command: 'review_reject',
+            actorUserId: TEST_USER_ID,
+            targetTable: 'lifecyclemodels',
+            targetId: TEST_REVIEW_ID,
+            targetVersion: '',
+            payload: {
+              reason: 'Data quality issue',
+            },
+          },
+        },
+      },
+    ]);
+  },
+);
 
 Deno.test('executeRejectReviewCommand rejects blank reason before RPC call', async () => {
   const supabase = new FakeRpcSupabase();
