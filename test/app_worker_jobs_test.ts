@@ -97,7 +97,7 @@ Deno.test('mergeDataProductWorkerJobMetadata exposes safe result-set fields only
     [
       {
         id: TEST_JOB_ID,
-        payload_json: {
+        payload: {
           name: 'June public result set',
           input_manifest: { processes: [{ id: 'process-a' }] },
         },

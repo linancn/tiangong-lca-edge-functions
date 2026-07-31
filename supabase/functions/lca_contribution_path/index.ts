@@ -2,6 +2,7 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
+import { createServiceWorkerCapabilityRepository } from '../_shared/capabilities/worker_jobs.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { validateProcessEntriesInDataScope } from '../_shared/lca_process_scope.ts';
 import { ensureLcaSnapshotBuildQueued } from '../_shared/lca_snapshot_build_queue.ts';
@@ -666,20 +667,23 @@ async function fetchCacheJobState(
 async function fetchWorkerCacheJobState(
   workerJobId: string,
 ): Promise<{ ok: true; data: CacheJobState } | { ok: false }> {
-  const { data: jobData, error: jobError } = await supabaseClient
-    .from('worker_jobs')
-    .select('id,status')
-    .eq('id', workerJobId)
-    .maybeSingle();
+  const jobResult = await createServiceWorkerCapabilityRepository(supabaseClient).read({
+    jobId: workerJobId,
+    includeInternal: false,
+  });
 
-  if (jobError) {
+  if (!jobResult.ok) {
     console.warn('fetch worker cache job state failed', {
-      error: jobError.message,
+      error: jobResult.message,
       worker_job_id: workerJobId,
     });
     return { ok: false };
   }
 
+  const jobData =
+    jobResult.data && typeof jobResult.data === 'object' && !Array.isArray(jobResult.data)
+      ? (jobResult.data as Record<string, unknown>)
+      : null;
   if (!jobData) {
     return { ok: false };
   }

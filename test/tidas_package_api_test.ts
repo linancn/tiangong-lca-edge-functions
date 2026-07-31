@@ -82,6 +82,34 @@ class FakeSupabase {
         error: null,
       });
     }
+    if (fn === 'worker_read_job') {
+      const record = asJsonRecord(args);
+      const workerJob = this.tables.worker_jobs.find((row) => row.id === record.p_job_id);
+      if (!workerJob) {
+        return Promise.resolve({ data: { ok: true, data: null }, error: null });
+      }
+      return Promise.resolve({
+        data: {
+          ok: true,
+          data: {
+            id: workerJob.id,
+            jobKind: workerJob.job_kind,
+            status: workerJob.status,
+            requestedBy: workerJob.requested_by,
+            requestHash: workerJob.request_hash,
+            payload: workerJob.payload_json,
+            diagnostics: workerJob.diagnostics,
+            errorCode: workerJob.error_code,
+            errorMessage: workerJob.error_message,
+            createdAt: workerJob.created_at,
+            startedAt: workerJob.started_at,
+            finishedAt: workerJob.finished_at,
+            updatedAt: workerJob.updated_at,
+          },
+        },
+        error: null,
+      });
+    }
     return Promise.resolve({ data: null, error: null });
   }
 
@@ -305,8 +333,7 @@ class FakeQueryBuilder implements PromiseLike<{ data: unknown; error: unknown }>
 
   then<TResult1 = { data: unknown; error: unknown }, TResult2 = never>(
     onfulfilled?:
-      | ((value: { data: unknown; error: unknown }) => TResult1 | PromiseLike<TResult1>)
-      | null,
+      ((value: { data: unknown; error: unknown }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     const result =
@@ -734,7 +761,8 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       worker_job_id: TEST_WORKER_JOB_ID,
       source_artifact_id: prepared.source_artifact_id,
     });
-    assertEquals(supabase.rpcCalls.length, 1);
+    assertEquals(supabase.rpcCalls.length, 2);
+    assertEquals(supabase.rpcCalls[1].fn, 'worker_read_job');
 
     const lookupResponse = await jobsHandler(
       new Request(`https://example.com/functions/v1/tidas_package_jobs/${prepared.job_id}`, {

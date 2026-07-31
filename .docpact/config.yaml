@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-07-31'
-lastReviewedCommit: '45f78ad679599850128f1e959f2970bfb56a71c8'
+lastReviewedAt: '2026-08-01'
+lastReviewedCommit: 'facc70a7ae1f4787cff5751f778f3cbc109ca950'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -114,6 +114,7 @@ routing:
         - supabase/functions/admin_*/**
         - supabase/functions/_shared/command_runtime/**
         - supabase/functions/_shared/commands/**
+        - supabase/functions/_shared/capabilities/**
         - supabase/functions/_shared/db_rpc/**
     data-product-runtime:
       paths:
@@ -144,6 +145,7 @@ routing:
         - supabase/functions/app_worker_jobs/**
         - supabase/functions/process_dataset_review_submit_jobs/**
         - supabase/functions/_shared/commands/worker_jobs.ts
+        - supabase/functions/_shared/capabilities/worker_jobs.ts
         - supabase/functions/_shared/commands/dataset/review_submit_gate.ts
         - supabase/functions/_shared/commands/dataset/review_submit_jobs.ts
         - supabase/functions/_shared/commands/dataset/submit_review.ts
@@ -159,6 +161,7 @@ routing:
         - test/dataset_command_rpc_contract_test.ts
         - test/review_submit_job_worker_test.ts
         - test/worker_jobs_test.ts
+        - test/worker_capability_db_contract_test.ts
         - README.md
         - test.example.http
     search-and-embedding:
@@ -342,6 +345,8 @@ rules:
         kind: runtime-code
       - path: supabase/functions/_shared/commands/worker_jobs.ts
         kind: runtime-code
+      - path: supabase/functions/_shared/capabilities/worker_jobs.ts
+        kind: runtime-code
       - path: supabase/functions/_shared/commands/dataset/review_submit_gate.ts
         kind: runtime-code
       - path: supabase/functions/_shared/commands/dataset/review_submit_jobs.ts
@@ -365,6 +370,8 @@ rules:
       - path: test/review_submit_job_worker_test.ts
         kind: runtime-test
       - path: test/worker_jobs_test.ts
+        kind: runtime-test
+      - path: test/worker_capability_db_contract_test.ts
         kind: runtime-test
     requiredDocs:
       - path: AGENTS.md
