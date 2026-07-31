@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-07-30'
-lastReviewedCommit: '60f3bd97bd3f3da161a6fda17758f21fa87cefe7'
+lastReviewedAt: '2026-07-31'
+lastReviewedCommit: '45f78ad679599850128f1e959f2970bfb56a71c8'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -214,6 +214,8 @@ routing:
         - test/**
         - scripts/deno-check-all.cjs
         - scripts/probe-functions-auth.cjs
+        - scripts/run_scope_closure_edge_qualification.sh
+        - scripts/scope_closure_edge_qualification.ts
         - .github/workflows/ci.yml
         - docs/agents/repo-validation.md
         - test.example.http
@@ -416,6 +418,10 @@ rules:
         kind: runtime-test
       - path: scripts/deno-check-all.cjs
         kind: validation-wrapper
+      - path: scripts/run_scope_closure_edge_qualification.sh
+        kind: qualification-adapter
+      - path: scripts/scope_closure_edge_qualification.ts
+        kind: qualification-adapter
       - path: .github/workflows/ci.yml
         kind: automation
     requiredDocs:

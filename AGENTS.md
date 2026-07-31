@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-30
-lastReviewedCommit: 60f3bd97bd3f3da161a6fda17758f21fa87cefe7
-lastReviewedNote: 'Reviewed for Issue #235 Contract cleanup: all seven Hybrid routes retain the Database v2 lexical contract, embedding_ft remains active, and the generic non-FT worker plus legacy LLM summary webhooks are retired from source.'
+lastReviewedAt: 2026-07-31
+lastReviewedCommit: 45f78ad679599850128f1e959f2970bfb56a71c8
+lastReviewedNote: 'Reviewed for Issue #242: the tracked isolated Edge qualification adapter remains proof tooling under scripts/test and does not change runtime, auth, branch, deployment, or ownership boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

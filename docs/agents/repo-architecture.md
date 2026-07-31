@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-30
-lastReviewedCommit: 60f3bd97bd3f3da161a6fda17758f21fa87cefe7
-lastReviewedNote: 'Reviewed for Issue #235 Contract cleanup: Hybrid Search owns one lexical_weight, Database owns extracted_md lexical execution, embedding_ft remains the only semantic pipeline, and the generic non-FT embedding route is retired.'
+lastReviewedAt: 2026-07-31
+lastReviewedCommit: 45f78ad679599850128f1e959f2970bfb56a71c8
+lastReviewedNote: 'Reviewed for Issue #242: the isolated scope-closure adapter exercises the existing Data Product download boundary and adds no new production runtime family or ownership boundary.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
