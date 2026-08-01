@@ -51,6 +51,10 @@ function createMockState(overrides: Partial<MockState> = {}): MockState {
 
 function createSupabaseMock(state: MockState) {
   return {
+    schema(schema: string) {
+      assertEquals(schema, 'api');
+      return this;
+    },
     from(table: string) {
       return createTableBuilder(state, table);
     },

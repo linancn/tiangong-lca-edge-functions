@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-01
-lastReviewedCommit: 5d8b8c7c77dc29befe82b3cd51f1dc544a8ab3ff
-lastReviewedNote: 'Updated for Issue #249: Worker control-plane consumers use the explicit api profile and versioned v1 adapters through one service-only capability repository.'
+lastReviewedAt: 2026-08-02
+lastReviewedCommit: 04dfefe17794e7d1a16fe27b5023ad07143cbf0c
+lastReviewedNote: 'Updated for Issue #250: PostgREST schema selection and the exact public-residue ledger are centralized under the schema-boundary capability.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -208,6 +208,8 @@ Calculation Bundle reads follow the same projection rule. The database returns o
 ## Database Boundary
 
 This repo consumes database truth but does not own it.
+
+`supabase/functions/_shared/capabilities/schema_boundary.ts` is the shared PostgREST entrypoint for database-owned `api` capabilities. Its adjacent versioned manifest binds the reviewed database inventory, the nine public core tables, exact current residue, dynamic SQL/PGMQ/Storage consumers, and the field/filter/order/limit/ownership/transaction requirements that database-engine must satisfy. `scripts/schema-boundary-consumer-audit.ts` has two profiles: `expand` rejects unregistered dependencies while allowing reviewed migration residue, and `contract` fails until every non-core public dependency has moved behind an approved boundary. The manifest records capability semantics rather than treating candidate database routine names as frozen contracts.
 
 Typical signs the task also belongs in `database-engine`:
 

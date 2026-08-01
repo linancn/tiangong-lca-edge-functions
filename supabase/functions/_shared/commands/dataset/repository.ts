@@ -29,7 +29,7 @@ import type {
   SubmitReviewRequest,
 } from './types.ts';
 
-type RpcClient = Pick<SupabaseClient, 'rpc'>;
+type RpcClient = Pick<SupabaseClient, 'schema' | 'rpc'>;
 
 export type DatasetCommandRepository = {
   create: (request: CreateRequest, audit: CommandAuditPayload) => Promise<DatasetRpcResult>;
@@ -60,7 +60,7 @@ export type DatasetCommandRepository = {
 };
 
 function requireExplicitClient(supabase: RpcClient | null | undefined): RpcClient {
-  if (!supabase || typeof supabase.rpc !== 'function') {
+  if (!supabase || typeof supabase.schema !== 'function' || typeof supabase.rpc !== 'function') {
     throw new Error('Dataset command repository requires an explicit Supabase client');
   }
 

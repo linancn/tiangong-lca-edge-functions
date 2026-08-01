@@ -1,4 +1,4 @@
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
+import { fromDatabaseApi, type SchemaBoundaryClient } from './capabilities/schema_boundary.ts';
 
 export type UserRoleRow = {
   role: string;
@@ -10,8 +10,10 @@ export type UserRoleRow = {
  * The role enumarate values are [member, owner, review-member, review-admin ...]
  * Return the role and team_id
  */
-async function getUserRole(id: string, supabase: Pick<SupabaseClient, 'from'>) {
-  const result = await supabase.from('roles').select('role,team_id').eq('user_id', id);
+async function getUserRole(id: string, supabase: SchemaBoundaryClient) {
+  const result = await fromDatabaseApi(supabase, 'team_roles_v1')
+    .select('role,team_id')
+    .eq('user_id', id);
   return Promise.resolve(result);
 }
 

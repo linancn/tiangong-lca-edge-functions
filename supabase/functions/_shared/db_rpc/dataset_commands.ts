@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
+import { callDatabaseApiRpc } from '../capabilities/schema_boundary.ts';
 import type { CommandAuditPayload } from '../command_runtime/audit_log.ts';
 import type {
   AssignTeamRequest,
@@ -20,7 +21,7 @@ import {
   REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION,
 } from '../commands/dataset/types.ts';
 
-type RpcClient = Pick<SupabaseClient, 'rpc'>;
+type RpcClient = Pick<SupabaseClient, 'schema' | 'rpc'>;
 
 export type DatasetRpcResult = { ok: true; data: unknown } | DatasetCommandFailure;
 
@@ -57,7 +58,7 @@ async function callDatasetRpc(
   fn: string,
   args: Record<string, unknown>,
 ): Promise<DatasetRpcResult> {
-  const { data, error } = await supabase.rpc(fn, args);
+  const { data, error } = await callDatabaseApiRpc(supabase, fn, args);
   if (error) {
     return mapRpcError(error);
   }
@@ -83,6 +84,26 @@ async function callDatasetRpc(
     ok: true,
     data,
   };
+}
+
+async function callLegacyPublicDatasetRpc(
+  supabase: RpcClient,
+  fn: string,
+  args: Record<string, unknown>,
+): Promise<DatasetRpcResult> {
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) return mapRpcError(error);
+  if (isDatasetCommandFailure(data)) return data;
+  if (
+    data &&
+    typeof data === 'object' &&
+    !Array.isArray(data) &&
+    (data as { ok?: unknown }).ok === true &&
+    'data' in (data as Record<string, unknown>)
+  ) {
+    return { ok: true, data: (data as Record<string, unknown>).data };
+  }
+  return { ok: true, data };
 }
 
 export function buildDatasetSaveDraftRpcArgs(
@@ -342,7 +363,7 @@ export function callDatasetSubmitReviewRpc(
   request: SubmitReviewRequest,
   audit: CommandAuditPayload,
 ) {
-  return callDatasetRpc(
+  return callLegacyPublicDatasetRpc(
     supabase,
     'cmd_review_submit_v2',
     buildDatasetSubmitReviewRpcArgs(request, audit),

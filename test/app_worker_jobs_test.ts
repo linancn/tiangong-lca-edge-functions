@@ -238,7 +238,7 @@ Deno.test(
     );
 
     assertEquals(result.ok, true);
-    assertEquals(supabase.roleQueries, [{ table: 'roles' }]);
+    assertEquals(supabase.roleQueries, [{ table: 'team_roles_v1' }]);
     assertEquals(supabase.rpcCalls, [
       {
         fn: 'worker_list_jobs_v1',

@@ -18,8 +18,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-01
-lastReviewedCommit: facc70a7ae1f4787cff5751f778f3cbc109ca950
+lastReviewedAt: 2026-08-02
+lastReviewedCommit: 04dfefe17794e7d1a16fe27b5023ad07143cbf0c
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -326,7 +326,15 @@ This baseline intentionally skips the currently disabled `antchain_*` functions.
 deno check --config supabase/functions/deno.json <changed-file>
 ```
 
-4. Keep docs synced:
+4. When changing database consumers or schema capabilities, run the expansion audit:
+
+```bash
+npm run audit:schema-boundary:expand
+```
+
+The expansion profile accepts only reviewed migration residue and fails on unregistered consumers, dynamic schema bindings, allowlist drift, or a canonical manifest digest mismatch. The stricter `npm run audit:schema-boundary:contract` profile intentionally remains red until all registered `public`-schema residue has migrated.
+
+5. Keep docs synced:
 
 - Update `README.md` for human-facing workflow changes.
 - Update `AGENTS.md` for repo contract, boundaries, or minimal execution-fact changes.

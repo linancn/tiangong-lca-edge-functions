@@ -777,8 +777,10 @@ async function fetchProcessMaxModifiedAt(
   return data?.modified_at ? String(data.modified_at) : null;
 }
 
+const LCA_FRESHNESS_TABLES = ['flows', 'lciamethods'] as const;
+
 async function fetchTableMaxModifiedAt(
-  table: 'flows' | 'lciamethods',
+  table: (typeof LCA_FRESHNESS_TABLES)[number],
   filter: ParsedSnapshotProcessFilter,
 ): Promise<string | null> {
   let query = supabaseClient

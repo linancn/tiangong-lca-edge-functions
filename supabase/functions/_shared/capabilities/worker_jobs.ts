@@ -4,10 +4,12 @@ import type { DatasetCommandFailure } from '../commands/dataset/types.ts';
 
 type RpcClient = Pick<SupabaseClient, 'schema'>;
 
+export const WORKER_API_SCHEMA = 'api' as const;
+
 export const WORKER_CAPABILITY_CONTRACT = {
   edgeFunction: 'app_worker_jobs',
   database: {
-    schema: 'api',
+    schema: WORKER_API_SCHEMA,
     routine: {
       enqueue: 'worker_enqueue_job_v1',
       read: 'worker_read_job_v1',
@@ -156,9 +158,7 @@ async function callWorkerJobRpc<T>(
   fn: (typeof WORKER_CAPABILITY_CONTRACT.database.routine)[keyof typeof WORKER_CAPABILITY_CONTRACT.database.routine],
   args: Record<string, unknown>,
 ): Promise<WorkerJobRpcResult<T>> {
-  const { data, error } = await supabase
-    .schema(WORKER_CAPABILITY_CONTRACT.database.schema)
-    .rpc(fn, args);
+  const { data, error } = await supabase.schema(WORKER_API_SCHEMA).rpc(fn, args);
   if (error) {
     return mapRpcError(error);
   }

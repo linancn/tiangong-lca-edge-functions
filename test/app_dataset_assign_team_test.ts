@@ -9,6 +9,12 @@ const TEST_TEAM_ID = '44444444-4444-4444-8444-444444444444';
 
 class FakeRpcSupabase {
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
+  schemas: string[] = [];
+
+  schema(name: string) {
+    this.schemas.push(name);
+    return this;
+  }
 
   rpc(fn: string, args: unknown) {
     this.rpcCalls.push({

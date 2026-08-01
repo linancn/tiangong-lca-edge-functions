@@ -1,5 +1,6 @@
 import * as jose from 'https://deno.land/x/jose@v4.14.4/index.ts';
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
+import { fromDatabaseApi } from './capabilities/schema_boundary.ts';
 import {
   assertOk,
   decideLocalRole,
@@ -61,8 +62,7 @@ export async function applyActionToDesiredState(client: SupabaseClient, action: 
   const current =
     row ??
     assertOk(
-      await client
-        .from('identity_center_users')
+      await fromDatabaseApi(client, 'identity_center_users_v1')
         .select('*')
         .eq('keycloak_sub', action.keycloakSub)
         .maybeSingle(),
@@ -73,7 +73,10 @@ export async function applyActionToDesiredState(client: SupabaseClient, action: 
     assertOk(
       await client
         .from('identity_center_users')
-        .update({ status: action.status, modified_at: new Date().toISOString() })
+        .update({
+          status: action.status,
+          modified_at: new Date().toISOString(),
+        })
         .eq('keycloak_sub', action.keycloakSub),
       '更新 status',
     );
@@ -82,7 +85,10 @@ export async function applyActionToDesiredState(client: SupabaseClient, action: 
     assertOk(
       await client
         .from('identity_center_users')
-        .update({ desired_role: action.roleCode, modified_at: new Date().toISOString() })
+        .update({
+          desired_role: action.roleCode,
+          modified_at: new Date().toISOString(),
+        })
         .eq('keycloak_sub', action.keycloakSub),
       '更新 desired_role',
     );
@@ -124,8 +130,7 @@ export async function materializeForUser(
   // maybeSingle + assertOk:真正的 DB 故障抛出(交调用方转 503/500 重试),
   // 而"用户行不存在"是 data:null(非错误)→ 优雅 return,不误当故障。
   const { data: state } = assertOk(
-    await client
-      .from('identity_center_users')
+    await fromDatabaseApi(client, 'identity_center_users_v1')
       .select('*')
       .eq('keycloak_sub', keycloakSub)
       .maybeSingle(),
@@ -148,8 +153,7 @@ export async function materializeForUser(
   }
 
   const { data: roleRow } = assertOk(
-    await client
-      .from('roles')
+    await fromDatabaseApi(client, 'team_roles_v1')
       .select('role')
       .eq('user_id', userId)
       .eq('team_id', SYSTEM_TEAM_ID)

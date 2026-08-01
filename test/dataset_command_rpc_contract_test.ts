@@ -160,8 +160,14 @@ Deno.test('createDatasetCommandRepository requires an explicit Supabase client',
 
 class FakeRpcSupabase {
   calls: Array<{ fn: string; args: unknown }> = [];
+  schemas: string[] = [];
 
   constructor(private readonly result: { data: unknown; error: unknown }) {}
+
+  schema(name: string) {
+    this.schemas.push(name);
+    return this;
+  }
 
   rpc(fn: string, args: unknown) {
     this.calls.push({ fn, args: structuredClone(args) });

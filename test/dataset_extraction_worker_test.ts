@@ -46,7 +46,12 @@ const FIXTURES: Record<SupportedDatasetEntityKind, unknown> = {
         },
         quantitativeReference: {
           referenceToReferenceUnitGroup: {
-            'common:shortDescription': [{ '@xml:lang': 'en', '#text': 'Units of mass' }],
+            'common:shortDescription': [
+              {
+                '@xml:lang': 'en',
+                '#text': 'Units of mass',
+              },
+            ],
           },
         },
       },
@@ -56,7 +61,12 @@ const FIXTURES: Record<SupportedDatasetEntityKind, unknown> = {
     sourceDataSet: {
       sourceInformation: {
         dataSetInformation: {
-          'common:shortName': [{ '@xml:lang': 'en', '#text': 'Reference source' }],
+          'common:shortName': [
+            {
+              '@xml:lang': 'en',
+              '#text': 'Reference source',
+            },
+          ],
           sourceCitation: 'Example et al. 2026',
         },
       },
@@ -87,12 +97,21 @@ class FakeSupabase {
   rows: Record<string, JsonRecord[]> = {};
   claimedJobs: JsonRecord[] = [];
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
+  schemas: string[] = [];
+
+  schema(name: string) {
+    this.schemas.push(name);
+    return this;
+  }
 
   rpc(fn: string, args: unknown) {
     this.rpcCalls.push({ fn, args: structuredClone(args) });
     if (fn === 'cmd_dataset_extraction_claim') {
       return Promise.resolve({
-        data: { ok: true, data: this.claimedJobs.map((job) => structuredClone(job)) },
+        data: {
+          ok: true,
+          data: this.claimedJobs.map((job) => structuredClone(job)),
+        },
         error: null,
       });
     }
@@ -130,13 +149,15 @@ class FakeDatasetQuery implements PromiseLike<{ data: unknown; error: unknown }>
 
   maybeSingle() {
     const row = this.matchingRows()[0];
-    return Promise.resolve({ data: row ? structuredClone(row) : null, error: null });
+    return Promise.resolve({
+      data: row ? structuredClone(row) : null,
+      error: null,
+    });
   }
 
   then<TResult1 = { data: unknown; error: unknown }, TResult2 = never>(
     onfulfilled?:
-      | ((value: { data: unknown; error: unknown }) => TResult1 | PromiseLike<TResult1>)
-      | null,
+      ((value: { data: unknown; error: unknown }) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
     const result =
@@ -153,7 +174,9 @@ class FakeDatasetQuery implements PromiseLike<{ data: unknown; error: unknown }>
   }
 
   private executeUpdate() {
-    for (const row of this.matchingRows()) Object.assign(row, structuredClone(this.updateValues));
+    for (const row of this.matchingRows()) {
+      Object.assign(row, structuredClone(this.updateValues));
+    }
     return { data: null, error: null };
   }
 }
@@ -226,7 +249,9 @@ Deno.test('dataset extraction updates only the exact id and version', async () =
   ];
   supabase.claimedJobs = [buildJob(10, 'source', 'sources', id, '01.01.000')];
 
-  await processDatasetExtractionJobs({ supabase: supabase as unknown as SupabaseClient });
+  await processDatasetExtractionJobs({
+    supabase: supabase as unknown as SupabaseClient,
+  });
 
   assertEquals(supabase.rows.sources[0].extracted_md, undefined);
   assertStringIncludes(String(supabase.rows.sources[1].extracted_md), '# Reference source');
@@ -274,7 +299,13 @@ Deno.test('wrong table/entity combinations are terminal unsupported jobs', async
 Deno.test('transient generator failures remain visible for retry', async () => {
   const supabase = new FakeSupabase();
   const id = '97000000-0000-0000-0000-000000000040';
-  supabase.rows.sources = [{ id, version: '01.00.000', json_ordered: FIXTURES.source }];
+  supabase.rows.sources = [
+    {
+      id,
+      version: '01.00.000',
+      json_ordered: FIXTURES.source,
+    },
+  ];
   supabase.claimedJobs = [buildJob(40, 'source', 'sources', id)];
 
   const result = await processDatasetExtractionJobs({
@@ -297,7 +328,13 @@ Deno.test('transient generator failures remain visible for retry', async () => {
 Deno.test('max-read generator failures are recorded and removed', async () => {
   const supabase = new FakeSupabase();
   const id = '97000000-0000-0000-0000-000000000050';
-  supabase.rows.unitgroups = [{ id, version: '01.00.000', json_ordered: FIXTURES.unitgroup }];
+  supabase.rows.unitgroups = [
+    {
+      id,
+      version: '01.00.000',
+      json_ordered: FIXTURES.unitgroup,
+    },
+  ];
   supabase.claimedJobs = [
     buildJob(50, 'unitgroup', 'unitgroups', id, '01.00.000', 'extracted_md', 5),
   ];

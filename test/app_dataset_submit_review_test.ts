@@ -13,6 +13,12 @@ const TEST_REVISION_CHECKSUM = 'a'.repeat(64);
 
 class FakeRpcSupabase {
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
+  schemas: string[] = [];
+
+  schema(name: string) {
+    this.schemas.push(name);
+    return this;
+  }
 
   rpc(fn: string, args: unknown) {
     this.rpcCalls.push({

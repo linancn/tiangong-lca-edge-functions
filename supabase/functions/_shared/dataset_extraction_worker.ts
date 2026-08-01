@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
+import { callDatabaseApiRpc } from './capabilities/schema_boundary.ts';
 import { generateFlowMarkdown, normalizeJsonOrdered } from './flow_extraction.ts';
 import {
   generateContactMarkdown,
@@ -10,12 +11,7 @@ import {
 
 export type DatasetExtractionKind = 'extracted_md';
 export type DatasetEntityKind =
-  | 'flow'
-  | 'process'
-  | 'contact'
-  | 'flowproperty'
-  | 'source'
-  | 'unitgroup';
+  'flow' | 'process' | 'contact' | 'flowproperty' | 'source' | 'unitgroup';
 export type SupportedDatasetEntityKind = Exclude<DatasetEntityKind, 'process'>;
 
 export interface DatasetExtractionJobMessage {
@@ -55,6 +51,14 @@ export interface DatasetExtractionWorkerResult {
 
 type MarkdownGenerator = (jsonOrdered: unknown) => string;
 
+export const DATASET_EXTRACTION_TABLES = [
+  'flows',
+  'contacts',
+  'flowproperties',
+  'sources',
+  'unitgroups',
+] as const;
+
 export interface DatasetExtractionWorkerOptions {
   supabase: SupabaseClient;
   batchSize?: number;
@@ -80,11 +84,14 @@ interface DatasetExtractionTarget {
 const DATASET_EXTRACTION_TARGETS: Readonly<
   Record<SupportedDatasetEntityKind, DatasetExtractionTarget>
 > = {
-  flow: { table: 'flows', generator: generateFlowMarkdown },
-  contact: { table: 'contacts', generator: generateContactMarkdown },
-  flowproperty: { table: 'flowproperties', generator: generateFlowPropertyMarkdown },
-  source: { table: 'sources', generator: generateSourceMarkdown },
-  unitgroup: { table: 'unitgroups', generator: generateUnitGroupMarkdown },
+  flow: { table: DATASET_EXTRACTION_TABLES[0], generator: generateFlowMarkdown },
+  contact: { table: DATASET_EXTRACTION_TABLES[1], generator: generateContactMarkdown },
+  flowproperty: {
+    table: DATASET_EXTRACTION_TABLES[2],
+    generator: generateFlowPropertyMarkdown,
+  },
+  source: { table: DATASET_EXTRACTION_TABLES[3], generator: generateSourceMarkdown },
+  unitgroup: { table: DATASET_EXTRACTION_TABLES[4], generator: generateUnitGroupMarkdown },
 };
 
 function positiveInteger(value: number | undefined, fallback: number, max: number): number {
@@ -164,7 +171,7 @@ async function recordTerminalFailure(
   reason: string,
   message: string,
 ): Promise<void> {
-  const { error } = await supabase.rpc('cmd_dataset_extraction_record_failure', {
+  const { error } = await callDatabaseApiRpc(supabase, 'cmd_dataset_extraction_record_failure', {
     p_msg_id: job.msg_id,
     p_read_count: job.read_ct,
     p_reason: reason,
@@ -242,11 +249,15 @@ export async function processDatasetExtractionJobs(
     ...options.markdownGenerators,
   };
 
-  const { data, error } = await options.supabase.rpc('cmd_dataset_extraction_claim', {
-    p_qty: batchSize,
-    p_vt_seconds: visibilityTimeoutSeconds,
-    p_max_read_count: maxReadCount,
-  });
+  const { data, error } = await callDatabaseApiRpc(
+    options.supabase,
+    'cmd_dataset_extraction_claim',
+    {
+      p_qty: batchSize,
+      p_vt_seconds: visibilityTimeoutSeconds,
+      p_max_read_count: maxReadCount,
+    },
+  );
   if (error) throw error;
 
   const envelope = data as RpcEnvelope<unknown[]>;
@@ -276,7 +287,11 @@ export async function processDatasetExtractionJobs(
     try {
       const status = await processDatasetJob(options.supabase, job, generators);
       ackIds.push(job.msg_id);
-      const result = { ...baseLog, status, duration_ms: Date.now() - startedAt };
+      const result = {
+        ...baseLog,
+        status,
+        duration_ms: Date.now() - startedAt,
+      };
       console.log('[dataset_extraction_job]', { ...result, stage: status });
       results.push(result);
     } catch (caught) {
@@ -285,7 +300,9 @@ export async function processDatasetExtractionJobs(
       const unsupported =
         code === 'UNSUPPORTED_ENTITY_KIND' || code === 'UNSUPPORTED_EXTRACTION_KIND';
       const terminal = unsupported || code === 'INVALID_JOB_MESSAGE' || job.read_ct >= maxReadCount;
-      if (terminal) await recordTerminalFailure(options.supabase, job, code, message);
+      if (terminal) {
+        await recordTerminalFailure(options.supabase, job, code, message);
+      }
 
       const result = {
         ...baseLog,
@@ -298,15 +315,20 @@ export async function processDatasetExtractionJobs(
         error_code: code,
         error_message: message,
       };
-      console.error('[dataset_extraction_job]', { ...result, stage: result.status });
+      console.error('[dataset_extraction_job]', {
+        ...result,
+        stage: result.status,
+      });
       results.push(result);
     }
   }
 
   if (ackIds.length > 0) {
-    const { error: ackError } = await options.supabase.rpc('cmd_dataset_extraction_ack', {
-      p_msg_ids: ackIds,
-    });
+    const { error: ackError } = await callDatabaseApiRpc(
+      options.supabase,
+      'cmd_dataset_extraction_ack',
+      { p_msg_ids: ackIds },
+    );
     if (ackError) throw ackError;
   }
 

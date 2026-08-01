@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-01'
-lastReviewedCommit: 'facc70a7ae1f4787cff5751f778f3cbc109ca950'
+lastReviewedAt: '2026-08-02'
+lastReviewedCommit: '04dfefe17794e7d1a16fe27b5023ad07143cbf0c'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -116,6 +116,13 @@ routing:
         - supabase/functions/_shared/commands/**
         - supabase/functions/_shared/capabilities/**
         - supabase/functions/_shared/db_rpc/**
+    schema-boundary:
+      paths:
+        - supabase/functions/_shared/capabilities/schema_boundary.ts
+        - supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.json
+        - scripts/schema-boundary-consumer-audit.ts
+        - test/schema_boundary_capability_test.ts
+        - test/schema_boundary_consumer_audit_test.ts
     data-product-runtime:
       paths:
         - supabase/functions/app_data_product_commands/**
@@ -217,6 +224,7 @@ routing:
     proof:
       paths:
         - test/**
+        - scripts/schema-boundary-consumer-audit.ts
         - scripts/deno-check-all.cjs
         - scripts/probe-functions-auth.cjs
         - scripts/run_scope_closure_edge_qualification.sh
@@ -429,6 +437,8 @@ rules:
     triggers:
       - path: test/**
         kind: runtime-test
+      - path: scripts/schema-boundary-consumer-audit.ts
+        kind: validation-wrapper
       - path: scripts/deno-check-all.cjs
         kind: validation-wrapper
       - path: scripts/run-worker-capability-contract.cjs

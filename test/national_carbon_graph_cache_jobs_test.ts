@@ -163,7 +163,7 @@ Deno.test(
         },
       });
     }
-    assertEquals(supabase.roleQueries, [{ table: 'roles' }]);
+    assertEquals(supabase.roleQueries, [{ table: 'team_roles_v1' }]);
     assertEquals(supabase.rpcCalls, [
       {
         fn: 'worker_enqueue_job_v1',

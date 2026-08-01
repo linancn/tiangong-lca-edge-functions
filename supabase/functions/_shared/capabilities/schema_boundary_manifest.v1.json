@@ -1,0 +1,1280 @@
+{
+  "schemaVersion": "edge.schema-boundary-consumers.v1",
+  "canonicalization": {
+    "algorithm": "sha256",
+    "sidecar": "supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.sha256"
+  },
+  "edgeBaseCommit": "04dfefe17794e7d1a16fe27b5023ad07143cbf0c",
+  "databaseSource": {
+    "issue": "tiangong-lca/database-engine#357",
+    "candidateComment": 5152567125,
+    "baseCommit": "afe31240567b6225620ace080829a346bc5fcfd4",
+    "migrationHead": "20260801131918",
+    "publicObjectInventorySha256": "2526146dc64e2b32bdf9afb2ebcc0495f5a174f241c2abbd7f0f1b5348aa8c18",
+    "state": "candidate-not-frozen"
+  },
+  "policy": {
+    "retainedPublicTables": [
+      "processes",
+      "flows",
+      "contacts",
+      "sources",
+      "unitgroups",
+      "flowproperties",
+      "lciamethods",
+      "lifecyclemodels",
+      "ilcd"
+    ],
+    "allowedPostgrestSchemas": ["api"],
+    "relationDerivedAcl": {
+      "execute": ["service_role", "api_internal_executor"],
+      "deny": ["PUBLIC", "anon", "authenticated"]
+    }
+  },
+  "apiCapabilities": {
+    "relations": [
+      "identity_center_users_v1",
+      "identity_center_processed_events_v1",
+      "team_roles_v1"
+    ],
+    "actorRoutines": [
+      "cmd_dataset_save_draft",
+      "cmd_dataset_review_submit_job_enqueue",
+      "cmd_dataset_review_submit_job_read",
+      "cmd_dataset_review_submit_job_read_latest",
+      "cmd_dataset_create",
+      "cmd_dataset_create_version",
+      "cmd_dataset_delete",
+      "cmd_dataset_assign_team",
+      "cmd_dataset_publish",
+      "cmd_dataset_review_submit_gate"
+    ],
+    "serviceRoutines": [
+      "cmd_dataset_extraction_record_failure",
+      "cmd_dataset_extraction_claim",
+      "cmd_dataset_extraction_ack"
+    ]
+  },
+  "publicResidue": {
+    "relations": [
+      "identity_center_processed_events",
+      "identity_center_users",
+      "roles",
+      "lcia_result_publications",
+      "lcia_result_packages",
+      "lca_snapshot_artifacts",
+      "lca_network_snapshots",
+      "lca_result_cache",
+      "lca_active_snapshots",
+      "lca_latest_all_unit_results",
+      "lca_results",
+      "lca_package_artifacts",
+      "lca_package_request_cache"
+    ],
+    "routines": [
+      "cmd_dataset_review_submit_job_claim",
+      "cmd_dataset_review_submit_job_record_result",
+      "cmd_review_submit_from_job",
+      "delete_lifecycle_model_bundle",
+      "save_lifecycle_model_bundle"
+    ],
+    "dynamicRpcFiles": [
+      "supabase/functions/_shared/db_rpc/dataset_commands.ts",
+      "supabase/functions/_shared/db_rpc/data_product_commands.ts",
+      "supabase/functions/_shared/db_rpc/lca_release_commands.ts",
+      "supabase/functions/_shared/db_rpc/lca_results.ts",
+      "supabase/functions/_shared/db_rpc/membership_commands.ts",
+      "supabase/functions/_shared/db_rpc/notification_commands.ts",
+      "supabase/functions/_shared/db_rpc/review_commands.ts",
+      "supabase/functions/_shared/hybrid_search_handler.ts"
+    ]
+  },
+  "dynamicConsumers": [
+    {
+      "file": "supabase/functions/_shared/get_data.ts",
+      "kind": "retire-unbounded-relation-helper",
+      "expressions": ["table"]
+    },
+    {
+      "file": "supabase/functions/_shared/get_data_status.ts",
+      "kind": "retire-unbounded-relation-helper",
+      "expressions": ["table"]
+    },
+    {
+      "file": "supabase/functions/_shared/update_data.ts",
+      "kind": "retire-unbounded-relation-helper",
+      "expressions": ["table"]
+    },
+    {
+      "file": "supabase/functions/_shared/commands/dataset/review_submit_gate.ts",
+      "kind": "core-table-allowlist",
+      "expressions": ["request.table"],
+      "allowedRelations": [
+        "contacts",
+        "sources",
+        "unitgroups",
+        "flowproperties",
+        "flows",
+        "processes",
+        "lifecyclemodels"
+      ],
+      "allowlistSource": {
+        "file": "supabase/functions/_shared/commands/dataset/types.ts",
+        "symbol": "DATASET_TABLES"
+      }
+    },
+    {
+      "file": "supabase/functions/_shared/commands/dataset/verify_remote.ts",
+      "kind": "core-table-allowlist",
+      "expressions": ["reference.table"],
+      "allowedRelations": [
+        "contacts",
+        "sources",
+        "unitgroups",
+        "flowproperties",
+        "flows",
+        "processes",
+        "lifecyclemodels",
+        "lciamethods"
+      ],
+      "allowlistSource": {
+        "file": "supabase/functions/_shared/commands/dataset/verify_remote.ts",
+        "symbol": "REMOTE_VERIFY_TABLES"
+      }
+    },
+    {
+      "file": "supabase/functions/_shared/dataset_extraction_worker.ts",
+      "kind": "core-table-allowlist",
+      "expressions": ["table"],
+      "allowedRelations": ["flows", "contacts", "flowproperties", "sources", "unitgroups"],
+      "allowlistSource": {
+        "file": "supabase/functions/_shared/dataset_extraction_worker.ts",
+        "symbol": "DATASET_EXTRACTION_TABLES"
+      }
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "kind": "core-table-allowlist",
+      "expressions": ["table"],
+      "allowedRelations": [
+        "contacts",
+        "sources",
+        "unitgroups",
+        "flowproperties",
+        "flows",
+        "processes",
+        "lifecyclemodels"
+      ],
+      "allowlistSource": {
+        "file": "supabase/functions/_shared/tidas_package.ts",
+        "symbol": "SUPPORTED_TIDAS_TABLES"
+      }
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "kind": "core-table-allowlist",
+      "expressions": ["table"],
+      "allowedRelations": ["flows", "lciamethods"],
+      "allowlistSource": {
+        "file": "supabase/functions/lca_contribution_path/index.ts",
+        "symbol": "LCA_FRESHNESS_TABLES"
+      }
+    },
+    {
+      "file": "supabase/functions/lca_query_results/index.ts",
+      "kind": "core-table-allowlist",
+      "expressions": ["table"],
+      "allowedRelations": ["flows", "lciamethods"],
+      "allowlistSource": {
+        "file": "supabase/functions/lca_query_results/index.ts",
+        "symbol": "LCA_FRESHNESS_TABLES"
+      }
+    },
+    {
+      "file": "supabase/functions/lca_solve/index.ts",
+      "kind": "core-table-allowlist",
+      "expressions": ["table"],
+      "allowedRelations": ["flows", "lciamethods"],
+      "allowlistSource": {
+        "file": "supabase/functions/lca_solve/index.ts",
+        "symbol": "LCA_FRESHNESS_TABLES"
+      }
+    },
+    {
+      "file": "supabase/functions/_shared/capabilities/schema_boundary.ts",
+      "kind": "api-abstraction",
+      "relationExpressions": ["relation"],
+      "schemaExpressions": ["DATABASE_API_SCHEMA"],
+      "allowedSchemas": ["api"],
+      "schemaSource": {
+        "file": "supabase/functions/_shared/capabilities/schema_boundary.ts",
+        "symbol": "DATABASE_API_SCHEMA"
+      }
+    },
+    {
+      "file": "supabase/functions/_shared/capabilities/worker_jobs.ts",
+      "kind": "api-abstraction",
+      "schemaExpressions": ["WORKER_API_SCHEMA"],
+      "allowedSchemas": ["api"],
+      "schemaSource": {
+        "file": "supabase/functions/_shared/capabilities/worker_jobs.ts",
+        "symbol": "WORKER_API_SCHEMA"
+      }
+    }
+  ],
+  "platformConsumers": {
+    "directPostgres": [
+      {
+        "file": "supabase/functions/embedding_ft/index.ts",
+        "status": "reviewed",
+        "targets": "nine public core tables plus reviewed api content routines"
+      },
+      {
+        "file": "supabase/functions/embedding_ft_local/index.ts",
+        "status": "retire",
+        "targets": "unsafe local-only direct SQL consumer"
+      }
+    ],
+    "pgmq": [
+      {
+        "file": "supabase/functions/embedding_ft/index.ts",
+        "status": "reviewed",
+        "operations": ["delete", "set_vt"]
+      },
+      {
+        "file": "supabase/functions/embedding_ft_local/index.ts",
+        "status": "retire",
+        "operations": ["delete"]
+      }
+    ],
+    "storage": [
+      {
+        "file": "supabase/functions/_shared/commands/data_product/repository.ts",
+        "expressions": ["descriptor.data.bucket", "storagePath.bucket"]
+      },
+      {
+        "file": "supabase/functions/_shared/commands/lca_release/repository.ts",
+        "expressions": ["bucket", "storagePath.bucket"]
+      },
+      {
+        "file": "supabase/functions/_shared/commands/national_carbon_graph_cache_objects.ts",
+        "expressions": ["config.bucket"]
+      },
+      {
+        "file": "supabase/functions/_shared/tidas_package.ts",
+        "expressions": ["storagePath.bucket", "bucket"]
+      },
+      {
+        "file": "supabase/functions/lca_contribution_path/index.ts",
+        "expressions": ["storagePath.bucket"]
+      },
+      {
+        "file": "supabase/functions/lca_contribution_path_result/index.ts",
+        "expressions": ["storagePath.bucket"]
+      },
+      {
+        "file": "supabase/functions/lca_query_results/index.ts",
+        "expressions": ["storagePath.bucket"]
+      },
+      { "file": "supabase/functions/lca_solve/index.ts", "expressions": ["storagePath.bucket"] }
+    ]
+  },
+  "unresolvedServiceWrites": [
+    {
+      "relation": "identity_center_users",
+      "files": [
+        "supabase/functions/_shared/identity_center.ts",
+        "supabase/functions/identity_login_sync/index.ts"
+      ],
+      "requiredCapability": "identity user placeholder/upsert and desired-state mutation"
+    },
+    {
+      "relation": "identity_center_processed_events",
+      "files": ["supabase/functions/identity_center_webhook/index.ts"],
+      "requiredCapability": "atomic webhook dedupe claim/release"
+    },
+    {
+      "relation": "roles",
+      "files": ["supabase/functions/_shared/identity_center.ts"],
+      "requiredCapability": "materialize managed system-team role"
+    }
+  ],
+  "privateRoutineAliases": [
+    {
+      "routine": "cmd_dataset_review_submit_job_claim",
+      "caller": "supabase/functions/_shared/review_submit_job_worker.ts",
+      "access": "service-only"
+    },
+    {
+      "routine": "cmd_dataset_review_submit_job_record_result",
+      "caller": "supabase/functions/_shared/review_submit_job_worker.ts",
+      "access": "service-only"
+    },
+    {
+      "routine": "lca_read_job_projection",
+      "caller": "supabase/functions/_shared/db_rpc/lca_results.ts",
+      "access": "service-only"
+    },
+    {
+      "routine": "lca_read_result_projection",
+      "caller": "supabase/functions/_shared/db_rpc/lca_results.ts",
+      "access": "service-only"
+    },
+    {
+      "routine": "lca_read_latest_single_solve_result",
+      "caller": "supabase/functions/_shared/db_rpc/lca_results.ts",
+      "access": "service-only"
+    },
+    {
+      "routine": "cmd_review_submit_from_job",
+      "caller": "supabase/functions/_shared/review_submit_job_worker.ts",
+      "access": "service-only",
+      "batch": 39
+    }
+  ],
+  "capabilityRequirements": {
+    "resultCache": {
+      "readAndTouch": {
+        "inputs": ["scope", "snapshot_id", "request_key", "accessed_at"],
+        "returns": ["id", "status", "job_id", "worker_job_id", "result_id", "hit_count"],
+        "atomicity": "row read and hit_count=hit_count+1 in one transaction"
+      },
+      "putPending": {
+        "inputs": [
+          "scope",
+          "snapshot_id",
+          "request_key",
+          "request_payload",
+          "job_id",
+          "worker_job_id",
+          "accessed_at",
+          "expected_existing_id",
+          "expected_existing_status"
+        ],
+        "returns": ["id", "status", "job_id", "worker_job_id", "result_id", "hit_count"],
+        "statusSet": ["pending"],
+        "atomicity": "unique(scope,snapshot_id,request_key), insert-on-conflict plus CAS"
+      },
+      "transition": {
+        "inputs": ["id", "expected_statuses", "patch"],
+        "patchFields": [
+          "status",
+          "result_id",
+          "job_id",
+          "worker_job_id",
+          "last_accessed_at",
+          "updated_at"
+        ],
+        "statusSet": ["pending", "running", "completed", "failed"],
+        "atomicity": "reviewed patch allowlist and fail-closed CAS"
+      }
+    },
+    "tidasRequestCache": {
+      "readAndTouch": {
+        "inputs": [
+          "p_requested_by uuid",
+          "p_lookup_kind text",
+          "p_lookup_value text",
+          "p_accessed_at timestamptz"
+        ],
+        "lookupKinds": ["request_key", "job_id", "worker_job_id"],
+        "lookupTypeRule": "lookup_value is text; request_key compares as text and job_id/worker_job_id use a fail-closed UUID safe cast selected by lookup_kind",
+        "returns": [
+          "id",
+          "status",
+          "request_key",
+          "job_id",
+          "worker_job_id",
+          "error_code",
+          "error_message",
+          "hit_count",
+          "last_accessed_at",
+          "created_at",
+          "updated_at",
+          "export_artifact_id",
+          "report_artifact_id"
+        ],
+        "ownership": "requested_by = authenticated actor",
+        "atomicity": "read plus hit_count increment"
+      },
+      "putPending": {
+        "inputs": [
+          "requested_by",
+          "request_key",
+          "request_payload",
+          "job_id",
+          "worker_job_id",
+          "accessed_at",
+          "expected_existing_id",
+          "expected_existing_status"
+        ],
+        "returns": [
+          "id",
+          "status",
+          "job_id",
+          "worker_job_id",
+          "export_artifact_id",
+          "report_artifact_id",
+          "hit_count"
+        ],
+        "atomicity": "unique(requested_by,operation='export_package',request_key) plus CAS; reset artifact/error fields"
+      }
+    },
+    "tidasArtifact": {
+      "prepareImportSource": {
+        "inputs": [
+          "requested_by",
+          "idempotency_key",
+          "artifact_url",
+          "content_type",
+          "metadata",
+          "expires_at",
+          "now"
+        ],
+        "returns": ["id", "job_id", "worker_job_id", "status", "artifact_url", "metadata"],
+        "generatedByDatabase": ["id", "job_id"],
+        "atomicity": "reuse or create pending by (requested_by,idempotency_key)"
+      },
+      "markImportSourceReady": {
+        "inputs": [
+          "id",
+          "job_id",
+          "expected_status=pending",
+          "sha256",
+          "byte_size",
+          "content_type",
+          "metadata_patch",
+          "now"
+        ],
+        "metadataMerge": {
+          "preserve": ["requested_by", "import_prepare_idempotency_key", "object_path"],
+          "overwrite": ["filename", "original_filename", "upload_state"]
+        },
+        "atomicity": "CAS pending to ready after external upload"
+      },
+      "linkWorker": {
+        "inputs": [
+          "id",
+          "job_id",
+          "expected_worker_job_id=null",
+          "worker_job_id",
+          "metadata_patch",
+          "now"
+        ],
+        "metadataMerge": {
+          "preserve": [
+            "requested_by",
+            "import_prepare_idempotency_key",
+            "object_path",
+            "filename",
+            "original_filename",
+            "upload_state"
+          ],
+          "overwrite": ["worker_job_id"]
+        },
+        "atomicity": "CAS link, never overwrite an existing worker binding"
+      },
+      "reads": {
+        "returns": [
+          "id",
+          "job_id",
+          "worker_job_id",
+          "artifact_kind",
+          "status",
+          "artifact_url",
+          "artifact_sha256",
+          "artifact_byte_size",
+          "artifact_format",
+          "content_type",
+          "metadata",
+          "expires_at",
+          "is_pinned",
+          "created_at",
+          "updated_at"
+        ],
+        "ownership": "service-only caller supplies p_requested_by from the already authenticated Edge actor; the same SQL statement must join/exists-check lca_package_request_cache.requested_by before returning an artifact"
+      }
+    },
+    "snapshot": {
+      "requirements": [
+        "resolve active by exact scope",
+        "resolve latest/explicit ready artifact",
+        "bounded candidate network query is discovery only; Edge must continue exact process_filter comparison and contains must never be treated as authorization",
+        "idempotent full_library draft create with created_by actor binding",
+        "latest-all-unit and worker-result projections"
+      ]
+    },
+    "publicationPackage": {
+      "requirements": [
+        "current public publication and its required preview_ready package are returned from one SQL statement/snapshot as one envelope",
+        "bounded admin publication list ordered current/published/created desc includes its package projections in the same SQL envelope",
+        "packages by bounded ids",
+        "packages by bounded worker-job ids",
+        "package by id and required status"
+      ]
+    }
+  },
+  "preferredApiIdentities": [
+    {
+      "capability": "publication.current-public",
+      "identity": "api.lcia_public_result_current()",
+      "returns": "jsonb {publication:{id,package_id,publication_series_key,publication_channel,visibility_scope,is_current,status,display_default_impact_category,published_at,created_at},package:{id,package_version,eligible_input_count,included_input_count,input_manifest,snapshot_id,result_id,result_artifact_ref,query_artifact_ref,artifact_manifest,available_impact_categories,default_impact_category,status}} or null",
+      "transaction": "single SQL statement/snapshot; package status preview_ready is part of the same query"
+    },
+    {
+      "capability": "publication.admin-list",
+      "identity": "api.lcia_result_publications_list(p_limit integer)",
+      "returns": "jsonb[] bounded publication rows with nested package {id,build_worker_job_id,package_version,coverage_mode,eligible_input_count,included_input_count,default_impact_category,status,created_at,updated_at}",
+      "transaction": "single SQL statement/envelope ordered is_current desc,published_at desc,created_at desc; p_limit 1..50"
+    },
+    {
+      "capability": "worker.package-enrichment",
+      "identity": "api.lcia_result_packages_by_worker_jobs(p_worker_job_ids uuid[])",
+      "returns": "table(build_worker_job_id uuid,id uuid,package_version text,status text,eligible_input_count bigint,included_input_count bigint)",
+      "transaction": "bounded input array, explicit fields"
+    },
+    {
+      "capability": "snapshot.resolve-active",
+      "identity": "api.lca_active_snapshot_resolve(p_scope text)",
+      "returns": "table(snapshot_id uuid) at most one row"
+    },
+    {
+      "capability": "snapshot.latest-ready",
+      "identity": "api.lca_snapshot_artifact_latest_ready()",
+      "returns": "table(snapshot_id uuid,process_count bigint,artifact_url text,status text,created_at timestamptz) at most one row"
+    },
+    {
+      "capability": "snapshot.resolve-artifact",
+      "identity": "api.lca_snapshot_artifact_resolve(p_snapshot_id uuid)",
+      "returns": "table(snapshot_id uuid,process_count bigint,artifact_url text,status text,created_at timestamptz) at most one ready row"
+    },
+    {
+      "capability": "snapshot.resolve-network-candidate",
+      "identity": "api.lca_network_snapshot_candidates(p_scopes text[],p_process_filter jsonb,p_limit integer)",
+      "returns": "table(id uuid,created_at timestamptz,process_filter jsonb)",
+      "transaction": "p_limit 1..100; discovery candidates only, Edge exact-compares process_filter"
+    },
+    {
+      "capability": "snapshot.verify-filter",
+      "identity": "api.lca_network_snapshot_process_filter(p_snapshot_id uuid)",
+      "returns": "table(process_filter jsonb) at most one row"
+    },
+    {
+      "capability": "snapshot.create-draft",
+      "identity": "api.lca_network_snapshot_create(p_request jsonb)",
+      "requestShape": "{id uuid,scope text,process_filter jsonb,status:'draft',created_by uuid}",
+      "returns": "table(id uuid,scope text,process_filter jsonb,status text,created_by uuid)",
+      "transaction": "idempotent id conflict only when existing created_by/scope/process_filter are identical; otherwise fail closed"
+    },
+    {
+      "capability": "result.latest-all-unit",
+      "identity": "api.lca_latest_all_unit_result_get(p_snapshot_id uuid)",
+      "returns": "table(snapshot_id uuid,result_id uuid,computed_at timestamptz,query_artifact_url text,query_artifact_format text,status text,updated_at timestamptz) at most one ready row"
+    },
+    {
+      "capability": "result.latest-by-worker",
+      "identity": "api.lca_result_latest_by_worker_job(p_worker_job_id uuid)",
+      "returns": "table(id uuid) at most one row ordered created_at desc"
+    },
+    {
+      "capability": "result-cache.read-and-touch",
+      "identity": "api.lca_result_cache_read_and_touch(p_scope text,p_snapshot_id uuid,p_request_key text,p_accessed_at timestamptz)",
+      "returns": "table(id uuid,status text,job_id uuid,worker_job_id uuid,result_id uuid,hit_count bigint)",
+      "transaction": "select plus hit_count=hit_count+1 and timestamps in one transaction"
+    },
+    {
+      "capability": "result-cache.put-pending",
+      "identity": "api.lca_result_cache_put_pending(p_request jsonb)",
+      "requestShape": "{scope,snapshot_id,request_key,request_payload,job_id,worker_job_id,accessed_at,expected_existing_id,expected_existing_status}",
+      "returns": "table(id uuid,status text,job_id uuid,worker_job_id uuid,result_id uuid,hit_count bigint)",
+      "transaction": "unique request tuple plus insert-on-conflict/CAS"
+    },
+    {
+      "capability": "result-cache.transition",
+      "identity": "api.lca_result_cache_transition(p_id uuid,p_expected_statuses text[],p_patch jsonb)",
+      "returns": "table(id uuid,status text,job_id uuid,worker_job_id uuid,result_id uuid,hit_count bigint)",
+      "transaction": "reviewed status/patch allowlist and fail-closed CAS"
+    },
+    {
+      "capability": "tidas-cache.read-and-touch",
+      "identity": "api.lca_package_request_cache_read_and_touch(p_requested_by uuid,p_lookup_kind text,p_lookup_value text,p_accessed_at timestamptz)",
+      "returns": "table(id uuid,status text,request_key text,job_id uuid,worker_job_id uuid,error_code text,error_message text,hit_count bigint,last_accessed_at timestamptz,created_at timestamptz,updated_at timestamptz,export_artifact_id uuid,report_artifact_id uuid)",
+      "transaction": "service p_requested_by assertion; lookup-kind safe cast; read plus hit increment"
+    },
+    {
+      "capability": "tidas-cache.put-pending",
+      "identity": "api.lca_package_request_cache_put_pending(p_request jsonb)",
+      "requestShape": "{requested_by,request_key,request_payload,job_id,worker_job_id,accessed_at,expected_existing_id,expected_existing_status}",
+      "returns": "table(id uuid,status text,job_id uuid,worker_job_id uuid,export_artifact_id uuid,report_artifact_id uuid,hit_count bigint)",
+      "transaction": "unique actor+operation+request key, CAS, reset artifact/error fields"
+    },
+    {
+      "capability": "tidas-artifact.prepare-import-source",
+      "identity": "api.lca_package_artifact_prepare_import_source(p_requested_by uuid,p_idempotency_key text,p_artifact_url text,p_content_type text,p_metadata jsonb,p_expires_at timestamptz,p_now timestamptz)",
+      "returns": "table(id uuid,job_id uuid,worker_job_id uuid,status text,artifact_url text,metadata jsonb)",
+      "transaction": "database generates id/job_id and atomically reuse-or-create pending by requested_by+idempotency key"
+    },
+    {
+      "capability": "tidas-artifact.mark-import-ready",
+      "identity": "api.lca_package_artifact_mark_import_source_ready(p_requested_by uuid,p_id uuid,p_job_id uuid,p_expected_status text,p_sha256 text,p_byte_size bigint,p_content_type text,p_metadata_patch jsonb,p_now timestamptz)",
+      "returns": "same explicit artifact read shape",
+      "transaction": "same-statement actor ownership check and pending-to-ready CAS; reviewed metadata merge"
+    },
+    {
+      "capability": "tidas-artifact.link-worker",
+      "identity": "api.lca_package_artifact_link_worker(p_requested_by uuid,p_id uuid,p_job_id uuid,p_expected_worker_job_id uuid,p_worker_job_id uuid,p_metadata_patch jsonb,p_now timestamptz)",
+      "returns": "same explicit artifact read shape",
+      "transaction": "same-statement actor ownership check and worker binding CAS; null expected value is meaningful"
+    },
+    {
+      "capability": "tidas-artifact.get",
+      "identity": "api.lca_package_artifact_get(p_requested_by uuid,p_artifact_id uuid,p_job_id uuid)",
+      "returns": "explicit artifact read shape",
+      "transaction": "same SQL statement verifies request-cache requested_by ownership"
+    },
+    {
+      "capability": "tidas-artifact.get-by-kind",
+      "identity": "api.lca_package_artifact_get_by_kind(p_requested_by uuid,p_job_id uuid,p_artifact_kind text)",
+      "returns": "explicit artifact read shape",
+      "transaction": "same SQL statement verifies request-cache requested_by ownership"
+    },
+    {
+      "capability": "tidas-artifact.list-by-job",
+      "identity": "api.lca_package_artifact_list_by_job(p_requested_by uuid,p_job_id uuid,p_limit integer)",
+      "returns": "setof explicit artifact read shape ordered created_at asc",
+      "transaction": "same SQL statement verifies request-cache requested_by ownership; p_limit bounded"
+    }
+  ],
+  "relationOccurrences": [
+    {
+      "file": "supabase/functions/_shared/commands/data_product/repository.ts",
+      "line": 698,
+      "relation": "lcia_result_publications",
+      "operation": "select",
+      "fields": "id,package_id,publication_series_key,publication_channel,visibility_scope,is_current,status,display_default_impact_category,published_at,unpublished_at,reason,created_at,updated_at",
+      "filters": [],
+      "order": ["is_current desc", "published_at desc", "created_at desc"],
+      "limit": "request.limit??50",
+      "ownership": "service operator authorization",
+      "atomicityGroup": "publication.admin-list",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/data_product_results/index.ts",
+      "line": 202,
+      "relation": "lcia_result_publications",
+      "operation": "select",
+      "fields": "id,package_id,publication_series_key,publication_channel,visibility_scope,is_current,status,display_default_impact_category,published_at,created_at",
+      "filters": [
+        "series=global",
+        "channel=public",
+        "visibility=public",
+        "is_current=true",
+        "status=current"
+      ],
+      "order": ["published_at desc", "created_at desc"],
+      "limit": 1,
+      "ownership": "public projection",
+      "atomicityGroup": "publication.current-public",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/_shared/commands/data_product/repository.ts",
+      "line": 741,
+      "relation": "lcia_result_packages",
+      "operation": "select",
+      "fields": "id,build_worker_job_id,package_version,coverage_mode,eligible_input_count,included_input_count,default_impact_category,status,created_at,updated_at",
+      "filters": ["id in bounded package ids"],
+      "order": [],
+      "limit": "bounded by publication list<=50",
+      "ownership": "service operator authorization",
+      "atomicityGroup": "publication.admin-list",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/_shared/commands/worker_jobs.ts",
+      "line": 229,
+      "relation": "lcia_result_packages",
+      "operation": "select",
+      "fields": "build_worker_job_id,id,package_version,status,eligible_input_count,included_input_count",
+      "filters": ["build_worker_job_id in bounded job ids"],
+      "order": [],
+      "limit": "caller job batch",
+      "ownership": "service; actor filtered before response",
+      "atomicityGroup": "worker.package-enrichment",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/data_product_results/index.ts",
+      "line": 247,
+      "relation": "lcia_result_packages",
+      "operation": "select",
+      "fields": "id,package_version,eligible_input_count,included_input_count,input_manifest,snapshot_id,result_id,result_artifact_ref,query_artifact_ref,artifact_manifest,available_impact_categories,default_impact_category,status",
+      "filters": ["id=package_id", "status=preview_ready"],
+      "order": [],
+      "limit": 1,
+      "ownership": "public only through current-public publication",
+      "atomicityGroup": "publication.current-public",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/_shared/commands/data_product/repository.ts",
+      "line": 860,
+      "relation": "lca_snapshot_artifacts",
+      "operation": "select",
+      "fields": "snapshot_id,artifact_url,status,created_at",
+      "filters": ["snapshot_id", "status=ready"],
+      "order": ["created_at desc"],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.resolve-artifact",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "line": 785,
+      "relation": "lca_snapshot_artifacts",
+      "operation": "select",
+      "fields": "snapshot_id,status,created_at",
+      "filters": ["status=ready"],
+      "order": ["created_at desc"],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.latest-ready",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "line": 947,
+      "relation": "lca_snapshot_artifacts",
+      "operation": "select",
+      "fields": "snapshot_id,artifact_url,status,created_at",
+      "filters": ["snapshot_id", "status=ready"],
+      "order": ["created_at desc"],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.resolve-artifact",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_query_results/index.ts",
+      "line": 651,
+      "relation": "lca_snapshot_artifacts",
+      "operation": "select",
+      "fields": "snapshot_id,status,created_at",
+      "filters": ["status=ready"],
+      "order": ["created_at desc"],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.latest-ready",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_query_results/index.ts",
+      "line": 813,
+      "relation": "lca_snapshot_artifacts",
+      "operation": "select",
+      "fields": "snapshot_id,artifact_url,status,created_at",
+      "filters": ["snapshot_id", "status=ready"],
+      "order": ["created_at desc"],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.resolve-artifact",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_solve/index.ts",
+      "line": 711,
+      "relation": "lca_snapshot_artifacts",
+      "operation": "select",
+      "fields": "snapshot_id,process_count,artifact_url,status,created_at",
+      "filters": ["status=ready"],
+      "order": ["created_at desc"],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.latest-ready",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_solve/index.ts",
+      "line": 793,
+      "relation": "lca_snapshot_artifacts",
+      "operation": "select",
+      "fields": "snapshot_id,process_count,artifact_url,status,created_at",
+      "filters": ["snapshot_id", "status=ready"],
+      "order": ["created_at desc"],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.resolve-artifact",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_solve/index.ts",
+      "line": 1048,
+      "relation": "lca_snapshot_artifacts",
+      "operation": "select",
+      "fields": "artifact_url",
+      "filters": ["snapshot_id", "status=ready"],
+      "order": ["created_at desc"],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.resolve-artifact",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/_shared/lca_snapshot_build_queue.ts",
+      "line": 116,
+      "relation": "lca_network_snapshots",
+      "operation": "insert",
+      "fields": "id,scope,process_filter,status,created_by",
+      "filters": [],
+      "order": [],
+      "limit": 1,
+      "ownership": "created_by=actor",
+      "atomicityGroup": "snapshot.create-draft",
+      "idempotencyCas": "id conflict is idempotent; must verify same actor/filter"
+    },
+    {
+      "file": "supabase/functions/_shared/lca_snapshot_scope_db.ts",
+      "line": 25,
+      "relation": "lca_network_snapshots",
+      "operation": "select",
+      "fields": "process_filter",
+      "filters": ["id=snapshot_id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "expected filter contains actor scope",
+      "atomicityGroup": "snapshot.verify-filter",
+      "idempotencyCas": "exact in-edge comparison required"
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "line": 815,
+      "relation": "lca_network_snapshots",
+      "operation": "select",
+      "fields": "id,created_at,process_filter",
+      "filters": ["status=ready", "scope in candidate scopes", "process_filter contains candidate"],
+      "order": ["created_at desc"],
+      "limit": 100,
+      "ownership": "exact actor process_filter verified in Edge",
+      "atomicityGroup": "snapshot.resolve-network-candidate",
+      "idempotencyCas": "read-only; candidate filter is not authorization"
+    },
+    {
+      "file": "supabase/functions/lca_query_results/index.ts",
+      "line": 681,
+      "relation": "lca_network_snapshots",
+      "operation": "select",
+      "fields": "id,created_at,process_filter",
+      "filters": ["status=ready", "scope in candidate scopes", "process_filter contains candidate"],
+      "order": ["created_at desc"],
+      "limit": 100,
+      "ownership": "exact actor process_filter verified in Edge",
+      "atomicityGroup": "snapshot.resolve-network-candidate",
+      "idempotencyCas": "read-only; candidate filter is not authorization"
+    },
+    {
+      "file": "supabase/functions/lca_solve/index.ts",
+      "line": 745,
+      "relation": "lca_network_snapshots",
+      "operation": "select",
+      "fields": "id,created_at,process_filter",
+      "filters": ["status=ready", "scope in candidate scopes", "process_filter contains candidate"],
+      "order": ["created_at desc"],
+      "limit": 100,
+      "ownership": "exact actor process_filter verified in Edge",
+      "atomicityGroup": "snapshot.resolve-network-candidate",
+      "idempotencyCas": "read-only; candidate filter is not authorization"
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "line": 768,
+      "relation": "lca_active_snapshots",
+      "operation": "select",
+      "fields": "snapshot_id",
+      "filters": ["scope"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.resolve-active",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_query_results/index.ts",
+      "line": 634,
+      "relation": "lca_active_snapshots",
+      "operation": "select",
+      "fields": "snapshot_id",
+      "filters": ["scope"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.resolve-active",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_solve/index.ts",
+      "line": 694,
+      "relation": "lca_active_snapshots",
+      "operation": "select",
+      "fields": "snapshot_id",
+      "filters": ["scope"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "snapshot.resolve-active",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_query_results/index.ts",
+      "line": 847,
+      "relation": "lca_latest_all_unit_results",
+      "operation": "select",
+      "fields": "snapshot_id,result_id,computed_at,query_artifact_url,query_artifact_format,status,updated_at",
+      "filters": ["snapshot_id", "status=ready"],
+      "order": ["updated_at desc"],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result.latest-all-unit",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "line": 694,
+      "relation": "lca_results",
+      "operation": "select",
+      "fields": "id",
+      "filters": ["worker_job_id"],
+      "order": ["created_at desc"],
+      "limit": 1,
+      "ownership": "worker job already actor-authorized",
+      "atomicityGroup": "result.latest-by-worker",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/_shared/lca_all_unit_solve_queue.ts",
+      "line": 210,
+      "relation": "lca_result_cache",
+      "operation": "select",
+      "fields": "id,status,job_id,worker_job_id,result_id,hit_count",
+      "filters": ["scope", "snapshot_id", "request_key"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service; request scope actor-derived",
+      "atomicityGroup": "result-cache.read-and-touch",
+      "idempotencyCas": "must combine with touch atomically"
+    },
+    {
+      "file": "supabase/functions/_shared/lca_all_unit_solve_queue.ts",
+      "line": 253,
+      "relation": "lca_result_cache",
+      "operation": "update",
+      "fields": "updated_at,last_accessed_at,hit_count",
+      "filters": ["id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result-cache.read-and-touch",
+      "idempotencyCas": "hit_count must increment in DB"
+    },
+    {
+      "file": "supabase/functions/_shared/lca_all_unit_solve_queue.ts",
+      "line": 281,
+      "relation": "lca_result_cache",
+      "operation": "update",
+      "fields": "status,job_id,worker_job_id,request_payload,hit_count,last_accessed_at,updated_at",
+      "filters": ["id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result-cache.put-pending",
+      "idempotencyCas": "expected id/status plus unique request tuple"
+    },
+    {
+      "file": "supabase/functions/_shared/lca_all_unit_solve_queue.ts",
+      "line": 317,
+      "relation": "lca_result_cache",
+      "operation": "insert",
+      "fields": "scope,snapshot_id,request_key,request_payload,status,job_id,worker_job_id,hit_count,last_accessed_at,created_at,updated_at",
+      "filters": [],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result-cache.put-pending",
+      "idempotencyCas": "unique request tuple; insert-on-conflict/CAS"
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "line": 455,
+      "relation": "lca_result_cache",
+      "operation": "update",
+      "fields": "status,job_id,worker_job_id,request_payload,hit_count,last_accessed_at,updated_at",
+      "filters": ["id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result-cache.put-pending",
+      "idempotencyCas": "expected id/status plus unique request tuple"
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "line": 475,
+      "relation": "lca_result_cache",
+      "operation": "insert",
+      "fields": "scope,snapshot_id,request_key,request_payload,status,job_id,worker_job_id,hit_count,last_accessed_at,created_at,updated_at",
+      "filters": [],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result-cache.put-pending",
+      "idempotencyCas": "unique request tuple; insert-on-conflict/CAS"
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "line": 564,
+      "relation": "lca_result_cache",
+      "operation": "select",
+      "fields": "id,status,job_id,worker_job_id,result_id,hit_count",
+      "filters": ["scope", "snapshot_id", "request_key"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service; request scope actor-derived",
+      "atomicityGroup": "result-cache.read-and-touch",
+      "idempotencyCas": "must combine with touch atomically"
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "line": 607,
+      "relation": "lca_result_cache",
+      "operation": "update",
+      "fields": "updated_at,last_accessed_at,hit_count",
+      "filters": ["id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result-cache.read-and-touch",
+      "idempotencyCas": "hit_count must increment in DB"
+    },
+    {
+      "file": "supabase/functions/lca_contribution_path/index.ts",
+      "line": 644,
+      "relation": "lca_result_cache",
+      "operation": "update",
+      "fields": "status,updated_at,last_accessed_at,hit_count,result_id?",
+      "filters": ["id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result-cache.transition",
+      "idempotencyCas": "expected statuses and patch allowlist"
+    },
+    {
+      "file": "supabase/functions/lca_solve/index.ts",
+      "line": 494,
+      "relation": "lca_result_cache",
+      "operation": "update",
+      "fields": "status,job_id,worker_job_id,request_payload,hit_count,last_accessed_at,updated_at",
+      "filters": ["id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result-cache.put-pending",
+      "idempotencyCas": "expected id/status plus unique request tuple"
+    },
+    {
+      "file": "supabase/functions/lca_solve/index.ts",
+      "line": 514,
+      "relation": "lca_result_cache",
+      "operation": "insert",
+      "fields": "scope,snapshot_id,request_key,request_payload,status,job_id,worker_job_id,hit_count,last_accessed_at,created_at,updated_at",
+      "filters": [],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result-cache.put-pending",
+      "idempotencyCas": "unique request tuple; insert-on-conflict/CAS"
+    },
+    {
+      "file": "supabase/functions/lca_solve/index.ts",
+      "line": 590,
+      "relation": "lca_result_cache",
+      "operation": "select",
+      "fields": "id,status,job_id,worker_job_id,result_id,hit_count",
+      "filters": ["scope", "snapshot_id", "request_key"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service; request scope actor-derived",
+      "atomicityGroup": "result-cache.read-and-touch",
+      "idempotencyCas": "must combine with touch atomically"
+    },
+    {
+      "file": "supabase/functions/lca_solve/index.ts",
+      "line": 631,
+      "relation": "lca_result_cache",
+      "operation": "update",
+      "fields": "updated_at,last_accessed_at,hit_count",
+      "filters": ["id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "service",
+      "atomicityGroup": "result-cache.read-and-touch",
+      "idempotencyCas": "hit_count must increment in DB"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 492,
+      "relation": "lca_package_artifacts",
+      "operation": "insert",
+      "fields": "id,job_id,worker_job_id,artifact_kind,status,artifact_url,artifact_format,content_type,metadata,expires_at,is_pinned,created_at,updated_at",
+      "filters": [],
+      "order": [],
+      "limit": 1,
+      "ownership": "metadata.requested_by=actor",
+      "atomicityGroup": "tidas-artifact.prepare-import-source",
+      "idempotencyCas": "reuse/create by actor+idempotency key"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 629,
+      "relation": "lca_package_artifacts",
+      "operation": "update",
+      "fields": "status,artifact_sha256,artifact_byte_size,content_type,metadata,updated_at",
+      "filters": ["id", "job_id", "artifact_kind=import_source", "status=pending"],
+      "order": [],
+      "limit": 1,
+      "ownership": "actor-owned artifact",
+      "atomicityGroup": "tidas-artifact.mark-import-ready",
+      "idempotencyCas": "CAS pending->ready; preserve metadata keys"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 717,
+      "relation": "lca_package_artifacts",
+      "operation": "select",
+      "fields": "id,worker_job_id,artifact_kind,status,artifact_url,artifact_sha256,artifact_byte_size,artifact_format,content_type,metadata,expires_at,is_pinned,created_at,updated_at",
+      "filters": ["job_id=actor-owned effective job"],
+      "order": ["created_at asc"],
+      "limit": "unbounded current; API must bound",
+      "ownership": "actor-owned request cache",
+      "atomicityGroup": "tidas-artifact.list-by-job",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 1270,
+      "relation": "lca_package_artifacts",
+      "operation": "update",
+      "fields": "worker_job_id,metadata,updated_at",
+      "filters": ["id", "job_id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "actor-owned artifact",
+      "atomicityGroup": "tidas-artifact.link-worker",
+      "idempotencyCas": "CAS expected worker_job_id=null; preserve metadata"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 1306,
+      "relation": "lca_package_artifacts",
+      "operation": "select",
+      "fields": "id,worker_job_id,job_id,artifact_kind,status,artifact_url,artifact_sha256,artifact_byte_size,artifact_format,content_type,metadata,expires_at,is_pinned,created_at,updated_at",
+      "filters": ["artifact_kind=import_source", "metadata contains requested_by+idempotency_key"],
+      "order": ["created_at desc"],
+      "limit": 1,
+      "ownership": "requested_by=actor",
+      "atomicityGroup": "tidas-artifact.prepare-import-source",
+      "idempotencyCas": "read-before-create must become atomic reuse/create"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 1614,
+      "relation": "lca_package_artifacts",
+      "operation": "select",
+      "fields": "id,worker_job_id,artifact_kind,status,artifact_url,artifact_sha256,artifact_byte_size,artifact_format,content_type,metadata,expires_at,is_pinned,created_at,updated_at",
+      "filters": ["id", "job_id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "actor-owned job",
+      "atomicityGroup": "tidas-artifact.get",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 1670,
+      "relation": "lca_package_artifacts",
+      "operation": "select",
+      "fields": "id,worker_job_id,artifact_kind,status,artifact_url,artifact_sha256,artifact_byte_size,artifact_format,content_type,metadata,expires_at,is_pinned,created_at,updated_at",
+      "filters": ["job_id", "artifact_kind"],
+      "order": [],
+      "limit": 1,
+      "ownership": "actor-owned job",
+      "atomicityGroup": "tidas-artifact.get-by-kind",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 1044,
+      "relation": "lca_package_request_cache",
+      "operation": "select",
+      "fields": "id,status,job_id,worker_job_id,export_artifact_id,report_artifact_id,hit_count",
+      "filters": ["requested_by=actor", "operation=export_package", "request_key"],
+      "order": [],
+      "limit": 1,
+      "ownership": "requested_by=actor",
+      "atomicityGroup": "tidas-cache.read-and-touch",
+      "idempotencyCas": "must combine with touch atomically"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 1100,
+      "relation": "lca_package_request_cache",
+      "operation": "select",
+      "fields": "id,status,request_key,job_id,worker_job_id,error_code,error_message,hit_count,last_accessed_at,created_at,updated_at,export_artifact_id,report_artifact_id",
+      "filters": ["requested_by=actor", "operation=export_package", "job_id|worker_job_id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "requested_by=actor",
+      "atomicityGroup": "tidas-cache.lookup-owned",
+      "idempotencyCas": "read-only"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 1164,
+      "relation": "lca_package_request_cache",
+      "operation": "update",
+      "fields": "updated_at,last_accessed_at,hit_count",
+      "filters": ["id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "row obtained with actor filter",
+      "atomicityGroup": "tidas-cache.read-and-touch",
+      "idempotencyCas": "hit_count increment in DB"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 1198,
+      "relation": "lca_package_request_cache",
+      "operation": "update",
+      "fields": "status,job_id,worker_job_id,request_payload,export_artifact_id,report_artifact_id,error_code,error_message,hit_count,last_accessed_at,updated_at",
+      "filters": ["id"],
+      "order": [],
+      "limit": 1,
+      "ownership": "requested_by=actor",
+      "atomicityGroup": "tidas-cache.put-pending",
+      "idempotencyCas": "expected existing id/status; reset artifacts/errors"
+    },
+    {
+      "file": "supabase/functions/_shared/tidas_package.ts",
+      "line": 1230,
+      "relation": "lca_package_request_cache",
+      "operation": "insert",
+      "fields": "requested_by,operation,request_key,request_payload,status,job_id,worker_job_id,hit_count,last_accessed_at,created_at,updated_at",
+      "filters": [],
+      "order": [],
+      "limit": 1,
+      "ownership": "requested_by=actor",
+      "atomicityGroup": "tidas-cache.put-pending",
+      "idempotencyCas": "unique actor+operation+request_key; insert-on-conflict/CAS"
+    }
+  ]
+}

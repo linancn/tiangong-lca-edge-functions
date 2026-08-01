@@ -1,5 +1,7 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
+
 import { z } from 'zod';
+import { fromDatabaseApi } from '../capabilities/schema_boundary.ts';
 
 import {
   callWorkerJobEnqueueRpc,
@@ -164,8 +166,7 @@ async function ensureSystemManager(
   actor: ActorContext,
   serviceClient: SupabaseClient,
 ): Promise<CommandExecutionResult | null> {
-  const { data, error } = await serviceClient
-    .from('roles')
+  const { data, error } = await fromDatabaseApi(serviceClient, 'team_roles_v1')
     .select('user_id')
     .eq('user_id', actor.userId)
     .eq('team_id', SYSTEM_TEAM_ID)

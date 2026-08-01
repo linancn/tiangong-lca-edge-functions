@@ -14,6 +14,7 @@ type TableName =
   | 'lca_package_jobs'
   | 'lca_package_request_cache'
   | 'roles'
+  | 'team_roles_v1'
   | 'worker_jobs';
 
 const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
@@ -32,6 +33,7 @@ class FakeSupabase {
     lca_package_artifacts: [],
     lca_package_request_cache: [],
     roles: [],
+    team_roles_v1: [],
     worker_jobs: [],
   };
   rpcCalls: Array<{ fn: string; args: unknown }> = [];

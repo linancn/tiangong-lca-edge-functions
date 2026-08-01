@@ -11,6 +11,12 @@ const TEST_DATASET_ID = '22222222-2222-4222-8222-222222222222';
 
 class FakeRpcSupabase {
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
+  schemas: string[] = [];
+
+  schema(name: string) {
+    this.schemas.push(name);
+    return this;
+  }
   response: { data: unknown; error: unknown };
 
   constructor(

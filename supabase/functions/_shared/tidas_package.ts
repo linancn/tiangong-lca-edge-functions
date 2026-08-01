@@ -1,4 +1,6 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
+
+import { fromDatabaseApi } from './capabilities/schema_boundary.ts';
 import { createServiceWorkerCapabilityRepository } from './capabilities/worker_jobs.ts';
 import { corsHeaders } from './cors.ts';
 import {
@@ -956,8 +958,7 @@ function rootKey(root: TidasPackageRoot): string {
 }
 
 async function isSystemAdminUser(supabase: SupabaseClient, userId: string): Promise<boolean> {
-  const { data, error } = await supabase
-    .from('roles')
+  const { data, error } = await fromDatabaseApi(supabase, 'team_roles_v1')
     .select('role')
     .eq('user_id', userId)
     .eq('team_id', SYSTEM_TEAM_ID)
