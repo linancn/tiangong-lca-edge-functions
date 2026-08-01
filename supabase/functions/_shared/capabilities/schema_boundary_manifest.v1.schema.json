@@ -46,7 +46,23 @@
         "authorization",
         "frozenManifest",
         "requiredFrozenBindings"
-      ]
+      ],
+      "properties": {
+        "issue": { "const": "tiangong-lca/database-engine#357" },
+        "candidateComment": { "type": "integer", "minimum": 1 },
+        "repository": { "const": "tiangong-lca/database-engine" },
+        "freezeSchemaVersion": { "const": "database.lca-private-expand-freeze.v3" },
+        "freezeSchemaPath": { "type": "string", "minLength": 1 },
+        "baseCommit": { "$ref": "#/$defs/commit" },
+        "migrationHead": { "type": "string", "pattern": "^[0-9]{14}$" },
+        "publicObjectInventorySha256": { "$ref": "#/$defs/sha256" },
+        "state": { "enum": ["candidate-not-frozen", "reviewed-frozen"] },
+        "authorization": {
+          "enum": ["not-authorized", "consumer-migration-authorized"]
+        },
+        "frozenManifest": { "type": "object" },
+        "requiredFrozenBindings": { "type": "object" }
+      }
     },
     "policy": {
       "type": "object",
@@ -95,6 +111,22 @@
         }
       }
     },
+    "publicResidue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relations", "routines", "dynamicRpcFiles"],
+      "properties": {
+        "relations": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "routines": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "dynamicRpcFiles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "dynamicConsumers": { "type": "array", "items": { "type": "object" } },
+    "platformConsumers": { "type": "object" },
     "relationOccurrences": {
       "type": "array",
       "minItems": 48,
@@ -153,7 +185,14 @@
             "start": { "type": "integer", "minimum": 0 },
             "end": { "type": "integer", "minimum": 1 }
           }
-        }
+        },
+        "fields": {},
+        "filters": {},
+        "order": {},
+        "limit": {},
+        "ownership": {},
+        "atomicityGroup": {},
+        "idempotencyCas": {}
       }
     },
     "preferredExposure": {
@@ -166,12 +205,38 @@
         "signature": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["identityArguments", "arguments", "resultType"]
+          "required": ["identityArguments", "arguments", "resultType"],
+          "properties": {
+            "identityArguments": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "arguments": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "resultType": { "type": "string", "minLength": 1 }
+          }
         },
         "acl": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["state", "authorizationPolicyIds", "executeRoles", "deniedRoles"]
+          "required": ["state", "authorizationPolicyIds", "executeRoles", "deniedRoles"],
+          "properties": {
+            "state": { "enum": ["candidate-not-frozen", "reviewed-frozen"] },
+            "authorizationPolicyIds": {
+              "type": ["array", "null"],
+              "items": { "type": "string" }
+            },
+            "executeRoles": {
+              "type": ["array", "null"],
+              "items": { "type": "string" }
+            },
+            "deniedRoles": {
+              "type": ["array", "null"],
+              "items": { "type": "string" }
+            }
+          }
         }
       }
     }

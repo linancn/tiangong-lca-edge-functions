@@ -4,7 +4,7 @@
     "algorithm": "sha256",
     "sidecar": "supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.sha256",
     "schemaPath": "supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.schema.json",
-    "schemaSha256": "6496f8f12f7dc47a2656b36cf58b7978c5a7453172542c2c49500e892c995c7a"
+    "schemaSha256": "aa4d682049d22571c3ffbea2ae4b3092848ad7d7eebf0e03bafd2a6d8e7be050"
   },
   "edgeBaseCommit": "04dfefe17794e7d1a16fe27b5023ad07143cbf0c",
   "databaseSource": {

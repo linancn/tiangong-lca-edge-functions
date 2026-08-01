@@ -1,4 +1,5 @@
 import { assert, assertEquals } from 'jsr:@std/assert';
+import { Ajv2020 } from 'npm:ajv@8.20.0/dist/2020.js';
 
 import {
   auditSchemaBoundary,
@@ -23,6 +24,40 @@ import {
 } from '../supabase/functions/_shared/capabilities/schema_boundary.ts';
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
+
+Deno.test(
+  'official JSON Schema accepts the canonical manifest and rejects structural drift',
+  async () => {
+    const manifest = JSON.parse(
+      await Deno.readTextFile(
+        `${ROOT}/supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.json`,
+      ),
+    );
+    const schema = JSON.parse(
+      await Deno.readTextFile(
+        `${ROOT}/supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.schema.json`,
+      ),
+    );
+    const validate = new Ajv2020({ allErrors: true, strict: true }).compile(schema);
+    assertEquals(validate(manifest), true, JSON.stringify(validate.errors));
+
+    const missingSignatureField = structuredClone(manifest);
+    delete missingSignatureField.preferredApiIdentities[0].signature.resultType;
+    assertEquals(validate(missingSignatureField), false);
+
+    const extraSignatureField = structuredClone(manifest);
+    extraSignatureField.preferredApiIdentities[0].signature.unreviewed = true;
+    assertEquals(validate(extraSignatureField), false);
+
+    const invalidAcl = structuredClone(manifest);
+    invalidAcl.preferredApiIdentities[0].acl.state = 'implicitly-authorized';
+    assertEquals(validate(invalidAcl), false);
+
+    const missingOccurrence = structuredClone(manifest);
+    missingOccurrence.relationOccurrences.pop();
+    assertEquals(validate(missingOccurrence), false);
+  },
+);
 
 Deno.test(
   'schema boundary expand audit has no unregistered consumers and inventories all 48 relation occurrences',

@@ -21,6 +21,7 @@
     "lint": "prettier --check \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\""
   },
   "devDependencies": {
+    "ajv": "8.20.0",
     "prettier": "3.9.5",
     "prettier-plugin-organize-imports": "^4.3.0",
     "supabase": "2.106.0",
