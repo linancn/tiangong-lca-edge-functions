@@ -134,6 +134,32 @@ async function signIn(client: SupabaseClient, email: string, password: string) {
   return data.session.access_token;
 }
 
+function signInWithFreshClient(
+  url: string,
+  publishableKey: string,
+  email: string,
+  password: string,
+) {
+  return signIn(requestClient(url, publishableKey), email, password);
+}
+
+async function assertNeverAuthenticated(client: SupabaseClient, label: string) {
+  const { data, error } = await client.auth.getSession();
+  assertEquals(error, null, `${label} session lookup must succeed`);
+  assertEquals(data.session, null, `${label} must remain a never-authenticated client`);
+}
+
+function assertPostgrestPermissionDenied(
+  error: { code?: string; message?: string } | null,
+  label: string,
+) {
+  assert(error, `${label} must return a PostgREST permission error`);
+  assert(
+    error.code === '42501',
+    `${label} returned unexpected PostgREST code ${error.code ?? 'missing'}`,
+  );
+}
+
 function post(url: string, token: string | null, body: unknown, apiKey?: string) {
   const headers = new Headers({ 'content-type': 'application/json' });
   if (token) {
@@ -172,6 +198,8 @@ Deno.test({
     const service = createClient(config.url, config.serviceKey, {
       auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
     });
+    // This client is reserved for anonymous probes. Token acquisition must use
+    // separate clients because supabase-js reads each client's current auth session.
     const anonymous = requestClient(config.url, config.publishableKey);
     let owner: Awaited<ReturnType<typeof createLocalUser>> | undefined;
     let foreign: Awaited<ReturnType<typeof createLocalUser>> | undefined;
@@ -181,9 +209,25 @@ Deno.test({
       owner = await createLocalUser(service, 'owner');
       foreign = await createLocalUser(service, 'foreign');
       admin = await createAdminUser(service);
-      const ownerToken = await signIn(anonymous, owner.email, owner.password);
-      const foreignToken = await signIn(anonymous, foreign.email, foreign.password);
-      const adminToken = await signIn(anonymous, admin.email, admin.password);
+      const ownerToken = await signInWithFreshClient(
+        config.url,
+        config.publishableKey,
+        owner.email,
+        owner.password,
+      );
+      const foreignToken = await signInWithFreshClient(
+        config.url,
+        config.publishableKey,
+        foreign.email,
+        foreign.password,
+      );
+      const adminToken = await signInWithFreshClient(
+        config.url,
+        config.publishableKey,
+        admin.email,
+        admin.password,
+      );
+      await assertNeverAuthenticated(anonymous, 'anonymous probe client after JWT acquisition');
       const ownerClient = requestClient(config.url, config.publishableKey, ownerToken);
       const foreignClient = requestClient(config.url, config.publishableKey, foreignToken);
       const adminClient = requestClient(config.url, config.publishableKey, adminToken);
@@ -240,7 +284,7 @@ Deno.test({
             p_job_id: firstJob.id,
             p_include_internal: false,
           });
-        assert(readRpc.error, `${label} must not call the service-only api Worker read RPC`);
+        assertPostgrestPermissionDenied(readRpc.error, `${label} service-only api Worker read RPC`);
 
         const concurrencyRpc = await client
           .schema(WORKER_CAPABILITY_CONTRACT.database.schema)
@@ -251,9 +295,9 @@ Deno.test({
             p_limit: 20,
             p_include_internal: true,
           });
-        assert(
+        assertPostgrestPermissionDenied(
           concurrencyRpc.error,
-          `${label} must not call the service-only api Worker concurrency-list RPC`,
+          `${label} service-only api Worker concurrency-list RPC`,
         );
       }
 
@@ -272,10 +316,18 @@ Deno.test({
       assertEquals(privateProfile.status, 406);
       assertEquals((await privateProfile.json()).code, 'PGRST106');
 
-      for (const client of [anonymous, ownerClient]) {
+      for (const [label, client] of [
+        ['anon', anonymous],
+        ['owner', ownerClient],
+      ] as const) {
         const directRelation = await client.from('worker_jobs').select('id').limit(1);
-        assert(directRelation.error, 'worker_jobs must not remain a public Data API relation');
+        assertPostgrestPermissionDenied(
+          directRelation.error,
+          `${label} public worker_jobs relation`,
+        );
       }
+
+      await assertNeverAuthenticated(anonymous, 'anonymous probe client after negative probes');
 
       const handler = createAppWorkerJobsHandler({
         resolveActor: (request) =>
