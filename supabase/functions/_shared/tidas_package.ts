@@ -958,7 +958,7 @@ function rootKey(root: TidasPackageRoot): string {
 }
 
 async function isSystemAdminUser(supabase: SupabaseClient, userId: string): Promise<boolean> {
-  const { data, error } = await fromDatabaseApi(supabase, 'team_roles_v1')
+  const { data, error } = await fromDatabaseApi(supabase, 'team.roles')
     .select('role')
     .eq('user_id', userId)
     .eq('team_id', SYSTEM_TEAM_ID)

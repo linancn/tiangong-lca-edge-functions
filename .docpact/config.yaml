@@ -120,9 +120,11 @@ routing:
       paths:
         - supabase/functions/_shared/capabilities/schema_boundary.ts
         - supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.json
+        - supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.schema.json
         - scripts/schema-boundary-consumer-audit.ts
         - test/schema_boundary_capability_test.ts
         - test/schema_boundary_consumer_audit_test.ts
+        - .github/workflows/ci.yml
     data-product-runtime:
       paths:
         - supabase/functions/app_data_product_commands/**

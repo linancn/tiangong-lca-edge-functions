@@ -332,7 +332,7 @@ deno check --config supabase/functions/deno.json <changed-file>
 npm run audit:schema-boundary:expand
 ```
 
-The expansion profile accepts only reviewed migration residue and fails on unregistered consumers, dynamic schema bindings, allowlist drift, or a canonical manifest digest mismatch. The stricter `npm run audit:schema-boundary:contract` profile intentionally remains red until all registered `public`-schema residue has migrated.
+The expansion profile accepts only reviewed, explicitly non-authorizing migration residue. It parses TypeScript call syntax, requires typed actor/service capability IDs and source-derived relation occurrences to match the canonical manifest in both directions, and fails on dynamic/computed call shapes, allowlist drift, or a manifest digest mismatch. The stricter `npm run audit:schema-boundary:contract` profile intentionally remains red until all registered `public`-schema residue has migrated and the exact database-engine #357 v3 freeze, exposure signatures, and ACL policies are bound.
 
 5. Keep docs synced:
 

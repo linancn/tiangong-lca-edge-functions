@@ -3,13 +3,24 @@ import { assert, assertEquals } from 'jsr:@std/assert';
 import {
   auditSchemaBoundary,
   classifyDynamicRelation,
+  compareRelationOccurrenceInventories,
+  deriveAstBoundaryViolations,
+  deriveBoundaryMethodCalls,
+  deriveSourceRelationOccurrences,
+  exactStringSet,
+  exactUniqueList,
   isApprovedDynamicSchema,
   isExactCoreAllowlistBinding,
   isExactSchemaBinding,
+  REQUIRED_RELATION_OCCURRENCE_SCOPE,
   sha256Hex,
   sidecarMatchesDigest,
   type DynamicConsumerRegistration,
 } from '../scripts/schema-boundary-consumer-audit.ts';
+import {
+  DATABASE_API_ACTOR_CAPABILITIES,
+  DATABASE_API_SERVICE_CAPABILITIES,
+} from '../supabase/functions/_shared/capabilities/schema_boundary.ts';
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 
@@ -19,6 +30,7 @@ Deno.test(
     const result = await auditSchemaBoundary(ROOT, 'expand');
     assertEquals(result.findings, []);
     assertEquals(result.counts.requirementOccurrences, 48);
+    assertEquals(result.counts.apiRoutines, 13);
     assert(result.pending.length > 0, 'expand phase must not claim consumer-zero before DB #357');
   },
 );
@@ -132,6 +144,139 @@ Deno.test('dynamic schema is bound to the exact canonical const initializer', ()
   );
 });
 
+Deno.test(
+  'every actor and service routine is required by both typed and observed inventories',
+  () => {
+    for (const routines of [
+      Object.values(DATABASE_API_ACTOR_CAPABILITIES),
+      Object.values(DATABASE_API_SERVICE_CAPABILITIES),
+    ]) {
+      for (const routine of routines) {
+        assertEquals(
+          exactStringSet(
+            routines,
+            routines.filter((candidate) => candidate !== routine),
+          ),
+          false,
+          `removing ${routine} must fail the routine inventory`,
+        );
+      }
+    }
+    for (const capabilityIds of [
+      Object.keys(DATABASE_API_ACTOR_CAPABILITIES),
+      Object.keys(DATABASE_API_SERVICE_CAPABILITIES),
+    ]) {
+      for (const capabilityId of capabilityIds) {
+        assertEquals(
+          exactStringSet(
+            capabilityIds,
+            capabilityIds.filter((candidate) => candidate !== capabilityId),
+          ),
+          false,
+          `removing observed ${capabilityId} must fail the capability inventory`,
+        );
+      }
+    }
+    assertEquals(exactUniqueList(['one', 'one'], ['one', 'two']), false);
+  },
+);
+
+Deno.test(
+  'AST audit rejects multiline variables, bracket calls, destructuring, and detached methods',
+  () => {
+    const source = `
+const table = request.table;
+const { rpc } = client;
+const detached = client.schema;
+client['from']('processes');
+client.from(
+  table
+);
+rpc('unsafe');
+`;
+    const violations = deriveAstBoundaryViolations(
+      'bypass.ts',
+      source,
+      [],
+      [],
+      ['api'],
+      new Map([['bypass.ts', source]]),
+    );
+    const kinds = violations.map((finding) => finding.kind);
+    assert(kinds.includes('destructured-data-api-method'));
+    assert(kinds.includes('detached-data-api-method'));
+    assert(kinds.includes('computed-data-api-call'));
+    assert(kinds.includes('ast-unregistered-dynamic-from'));
+    assert(kinds.includes('detached-data-api-call'));
+  },
+);
+
+Deno.test('dynamic capability abstraction call expressions and counts are exact', () => {
+  const exact = `
+const schema = client.schema(API_SCHEMA);
+schema.rpc(routine, args);
+schema.rpc(routine, args);
+schema.from(relation);
+`;
+  assertEquals(deriveBoundaryMethodCalls(exact), {
+    'schema:API_SCHEMA': 1,
+    'rpc:routine': 2,
+    'from:relation': 1,
+  });
+  assertEquals(deriveBoundaryMethodCalls(`${exact}\nschema.from(otherRelation);`), {
+    'schema:API_SCHEMA': 1,
+    'rpc:routine': 2,
+    'from:relation': 1,
+    'from:otherRelation': 1,
+  });
+});
+
+Deno.test(
+  'source-derived relation occurrence inventory rejects additions, deletion, and duplicates',
+  () => {
+    const source = `
+const one = client.from('lca_result_cache').select('id');
+const two = client.from('lca_result_cache').update({ status: 'ready' });
+`;
+    const derived = deriveSourceRelationOccurrences(
+      'consumer.ts',
+      source,
+      new Set(['lca_result_cache']),
+    );
+    assertEquals(derived.length, 2);
+    assertEquals(
+      derived.map((item) => item.operation),
+      ['select', 'update'],
+    );
+    assertEquals(
+      compareRelationOccurrenceInventories(derived, structuredClone(derived)).exact,
+      true,
+    );
+
+    const missing = compareRelationOccurrenceInventories(derived, [derived[0]]);
+    assertEquals(missing.exact, false);
+    assertEquals(missing.missingFromManifest.length, 1);
+
+    const stale = compareRelationOccurrenceInventories([derived[0]], derived);
+    assertEquals(stale.exact, false);
+    assertEquals(stale.staleInManifest.length, 1);
+
+    const duplicate = compareRelationOccurrenceInventories(derived, [
+      ...derived,
+      structuredClone(derived[0]),
+    ]);
+    assertEquals(duplicate.exact, false);
+    assertEquals(duplicate.duplicateManifest.length, 1);
+    assertEquals(
+      exactStringSet(
+        REQUIRED_RELATION_OCCURRENCE_SCOPE,
+        REQUIRED_RELATION_OCCURRENCE_SCOPE.slice(1),
+      ),
+      false,
+    );
+  },
+);
+
 Deno.test('manifest sidecar verification fails when canonical bytes change', async () => {
   const canonical = new TextEncoder().encode('{"version":1}\n');
   const changed = new TextEncoder().encode('{"version":2}\n');
@@ -148,5 +293,6 @@ Deno.test(
     assertEquals(result.ok, false);
     assert(result.findings.some((finding) => finding.kind === 'public-relation-residue'));
     assert(result.findings.some((finding) => finding.kind.includes('routine-residue')));
+    assert(result.findings.some((finding) => finding.kind === 'database-freeze-pending'));
   },
 );

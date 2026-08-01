@@ -34,7 +34,7 @@ checkPaths:
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-02
 lastReviewedCommit: 04dfefe17794e7d1a16fe27b5023ad07143cbf0c
-lastReviewedNote: 'Reviewed for Issue #250: the schema-boundary capability, manifest, and audit remain Edge-owned runtime and proof assets; database schema truth stays in database-engine.'
+lastReviewedNote: 'Reviewed for Issue #250: typed/AST-derived schema-boundary proof and pull-request CI remain Edge-owned; the candidate database binding is non-authorizing until database-engine #357 freezes v3.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

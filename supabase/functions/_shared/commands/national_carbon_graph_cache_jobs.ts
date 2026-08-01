@@ -166,7 +166,7 @@ async function ensureSystemManager(
   actor: ActorContext,
   serviceClient: SupabaseClient,
 ): Promise<CommandExecutionResult | null> {
-  const { data, error } = await fromDatabaseApi(serviceClient, 'team_roles_v1')
+  const { data, error } = await fromDatabaseApi(serviceClient, 'team.roles')
     .select('user_id')
     .eq('user_id', actor.userId)
     .eq('team_id', SYSTEM_TEAM_ID)

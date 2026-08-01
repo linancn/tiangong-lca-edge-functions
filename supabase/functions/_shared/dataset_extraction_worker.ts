@@ -1,6 +1,6 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import { callDatabaseApiRpc } from './capabilities/schema_boundary.ts';
+import { callServiceDatabaseApiRpc } from './capabilities/schema_boundary.ts';
 import { generateFlowMarkdown, normalizeJsonOrdered } from './flow_extraction.ts';
 import {
   generateContactMarkdown,
@@ -171,7 +171,7 @@ async function recordTerminalFailure(
   reason: string,
   message: string,
 ): Promise<void> {
-  const { error } = await callDatabaseApiRpc(supabase, 'cmd_dataset_extraction_record_failure', {
+  const { error } = await callServiceDatabaseApiRpc(supabase, 'dataset-extraction.record-failure', {
     p_msg_id: job.msg_id,
     p_read_count: job.read_ct,
     p_reason: reason,
@@ -249,9 +249,9 @@ export async function processDatasetExtractionJobs(
     ...options.markdownGenerators,
   };
 
-  const { data, error } = await callDatabaseApiRpc(
+  const { data, error } = await callServiceDatabaseApiRpc(
     options.supabase,
-    'cmd_dataset_extraction_claim',
+    'dataset-extraction.claim',
     {
       p_qty: batchSize,
       p_vt_seconds: visibilityTimeoutSeconds,
@@ -324,9 +324,9 @@ export async function processDatasetExtractionJobs(
   }
 
   if (ackIds.length > 0) {
-    const { error: ackError } = await callDatabaseApiRpc(
+    const { error: ackError } = await callServiceDatabaseApiRpc(
       options.supabase,
-      'cmd_dataset_extraction_ack',
+      'dataset-extraction.ack',
       { p_msg_ids: ackIds },
     );
     if (ackError) throw ackError;

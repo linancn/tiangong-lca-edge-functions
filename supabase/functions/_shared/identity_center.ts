@@ -62,7 +62,7 @@ export async function applyActionToDesiredState(client: SupabaseClient, action: 
   const current =
     row ??
     assertOk(
-      await fromDatabaseApi(client, 'identity_center_users_v1')
+      await fromDatabaseApi(client, 'identity-center.users')
         .select('*')
         .eq('keycloak_sub', action.keycloakSub)
         .maybeSingle(),
@@ -130,7 +130,7 @@ export async function materializeForUser(
   // maybeSingle + assertOk:真正的 DB 故障抛出(交调用方转 503/500 重试),
   // 而"用户行不存在"是 data:null(非错误)→ 优雅 return,不误当故障。
   const { data: state } = assertOk(
-    await fromDatabaseApi(client, 'identity_center_users_v1')
+    await fromDatabaseApi(client, 'identity-center.users')
       .select('*')
       .eq('keycloak_sub', keycloakSub)
       .maybeSingle(),
@@ -153,7 +153,7 @@ export async function materializeForUser(
   }
 
   const { data: roleRow } = assertOk(
-    await fromDatabaseApi(client, 'team_roles_v1')
+    await fromDatabaseApi(client, 'team.roles')
       .select('role')
       .eq('user_id', userId)
       .eq('team_id', SYSTEM_TEAM_ID)

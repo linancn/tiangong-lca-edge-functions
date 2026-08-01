@@ -2,16 +2,63 @@
   "schemaVersion": "edge.schema-boundary-consumers.v1",
   "canonicalization": {
     "algorithm": "sha256",
-    "sidecar": "supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.sha256"
+    "sidecar": "supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.sha256",
+    "schemaPath": "supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.schema.json",
+    "schemaSha256": "6496f8f12f7dc47a2656b36cf58b7978c5a7453172542c2c49500e892c995c7a"
   },
   "edgeBaseCommit": "04dfefe17794e7d1a16fe27b5023ad07143cbf0c",
   "databaseSource": {
     "issue": "tiangong-lca/database-engine#357",
     "candidateComment": 5152567125,
+    "repository": "tiangong-lca/database-engine",
+    "freezeSchemaVersion": "database.lca-private-expand-freeze.v3",
+    "freezeSchemaPath": "supabase/tests/contracts/lca_private_expand_freeze.v3.schema.json",
     "baseCommit": "afe31240567b6225620ace080829a346bc5fcfd4",
     "migrationHead": "20260801131918",
     "publicObjectInventorySha256": "2526146dc64e2b32bdf9afb2ebcc0495f5a174f241c2abbd7f0f1b5348aa8c18",
-    "state": "candidate-not-frozen"
+    "state": "candidate-not-frozen",
+    "authorization": "not-authorized",
+    "frozenManifest": {
+      "path": null,
+      "sha256": null,
+      "sidecarPath": null,
+      "contentFingerprintSha256": null,
+      "edgeExposureFingerprintSha256": null,
+      "commit": null,
+      "reviewComment": null
+    },
+    "requiredFrozenBindings": {
+      "consumerSource": [
+        "sourceId",
+        "repository",
+        "commit",
+        "manifestPath",
+        "manifestSha256",
+        "manifestSchemaPath",
+        "manifestSchemaSha256",
+        "manifestSchemaVersion",
+        "consumerKinds"
+      ],
+      "exposureSurface": [
+        "identity",
+        "signature",
+        "authorizationPolicyIds",
+        "phaseRepresentations",
+        "fingerprintSha256"
+      ],
+      "authorizationPolicy": [
+        "policyType",
+        "security",
+        "owner",
+        "searchPath",
+        "executeRoles",
+        "deniedRoles",
+        "directPgRoles",
+        "rlsMode",
+        "ownershipCheck",
+        "fingerprintSha256"
+      ]
+    }
   },
   "policy": {
     "retainedPublicTables": [
@@ -53,6 +100,21 @@
       "cmd_dataset_extraction_record_failure",
       "cmd_dataset_extraction_claim",
       "cmd_dataset_extraction_ack"
+    ]
+  },
+  "relationOccurrenceScope": {
+    "sourceKind": "literal-postgrest-from-call",
+    "relations": [
+      "lcia_result_publications",
+      "lcia_result_packages",
+      "lca_snapshot_artifacts",
+      "lca_network_snapshots",
+      "lca_result_cache",
+      "lca_active_snapshots",
+      "lca_latest_all_unit_results",
+      "lca_results",
+      "lca_package_artifacts",
+      "lca_package_request_cache"
     ]
   },
   "publicResidue": {
@@ -204,6 +266,12 @@
       "file": "supabase/functions/_shared/capabilities/schema_boundary.ts",
       "kind": "api-abstraction",
       "relationExpressions": ["relation"],
+      "rpcExpressions": ["routine"],
+      "dynamicCallCounts": {
+        "schema:DATABASE_API_SCHEMA": 1,
+        "rpc:routine": 2,
+        "from:relation": 1
+      },
       "schemaExpressions": ["DATABASE_API_SCHEMA"],
       "allowedSchemas": ["api"],
       "schemaSource": {
@@ -214,6 +282,11 @@
     {
       "file": "supabase/functions/_shared/capabilities/worker_jobs.ts",
       "kind": "api-abstraction",
+      "rpcExpressions": ["fn"],
+      "dynamicCallCounts": {
+        "schema:WORKER_API_SCHEMA": 1,
+        "rpc:fn": 1
+      },
       "schemaExpressions": ["WORKER_API_SCHEMA"],
       "allowedSchemas": ["api"],
       "schemaSource": {
@@ -276,7 +349,10 @@
         "file": "supabase/functions/lca_query_results/index.ts",
         "expressions": ["storagePath.bucket"]
       },
-      { "file": "supabase/functions/lca_solve/index.ts", "expressions": ["storagePath.bucket"] }
+      {
+        "file": "supabase/functions/lca_solve/index.ts",
+        "expressions": ["storagePath.bucket"]
+      }
     ]
   },
   "unresolvedServiceWrites": [
@@ -519,130 +595,444 @@
       "capability": "publication.current-public",
       "identity": "api.lcia_public_result_current()",
       "returns": "jsonb {publication:{id,package_id,publication_series_key,publication_channel,visibility_scope,is_current,status,display_default_impact_category,published_at,created_at},package:{id,package_version,eligible_input_count,included_input_count,input_manifest,snapshot_id,result_id,result_artifact_ref,query_artifact_ref,artifact_manifest,available_impact_categories,default_impact_category,status}} or null",
-      "transaction": "single SQL statement/snapshot; package status preview_ready is part of the same query"
+      "transaction": "single SQL statement/snapshot; package status preview_ready is part of the same query",
+      "signature": {
+        "identityArguments": [],
+        "arguments": [],
+        "resultType": "jsonb {publication:{id,package_id,publication_series_key,publication_channel,visibility_scope,is_current,status,display_default_impact_category,published_at,created_at},package:{id,package_version,eligible_input_count,included_input_count,input_manifest,snapshot_id,result_id,result_artifact_ref,query_artifact_ref,artifact_manifest,available_impact_categories,default_impact_category,status}} or null"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "publication.admin-list",
       "identity": "api.lcia_result_publications_list(p_limit integer)",
       "returns": "jsonb[] bounded publication rows with nested package {id,build_worker_job_id,package_version,coverage_mode,eligible_input_count,included_input_count,default_impact_category,status,created_at,updated_at}",
-      "transaction": "single SQL statement/envelope ordered is_current desc,published_at desc,created_at desc; p_limit 1..50"
+      "transaction": "single SQL statement/envelope ordered is_current desc,published_at desc,created_at desc; p_limit 1..50",
+      "signature": {
+        "identityArguments": ["p_limit integer"],
+        "arguments": ["p_limit integer"],
+        "resultType": "jsonb[] bounded publication rows with nested package {id,build_worker_job_id,package_version,coverage_mode,eligible_input_count,included_input_count,default_impact_category,status,created_at,updated_at}"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "worker.package-enrichment",
       "identity": "api.lcia_result_packages_by_worker_jobs(p_worker_job_ids uuid[])",
       "returns": "table(build_worker_job_id uuid,id uuid,package_version text,status text,eligible_input_count bigint,included_input_count bigint)",
-      "transaction": "bounded input array, explicit fields"
+      "transaction": "bounded input array, explicit fields",
+      "signature": {
+        "identityArguments": ["p_worker_job_ids uuid[]"],
+        "arguments": ["p_worker_job_ids uuid[]"],
+        "resultType": "table(build_worker_job_id uuid,id uuid,package_version text,status text,eligible_input_count bigint,included_input_count bigint)"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "snapshot.resolve-active",
       "identity": "api.lca_active_snapshot_resolve(p_scope text)",
-      "returns": "table(snapshot_id uuid) at most one row"
+      "returns": "table(snapshot_id uuid) at most one row",
+      "signature": {
+        "identityArguments": ["p_scope text"],
+        "arguments": ["p_scope text"],
+        "resultType": "table(snapshot_id uuid) at most one row"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "snapshot.latest-ready",
       "identity": "api.lca_snapshot_artifact_latest_ready()",
-      "returns": "table(snapshot_id uuid,process_count bigint,artifact_url text,status text,created_at timestamptz) at most one row"
+      "returns": "table(snapshot_id uuid,process_count bigint,artifact_url text,status text,created_at timestamptz) at most one row",
+      "signature": {
+        "identityArguments": [],
+        "arguments": [],
+        "resultType": "table(snapshot_id uuid,process_count bigint,artifact_url text,status text,created_at timestamptz) at most one row"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "snapshot.resolve-artifact",
       "identity": "api.lca_snapshot_artifact_resolve(p_snapshot_id uuid)",
-      "returns": "table(snapshot_id uuid,process_count bigint,artifact_url text,status text,created_at timestamptz) at most one ready row"
+      "returns": "table(snapshot_id uuid,process_count bigint,artifact_url text,status text,created_at timestamptz) at most one ready row",
+      "signature": {
+        "identityArguments": ["p_snapshot_id uuid"],
+        "arguments": ["p_snapshot_id uuid"],
+        "resultType": "table(snapshot_id uuid,process_count bigint,artifact_url text,status text,created_at timestamptz) at most one ready row"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "snapshot.resolve-network-candidate",
       "identity": "api.lca_network_snapshot_candidates(p_scopes text[],p_process_filter jsonb,p_limit integer)",
       "returns": "table(id uuid,created_at timestamptz,process_filter jsonb)",
-      "transaction": "p_limit 1..100; discovery candidates only, Edge exact-compares process_filter"
+      "transaction": "p_limit 1..100; discovery candidates only, Edge exact-compares process_filter",
+      "signature": {
+        "identityArguments": ["p_scopes text[]", "p_process_filter jsonb", "p_limit integer"],
+        "arguments": ["p_scopes text[]", "p_process_filter jsonb", "p_limit integer"],
+        "resultType": "table(id uuid,created_at timestamptz,process_filter jsonb)"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "snapshot.verify-filter",
       "identity": "api.lca_network_snapshot_process_filter(p_snapshot_id uuid)",
-      "returns": "table(process_filter jsonb) at most one row"
+      "returns": "table(process_filter jsonb) at most one row",
+      "signature": {
+        "identityArguments": ["p_snapshot_id uuid"],
+        "arguments": ["p_snapshot_id uuid"],
+        "resultType": "table(process_filter jsonb) at most one row"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "snapshot.create-draft",
       "identity": "api.lca_network_snapshot_create(p_request jsonb)",
       "requestShape": "{id uuid,scope text,process_filter jsonb,status:'draft',created_by uuid}",
       "returns": "table(id uuid,scope text,process_filter jsonb,status text,created_by uuid)",
-      "transaction": "idempotent id conflict only when existing created_by/scope/process_filter are identical; otherwise fail closed"
+      "transaction": "idempotent id conflict only when existing created_by/scope/process_filter are identical; otherwise fail closed",
+      "signature": {
+        "identityArguments": ["p_request jsonb"],
+        "arguments": ["p_request jsonb"],
+        "resultType": "table(id uuid,scope text,process_filter jsonb,status text,created_by uuid)"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "result.latest-all-unit",
       "identity": "api.lca_latest_all_unit_result_get(p_snapshot_id uuid)",
-      "returns": "table(snapshot_id uuid,result_id uuid,computed_at timestamptz,query_artifact_url text,query_artifact_format text,status text,updated_at timestamptz) at most one ready row"
+      "returns": "table(snapshot_id uuid,result_id uuid,computed_at timestamptz,query_artifact_url text,query_artifact_format text,status text,updated_at timestamptz) at most one ready row",
+      "signature": {
+        "identityArguments": ["p_snapshot_id uuid"],
+        "arguments": ["p_snapshot_id uuid"],
+        "resultType": "table(snapshot_id uuid,result_id uuid,computed_at timestamptz,query_artifact_url text,query_artifact_format text,status text,updated_at timestamptz) at most one ready row"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "result.latest-by-worker",
       "identity": "api.lca_result_latest_by_worker_job(p_worker_job_id uuid)",
-      "returns": "table(id uuid) at most one row ordered created_at desc"
+      "returns": "table(id uuid) at most one row ordered created_at desc",
+      "signature": {
+        "identityArguments": ["p_worker_job_id uuid"],
+        "arguments": ["p_worker_job_id uuid"],
+        "resultType": "table(id uuid) at most one row ordered created_at desc"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "result-cache.read-and-touch",
       "identity": "api.lca_result_cache_read_and_touch(p_scope text,p_snapshot_id uuid,p_request_key text,p_accessed_at timestamptz)",
       "returns": "table(id uuid,status text,job_id uuid,worker_job_id uuid,result_id uuid,hit_count bigint)",
-      "transaction": "select plus hit_count=hit_count+1 and timestamps in one transaction"
+      "transaction": "select plus hit_count=hit_count+1 and timestamps in one transaction",
+      "signature": {
+        "identityArguments": [
+          "p_scope text",
+          "p_snapshot_id uuid",
+          "p_request_key text",
+          "p_accessed_at timestamptz"
+        ],
+        "arguments": [
+          "p_scope text",
+          "p_snapshot_id uuid",
+          "p_request_key text",
+          "p_accessed_at timestamptz"
+        ],
+        "resultType": "table(id uuid,status text,job_id uuid,worker_job_id uuid,result_id uuid,hit_count bigint)"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "result-cache.put-pending",
       "identity": "api.lca_result_cache_put_pending(p_request jsonb)",
       "requestShape": "{scope,snapshot_id,request_key,request_payload,job_id,worker_job_id,accessed_at,expected_existing_id,expected_existing_status}",
       "returns": "table(id uuid,status text,job_id uuid,worker_job_id uuid,result_id uuid,hit_count bigint)",
-      "transaction": "unique request tuple plus insert-on-conflict/CAS"
+      "transaction": "unique request tuple plus insert-on-conflict/CAS",
+      "signature": {
+        "identityArguments": ["p_request jsonb"],
+        "arguments": ["p_request jsonb"],
+        "resultType": "table(id uuid,status text,job_id uuid,worker_job_id uuid,result_id uuid,hit_count bigint)"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "result-cache.transition",
       "identity": "api.lca_result_cache_transition(p_id uuid,p_expected_statuses text[],p_patch jsonb)",
       "returns": "table(id uuid,status text,job_id uuid,worker_job_id uuid,result_id uuid,hit_count bigint)",
-      "transaction": "reviewed status/patch allowlist and fail-closed CAS"
+      "transaction": "reviewed status/patch allowlist and fail-closed CAS",
+      "signature": {
+        "identityArguments": ["p_id uuid", "p_expected_statuses text[]", "p_patch jsonb"],
+        "arguments": ["p_id uuid", "p_expected_statuses text[]", "p_patch jsonb"],
+        "resultType": "table(id uuid,status text,job_id uuid,worker_job_id uuid,result_id uuid,hit_count bigint)"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "tidas-cache.read-and-touch",
       "identity": "api.lca_package_request_cache_read_and_touch(p_requested_by uuid,p_lookup_kind text,p_lookup_value text,p_accessed_at timestamptz)",
       "returns": "table(id uuid,status text,request_key text,job_id uuid,worker_job_id uuid,error_code text,error_message text,hit_count bigint,last_accessed_at timestamptz,created_at timestamptz,updated_at timestamptz,export_artifact_id uuid,report_artifact_id uuid)",
-      "transaction": "service p_requested_by assertion; lookup-kind safe cast; read plus hit increment"
+      "transaction": "service p_requested_by assertion; lookup-kind safe cast; read plus hit increment",
+      "signature": {
+        "identityArguments": [
+          "p_requested_by uuid",
+          "p_lookup_kind text",
+          "p_lookup_value text",
+          "p_accessed_at timestamptz"
+        ],
+        "arguments": [
+          "p_requested_by uuid",
+          "p_lookup_kind text",
+          "p_lookup_value text",
+          "p_accessed_at timestamptz"
+        ],
+        "resultType": "table(id uuid,status text,request_key text,job_id uuid,worker_job_id uuid,error_code text,error_message text,hit_count bigint,last_accessed_at timestamptz,created_at timestamptz,updated_at timestamptz,export_artifact_id uuid,report_artifact_id uuid)"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "tidas-cache.put-pending",
       "identity": "api.lca_package_request_cache_put_pending(p_request jsonb)",
       "requestShape": "{requested_by,request_key,request_payload,job_id,worker_job_id,accessed_at,expected_existing_id,expected_existing_status}",
       "returns": "table(id uuid,status text,job_id uuid,worker_job_id uuid,export_artifact_id uuid,report_artifact_id uuid,hit_count bigint)",
-      "transaction": "unique actor+operation+request key, CAS, reset artifact/error fields"
+      "transaction": "unique actor+operation+request key, CAS, reset artifact/error fields",
+      "signature": {
+        "identityArguments": ["p_request jsonb"],
+        "arguments": ["p_request jsonb"],
+        "resultType": "table(id uuid,status text,job_id uuid,worker_job_id uuid,export_artifact_id uuid,report_artifact_id uuid,hit_count bigint)"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "tidas-artifact.prepare-import-source",
       "identity": "api.lca_package_artifact_prepare_import_source(p_requested_by uuid,p_idempotency_key text,p_artifact_url text,p_content_type text,p_metadata jsonb,p_expires_at timestamptz,p_now timestamptz)",
       "returns": "table(id uuid,job_id uuid,worker_job_id uuid,status text,artifact_url text,metadata jsonb)",
-      "transaction": "database generates id/job_id and atomically reuse-or-create pending by requested_by+idempotency key"
+      "transaction": "database generates id/job_id and atomically reuse-or-create pending by requested_by+idempotency key",
+      "signature": {
+        "identityArguments": [
+          "p_requested_by uuid",
+          "p_idempotency_key text",
+          "p_artifact_url text",
+          "p_content_type text",
+          "p_metadata jsonb",
+          "p_expires_at timestamptz",
+          "p_now timestamptz"
+        ],
+        "arguments": [
+          "p_requested_by uuid",
+          "p_idempotency_key text",
+          "p_artifact_url text",
+          "p_content_type text",
+          "p_metadata jsonb",
+          "p_expires_at timestamptz",
+          "p_now timestamptz"
+        ],
+        "resultType": "table(id uuid,job_id uuid,worker_job_id uuid,status text,artifact_url text,metadata jsonb)"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "tidas-artifact.mark-import-ready",
       "identity": "api.lca_package_artifact_mark_import_source_ready(p_requested_by uuid,p_id uuid,p_job_id uuid,p_expected_status text,p_sha256 text,p_byte_size bigint,p_content_type text,p_metadata_patch jsonb,p_now timestamptz)",
       "returns": "same explicit artifact read shape",
-      "transaction": "same-statement actor ownership check and pending-to-ready CAS; reviewed metadata merge"
+      "transaction": "same-statement actor ownership check and pending-to-ready CAS; reviewed metadata merge",
+      "signature": {
+        "identityArguments": [
+          "p_requested_by uuid",
+          "p_id uuid",
+          "p_job_id uuid",
+          "p_expected_status text",
+          "p_sha256 text",
+          "p_byte_size bigint",
+          "p_content_type text",
+          "p_metadata_patch jsonb",
+          "p_now timestamptz"
+        ],
+        "arguments": [
+          "p_requested_by uuid",
+          "p_id uuid",
+          "p_job_id uuid",
+          "p_expected_status text",
+          "p_sha256 text",
+          "p_byte_size bigint",
+          "p_content_type text",
+          "p_metadata_patch jsonb",
+          "p_now timestamptz"
+        ],
+        "resultType": "same explicit artifact read shape"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "tidas-artifact.link-worker",
       "identity": "api.lca_package_artifact_link_worker(p_requested_by uuid,p_id uuid,p_job_id uuid,p_expected_worker_job_id uuid,p_worker_job_id uuid,p_metadata_patch jsonb,p_now timestamptz)",
       "returns": "same explicit artifact read shape",
-      "transaction": "same-statement actor ownership check and worker binding CAS; null expected value is meaningful"
+      "transaction": "same-statement actor ownership check and worker binding CAS; null expected value is meaningful",
+      "signature": {
+        "identityArguments": [
+          "p_requested_by uuid",
+          "p_id uuid",
+          "p_job_id uuid",
+          "p_expected_worker_job_id uuid",
+          "p_worker_job_id uuid",
+          "p_metadata_patch jsonb",
+          "p_now timestamptz"
+        ],
+        "arguments": [
+          "p_requested_by uuid",
+          "p_id uuid",
+          "p_job_id uuid",
+          "p_expected_worker_job_id uuid",
+          "p_worker_job_id uuid",
+          "p_metadata_patch jsonb",
+          "p_now timestamptz"
+        ],
+        "resultType": "same explicit artifact read shape"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "tidas-artifact.get",
       "identity": "api.lca_package_artifact_get(p_requested_by uuid,p_artifact_id uuid,p_job_id uuid)",
       "returns": "explicit artifact read shape",
-      "transaction": "same SQL statement verifies request-cache requested_by ownership"
+      "transaction": "same SQL statement verifies request-cache requested_by ownership",
+      "signature": {
+        "identityArguments": ["p_requested_by uuid", "p_artifact_id uuid", "p_job_id uuid"],
+        "arguments": ["p_requested_by uuid", "p_artifact_id uuid", "p_job_id uuid"],
+        "resultType": "explicit artifact read shape"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "tidas-artifact.get-by-kind",
       "identity": "api.lca_package_artifact_get_by_kind(p_requested_by uuid,p_job_id uuid,p_artifact_kind text)",
       "returns": "explicit artifact read shape",
-      "transaction": "same SQL statement verifies request-cache requested_by ownership"
+      "transaction": "same SQL statement verifies request-cache requested_by ownership",
+      "signature": {
+        "identityArguments": ["p_requested_by uuid", "p_job_id uuid", "p_artifact_kind text"],
+        "arguments": ["p_requested_by uuid", "p_job_id uuid", "p_artifact_kind text"],
+        "resultType": "explicit artifact read shape"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     },
     {
       "capability": "tidas-artifact.list-by-job",
       "identity": "api.lca_package_artifact_list_by_job(p_requested_by uuid,p_job_id uuid,p_limit integer)",
       "returns": "setof explicit artifact read shape ordered created_at asc",
-      "transaction": "same SQL statement verifies request-cache requested_by ownership; p_limit bounded"
+      "transaction": "same SQL statement verifies request-cache requested_by ownership; p_limit bounded",
+      "signature": {
+        "identityArguments": ["p_requested_by uuid", "p_job_id uuid", "p_limit integer"],
+        "arguments": ["p_requested_by uuid", "p_job_id uuid", "p_limit integer"],
+        "resultType": "setof explicit artifact read shape ordered created_at asc"
+      },
+      "acl": {
+        "state": "candidate-not-frozen",
+        "authorizationPolicyIds": null,
+        "executeRoles": null,
+        "deniedRoles": null
+      }
     }
   ],
   "relationOccurrences": [
@@ -657,7 +1047,11 @@
       "limit": "request.limit??50",
       "ownership": "service operator authorization",
       "atomicityGroup": "publication.admin-list",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 21749,
+        "end": 21781
+      }
     },
     {
       "file": "supabase/functions/data_product_results/index.ts",
@@ -676,7 +1070,11 @@
       "limit": 1,
       "ownership": "public projection",
       "atomicityGroup": "publication.current-public",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 6932,
+        "end": 6964
+      }
     },
     {
       "file": "supabase/functions/_shared/commands/data_product/repository.ts",
@@ -689,7 +1087,11 @@
       "limit": "bounded by publication list<=50",
       "ownership": "service operator authorization",
       "atomicityGroup": "publication.admin-list",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 22980,
+        "end": 23008
+      }
     },
     {
       "file": "supabase/functions/_shared/commands/worker_jobs.ts",
@@ -702,7 +1104,11 @@
       "limit": "caller job batch",
       "ownership": "service; actor filtered before response",
       "atomicityGroup": "worker.package-enrichment",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 7195,
+        "end": 7223
+      }
     },
     {
       "file": "supabase/functions/data_product_results/index.ts",
@@ -715,7 +1121,11 @@
       "limit": 1,
       "ownership": "public only through current-public publication",
       "atomicityGroup": "publication.current-public",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 8356,
+        "end": 8384
+      }
     },
     {
       "file": "supabase/functions/_shared/commands/data_product/repository.ts",
@@ -728,7 +1138,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.resolve-artifact",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 26878,
+        "end": 26908
+      }
     },
     {
       "file": "supabase/functions/lca_contribution_path/index.ts",
@@ -741,7 +1155,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.latest-ready",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 23948,
+        "end": 23978
+      }
     },
     {
       "file": "supabase/functions/lca_contribution_path/index.ts",
@@ -754,7 +1172,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.resolve-artifact",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 28972,
+        "end": 29002
+      }
     },
     {
       "file": "supabase/functions/lca_query_results/index.ts",
@@ -767,7 +1189,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.latest-ready",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 20043,
+        "end": 20073
+      }
     },
     {
       "file": "supabase/functions/lca_query_results/index.ts",
@@ -780,7 +1206,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.resolve-artifact",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 25067,
+        "end": 25097
+      }
     },
     {
       "file": "supabase/functions/lca_solve/index.ts",
@@ -793,7 +1223,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.latest-ready",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 21654,
+        "end": 21684
+      }
     },
     {
       "file": "supabase/functions/lca_solve/index.ts",
@@ -806,7 +1240,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.resolve-artifact",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 24375,
+        "end": 24405
+      }
     },
     {
       "file": "supabase/functions/lca_solve/index.ts",
@@ -819,7 +1257,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.resolve-artifact",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 31452,
+        "end": 31482
+      }
     },
     {
       "file": "supabase/functions/_shared/lca_snapshot_build_queue.ts",
@@ -832,7 +1274,11 @@
       "limit": 1,
       "ownership": "created_by=actor",
       "atomicityGroup": "snapshot.create-draft",
-      "idempotencyCas": "id conflict is idempotent; must verify same actor/filter"
+      "idempotencyCas": "id conflict is idempotent; must verify same actor/filter",
+      "span": {
+        "start": 3742,
+        "end": 3771
+      }
     },
     {
       "file": "supabase/functions/_shared/lca_snapshot_scope_db.ts",
@@ -845,7 +1291,11 @@
       "limit": 1,
       "ownership": "expected filter contains actor scope",
       "atomicityGroup": "snapshot.verify-filter",
-      "idempotencyCas": "exact in-edge comparison required"
+      "idempotencyCas": "exact in-edge comparison required",
+      "span": {
+        "start": 811,
+        "end": 840
+      }
     },
     {
       "file": "supabase/functions/lca_contribution_path/index.ts",
@@ -858,7 +1308,11 @@
       "limit": 100,
       "ownership": "exact actor process_filter verified in Edge",
       "atomicityGroup": "snapshot.resolve-network-candidate",
-      "idempotencyCas": "read-only; candidate filter is not authorization"
+      "idempotencyCas": "read-only; candidate filter is not authorization",
+      "span": {
+        "start": 24807,
+        "end": 24836
+      }
     },
     {
       "file": "supabase/functions/lca_query_results/index.ts",
@@ -871,7 +1325,11 @@
       "limit": 100,
       "ownership": "exact actor process_filter verified in Edge",
       "atomicityGroup": "snapshot.resolve-network-candidate",
-      "idempotencyCas": "read-only; candidate filter is not authorization"
+      "idempotencyCas": "read-only; candidate filter is not authorization",
+      "span": {
+        "start": 20902,
+        "end": 20931
+      }
     },
     {
       "file": "supabase/functions/lca_solve/index.ts",
@@ -884,7 +1342,11 @@
       "limit": 100,
       "ownership": "exact actor process_filter verified in Edge",
       "atomicityGroup": "snapshot.resolve-network-candidate",
-      "idempotencyCas": "read-only; candidate filter is not authorization"
+      "idempotencyCas": "read-only; candidate filter is not authorization",
+      "span": {
+        "start": 22767,
+        "end": 22796
+      }
     },
     {
       "file": "supabase/functions/lca_contribution_path/index.ts",
@@ -897,7 +1359,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.resolve-active",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 23438,
+        "end": 23466
+      }
     },
     {
       "file": "supabase/functions/lca_query_results/index.ts",
@@ -910,7 +1376,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.resolve-active",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 19533,
+        "end": 19561
+      }
     },
     {
       "file": "supabase/functions/lca_solve/index.ts",
@@ -923,7 +1393,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "snapshot.resolve-active",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 21166,
+        "end": 21194
+      }
     },
     {
       "file": "supabase/functions/lca_query_results/index.ts",
@@ -936,7 +1410,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result.latest-all-unit",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 25984,
+        "end": 26019
+      }
     },
     {
       "file": "supabase/functions/lca_contribution_path/index.ts",
@@ -949,7 +1427,11 @@
       "limit": 1,
       "ownership": "worker job already actor-authorized",
       "atomicityGroup": "result.latest-by-worker",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 21191,
+        "end": 21210
+      }
     },
     {
       "file": "supabase/functions/_shared/lca_all_unit_solve_queue.ts",
@@ -962,7 +1444,11 @@
       "limit": 1,
       "ownership": "service; request scope actor-derived",
       "atomicityGroup": "result-cache.read-and-touch",
-      "idempotencyCas": "must combine with touch atomically"
+      "idempotencyCas": "must combine with touch atomically",
+      "span": {
+        "start": 6016,
+        "end": 6040
+      }
     },
     {
       "file": "supabase/functions/_shared/lca_all_unit_solve_queue.ts",
@@ -975,7 +1461,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result-cache.read-and-touch",
-      "idempotencyCas": "hit_count must increment in DB"
+      "idempotencyCas": "hit_count must increment in DB",
+      "span": {
+        "start": 7070,
+        "end": 7094
+      }
     },
     {
       "file": "supabase/functions/_shared/lca_all_unit_solve_queue.ts",
@@ -988,7 +1478,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result-cache.put-pending",
-      "idempotencyCas": "expected id/status plus unique request tuple"
+      "idempotencyCas": "expected id/status plus unique request tuple",
+      "span": {
+        "start": 7782,
+        "end": 7806
+      }
     },
     {
       "file": "supabase/functions/_shared/lca_all_unit_solve_queue.ts",
@@ -1001,7 +1495,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result-cache.put-pending",
-      "idempotencyCas": "unique request tuple; insert-on-conflict/CAS"
+      "idempotencyCas": "unique request tuple; insert-on-conflict/CAS",
+      "span": {
+        "start": 8761,
+        "end": 8785
+      }
     },
     {
       "file": "supabase/functions/lca_contribution_path/index.ts",
@@ -1014,7 +1512,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result-cache.put-pending",
-      "idempotencyCas": "expected id/status plus unique request tuple"
+      "idempotencyCas": "expected id/status plus unique request tuple",
+      "span": {
+        "start": 14550,
+        "end": 14574
+      }
     },
     {
       "file": "supabase/functions/lca_contribution_path/index.ts",
@@ -1027,7 +1529,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result-cache.put-pending",
-      "idempotencyCas": "unique request tuple; insert-on-conflict/CAS"
+      "idempotencyCas": "unique request tuple; insert-on-conflict/CAS",
+      "span": {
+        "start": 15202,
+        "end": 15226
+      }
     },
     {
       "file": "supabase/functions/lca_contribution_path/index.ts",
@@ -1040,7 +1546,11 @@
       "limit": 1,
       "ownership": "service; request scope actor-derived",
       "atomicityGroup": "result-cache.read-and-touch",
-      "idempotencyCas": "must combine with touch atomically"
+      "idempotencyCas": "must combine with touch atomically",
+      "span": {
+        "start": 17934,
+        "end": 17958
+      }
     },
     {
       "file": "supabase/functions/lca_contribution_path/index.ts",
@@ -1053,7 +1563,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result-cache.read-and-touch",
-      "idempotencyCas": "hit_count must increment in DB"
+      "idempotencyCas": "hit_count must increment in DB",
+      "span": {
+        "start": 18977,
+        "end": 19001
+      }
     },
     {
       "file": "supabase/functions/lca_contribution_path/index.ts",
@@ -1066,7 +1580,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result-cache.transition",
-      "idempotencyCas": "expected statuses and patch allowlist"
+      "idempotencyCas": "expected statuses and patch allowlist",
+      "span": {
+        "start": 19851,
+        "end": 19875
+      }
     },
     {
       "file": "supabase/functions/lca_solve/index.ts",
@@ -1079,7 +1597,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result-cache.put-pending",
-      "idempotencyCas": "expected id/status plus unique request tuple"
+      "idempotencyCas": "expected id/status plus unique request tuple",
+      "span": {
+        "start": 15348,
+        "end": 15372
+      }
     },
     {
       "file": "supabase/functions/lca_solve/index.ts",
@@ -1092,7 +1614,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result-cache.put-pending",
-      "idempotencyCas": "unique request tuple; insert-on-conflict/CAS"
+      "idempotencyCas": "unique request tuple; insert-on-conflict/CAS",
+      "span": {
+        "start": 16000,
+        "end": 16024
+      }
     },
     {
       "file": "supabase/functions/lca_solve/index.ts",
@@ -1105,7 +1631,11 @@
       "limit": 1,
       "ownership": "service; request scope actor-derived",
       "atomicityGroup": "result-cache.read-and-touch",
-      "idempotencyCas": "must combine with touch atomically"
+      "idempotencyCas": "must combine with touch atomically",
+      "span": {
+        "start": 18258,
+        "end": 18282
+      }
     },
     {
       "file": "supabase/functions/lca_solve/index.ts",
@@ -1118,7 +1648,11 @@
       "limit": 1,
       "ownership": "service",
       "atomicityGroup": "result-cache.read-and-touch",
-      "idempotencyCas": "hit_count must increment in DB"
+      "idempotencyCas": "hit_count must increment in DB",
+      "span": {
+        "start": 19250,
+        "end": 19274
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1131,7 +1665,11 @@
       "limit": 1,
       "ownership": "metadata.requested_by=actor",
       "atomicityGroup": "tidas-artifact.prepare-import-source",
-      "idempotencyCas": "reuse/create by actor+idempotency key"
+      "idempotencyCas": "reuse/create by actor+idempotency key",
+      "span": {
+        "start": 14262,
+        "end": 14291
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1144,7 +1682,11 @@
       "limit": 1,
       "ownership": "actor-owned artifact",
       "atomicityGroup": "tidas-artifact.mark-import-ready",
-      "idempotencyCas": "CAS pending->ready; preserve metadata keys"
+      "idempotencyCas": "CAS pending->ready; preserve metadata keys",
+      "span": {
+        "start": 18230,
+        "end": 18259
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1157,7 +1699,11 @@
       "limit": "unbounded current; API must bound",
       "ownership": "actor-owned request cache",
       "atomicityGroup": "tidas-artifact.list-by-job",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 20825,
+        "end": 20854
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1170,7 +1716,11 @@
       "limit": 1,
       "ownership": "actor-owned artifact",
       "atomicityGroup": "tidas-artifact.link-worker",
-      "idempotencyCas": "CAS expected worker_job_id=null; preserve metadata"
+      "idempotencyCas": "CAS expected worker_job_id=null; preserve metadata",
+      "span": {
+        "start": 37936,
+        "end": 37965
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1183,7 +1733,11 @@
       "limit": 1,
       "ownership": "requested_by=actor",
       "atomicityGroup": "tidas-artifact.prepare-import-source",
-      "idempotencyCas": "read-before-create must become atomic reuse/create"
+      "idempotencyCas": "read-before-create must become atomic reuse/create",
+      "span": {
+        "start": 38842,
+        "end": 38871
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1196,7 +1750,11 @@
       "limit": 1,
       "ownership": "actor-owned job",
       "atomicityGroup": "tidas-artifact.get",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 48293,
+        "end": 48322
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1209,7 +1767,11 @@
       "limit": 1,
       "ownership": "actor-owned job",
       "atomicityGroup": "tidas-artifact.get-by-kind",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 49879,
+        "end": 49908
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1222,7 +1784,11 @@
       "limit": 1,
       "ownership": "requested_by=actor",
       "atomicityGroup": "tidas-cache.read-and-touch",
-      "idempotencyCas": "must combine with touch atomically"
+      "idempotencyCas": "must combine with touch atomically",
+      "span": {
+        "start": 31253,
+        "end": 31286
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1235,7 +1801,11 @@
       "limit": 1,
       "ownership": "requested_by=actor",
       "atomicityGroup": "tidas-cache.lookup-owned",
-      "idempotencyCas": "read-only"
+      "idempotencyCas": "read-only",
+      "span": {
+        "start": 32959,
+        "end": 32992
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1248,7 +1818,11 @@
       "limit": 1,
       "ownership": "row obtained with actor filter",
       "atomicityGroup": "tidas-cache.read-and-touch",
-      "idempotencyCas": "hit_count increment in DB"
+      "idempotencyCas": "hit_count increment in DB",
+      "span": {
+        "start": 35157,
+        "end": 35190
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1261,7 +1835,11 @@
       "limit": 1,
       "ownership": "requested_by=actor",
       "atomicityGroup": "tidas-cache.put-pending",
-      "idempotencyCas": "expected existing id/status; reset artifacts/errors"
+      "idempotencyCas": "expected existing id/status; reset artifacts/errors",
+      "span": {
+        "start": 36040,
+        "end": 36073
+      }
     },
     {
       "file": "supabase/functions/_shared/tidas_package.ts",
@@ -1274,7 +1852,11 @@
       "limit": 1,
       "ownership": "requested_by=actor",
       "atomicityGroup": "tidas-cache.put-pending",
-      "idempotencyCas": "unique actor+operation+request_key; insert-on-conflict/CAS"
+      "idempotencyCas": "unique actor+operation+request_key; insert-on-conflict/CAS",
+      "span": {
+        "start": 36885,
+        "end": 36918
+      }
     }
   ]
 }

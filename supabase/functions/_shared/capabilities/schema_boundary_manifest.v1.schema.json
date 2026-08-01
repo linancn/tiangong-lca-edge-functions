@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "edge.schema-boundary-consumers.v1.schema",
+  "title": "Edge schema-boundary consumer manifest v1",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schemaVersion",
+    "canonicalization",
+    "edgeBaseCommit",
+    "databaseSource",
+    "policy",
+    "apiCapabilities",
+    "relationOccurrenceScope",
+    "publicResidue",
+    "dynamicConsumers",
+    "platformConsumers",
+    "relationOccurrences",
+    "preferredApiIdentities"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "edge.schema-boundary-consumers.v1" },
+    "canonicalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "sidecar", "schemaPath", "schemaSha256"],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "sidecar": { "type": "string", "minLength": 1 },
+        "schemaPath": { "type": "string", "minLength": 1 },
+        "schemaSha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "edgeBaseCommit": { "$ref": "#/$defs/commit" },
+    "databaseSource": {
+      "type": "object",
+      "required": [
+        "issue",
+        "repository",
+        "freezeSchemaVersion",
+        "freezeSchemaPath",
+        "baseCommit",
+        "migrationHead",
+        "publicObjectInventorySha256",
+        "state",
+        "authorization",
+        "frozenManifest",
+        "requiredFrozenBindings"
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "required": ["retainedPublicTables", "allowedPostgrestSchemas"],
+      "properties": {
+        "retainedPublicTables": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "allowedPostgrestSchemas": {
+          "const": ["api"]
+        }
+      }
+    },
+    "apiCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relations", "actorRoutines", "serviceRoutines"],
+      "properties": {
+        "relations": { "$ref": "#/$defs/threeUniqueStrings" },
+        "actorRoutines": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "serviceRoutines": { "$ref": "#/$defs/threeUniqueStrings" }
+      }
+    },
+    "relationOccurrenceScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceKind", "relations"],
+      "properties": {
+        "sourceKind": { "const": "literal-postgrest-from-call" },
+        "relations": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "relationOccurrences": {
+      "type": "array",
+      "minItems": 48,
+      "maxItems": 48,
+      "items": { "$ref": "#/$defs/relationOccurrence" }
+    },
+    "preferredApiIdentities": {
+      "type": "array",
+      "minItems": 22,
+      "maxItems": 22,
+      "items": { "$ref": "#/$defs/preferredExposure" }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "threeUniqueStrings": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": { "type": "string" }
+    },
+    "relationOccurrence": {
+      "type": "object",
+      "required": [
+        "file",
+        "line",
+        "relation",
+        "operation",
+        "span",
+        "fields",
+        "filters",
+        "order",
+        "limit",
+        "ownership",
+        "atomicityGroup",
+        "idempotencyCas"
+      ],
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "line": { "type": "integer", "minimum": 1 },
+        "relation": { "type": "string", "minLength": 1 },
+        "operation": { "enum": ["select", "insert", "update", "upsert", "delete"] },
+        "span": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start", "end"],
+          "properties": {
+            "start": { "type": "integer", "minimum": 0 },
+            "end": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "preferredExposure": {
+      "type": "object",
+      "required": ["capability", "identity", "returns", "signature", "acl"],
+      "properties": {
+        "capability": { "type": "string", "minLength": 1 },
+        "identity": { "type": "string", "pattern": "^api\\." },
+        "returns": { "type": "string", "minLength": 1 },
+        "signature": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identityArguments", "arguments", "resultType"]
+        },
+        "acl": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "authorizationPolicyIds", "executeRoles", "deniedRoles"]
+        }
+      }
+    }
+  }
+}

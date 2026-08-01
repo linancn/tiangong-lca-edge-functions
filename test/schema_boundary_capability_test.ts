@@ -1,9 +1,16 @@
-import { assertEquals } from 'jsr:@std/assert';
+import { assertEquals, assertThrows } from 'jsr:@std/assert';
 
 import {
-  callDatabaseApiRpc,
+  callActorDatabaseApiRpc,
+  callServiceDatabaseApiRpc,
+  DATABASE_API_ACTOR_CAPABILITIES,
+  DATABASE_API_RELATION_CAPABILITIES,
+  DATABASE_API_SERVICE_CAPABILITIES,
   databaseApi,
   fromDatabaseApi,
+  type DatabaseApiActorCapabilityId,
+  type DatabaseApiRelationCapabilityId,
+  type DatabaseApiServiceCapabilityId,
 } from '../supabase/functions/_shared/capabilities/schema_boundary.ts';
 
 class FakeCredentialBoundClient {
@@ -12,90 +19,128 @@ class FakeCredentialBoundClient {
   constructor(readonly credentialRole: 'authenticated' | 'service_role' | 'anon') {}
 
   schema(schema: string) {
-    this.calls.push({
-      operation: 'schema',
-      schema,
-      credentialRole: this.credentialRole,
-    });
+    this.calls.push({ operation: 'schema', schema, credentialRole: this.credentialRole });
     return this;
   }
 
   rpc(routine: string, args: Record<string, unknown>) {
-    this.calls.push({
-      operation: 'rpc',
-      routine,
-      args,
-      credentialRole: this.credentialRole,
-    });
+    this.calls.push({ operation: 'rpc', routine, args, credentialRole: this.credentialRole });
     return Promise.resolve({ data: { ok: true }, error: null });
   }
 
   from(relation: string) {
-    this.calls.push({
-      operation: 'from',
-      relation,
-      credentialRole: this.credentialRole,
-    });
+    this.calls.push({ operation: 'from', relation, credentialRole: this.credentialRole });
     return { relation };
   }
 }
 
-for (const credentialRole of ['authenticated', 'service_role', 'anon'] as const) {
-  Deno.test(
-    `database API capability selects api schema without changing ${credentialRole} credentials`,
-    async () => {
-      const client = new FakeCredentialBoundClient(credentialRole);
-
-      databaseApi(client as never);
-      fromDatabaseApi(client as never, 'team_roles_v1');
-      await callDatabaseApiRpc(client as never, 'cmd_dataset_save_draft', {
-        p_table: 'flows',
-      });
-
-      assertEquals(client.calls, [
-        { operation: 'schema', schema: 'api', credentialRole },
-        { operation: 'schema', schema: 'api', credentialRole },
-        { operation: 'from', relation: 'team_roles_v1', credentialRole },
-        { operation: 'schema', schema: 'api', credentialRole },
-        {
-          operation: 'rpc',
-          routine: 'cmd_dataset_save_draft',
-          args: { p_table: 'flows' },
-          credentialRole,
-        },
-      ]);
-    },
-  );
-}
+Deno.test('database API capability selects api schema without changing bound credentials', () => {
+  for (const credentialRole of ['authenticated', 'service_role', 'anon'] as const) {
+    const client = new FakeCredentialBoundClient(credentialRole);
+    databaseApi(client as never);
+    fromDatabaseApi(client as never, 'team.roles');
+    assertEquals(client.calls, [
+      { operation: 'schema', schema: 'api', credentialRole },
+      { operation: 'schema', schema: 'api', credentialRole },
+      { operation: 'from', relation: 'team_roles_v1', credentialRole },
+    ]);
+  }
+});
 
 Deno.test(
-  'the exact 10 actor and 3 service routines use the centralized api-schema boundary',
+  'all 10 actor capability IDs resolve exact routines through actor credentials',
   async () => {
-    const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
-    const manifest = JSON.parse(
-      await Deno.readTextFile(
-        `${root}/supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.json`,
-      ),
-    ) as {
-      apiCapabilities: { actorRoutines: string[]; serviceRoutines: string[] };
-    };
-    assertEquals(manifest.apiCapabilities.actorRoutines.length, 10);
-    assertEquals(manifest.apiCapabilities.serviceRoutines.length, 3);
-
-    const datasetCommands = await Deno.readTextFile(
-      `${root}/supabase/functions/_shared/db_rpc/dataset_commands.ts`,
-    );
-    const extractionWorker = await Deno.readTextFile(
-      `${root}/supabase/functions/_shared/dataset_extraction_worker.ts`,
-    );
-    for (const routine of manifest.apiCapabilities.actorRoutines) {
-      assertEquals(datasetCommands.includes(`'${routine}'`), true, routine);
+    assertEquals(Object.keys(DATABASE_API_ACTOR_CAPABILITIES).length, 10);
+    for (const [capabilityId, routine] of Object.entries(DATABASE_API_ACTOR_CAPABILITIES)) {
+      const client = new FakeCredentialBoundClient('authenticated');
+      await callActorDatabaseApiRpc(client as never, capabilityId as DatabaseApiActorCapabilityId, {
+        proof: capabilityId,
+      });
+      assertEquals(client.calls, [
+        { operation: 'schema', schema: 'api', credentialRole: 'authenticated' },
+        {
+          operation: 'rpc',
+          routine,
+          args: { proof: capabilityId },
+          credentialRole: 'authenticated',
+        },
+      ]);
     }
-    for (const routine of manifest.apiCapabilities.serviceRoutines) {
-      assertEquals(extractionWorker.includes(`'${routine}'`), true, routine);
-    }
-    assertEquals(datasetCommands.includes('callDatabaseApiRpc(supabase, fn, args)'), true);
-    assertEquals(datasetCommands.includes("'cmd_review_submit_v2'"), true);
-    assertEquals(datasetCommands.includes('callLegacyPublicDatasetRpc'), true);
   },
 );
+
+Deno.test(
+  'all 3 service capability IDs resolve exact routines through service credentials',
+  async () => {
+    assertEquals(Object.keys(DATABASE_API_SERVICE_CAPABILITIES).length, 3);
+    for (const [capabilityId, routine] of Object.entries(DATABASE_API_SERVICE_CAPABILITIES)) {
+      const client = new FakeCredentialBoundClient('service_role');
+      await callServiceDatabaseApiRpc(
+        client as never,
+        capabilityId as DatabaseApiServiceCapabilityId,
+        { proof: capabilityId },
+      );
+      assertEquals(client.calls, [
+        { operation: 'schema', schema: 'api', credentialRole: 'service_role' },
+        {
+          operation: 'rpc',
+          routine,
+          args: { proof: capabilityId },
+          credentialRole: 'service_role',
+        },
+      ]);
+    }
+  },
+);
+
+Deno.test('all relation capability IDs resolve exact api facade relations', () => {
+  for (const [capabilityId, relation] of Object.entries(DATABASE_API_RELATION_CAPABILITIES)) {
+    const client = new FakeCredentialBoundClient('service_role');
+    fromDatabaseApi(client as never, capabilityId as DatabaseApiRelationCapabilityId);
+    assertEquals(client.calls.at(-1), {
+      operation: 'from',
+      relation,
+      credentialRole: 'service_role',
+    });
+  }
+});
+
+Deno.test('forged actor, service, and relation capability IDs fail before a Data API call', () => {
+  const actorClient = new FakeCredentialBoundClient('authenticated');
+  assertThrows(
+    () =>
+      callActorDatabaseApiRpc(
+        actorClient as never,
+        'forged.actor' as DatabaseApiActorCapabilityId,
+        {},
+      ),
+    Error,
+    'Unregistered database API capability',
+  );
+  assertEquals(actorClient.calls, []);
+
+  const serviceClient = new FakeCredentialBoundClient('service_role');
+  assertThrows(
+    () =>
+      callServiceDatabaseApiRpc(
+        serviceClient as never,
+        'forged.service' as DatabaseApiServiceCapabilityId,
+        {},
+      ),
+    Error,
+    'Unregistered database API capability',
+  );
+  assertEquals(serviceClient.calls, []);
+
+  const relationClient = new FakeCredentialBoundClient('service_role');
+  assertThrows(
+    () =>
+      fromDatabaseApi(
+        relationClient as never,
+        'forged.relation' as DatabaseApiRelationCapabilityId,
+      ),
+    Error,
+    'Unregistered database API capability',
+  );
+  assertEquals(relationClient.calls, []);
+});

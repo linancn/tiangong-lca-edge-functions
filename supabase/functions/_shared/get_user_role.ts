@@ -11,7 +11,7 @@ export type UserRoleRow = {
  * Return the role and team_id
  */
 async function getUserRole(id: string, supabase: SchemaBoundaryClient) {
-  const result = await fromDatabaseApi(supabase, 'team_roles_v1')
+  const result = await fromDatabaseApi(supabase, 'team.roles')
     .select('role,team_id')
     .eq('user_id', id);
   return Promise.resolve(result);
