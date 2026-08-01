@@ -34,7 +34,7 @@ checkPaths:
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-02
 lastReviewedCommit: 04dfefe17794e7d1a16fe27b5023ad07143cbf0c
-lastReviewedNote: 'Reviewed for Issue #250: typed/AST-derived schema-boundary proof and pull-request CI remain Edge-owned; the candidate database binding is non-authorizing until database-engine #357 freezes v3.'
+lastReviewedNote: 'Reviewed for Issue #250: alias-aware typed/AST-derived schema-boundary proof and exact-head pull-request CI remain Edge-owned; the candidate database binding is non-authorizing until database-engine #357 freezes v3.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -172,4 +172,4 @@ Install the versioned local hook once per checkout:
 ./scripts/install-git-hooks.sh
 ```
 
-The `pre-push` hook runs `scripts/docpact-gate.sh`, which delegates CLI lookup to `scripts/docpact` and performs strict config validation plus enforced lint before the push leaves the machine. It then runs non-mutating `npm run lint` and `npm run check` as the local test gate, and aborts if the lint step changes the working tree. The wrapper checks `DOCPACT_BIN`, Cargo install locations, Homebrew install locations, and then `PATH`, so local agent shells should not fail only because bare `docpact` is unavailable. The default comparison base is `origin/dev` for routine branches and `origin/main` for promote or hotfix branches. Override it for unusual stacks with `DOCPACT_BASE_REF=<ref>` or `scripts/docpact-gate.sh --base <ref>`. The gate writes its detailed report to a temporary file so normal pushes do not create `.docpact/runs/` artifacts. The GitHub `CI` workflow is manual-dispatch only.
+The `pre-push` hook runs `scripts/docpact-gate.sh`, which delegates CLI lookup to `scripts/docpact` and performs strict config validation plus enforced lint before the push leaves the machine. It then runs non-mutating `npm run lint` and `npm run check` as the local test gate, and aborts if the lint step changes the working tree. The wrapper checks `DOCPACT_BIN`, Cargo install locations, Homebrew install locations, and then `PATH`, so local agent shells should not fail only because bare `docpact` is unavailable. The default comparison base is `origin/dev` for routine branches and `origin/main` for promote or hotfix branches. Override it for unusual stacks with `DOCPACT_BASE_REF=<ref>` or `scripts/docpact-gate.sh --base <ref>`. The gate writes its detailed report to a temporary file so normal pushes do not create `.docpact/runs/` artifacts. The GitHub `CI` workflow runs for pull requests targeting `dev` or `main` and can also be dispatched manually. Pull-request runs check out and verify the exact PR head SHA before validation.

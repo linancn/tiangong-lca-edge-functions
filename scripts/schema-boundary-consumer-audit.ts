@@ -77,6 +77,7 @@ type Manifest = {
       authorizationPolicy: string[];
     };
   };
+  sourceAudit: { version: string; controls: string[] };
   policy: { retainedPublicTables: string[]; allowedPostgrestSchemas: string[] };
   apiCapabilities: {
     relations: string[];
@@ -180,6 +181,290 @@ type CapabilityCall = {
   expression: string;
 };
 
+type BoundaryMethod = 'from' | 'rpc' | 'schema';
+
+const BOUNDARY_METHODS = new Set<BoundaryMethod>(['from', 'rpc', 'schema']);
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function identifierLooksLikeSupabaseClient(name: string): boolean {
+  return /^(?:client|supabase|supabaseClient|supabaseServiceClient|serviceClient|serviceSupabase|authClient|rpcClient)$/i.test(
+    name,
+  );
+}
+
+type BoundaryDataflow = {
+  clientIdentifiers: ReadonlySet<string>;
+  controlledBindingPatterns: ReadonlySet<ts.BindingName>;
+  isClientExpression: (expression: ts.Expression) => boolean;
+  staticString: (expression: ts.Expression) => string | null;
+};
+
+type LocalFunction = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
+
+/**
+ * Build a conservative, file-local dataflow model for Supabase clients. The audit deliberately
+ * treats aliases as tainted once they can receive a controlled client: uncertainty must create a
+ * finding rather than let a schema-boundary call disappear from the inventory.
+ */
+function deriveBoundaryDataflow(sourceFile: ts.SourceFile): BoundaryDataflow {
+  const valueBindings = new Map<string, ts.Expression[]>();
+  const clientIdentifiers = new Set<string>();
+  const clientPaths = new Set<string>();
+  const controlledBindingPatterns = new Set<ts.BindingName>();
+  const functions = new Map<string, LocalFunction>();
+  const clientReturningFunctions = new Set<string>();
+
+  const addValueBinding = (name: string, expression: ts.Expression) => {
+    const bindings = valueBindings.get(name) ?? [];
+    bindings.push(expression);
+    valueBindings.set(name, bindings);
+  };
+
+  const collect = (node: ts.Node) => {
+    if (ts.isFunctionDeclaration(node) && node.name) functions.set(node.name.text, node);
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      addValueBinding(node.name.text, node.initializer);
+      if (
+        identifierLooksLikeSupabaseClient(node.name.text) ||
+        node.type?.getText(sourceFile).includes('SupabaseClient')
+      ) {
+        clientIdentifiers.add(node.name.text);
+      }
+      if (ts.isArrowFunction(node.initializer) || ts.isFunctionExpression(node.initializer)) {
+        functions.set(node.name.text, node.initializer);
+      }
+    }
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
+      const left = unwrapExpression(node.left);
+      if (ts.isIdentifier(left)) addValueBinding(left.text, node.right);
+    }
+    if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
+      if (
+        identifierLooksLikeSupabaseClient(node.name.text) ||
+        node.type?.getText(sourceFile).includes('SupabaseClient')
+      ) {
+        clientIdentifiers.add(node.name.text);
+      }
+    }
+    if (ts.isBindingElement(node) && ts.isIdentifier(node.name)) {
+      const property = node.propertyName ?? node.name;
+      if (ts.isIdentifier(property) && identifierLooksLikeSupabaseClient(property.text)) {
+        clientIdentifiers.add(node.name.text);
+      }
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(sourceFile);
+  const collectCallBindings = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+      const declaration = functions.get(node.expression.text);
+      if (declaration) {
+        node.arguments.forEach((argument, index) => {
+          const parameter = declaration.parameters[index];
+          if (parameter && ts.isIdentifier(parameter.name)) {
+            addValueBinding(parameter.name.text, argument);
+          }
+        });
+      }
+    }
+    ts.forEachChild(node, collectCallBindings);
+  };
+  collectCallBindings(sourceFile);
+
+  const staticString = (expression: ts.Expression, visiting = new Set<string>()): string | null => {
+    const current = unwrapExpression(expression);
+    if (ts.isStringLiteralLike(current)) return current.text;
+    if (ts.isIdentifier(current)) {
+      if (visiting.has(current.text)) return null;
+      const bindings = valueBindings.get(current.text);
+      if (!bindings?.length) return null;
+      const nextVisiting = new Set(visiting).add(current.text);
+      const values = bindings.map((binding) => staticString(binding, nextVisiting));
+      const first = values[0];
+      return first !== null && values.every((value) => value === first) ? first : null;
+    }
+    if (ts.isBinaryExpression(current) && current.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+      const left = staticString(current.left, visiting);
+      const right = staticString(current.right, visiting);
+      return left !== null && right !== null ? left + right : null;
+    }
+    if (ts.isConditionalExpression(current)) {
+      const whenTrue = staticString(current.whenTrue, visiting);
+      const whenFalse = staticString(current.whenFalse, visiting);
+      return whenTrue !== null && whenTrue === whenFalse ? whenTrue : null;
+    }
+    return null;
+  };
+
+  const callName = (expression: ts.LeftHandSideExpression): string | null => {
+    const current = unwrapExpression(expression);
+    if (ts.isIdentifier(current)) return current.text;
+    if (ts.isPropertyAccessExpression(current)) return current.name.text;
+    if (ts.isElementAccessExpression(current) && current.argumentExpression) {
+      return staticString(current.argumentExpression);
+    }
+    return null;
+  };
+
+  const isClientExpression = (expression: ts.Expression, visiting = new Set<string>()): boolean => {
+    const current = unwrapExpression(expression);
+    const path = current.getText(sourceFile);
+    if (clientPaths.has(path)) return true;
+    if (ts.isIdentifier(current)) {
+      if (clientIdentifiers.has(current.text) || identifierLooksLikeSupabaseClient(current.text)) {
+        return true;
+      }
+      if (visiting.has(current.text)) return false;
+      const bindings = valueBindings.get(current.text) ?? [];
+      const nextVisiting = new Set(visiting).add(current.text);
+      return bindings.some((binding) => isClientExpression(binding, nextVisiting));
+    }
+    if (ts.isPropertyAccessExpression(current)) {
+      if (current.name.text === 'storage') return false;
+      return identifierLooksLikeSupabaseClient(current.name.text);
+    }
+    if (ts.isElementAccessExpression(current)) {
+      const property = current.argumentExpression ? staticString(current.argumentExpression) : null;
+      if (property === 'storage') return false;
+      return property !== null && identifierLooksLikeSupabaseClient(property);
+    }
+    if (ts.isConditionalExpression(current)) {
+      return (
+        isClientExpression(current.whenTrue, visiting) ||
+        isClientExpression(current.whenFalse, visiting)
+      );
+    }
+    if (ts.isAwaitExpression(current)) return isClientExpression(current.expression, visiting);
+    if (ts.isCallExpression(current)) {
+      const name = callName(current.expression);
+      if (
+        name &&
+        (clientReturningFunctions.has(name) ||
+          /^(?:createClient|create.*Supabase.*Client|databaseApi)$/i.test(name) ||
+          (name === 'schema' &&
+            (ts.isPropertyAccessExpression(current.expression) ||
+              ts.isElementAccessExpression(current.expression)) &&
+            isClientExpression(current.expression.expression, visiting)))
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const markIdentifier = (identifier: ts.Identifier) => {
+      if (!clientIdentifiers.has(identifier.text)) {
+        clientIdentifiers.add(identifier.text);
+        changed = true;
+      }
+    };
+    for (const [name, declaration] of functions) {
+      if (clientReturningFunctions.has(name) || !declaration.body) continue;
+      let returnsClient = false;
+      if (ts.isExpression(declaration.body)) {
+        returnsClient = isClientExpression(declaration.body);
+      } else {
+        const visitReturns = (node: ts.Node) => {
+          if (returnsClient) return;
+          if (node !== declaration && ts.isFunctionLike(node)) return;
+          if (
+            ts.isReturnStatement(node) &&
+            node.expression &&
+            isClientExpression(node.expression)
+          ) {
+            returnsClient = true;
+            return;
+          }
+          ts.forEachChild(node, visitReturns);
+        };
+        visitReturns(declaration.body);
+      }
+      if (returnsClient) {
+        clientReturningFunctions.add(name);
+        changed = true;
+      }
+    }
+    const propagate = (node: ts.Node) => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        isClientExpression(node.initializer)
+      ) {
+        markIdentifier(node.name);
+      }
+      if (
+        ts.isParameter(node) &&
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        isClientExpression(node.initializer)
+      ) {
+        markIdentifier(node.name);
+      }
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        isClientExpression(node.right)
+      ) {
+        const left = unwrapExpression(node.left);
+        if (ts.isIdentifier(left)) markIdentifier(left);
+        else if (ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left)) {
+          const path = left.getText(sourceFile);
+          if (!clientPaths.has(path)) {
+            clientPaths.add(path);
+            changed = true;
+          }
+        } else if (ts.isObjectLiteralExpression(left) || ts.isArrayLiteralExpression(left)) {
+          controlledBindingPatterns.add(left as unknown as ts.BindingName);
+        }
+      }
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+        const declaration = functions.get(node.expression.text);
+        if (declaration) {
+          node.arguments.forEach((argument, index) => {
+            if (!isClientExpression(argument)) return;
+            const parameter = declaration.parameters[index];
+            if (!parameter) return;
+            if (ts.isIdentifier(parameter.name)) markIdentifier(parameter.name);
+            else controlledBindingPatterns.add(parameter.name);
+          });
+        }
+      }
+      ts.forEachChild(node, propagate);
+    };
+    propagate(sourceFile);
+  }
+
+  return { clientIdentifiers, controlledBindingPatterns, isClientExpression, staticString };
+}
+
+function resolvedCalledPropertyName(
+  expression: ts.LeftHandSideExpression,
+  dataflow: BoundaryDataflow,
+): string | null {
+  if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
+  if (ts.isElementAccessExpression(expression) && expression.argumentExpression) {
+    return dataflow.staticString(expression.argumentExpression);
+  }
+  return ts.isIdentifier(expression) ? expression.text : null;
+}
+
 function calledPropertyName(expression: ts.Expression): string | null {
   if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
   if (
@@ -217,9 +502,13 @@ export function deriveSourceRelationOccurrences(
     true,
     ts.ScriptKind.TS,
   );
+  const dataflow = deriveBoundaryDataflow(sourceFile);
   const occurrences: SourceRelationOccurrence[] = [];
   const visit = (node: ts.Node) => {
-    if (ts.isCallExpression(node) && calledPropertyName(node.expression) === 'from') {
+    if (
+      ts.isCallExpression(node) &&
+      resolvedCalledPropertyName(node.expression, dataflow) === 'from'
+    ) {
       const argument = node.arguments[0];
       if (argument && ts.isStringLiteralLike(argument) && scopedRelations.has(argument.text)) {
         const start = ts.isPropertyAccessExpression(node.expression)
@@ -248,6 +537,7 @@ function deriveCapabilityCalls(file: string, source: string): CapabilityCall[] {
     true,
     ts.ScriptKind.TS,
   );
+  const dataflow = deriveBoundaryDataflow(sourceFile);
   const calls: CapabilityCall[] = [];
   const helperByName = new Map([
     ['callActorDatabaseApiRpc', 'actor' as const],
@@ -255,7 +545,7 @@ function deriveCapabilityCalls(file: string, source: string): CapabilityCall[] {
   ]);
   const visit = (node: ts.Node) => {
     if (ts.isCallExpression(node)) {
-      const name = calledPropertyName(node.expression);
+      const name = resolvedCalledPropertyName(node.expression, dataflow);
       const helper = name ? helperByName.get(name) : undefined;
       if (helper) {
         const argument = node.arguments[1];
@@ -283,10 +573,11 @@ export function deriveBoundaryMethodCalls(source: string): Record<string, number
     true,
     ts.ScriptKind.TS,
   );
+  const dataflow = deriveBoundaryDataflow(sourceFile);
   const counts: Record<string, number> = {};
   const visit = (node: ts.Node) => {
     if (ts.isCallExpression(node)) {
-      const method = calledPropertyName(node.expression);
+      const method = resolvedCalledPropertyName(node.expression, dataflow);
       if (method === 'from' || method === 'rpc' || method === 'schema') {
         const argument = node.arguments[0];
         if (argument && !ts.isStringLiteralLike(argument)) {
@@ -317,12 +608,8 @@ export function deriveAstBoundaryViolations(
     true,
     ts.ScriptKind.TS,
   );
+  const dataflow = deriveBoundaryDataflow(sourceFile);
   const violations: SchemaBoundaryFinding[] = [];
-  const boundaryMethods = new Set(['from', 'rpc', 'schema']);
-  const looksLikeClient = (expression: string) =>
-    /(?:^|\.)(?:client|supabase|supabaseClient|serviceClient|authClient|rpcClient)$/.test(
-      expression,
-    ) || expression.includes('databaseApi(');
   const push = (node: ts.Node, kind: string, message: string, object?: string) => {
     violations.push({
       file,
@@ -332,31 +619,55 @@ export function deriveAstBoundaryViolations(
       message,
     });
   };
+  const bindingPatternIsControlled = (node: ts.BindingElement): boolean => {
+    const declaration = node.parent.parent;
+    if (
+      ts.isVariableDeclaration(declaration) &&
+      declaration.initializer &&
+      dataflow.isClientExpression(declaration.initializer)
+    ) {
+      return true;
+    }
+    return [...dataflow.controlledBindingPatterns].some(
+      (pattern) =>
+        node.getStart(sourceFile) >= pattern.getStart(sourceFile) && node.end <= pattern.end,
+    );
+  };
   const visit = (node: ts.Node) => {
     if (ts.isBindingElement(node)) {
       const name = node.propertyName ?? node.name;
-      const declaration = node.parent.parent;
-      const initializer = ts.isVariableDeclaration(declaration)
-        ? declaration.initializer
-        : undefined;
+      const method = ts.isIdentifier(name)
+        ? name.text
+        : ts.isComputedPropertyName(name)
+          ? dataflow.staticString(name.expression)
+          : null;
       if (
-        ts.isIdentifier(name) &&
-        boundaryMethods.has(name.text) &&
-        initializer &&
-        looksLikeClient(initializer.getText(sourceFile))
+        method &&
+        BOUNDARY_METHODS.has(method as BoundaryMethod) &&
+        bindingPatternIsControlled(node)
       ) {
         push(
           node,
           'destructured-data-api-method',
-          `destructuring ${name.text} bypasses the verifiable schema-boundary call shape`,
-          name.text,
+          `destructuring ${method} bypasses the verifiable schema-boundary call shape`,
+          method,
+        );
+      } else if (ts.isComputedPropertyName(name) && !method && bindingPatternIsControlled(node)) {
+        push(
+          node,
+          'unknown-destructured-data-api-method',
+          'computed Supabase client destructuring cannot be statically resolved',
+          name.getText(sourceFile),
         );
       }
     }
 
-    if (ts.isPropertyAccessExpression(node) && boundaryMethods.has(node.name.text)) {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      BOUNDARY_METHODS.has(node.name.text as BoundaryMethod)
+    ) {
       if (
-        looksLikeClient(node.expression.getText(sourceFile)) &&
+        dataflow.isClientExpression(node.expression) &&
         !(ts.isCallExpression(node.parent) && node.parent.expression === node) &&
         !ts.isTypeOfExpression(node.parent)
       ) {
@@ -369,9 +680,51 @@ export function deriveAstBoundaryViolations(
       }
     }
 
+    if (
+      ts.isElementAccessExpression(node) &&
+      dataflow.isClientExpression(node.expression) &&
+      !(ts.isCallExpression(node.parent) && node.parent.expression === node) &&
+      !ts.isTypeOfExpression(node.parent)
+    ) {
+      const method = node.argumentExpression
+        ? dataflow.staticString(node.argumentExpression)
+        : null;
+      if (method && BOUNDARY_METHODS.has(method as BoundaryMethod)) {
+        push(
+          node,
+          'detached-data-api-method',
+          `detaching computed ${method} bypasses the verifiable schema-boundary call shape`,
+          node.getText(sourceFile),
+        );
+      } else if (!method) {
+        push(
+          node,
+          'unknown-computed-data-api-method',
+          'computed Supabase client method cannot be statically resolved',
+          node.getText(sourceFile),
+        );
+      }
+    }
+
     if (ts.isCallExpression(node)) {
-      const method = calledPropertyName(node.expression);
-      if (!method || !boundaryMethods.has(method)) {
+      const computedReceiver = ts.isElementAccessExpression(node.expression)
+        ? node.expression.expression
+        : null;
+      const controlledComputedReceiver = Boolean(
+        computedReceiver && dataflow.isClientExpression(computedReceiver),
+      );
+      const method = resolvedCalledPropertyName(node.expression, dataflow);
+      if (controlledComputedReceiver && !method) {
+        push(
+          node,
+          'unknown-computed-data-api-call',
+          'computed Supabase client call cannot be statically resolved and is rejected fail-closed',
+          node.expression.getText(sourceFile),
+        );
+        ts.forEachChild(node, visit);
+        return;
+      }
+      if (!method || !BOUNDARY_METHODS.has(method as BoundaryMethod)) {
         ts.forEachChild(node, visit);
         return;
       }
@@ -384,7 +737,7 @@ export function deriveAstBoundaryViolations(
         );
       }
       if (ts.isElementAccessExpression(node.expression)) {
-        if (looksLikeClient(node.expression.expression.getText(sourceFile))) {
+        if (controlledComputedReceiver) {
           push(
             node,
             'computed-data-api-call',
@@ -580,6 +933,15 @@ export const REQUIRED_RELATION_OCCURRENCE_SCOPE = [
   'lca_package_artifacts',
   'lca_package_request_cache',
 ] as const;
+const REQUIRED_SOURCE_AUDIT_CONTROLS = [
+  'supabase-client-alias-chain',
+  'static-computed-property-folding',
+  'unknown-computed-property-fail-closed',
+  'destructuring-and-detachment-rejection',
+  'assignment-propagation',
+  'local-parameter-propagation',
+  'local-return-propagation',
+] as const;
 
 function lineNumber(source: string, offset: number): number {
   return source.slice(0, offset).split('\n').length;
@@ -642,7 +1004,7 @@ export async function auditSchemaBoundary(
   const capabilityCalls: CapabilityCall[] = [];
   const scopedRelations = new Set(manifest.relationOccurrenceScope.relations);
   if (
-    manifest.relationOccurrenceScope.sourceKind !== 'literal-postgrest-from-call' ||
+    manifest.relationOccurrenceScope.sourceKind !== 'typescript-ast-resolved-from-call' ||
     !exactUniqueList(manifest.relationOccurrenceScope.relations, REQUIRED_RELATION_OCCURRENCE_SCOPE)
   ) {
     findings.push({
@@ -650,6 +1012,18 @@ export async function auditSchemaBoundary(
       line: 1,
       kind: 'relation-occurrence-scope-drift',
       message: 'the reviewed 10-relation occurrence scope cannot be narrowed by manifest edits',
+    });
+  }
+  if (
+    manifest.sourceAudit.version !== 'typescript-supabase-dataflow.v2' ||
+    !exactUniqueList(manifest.sourceAudit.controls, REQUIRED_SOURCE_AUDIT_CONTROLS)
+  ) {
+    findings.push({
+      file: MANIFEST_PATH,
+      line: 1,
+      kind: 'source-audit-policy-drift',
+      message:
+        'source audit must retain alias, computed-property, destructuring, assignment, and parameter fail-closed controls',
     });
   }
 

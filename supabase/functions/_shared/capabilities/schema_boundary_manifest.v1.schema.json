@@ -8,6 +8,7 @@
     "schemaVersion",
     "canonicalization",
     "edgeBaseCommit",
+    "sourceAudit",
     "databaseSource",
     "policy",
     "apiCapabilities",
@@ -32,6 +33,31 @@
       }
     },
     "edgeBaseCommit": { "$ref": "#/$defs/commit" },
+    "sourceAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "controls"],
+      "properties": {
+        "version": { "const": "typescript-supabase-dataflow.v2" },
+        "controls": {
+          "type": "array",
+          "minItems": 7,
+          "maxItems": 7,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "supabase-client-alias-chain",
+              "static-computed-property-folding",
+              "unknown-computed-property-fail-closed",
+              "destructuring-and-detachment-rejection",
+              "assignment-propagation",
+              "local-parameter-propagation",
+              "local-return-propagation"
+            ]
+          }
+        }
+      }
+    },
     "databaseSource": {
       "type": "object",
       "required": [
@@ -101,7 +127,7 @@
       "additionalProperties": false,
       "required": ["sourceKind", "relations"],
       "properties": {
-        "sourceKind": { "const": "literal-postgrest-from-call" },
+        "sourceKind": { "const": "typescript-ast-resolved-from-call" },
         "relations": {
           "type": "array",
           "minItems": 10,

@@ -56,6 +56,10 @@ Deno.test(
     const missingOccurrence = structuredClone(manifest);
     missingOccurrence.relationOccurrences.pop();
     assertEquals(validate(missingOccurrence), false);
+
+    const missingSourceAuditControl = structuredClone(manifest);
+    missingSourceAuditControl.sourceAudit.controls.pop();
+    assertEquals(validate(missingSourceAuditControl), false);
   },
 );
 
@@ -245,6 +249,93 @@ rpc('unsafe');
     assert(kinds.includes('detached-data-api-call'));
   },
 );
+
+Deno.test(
+  'Supabase client alias chains and constant computed calls are derived and rejected',
+  () => {
+    const source = `
+const origin = createClient();
+const firstAlias = origin;
+let assignedAlias;
+assignedAlias = firstAlias;
+const prefix = 'fr';
+const method = prefix + 'om';
+function query(db, operation) {
+  return db[operation]('lca_result_cache').select('id');
+}
+query(assignedAlias, method);
+`;
+    const occurrences = deriveSourceRelationOccurrences(
+      'alias.ts',
+      source,
+      new Set(['lca_result_cache']),
+    );
+    assertEquals(occurrences.length, 1);
+    assertEquals(occurrences[0].relation, 'lca_result_cache');
+    assertEquals(occurrences[0].operation, 'select');
+
+    const violations = deriveAstBoundaryViolations(
+      'alias.ts',
+      source,
+      [],
+      [],
+      ['api'],
+      new Map([['alias.ts', source]]),
+    );
+    assert(
+      violations.some((finding) => finding.kind === 'computed-data-api-call'),
+      'a constant-folded computed .from call must not bypass the audit',
+    );
+  },
+);
+
+Deno.test('unknown computed methods fail closed across aliases and local parameter passing', () => {
+  const source = `
+const origin = createSupabaseServiceClient();
+const alias = origin;
+function passthrough(value) {
+  return value;
+}
+const wrappedAlias = passthrough(alias);
+function invoke(db, method) {
+  return db[method]('lca_result_cache');
+}
+invoke(wrappedAlias, request.method);
+`;
+  const violations = deriveAstBoundaryViolations(
+    'parameter.ts',
+    source,
+    [],
+    [],
+    ['api'],
+    new Map([['parameter.ts', source]]),
+  );
+  assert(
+    violations.some((finding) => finding.kind === 'unknown-computed-data-api-call'),
+    'an unresolved method on a client passed through a parameter must fail closed',
+  );
+});
+
+Deno.test('client aliases cannot detach or destructure schema-boundary methods', () => {
+  const source = `
+const context = { supabase: createClient() };
+const { supabase: alias } = context;
+const { rpc: invoke } = alias;
+const detached = alias['schema'];
+invoke('unsafe');
+`;
+  const violations = deriveAstBoundaryViolations(
+    'detach.ts',
+    source,
+    [],
+    [],
+    ['api'],
+    new Map([['detach.ts', source]]),
+  );
+  const kinds = violations.map((finding) => finding.kind);
+  assert(kinds.includes('destructured-data-api-method'));
+  assert(kinds.includes('detached-data-api-method'));
+});
 
 Deno.test('dynamic capability abstraction call expressions and counts are exact', () => {
   const exact = `
