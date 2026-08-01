@@ -33,6 +33,19 @@ const EXPECTED_HOSTED_MIGRATION_RECEIPT_SHA256 =
   'd0412c27c5311edc006e476b8a5d0b69e1dd9dfcf1423bbdf669ad1b53ad923f';
 const EXPECTED_RESIDUE_VIEW_DEFINITION_MD5 = '80779a3fc370b05053792c3f73b7a35d';
 const EXPECTED_RESIDUE_CONTRACT = 'worker-control-plane.private-physical-expand.v1';
+const EXPECTED_RESIDUE_RELACL = '{postgres=arwdDxtm/postgres,service_role=r/postgres}';
+const EXPECTED_QUALIFICATION_RECEIPT_FILE =
+  'supabase/tests/contracts/security_definer_transition_qualification_receipt.issue-356.json';
+const EXPECTED_QUALIFICATION_RECEIPT_SHA_FILE =
+  'supabase/tests/contracts/security_definer_transition_qualification_receipt.issue-356.sha256';
+const EXPECTED_QUALIFICATION_RECEIPT_SHA256 =
+  '97684cbe624c91cf4ed33839d5b5e9d290529f34e428c5e2eecfe9abd3fcebb3';
+const EXPECTED_QUALIFICATION_BASE_COMMIT = '597072ca34a62cdc93df9bf0896a9d361901852c';
+const EXPECTED_QUALIFICATION_SOURCE_COMMIT = '961d659ada928fbd90fe59e6b0cebae26b886feb';
+const EXPECTED_ROLLBACK_FILE =
+  'supabase/operator/issue_356_restore_public_worker_control_plane.sql';
+const EXPECTED_ROLLBACK_FILE_SHA256 =
+  '6f61ab426a5ea6f5b83e2b1e059889ef58ba2749c9426c271230e33feb0d2b2f';
 
 function requireEnv(...names: string[]): string {
   for (const name of names) {
@@ -109,6 +122,12 @@ async function sha256Hex(value: string | Uint8Array): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+function decodeGithubContent(content: string): Uint8Array {
+  return Uint8Array.from(atob(content.replaceAll(/\s/g, '')), (character) =>
+    character.charCodeAt(0),
+  );
+}
+
 async function fetchJson<T>(
   url: string,
   expectedStatus: number,
@@ -129,11 +148,15 @@ async function assertHostedProvenance(config: ReturnType<typeof contractConfig>)
   const branches = await fetchJson<
     Array<{
       id?: string;
-      name?: string;
       project_ref?: string;
       parent_project_ref?: string;
       is_default?: boolean;
       persistent?: boolean;
+      git_branch?: string | null;
+      status?: string;
+      pr_number?: number | null;
+      latest_check_run_id?: number | null;
+      with_data?: boolean;
       preview_project_status?: string;
     }>
   >(`https://api.supabase.com/v1/projects/${EXPECTED_HOSTED_PARENT_PROJECT_REF}/branches`, 200, {
@@ -144,11 +167,35 @@ async function assertHostedProvenance(config: ReturnType<typeof contractConfig>)
   );
   assert(branch, 'Supabase branch API must resolve the exact hosted Preview ref');
   assertEquals(branch.id, EXPECTED_HOSTED_BRANCH_ID);
-  assertEquals(branch.name, EXPECTED_DATABASE_BRANCH);
   assertEquals(branch.parent_project_ref, EXPECTED_HOSTED_PARENT_PROJECT_REF);
   assertEquals(branch.is_default, false);
   assertEquals(branch.persistent, false);
+  assertEquals(branch.git_branch ?? null, null);
+  assertEquals(branch.status, 'MIGRATIONS_FAILED');
+  assertEquals(branch.pr_number ?? null, null);
+  assertEquals(branch.latest_check_run_id ?? null, null);
+  assertEquals(branch.with_data, false);
   assertEquals(branch.preview_project_status, 'ACTIVE_HEALTHY');
+
+  const actionRuns = await fetchJson<
+    Array<{
+      id?: string;
+      branch_id?: string;
+      check_run_id?: number | null;
+      git_config?: { owner?: string; repo?: string; ref?: string };
+      run_steps?: Array<{ name?: string; status?: string }>;
+    }>
+  >(`https://api.supabase.com/v1/projects/${EXPECTED_HOSTED_PROJECT_REF}/actions`, 200, {
+    headers: managementHeaders,
+  });
+  const branchAction = actionRuns.find((candidate) => candidate.branch_id === branch.id);
+  assert(branchAction, 'Supabase action API must expose the manual Preview creation run');
+  assertEquals(branchAction.id, EXPECTED_HOSTED_PROJECT_REF);
+  assertEquals(branchAction.check_run_id ?? null, null);
+  assertEquals(branchAction.git_config?.owner, 'tiangong-lca');
+  assertEquals(branchAction.git_config?.repo, 'database-engine');
+  assertEquals(branchAction.git_config?.ref ?? '', '');
+  assertEquals(branchAction.run_steps?.find((step) => step.name === 'migrate')?.status, 'DEAD');
 
   const migrations = await fetchJson<Array<{ version?: string; name?: string }>>(
     `https://api.supabase.com/v1/projects/${EXPECTED_HOSTED_PROJECT_REF}/database/migrations`,
@@ -192,13 +239,24 @@ async function assertHostedProvenance(config: ReturnType<typeof contractConfig>)
       (residue.residue->>'contractReady')::boolean as contract_ready,
       c.relkind::text as relkind,
       owner_role.rolname as owner,
+      c.relacl::text as relacl,
       pg_catalog.md5(pg_catalog.pg_get_viewdef(c.oid, true)) as definition_md5,
       pg_catalog.has_table_privilege('service_role', 'private.worker_control_plane_contract_residue', 'select') as service_select,
       pg_catalog.has_table_privilege('service_role', 'private.worker_control_plane_contract_residue', 'insert') as service_insert,
       pg_catalog.has_table_privilege('service_role', 'private.worker_control_plane_contract_residue', 'update') as service_update,
       pg_catalog.has_table_privilege('service_role', 'private.worker_control_plane_contract_residue', 'delete') as service_delete,
       pg_catalog.has_table_privilege('anon', 'private.worker_control_plane_contract_residue', 'select') as anon_select,
-      pg_catalog.has_table_privilege('authenticated', 'private.worker_control_plane_contract_residue', 'select') as authenticated_select
+      pg_catalog.has_table_privilege('anon', 'private.worker_control_plane_contract_residue', 'insert') as anon_insert,
+      pg_catalog.has_table_privilege('anon', 'private.worker_control_plane_contract_residue', 'update') as anon_update,
+      pg_catalog.has_table_privilege('anon', 'private.worker_control_plane_contract_residue', 'delete') as anon_delete,
+      pg_catalog.has_table_privilege('authenticated', 'private.worker_control_plane_contract_residue', 'select') as authenticated_select,
+      pg_catalog.has_table_privilege('authenticated', 'private.worker_control_plane_contract_residue', 'insert') as authenticated_insert,
+      pg_catalog.has_table_privilege('authenticated', 'private.worker_control_plane_contract_residue', 'update') as authenticated_update,
+      pg_catalog.has_table_privilege('authenticated', 'private.worker_control_plane_contract_residue', 'delete') as authenticated_delete,
+      pg_catalog.has_table_privilege('api_internal_executor', 'private.worker_control_plane_contract_residue', 'select') as executor_select,
+      pg_catalog.has_table_privilege('api_internal_executor', 'private.worker_control_plane_contract_residue', 'insert') as executor_insert,
+      pg_catalog.has_table_privilege('api_internal_executor', 'private.worker_control_plane_contract_residue', 'update') as executor_update,
+      pg_catalog.has_table_privilege('api_internal_executor', 'private.worker_control_plane_contract_residue', 'delete') as executor_delete
     from private.worker_control_plane_contract_residue as residue
     cross join (
       select pg_catalog.max(version)::text as migration_head
@@ -215,13 +273,24 @@ async function assertHostedProvenance(config: ReturnType<typeof contractConfig>)
       contract_ready?: boolean;
       relkind?: string;
       owner?: string;
+      relacl?: string;
       definition_md5?: string;
       service_select?: boolean;
       service_insert?: boolean;
       service_update?: boolean;
       service_delete?: boolean;
       anon_select?: boolean;
+      anon_insert?: boolean;
+      anon_update?: boolean;
+      anon_delete?: boolean;
       authenticated_select?: boolean;
+      authenticated_insert?: boolean;
+      authenticated_update?: boolean;
+      authenticated_delete?: boolean;
+      executor_select?: boolean;
+      executor_insert?: boolean;
+      executor_update?: boolean;
+      executor_delete?: boolean;
     }>
   >(
     `https://api.supabase.com/v1/projects/${EXPECTED_HOSTED_PROJECT_REF}/database/query/read-only`,
@@ -239,13 +308,24 @@ async function assertHostedProvenance(config: ReturnType<typeof contractConfig>)
   assertEquals(databaseAttestation.contract_ready, false);
   assertEquals(databaseAttestation.relkind, 'v');
   assertEquals(databaseAttestation.owner, 'postgres');
+  assertEquals(databaseAttestation.relacl, EXPECTED_RESIDUE_RELACL);
   assertEquals(databaseAttestation.definition_md5, EXPECTED_RESIDUE_VIEW_DEFINITION_MD5);
   assertEquals(databaseAttestation.service_select, true);
   assertEquals(databaseAttestation.service_insert, false);
   assertEquals(databaseAttestation.service_update, false);
   assertEquals(databaseAttestation.service_delete, false);
   assertEquals(databaseAttestation.anon_select, false);
+  assertEquals(databaseAttestation.anon_insert, false);
+  assertEquals(databaseAttestation.anon_update, false);
+  assertEquals(databaseAttestation.anon_delete, false);
   assertEquals(databaseAttestation.authenticated_select, false);
+  assertEquals(databaseAttestation.authenticated_insert, false);
+  assertEquals(databaseAttestation.authenticated_update, false);
+  assertEquals(databaseAttestation.authenticated_delete, false);
+  assertEquals(databaseAttestation.executor_select, false);
+  assertEquals(databaseAttestation.executor_insert, false);
+  assertEquals(databaseAttestation.executor_update, false);
+  assertEquals(databaseAttestation.executor_delete, false);
 
   const githubHeaders: Record<string, string> = {
     Accept: 'application/vnd.github+json',
@@ -268,7 +348,7 @@ async function assertHostedProvenance(config: ReturnType<typeof contractConfig>)
   assertEquals(pullRequest.state, 'closed');
   assertEquals(pullRequest.merged, true);
   assertEquals(pullRequest.head?.repo?.full_name, 'tiangong-lca/database-engine');
-  assertEquals(pullRequest.head?.ref, branch.name);
+  assertEquals(pullRequest.head?.ref, EXPECTED_DATABASE_BRANCH);
   assertEquals(pullRequest.head?.sha, EXPECTED_DATABASE_COMMIT);
   assertEquals(pullRequest.base?.repo?.full_name, 'tiangong-lca/database-engine');
   assertEquals(pullRequest.base?.ref, 'dev');
@@ -279,11 +359,129 @@ async function assertHostedProvenance(config: ReturnType<typeof contractConfig>)
     { headers: githubHeaders },
   );
   assert(migrationSource.content, 'exact database commit must contain the attested migration');
-  const sourceBytes = Uint8Array.from(
-    atob(migrationSource.content.replaceAll(/\s/g, '')),
-    (character) => character.charCodeAt(0),
-  );
+  const sourceBytes = decodeGithubContent(migrationSource.content);
   assertEquals(await sha256Hex(sourceBytes), EXPECTED_DATABASE_MIGRATION_FILE_SHA256);
+
+  const qualificationReceiptSource = await fetchJson<{ content?: string }>(
+    `https://api.github.com/repos/tiangong-lca/database-engine/contents/${EXPECTED_QUALIFICATION_RECEIPT_FILE}?ref=${EXPECTED_DATABASE_COMMIT}`,
+    200,
+    { headers: githubHeaders },
+  );
+  assert(
+    qualificationReceiptSource.content,
+    'reviewed database commit must contain the qualification receipt',
+  );
+  const qualificationReceiptBytes = decodeGithubContent(qualificationReceiptSource.content);
+  assertEquals(await sha256Hex(qualificationReceiptBytes), EXPECTED_QUALIFICATION_RECEIPT_SHA256);
+  const qualificationReceipt = JSON.parse(new TextDecoder().decode(qualificationReceiptBytes)) as {
+    schemaVersion?: string;
+    issue?: string;
+    baseCommitSha?: string;
+    migrationVersion?: string;
+    migration?: { path?: string; sha256?: string };
+    rollback?: { path?: string; sha256?: string };
+    source?: {
+      repository?: string;
+      commitSha?: string;
+      fixturePath?: string;
+      fixtureSha256?: string;
+    };
+  };
+  assertEquals(
+    qualificationReceipt.schemaVersion,
+    'database.security-definer-transition-qualification-receipt.v1',
+  );
+  assertEquals(qualificationReceipt.issue, 'tiangong-lca/database-engine#356');
+  assertEquals(qualificationReceipt.baseCommitSha, EXPECTED_QUALIFICATION_BASE_COMMIT);
+  assertEquals(qualificationReceipt.migrationVersion, EXPECTED_DATABASE_MIGRATION_HEAD);
+  assertEquals(qualificationReceipt.migration?.path, EXPECTED_DATABASE_MIGRATION_FILE);
+  assertEquals(qualificationReceipt.migration?.sha256, EXPECTED_DATABASE_MIGRATION_FILE_SHA256);
+  assertEquals(qualificationReceipt.rollback?.path, EXPECTED_ROLLBACK_FILE);
+  assertEquals(qualificationReceipt.rollback?.sha256, EXPECTED_ROLLBACK_FILE_SHA256);
+  assertEquals(qualificationReceipt.source?.repository, 'tiangong-lca/database-engine');
+  assertEquals(qualificationReceipt.source?.commitSha, EXPECTED_QUALIFICATION_SOURCE_COMMIT);
+  assertEquals(
+    qualificationReceipt.source?.fixturePath,
+    'supabase/tests/contracts/security_definer_transition_fixture.v1.json',
+  );
+  assertEquals(
+    qualificationReceipt.source?.fixtureSha256,
+    '9fc9bf0f2178ccc803bbc0f95c236e5595c682fc58738f4f39334eb1bfb75ec3',
+  );
+
+  const qualificationReceiptShaSource = await fetchJson<{ content?: string }>(
+    `https://api.github.com/repos/tiangong-lca/database-engine/contents/${EXPECTED_QUALIFICATION_RECEIPT_SHA_FILE}?ref=${EXPECTED_DATABASE_COMMIT}`,
+    200,
+    { headers: githubHeaders },
+  );
+  assert(qualificationReceiptShaSource.content);
+  assertEquals(
+    new TextDecoder().decode(decodeGithubContent(qualificationReceiptShaSource.content)).trim(),
+    EXPECTED_QUALIFICATION_RECEIPT_SHA256,
+  );
+}
+
+function sqlUuidArray(ids: readonly string[]): string {
+  for (const id of ids) {
+    assert(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id),
+      `cleanup attestation received a non-UUID identifier: ${id}`,
+    );
+  }
+  return ids.length === 0
+    ? 'array[]::uuid[]'
+    : `array[${ids.map((id) => `'${id}'::uuid`).join(',')}]`;
+}
+
+async function assertHostedCleanup(
+  config: ReturnType<typeof contractConfig>,
+  jobIds: readonly string[],
+  userIds: readonly string[],
+) {
+  assert(config.managementAccessToken);
+  const query = `
+    select
+      (
+        select coalesce(
+          pg_catalog.jsonb_agg(
+            pg_catalog.jsonb_build_object('id', jobs.id, 'status', jobs.status)
+            order by jobs.id
+          ),
+          '[]'::jsonb
+        )
+        from private.worker_jobs as jobs
+        where jobs.id = any(${sqlUuidArray(jobIds)})
+      ) as jobs,
+      (
+        select pg_catalog.count(*)::integer
+        from auth.users as users
+        where users.id = any(${sqlUuidArray(userIds)})
+      ) as remaining_users
+  `;
+  const [cleanupAttestation] = await fetchJson<
+    Array<{
+      jobs?: Array<{ id?: string; status?: string }>;
+      remaining_users?: number;
+    }>
+  >(
+    `https://api.supabase.com/v1/projects/${EXPECTED_HOSTED_PROJECT_REF}/database/query/read-only`,
+    201,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.managementAccessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
+    },
+  );
+  assert(cleanupAttestation, 'hosted cleanup attestation must return one row');
+  assertEquals(cleanupAttestation.remaining_users, 0);
+  assertEquals(cleanupAttestation.jobs?.length, jobIds.length);
+  assertEquals(cleanupAttestation.jobs?.map((job) => job.id).toSorted(), [...jobIds].toSorted());
+  for (const job of cleanupAttestation.jobs ?? []) {
+    assertEquals(job.status, 'cancelled', `controlled job ${job.id} must end cancelled`);
+  }
 }
 
 function requestClient(url: string, publishableKey: string, accessToken?: string): SupabaseClient {
@@ -311,8 +509,12 @@ async function createLocalUser(service: SupabaseClient, label: string) {
   return { id: data.user.id, email, password };
 }
 
-async function createAdminUser(service: SupabaseClient) {
+async function createAdminUser(
+  service: SupabaseClient,
+  onCreated: (user: Awaited<ReturnType<typeof createLocalUser>>) => void,
+) {
   const user = await createLocalUser(service, 'admin');
+  onCreated(user);
   const { error } = await service.auth.admin.updateUserById(user.id, {
     app_metadata: { role: 'admin', roles: ['admin'] },
   });
@@ -385,10 +587,14 @@ async function withoutAuthDebugLogs<T>(operation: () => Promise<T>): Promise<T> 
 
 Deno.test({
   name: 'worker capability contract enforces schema profile, auth matrix, ownership, service facade, and idempotency on a real DB',
-  ignore: !CONTRACT_ENABLED,
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
+    assertEquals(
+      CONTRACT_ENABLED,
+      true,
+      'Worker capability contract cannot be ignored; use the self-enforcing npm command',
+    );
     const config = contractConfig();
     if (config.databaseUrl) {
       await assertExactMigrationHead(config.databaseUrl);
@@ -400,18 +606,26 @@ Deno.test({
       auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
     });
     const worker = createServiceWorkerCapabilityRepository(service);
-    const cleanupJobIds = new Set<string>();
+    const createdJobIds = new Set<string>();
+    const pendingCleanupJobIds = new Set<string>();
+    const createdUserIds = new Set<string>();
+    const cleanupFailures: Error[] = [];
     // This client is reserved for anonymous probes. Token acquisition must use
     // separate clients because supabase-js reads each client's current auth session.
     const anonymous = requestClient(config.url, config.publishableKey);
     let owner: Awaited<ReturnType<typeof createLocalUser>> | undefined;
     let foreign: Awaited<ReturnType<typeof createLocalUser>> | undefined;
     let admin: Awaited<ReturnType<typeof createLocalUser>> | undefined;
+    let primaryError: unknown;
 
     try {
       owner = await createLocalUser(service, 'owner');
+      createdUserIds.add(owner.id);
       foreign = await createLocalUser(service, 'foreign');
-      admin = await createAdminUser(service);
+      createdUserIds.add(foreign.id);
+      admin = await createAdminUser(service, (createdAdmin) => {
+        createdUserIds.add(createdAdmin.id);
+      });
       const ownerToken = await signInWithFreshClient(
         config.url,
         config.publishableKey,
@@ -454,7 +668,8 @@ Deno.test({
       const firstJob = firstEnqueue.data as { id?: string };
       const retryJob = retryEnqueue.data as { id?: string };
       assert(firstJob.id);
-      cleanupJobIds.add(firstJob.id);
+      createdJobIds.add(firstJob.id);
+      pendingCleanupJobIds.add(firstJob.id);
       assertEquals(retryJob.id, firstJob.id);
 
       const serviceRead = await worker.read({ jobId: firstJob.id, includeInternal: true });
@@ -497,7 +712,8 @@ Deno.test({
       });
       assert(serviceCancelEnqueue.ok, JSON.stringify(serviceCancelEnqueue));
       assert(serviceCancelEnqueue.data.id);
-      cleanupJobIds.add(serviceCancelEnqueue.data.id);
+      createdJobIds.add(serviceCancelEnqueue.data.id);
+      pendingCleanupJobIds.add(serviceCancelEnqueue.data.id);
       const serviceCancel = await worker.cancel({
         jobId: serviceCancelEnqueue.data.id,
         cancelledBy: owner.id,
@@ -505,7 +721,7 @@ Deno.test({
       });
       assert(serviceCancel.ok, JSON.stringify(serviceCancel));
       assertEquals(serviceCancel.data.status, 'cancelled');
-      cleanupJobIds.delete(serviceCancelEnqueue.data.id);
+      pendingCleanupJobIds.delete(serviceCancelEnqueue.data.id);
 
       const negativeRpcProbes = [
         {
@@ -660,24 +876,65 @@ Deno.test({
       );
       assertEquals(ownerCancel.status, 200);
       assertEquals((await ownerCancel.json()).data.status, 'cancelled');
-      cleanupJobIds.delete(firstJob.id);
+      pendingCleanupJobIds.delete(firstJob.id);
+    } catch (error) {
+      primaryError = error;
     } finally {
-      for (const jobId of cleanupJobIds) {
-        await worker.cancel({
-          jobId,
-          cancelledBy: owner?.id ?? null,
-          reason: 'hosted_contract_finally_cleanup',
-        });
+      for (const jobId of pendingCleanupJobIds) {
+        try {
+          const cleanup = await worker.cancel({
+            jobId,
+            cancelledBy: owner?.id ?? null,
+            reason: 'hosted_contract_finally_cleanup',
+          });
+          if (!cleanup.ok) {
+            cleanupFailures.push(
+              new Error(`job ${jobId} cleanup failed: ${cleanup.code} ${cleanup.message}`),
+            );
+          } else if (cleanup.data.status !== 'cancelled') {
+            cleanupFailures.push(
+              new Error(`job ${jobId} cleanup returned status ${cleanup.data.status ?? 'missing'}`),
+            );
+          }
+        } catch (error) {
+          cleanupFailures.push(
+            new Error(`job ${jobId} cleanup threw`, {
+              cause: error,
+            }),
+          );
+        }
       }
-      if (owner) {
-        await service.auth.admin.deleteUser(owner.id);
+
+      for (const userId of createdUserIds) {
+        try {
+          const { error } = await service.auth.admin.deleteUser(userId);
+          if (error) {
+            cleanupFailures.push(new Error(`auth user ${userId} cleanup failed: ${error.message}`));
+          }
+        } catch (error) {
+          cleanupFailures.push(new Error(`auth user ${userId} cleanup threw`, { cause: error }));
+        }
       }
-      if (foreign) {
-        await service.auth.admin.deleteUser(foreign.id);
+
+      if (config.mode === 'hosted-preview') {
+        try {
+          await assertHostedCleanup(config, [...createdJobIds], [...createdUserIds]);
+        } catch (error) {
+          cleanupFailures.push(
+            new Error('hosted read-only cleanup attestation failed', { cause: error }),
+          );
+        }
       }
-      if (admin) {
-        await service.auth.admin.deleteUser(admin.id);
-      }
+    }
+
+    if (primaryError && cleanupFailures.length === 0) {
+      throw primaryError;
+    }
+    if (primaryError || cleanupFailures.length > 0) {
+      throw new AggregateError(
+        [...(primaryError ? [primaryError] : []), ...cleanupFailures],
+        'Worker capability contract or cleanup failed',
+      );
     }
   },
 });
