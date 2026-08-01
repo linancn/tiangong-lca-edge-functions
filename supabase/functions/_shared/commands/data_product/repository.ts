@@ -1,5 +1,9 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
+import {
+  createServiceWorkerCapabilityRepository,
+  type ServiceWorkerCapabilityRepository,
+} from '../../capabilities/worker_jobs.ts';
 import type { ActorContext } from '../../command_runtime/actor_context.ts';
 import type { CommandAuditPayload } from '../../command_runtime/audit_log.ts';
 import {
@@ -164,6 +168,7 @@ export function createDataProductCommandRepository(
   options: DataProductCommandRepositoryOptions = {},
 ): DataProductCommandRepository {
   const actorClient = requireExplicitActorClient(actorSupabase);
+  const workerRepository = createServiceWorkerCapabilityRepository(serviceSupabase);
   const now = options.now ?? Date.now;
 
   return {
@@ -290,7 +295,8 @@ export function createDataProductCommandRepository(
       callLciaResultPackagePublishRpc(actorClient, request, audit),
     unpublishPublication: (request, audit) =>
       callDataProductPackageUnpublishRpc(actorClient, request, audit),
-    listPublications: (request) => listLciaResultPublications(serviceSupabase, request),
+    listPublications: (request) =>
+      listLciaResultPublications(serviceSupabase, workerRepository, request),
   };
 }
 
@@ -685,6 +691,7 @@ function isValidSignedUrl(value: string): boolean {
 
 async function listLciaResultPublications(
   supabase: SupabaseClient,
+  workerRepository: ServiceWorkerCapabilityRepository,
   request: DataProductPublicationListRequest,
 ): Promise<DataProductRpcResult> {
   const { data: publicationRows, error: publicationError } = await supabase
@@ -774,28 +781,28 @@ async function listLciaResultPublications(
       .map((row) => stringValue(row.build_worker_job_id))
       .filter((value): value is string => Boolean(value)),
   );
-  const { data: workerRows, error: workerError } =
+  const workerResult =
     workerJobIds.length === 0
-      ? { data: [], error: null }
-      : await supabase.from('worker_jobs').select('id,payload_json').in('id', workerJobIds);
+      ? ({ ok: true, data: [] } as const)
+      : await workerRepository.readManyInternal(workerJobIds);
 
-  if (workerError) {
+  if (!workerResult.ok) {
     return {
       ok: false,
       code: 'lcia_result_publication_worker_jobs_lookup_failed',
       status: 500,
       message: 'Failed to read LCIA result package worker metadata',
-      details: workerError.message,
+      details: workerResult.message,
     };
   }
 
   const workerPayloadById = new Map<string, Record<string, unknown>>();
-  for (const row of (workerRows ?? []) as unknown[]) {
+  for (const row of (Array.isArray(workerResult.data) ? workerResult.data : []) as unknown[]) {
     if (!isRecord(row)) {
       continue;
     }
     const workerJobId = stringValue(row.id);
-    const payload = recordValue(row, 'payload_json');
+    const payload = recordValue(row, 'payload') ?? recordValue(row, 'payload_json');
     if (workerJobId && payload) {
       workerPayloadById.set(workerJobId, payload);
     }

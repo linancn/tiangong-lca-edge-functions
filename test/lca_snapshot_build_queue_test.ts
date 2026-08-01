@@ -9,6 +9,7 @@ import {
 type MockState = {
   rpcCalls: Array<{ fn: string; args: Record<string, unknown> }>;
   insertCalls: Array<{ table: string; row: Record<string, unknown> }>;
+  concurrencyRows?: Array<Record<string, unknown>>;
 };
 
 function createSupabaseMock(state: MockState) {
@@ -38,6 +39,12 @@ function createSupabaseMock(state: MockState) {
     },
     rpc(fn: string, args: Record<string, unknown>) {
       state.rpcCalls.push({ fn, args });
+      if (fn === 'worker_list_jobs_by_concurrency_key') {
+        return Promise.resolve({
+          data: { ok: true, data: state.concurrencyRows ?? [] },
+          error: null,
+        });
+      }
       return Promise.resolve({
         data: {
           ok: true,
@@ -86,9 +93,16 @@ Deno.test(
       result.calculation_contract.process_filter,
     );
 
-    assertEquals(state.rpcCalls.length, 1);
-    const rpcArgs = state.rpcCalls[0].args;
-    assertEquals(state.rpcCalls[0].fn, 'worker_enqueue_job');
+    assertEquals(state.rpcCalls.length, 2);
+    assertEquals(state.rpcCalls[0].fn, 'worker_list_jobs_by_concurrency_key');
+    assertEquals(state.rpcCalls[0].args.p_job_kind, 'lca.build_snapshot');
+    assertEquals(state.rpcCalls[0].args.p_limit, 20);
+    assertEquals(
+      state.rpcCalls[0].args.p_concurrency_key,
+      state.rpcCalls[1].args.p_concurrency_key,
+    );
+    const rpcArgs = state.rpcCalls[1].args;
+    assertEquals(state.rpcCalls[1].fn, 'worker_enqueue_job');
     assertEquals(rpcArgs.p_job_kind, 'lca.build_snapshot');
     assertEquals(rpcArgs.p_payload_schema_version, 'lca.build_snapshot.request.v2');
     assertEquals(rpcArgs.p_requested_by, 'user-1');
@@ -125,6 +139,46 @@ Deno.test(
   },
 );
 
+Deno.test(
+  'snapshot queue skips an expired newest candidate and reuses the next active job',
+  async () => {
+    const now = Date.now();
+    const state: MockState = {
+      rpcCalls: [],
+      insertCalls: [],
+      concurrencyRows: [
+        {
+          id: 'expired-worker-job',
+          status: 'queued',
+          createdAt: new Date(now - 11 * 60 * 1000).toISOString(),
+          payload: { job_id: 'expired-job', snapshot_id: 'expired-snapshot' },
+        },
+        {
+          id: 'active-worker-job',
+          status: 'running',
+          createdAt: new Date(now - 20 * 60 * 1000).toISOString(),
+          startedAt: new Date(now - 5 * 60 * 1000).toISOString(),
+          payload: { job_id: 'active-job', snapshot_id: 'active-snapshot' },
+        },
+      ],
+    };
+
+    const result = await ensureLcaSnapshotBuildQueued(createSupabaseMock(state) as never, {
+      scope: 'prod',
+      dataScope: 'public_plus_owner_draft',
+      userId: 'user-1',
+    });
+
+    assert(result.ok);
+    assertEquals(result.job_id, 'active-job');
+    assertEquals(result.snapshot_id, 'active-snapshot');
+    assertEquals(result.worker_job_id, 'active-worker-job');
+    assertEquals(state.rpcCalls.length, 1);
+    assertEquals(state.rpcCalls[0].fn, 'worker_list_jobs_by_concurrency_key');
+    assertEquals(state.insertCalls, []);
+  },
+);
+
 Deno.test('snapshot queue ignores client source locator and no-LCIA override fields', async () => {
   const state: MockState = { rpcCalls: [], insertCalls: [] };
   const enqueue = ensureLcaSnapshotBuildQueued as unknown as (
@@ -142,7 +196,7 @@ Deno.test('snapshot queue ignores client source locator and no-LCIA override fie
   });
 
   assert(result.ok);
-  const payload = state.rpcCalls[0].args.p_payload_json as Record<string, unknown>;
+  const payload = state.rpcCalls[1].args.p_payload_json as Record<string, unknown>;
   const source = payload.lcia_method_factor_source as Record<string, unknown>;
   assertEquals(payload.no_lcia, false);
   assertEquals(source.bundle_manifest_path, LCA_STATIC_CACHE_BUNDLE_MANIFEST_PATH);
@@ -181,7 +235,7 @@ Deno.test(
     const onlyB = await enqueue([rootB]);
     const full = await enqueue();
 
-    const canonicalArgs = canonical.state.rpcCalls[0].args;
+    const canonicalArgs = canonical.state.rpcCalls[1].args;
     const canonicalPayload = canonicalArgs.p_payload_json as Record<string, unknown>;
     assertEquals(
       canonical.result.calculation_contract.process_filter.selection_mode,
@@ -198,10 +252,10 @@ Deno.test(
     );
 
     for (const field of ['p_request_hash', 'p_idempotency_key', 'p_concurrency_key']) {
-      assertEquals(canonicalArgs[field], reordered.state.rpcCalls[0].args[field]);
-      assert(canonicalArgs[field] !== onlyA.state.rpcCalls[0].args[field]);
-      assert(onlyA.state.rpcCalls[0].args[field] !== onlyB.state.rpcCalls[0].args[field]);
-      assert(onlyA.state.rpcCalls[0].args[field] !== full.state.rpcCalls[0].args[field]);
+      assertEquals(canonicalArgs[field], reordered.state.rpcCalls[1].args[field]);
+      assert(canonicalArgs[field] !== onlyA.state.rpcCalls[1].args[field]);
+      assert(onlyA.state.rpcCalls[1].args[field] !== onlyB.state.rpcCalls[1].args[field]);
+      assert(onlyA.state.rpcCalls[1].args[field] !== full.state.rpcCalls[1].args[field]);
     }
   },
 );
