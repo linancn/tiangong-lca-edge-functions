@@ -11,7 +11,9 @@ import { executeWorkerJobCommand } from '../supabase/functions/_shared/commands/
 import { createAppWorkerJobsHandler } from '../supabase/functions/app_worker_jobs/index.ts';
 
 const CONTRACT_ENABLED = Deno.env.get('WORKER_CAPABILITY_DB_CONTRACT') === '1';
-const EXPECTED_DATABASE_MIGRATION_HEAD = '20260731164051';
+const EXPECTED_DATABASE_COMMIT = '6809528c32bac8163e9a6eec9b985d57370589e1';
+const EXPECTED_DATABASE_MIGRATION_HEAD = '20260801060304';
+const EXPECTED_HOSTED_PROJECT_REF = 'nlcyzijvoyufjoqgxlku';
 
 function requireEnv(...names: string[]): string {
   for (const name of names) {
@@ -20,31 +22,40 @@ function requireEnv(...names: string[]): string {
       return value;
     }
   }
-  throw new Error(`Missing local contract environment: ${names.join(' or ')}`);
+  throw new Error(`Missing Worker capability contract environment: ${names.join(' or ')}`);
 }
 
-function localContractConfig() {
+function contractConfig() {
   const url = requireEnv('WORKER_CAPABILITY_SUPABASE_URL', 'SUPABASE_URL');
   const hostname = new URL(url).hostname;
-  if (
-    hostname !== '127.0.0.1' &&
-    hostname !== 'localhost' &&
-    hostname !== '::1' &&
-    hostname !== '[::1]'
-  ) {
-    throw new Error('Worker capability DB contract refuses non-loopback Supabase URLs');
+  const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(hostname);
+  const mode = Deno.env.get('WORKER_CAPABILITY_CONTRACT_MODE')?.trim() ?? 'local';
+  if (mode !== 'local' && mode !== 'hosted-preview') {
+    throw new Error('WORKER_CAPABILITY_CONTRACT_MODE must be local or hosted-preview');
   }
-  const databaseUrl = requireEnv('WORKER_CAPABILITY_DB_URL');
-  const databaseHostname = new URL(databaseUrl).hostname;
-  if (
-    databaseHostname !== '127.0.0.1' &&
-    databaseHostname !== 'localhost' &&
-    databaseHostname !== '::1' &&
-    databaseHostname !== '[::1]'
-  ) {
-    throw new Error('Worker capability DB contract refuses non-loopback database URLs');
+  if (mode === 'local' && !loopback) {
+    throw new Error('Local Worker capability contract refuses non-loopback Supabase URLs');
+  }
+  if (mode === 'hosted-preview') {
+    assertEquals(hostname, `${EXPECTED_HOSTED_PROJECT_REF}.supabase.co`);
+    assertEquals(
+      requireEnv('WORKER_CAPABILITY_EXPECTED_DATABASE_COMMIT'),
+      EXPECTED_DATABASE_COMMIT,
+    );
+    assertEquals(
+      requireEnv('WORKER_CAPABILITY_EXPECTED_MIGRATION_HEAD'),
+      EXPECTED_DATABASE_MIGRATION_HEAD,
+    );
+  }
+  const databaseUrl = mode === 'local' ? requireEnv('WORKER_CAPABILITY_DB_URL') : undefined;
+  if (databaseUrl) {
+    const databaseHostname = new URL(databaseUrl).hostname;
+    if (!['127.0.0.1', 'localhost', '::1', '[::1]'].includes(databaseHostname)) {
+      throw new Error('Worker capability DB contract refuses non-loopback database URLs');
+    }
   }
   return {
+    mode,
     url,
     databaseUrl,
     publishableKey: requireEnv(
@@ -102,6 +113,17 @@ async function createLocalUser(service: SupabaseClient, label: string) {
   return { id: data.user.id, email, password };
 }
 
+async function createAdminUser(service: SupabaseClient) {
+  const user = await createLocalUser(service, 'admin');
+  const { error } = await service.auth.admin.updateUserById(user.id, {
+    app_metadata: { role: 'admin', roles: ['admin'] },
+  });
+  if (error) {
+    throw new Error(`Unable to mark contract admin user: ${error.message}`);
+  }
+  return user;
+}
+
 async function signIn(client: SupabaseClient, email: string, password: string) {
   const { data, error } = await client.auth.signInWithPassword({ email, password });
   if (error || !data.session?.access_token) {
@@ -138,26 +160,33 @@ async function withoutAuthDebugLogs<T>(operation: () => Promise<T>): Promise<T> 
 }
 
 Deno.test({
-  name: 'worker capability contract enforces auth, ownership, service facade, and idempotency on a real local DB',
+  name: 'worker capability contract enforces schema profile, auth matrix, ownership, service facade, and idempotency on a real DB',
   ignore: !CONTRACT_ENABLED,
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
-    const config = localContractConfig();
-    await assertExactMigrationHead(config.databaseUrl);
+    const config = contractConfig();
+    if (config.databaseUrl) {
+      await assertExactMigrationHead(config.databaseUrl);
+    }
     const service = createClient(config.url, config.serviceKey, {
       auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
     });
     const anonymous = requestClient(config.url, config.publishableKey);
     let owner: Awaited<ReturnType<typeof createLocalUser>> | undefined;
     let foreign: Awaited<ReturnType<typeof createLocalUser>> | undefined;
+    let admin: Awaited<ReturnType<typeof createLocalUser>> | undefined;
 
     try {
       owner = await createLocalUser(service, 'owner');
       foreign = await createLocalUser(service, 'foreign');
+      admin = await createAdminUser(service);
       const ownerToken = await signIn(anonymous, owner.email, owner.password);
       const foreignToken = await signIn(anonymous, foreign.email, foreign.password);
+      const adminToken = await signIn(anonymous, admin.email, admin.password);
       const ownerClient = requestClient(config.url, config.publishableKey, ownerToken);
+      const foreignClient = requestClient(config.url, config.publishableKey, foreignToken);
+      const adminClient = requestClient(config.url, config.publishableKey, adminToken);
       const worker = createServiceWorkerCapabilityRepository(service);
       const idempotencyKey = `edge-worker-contract:${crypto.randomUUID()}`;
       const enqueueRequest = {
@@ -199,40 +228,49 @@ Deno.test({
       assert(serviceConcurrencyRead.ok, JSON.stringify(serviceConcurrencyRead));
       assertEquals(serviceConcurrencyRead.data[0]?.id, firstJob.id);
 
-      const anonymousRpc = await anonymous.rpc(WORKER_CAPABILITY_CONTRACT.rpc.read, {
-        p_job_id: firstJob.id,
-        p_include_internal: false,
-      });
-      assert(anonymousRpc.error, 'anon must not call the service-only worker read RPC');
-
-      const authenticatedRpc = await ownerClient.rpc(WORKER_CAPABILITY_CONTRACT.rpc.read, {
-        p_job_id: firstJob.id,
-        p_include_internal: false,
-      });
-      assert(
-        authenticatedRpc.error,
-        'authenticated must not call the service-only worker read RPC',
-      );
-
       for (const [label, client] of [
         ['anon', anonymous],
-        ['authenticated', ownerClient],
+        ['foreign', foreignClient],
+        ['owner', ownerClient],
+        ['admin', adminClient],
       ] as const) {
-        const concurrencyRpc = await client.rpc(
-          WORKER_CAPABILITY_CONTRACT.rpc.listByConcurrencyKey,
-          {
+        const readRpc = await client
+          .schema(WORKER_CAPABILITY_CONTRACT.database.schema)
+          .rpc(WORKER_CAPABILITY_CONTRACT.database.routine.read, {
+            p_job_id: firstJob.id,
+            p_include_internal: false,
+          });
+        assert(readRpc.error, `${label} must not call the service-only api Worker read RPC`);
+
+        const concurrencyRpc = await client
+          .schema(WORKER_CAPABILITY_CONTRACT.database.schema)
+          .rpc(WORKER_CAPABILITY_CONTRACT.database.routine.listByConcurrencyKey, {
             p_job_kind: enqueueRequest.jobKind,
             p_concurrency_key: idempotencyKey,
             p_statuses: ['queued'],
             p_limit: 20,
             p_include_internal: true,
-          },
-        );
+          });
         assert(
           concurrencyRpc.error,
-          `${label} must not call the service-only worker concurrency-list RPC`,
+          `${label} must not call the service-only api Worker concurrency-list RPC`,
         );
       }
+
+      const privateProfile = await fetch(
+        `${config.url}/rest/v1/rpc/${WORKER_CAPABILITY_CONTRACT.database.routine.read}`,
+        {
+          method: 'POST',
+          headers: {
+            apikey: config.serviceKey,
+            'content-type': 'application/json',
+            'content-profile': 'private',
+          },
+          body: JSON.stringify({ p_job_id: firstJob.id, p_include_internal: true }),
+        },
+      );
+      assertEquals(privateProfile.status, 406);
+      assertEquals((await privateProfile.json()).code, 'PGRST106');
 
       for (const client of [anonymous, ownerClient]) {
         const directRelation = await client.from('worker_jobs').select('id').limit(1);
@@ -290,6 +328,9 @@ Deno.test({
       }
       if (foreign) {
         await service.auth.admin.deleteUser(foreign.id);
+      }
+      if (admin) {
+        await service.auth.admin.deleteUser(admin.id);
       }
     }
   },

@@ -336,14 +336,14 @@ deno check --config supabase/functions/deno.json <changed-file>
 
 LCA solve/snapshot/contribution path, TIDAS package import/export, and review-submit orchestration use database-owned `worker_jobs` RPCs for canonical task lifecycle state. The target database must include the `database-engine` worker job contract migrations before these Edge Functions are deployed:
 
-- `public.worker_enqueue_job(...)`
-- `public.worker_read_job(...)`
-- `public.worker_read_jobs_by_ids(...)`
-- `public.worker_list_jobs_by_concurrency_key(...)` with a maximum limit of 20 and `created_at DESC, id DESC` ordering
-- `public.worker_list_jobs(...)`
-- `public.worker_cancel_job(...)`
+- `api.worker_enqueue_job_v1(...)`
+- `api.worker_read_job_v1(...)`
+- `api.worker_read_jobs_by_ids_v1(...)`
+- `api.worker_list_jobs_by_concurrency_key_v1(...)` with a maximum limit of 20 and `created_at DESC, id DESC` ordering
+- `api.worker_list_jobs_v1(...)`
+- `api.worker_cancel_job_v1(...)`
 
-The Issue #246 contract is validated against `database-engine` commit `f09d0151fb59a3e7817bbaaf62df838cba2768da`, whose migration head is `20260731164051` and whose Worker capability expansion is introduced by `20260731163321_worker_control_plane_private_expand.sql`. Deploy only after an equivalent or newer database head containing those RPC contracts is present. After a local database reset or migration, confirm both new RPCs appear in the service-role PostgREST OpenAPI catalog; cold-refresh the isolated PostgREST service if it retained a pre-migration schema cache.
+The Issue #249 cutover contract is validated against `database-engine` commit `6809528c32bac8163e9a6eec9b985d57370589e1`, whose migration head is `20260801060304` and whose Worker physical/API expansion is introduced by `20260801060304_issue_356_worker_control_plane_physical_expand.sql`. The capability repository always selects the exposed `api` schema explicitly; default-schema `public.worker_*` compatibility wrappers are not Edge runtime contracts. Deploy only after an equivalent or newer database head containing the versioned API adapters is present. After a database reset or migration, confirm the six `api.worker_*_v1` routines appear in the service-role PostgREST schema profile; reload the isolated PostgREST schema cache if it retained a pre-migration catalog.
 
 Retained domain tables such as `lca_jobs`, `lca_result_cache`, `lca_package_jobs`, `lca_package_artifacts`, and `dataset_review_submit_jobs` still carry result/cache/artifact/history metadata, but they are not the user-facing task fact. New LCA solve/snapshot/contribution and TIDAS package import/export submissions enqueue canonical Worker jobs through the capability repository; the legacy job ids returned by those APIs are compatibility ids carried in Worker payloads, not newly inserted `lca_jobs` / `lca_package_jobs` rows. Legacy `lca_enqueue_job` / `lca_package_enqueue_job` must not be used as enqueue fallback. If `LCA_WORKER_JOBS_ENABLED=false`, `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false`, or `WORKER_JOBS_CUTOVER_ENABLED=false`, new worker-owned submissions fail closed with `legacy_queue_disabled` / `LEGACY_QUEUE_DISABLED` instead of writing to the legacy queue path.
 
@@ -388,7 +388,7 @@ Job response states map to HTTP status as follows:
 
 `process_dataset_review_submit_jobs` is a service-key-only worker endpoint. It claims DB submit jobs, records `waiting_gate` when the worker gate is not ready, maps terminal blocked/cancelled/failed gate worker states back to the coordinator, and calls DB-owned `cmd_review_submit_from_job` only after the gate worker job has completed with a passed result. Recurring invocation should be enabled only after the database RPC migration and this Edge Function are both deployed.
 
-`app_worker_jobs` is the authenticated task-center API for user-visible worker jobs. It supports `list`, `read`, and `cancel`; the handler authenticates the outer user request, and the command layer converts that request to the service-only Worker capability façade while enforcing requester ownership before returning or cancelling a job. The repository in `supabase/functions/_shared/capabilities/worker_jobs.ts` is the single Edge contract for Worker RPC names, arguments, and DTOs; runtime call sites do not read the physical Worker relation. It does not expose generic user enqueue; job-specific APIs such as `app_dataset_review_submit_jobs` own enqueue semantics and payload validation.
+`app_worker_jobs` is the authenticated task-center API for user-visible worker jobs. It supports `list`, `read`, and `cancel`; the handler authenticates the outer user request, and the command layer converts that request to the service-only Worker capability façade while enforcing requester ownership before returning or cancelling a job. The repository in `supabase/functions/_shared/capabilities/worker_jobs.ts` is the single Edge contract for the explicit `api` schema, versioned Worker routine names, arguments, and DTOs; runtime call sites do not read the physical Worker relation or call the default `public` profile. It does not expose generic user enqueue; job-specific APIs such as `app_dataset_review_submit_jobs` own enqueue semantics and payload validation.
 
 ## LCA Function Call Patterns
 

@@ -162,6 +162,7 @@ routing:
         - test/review_submit_job_worker_test.ts
         - test/worker_jobs_test.ts
         - test/worker_capability_db_contract_test.ts
+        - test/worker_rpc_consumer_zero_test.ts
         - README.md
         - test.example.http
     search-and-embedding:
@@ -372,6 +373,8 @@ rules:
       - path: test/worker_jobs_test.ts
         kind: runtime-test
       - path: test/worker_capability_db_contract_test.ts
+        kind: runtime-test
+      - path: test/worker_rpc_consumer_zero_test.ts
         kind: runtime-test
     requiredDocs:
       - path: AGENTS.md

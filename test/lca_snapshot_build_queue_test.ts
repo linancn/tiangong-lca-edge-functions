@@ -14,6 +14,10 @@ type MockState = {
 
 function createSupabaseMock(state: MockState) {
   return {
+    schema(schema: string) {
+      assertEquals(schema, 'api');
+      return this;
+    },
     from(table: string) {
       return {
         select(_columns: string) {
@@ -39,7 +43,7 @@ function createSupabaseMock(state: MockState) {
     },
     rpc(fn: string, args: Record<string, unknown>) {
       state.rpcCalls.push({ fn, args });
-      if (fn === 'worker_list_jobs_by_concurrency_key') {
+      if (fn === 'worker_list_jobs_by_concurrency_key_v1') {
         return Promise.resolve({
           data: { ok: true, data: state.concurrencyRows ?? [] },
           error: null,
@@ -94,7 +98,7 @@ Deno.test(
     );
 
     assertEquals(state.rpcCalls.length, 2);
-    assertEquals(state.rpcCalls[0].fn, 'worker_list_jobs_by_concurrency_key');
+    assertEquals(state.rpcCalls[0].fn, 'worker_list_jobs_by_concurrency_key_v1');
     assertEquals(state.rpcCalls[0].args.p_job_kind, 'lca.build_snapshot');
     assertEquals(state.rpcCalls[0].args.p_limit, 20);
     assertEquals(
@@ -102,7 +106,7 @@ Deno.test(
       state.rpcCalls[1].args.p_concurrency_key,
     );
     const rpcArgs = state.rpcCalls[1].args;
-    assertEquals(state.rpcCalls[1].fn, 'worker_enqueue_job');
+    assertEquals(state.rpcCalls[1].fn, 'worker_enqueue_job_v1');
     assertEquals(rpcArgs.p_job_kind, 'lca.build_snapshot');
     assertEquals(rpcArgs.p_payload_schema_version, 'lca.build_snapshot.request.v2');
     assertEquals(rpcArgs.p_requested_by, 'user-1');
@@ -174,7 +178,7 @@ Deno.test(
     assertEquals(result.snapshot_id, 'active-snapshot');
     assertEquals(result.worker_job_id, 'active-worker-job');
     assertEquals(state.rpcCalls.length, 1);
-    assertEquals(state.rpcCalls[0].fn, 'worker_list_jobs_by_concurrency_key');
+    assertEquals(state.rpcCalls[0].fn, 'worker_list_jobs_by_concurrency_key_v1');
     assertEquals(state.insertCalls, []);
   },
 );

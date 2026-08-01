@@ -79,6 +79,7 @@ Deno.test('workerJobPayloadStringFromRpcData extracts compatibility payload ids'
 
 Deno.test('enqueueCalculatorWorkerJob requires canonical worker job id', async () => {
   const supabase = {
+    schema: () => supabase,
     rpc: () =>
       Promise.resolve({
         data: {

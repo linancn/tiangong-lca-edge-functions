@@ -45,13 +45,18 @@ class FakeSupabase {
     return new FakeQueryBuilder(this, table);
   }
 
+  schema(schema: string) {
+    assertEquals(schema, 'api');
+    return this;
+  }
+
   rpc(fn: string, args: unknown) {
     this.rpcCalls.push({ fn, args: structuredClone(args) });
     const configured = this.rpcResults.get(fn);
     if (configured) {
       return Promise.resolve(structuredClone(configured));
     }
-    if (fn === 'worker_enqueue_job') {
+    if (fn === 'worker_enqueue_job_v1') {
       const record = asJsonRecord(args);
       const payload = asJsonRecord(record.p_payload_json);
       const nowIso = new Date().toISOString();
@@ -82,7 +87,7 @@ class FakeSupabase {
         error: null,
       });
     }
-    if (fn === 'worker_read_job') {
+    if (fn === 'worker_read_job_v1') {
       const record = asJsonRecord(args);
       const workerJob = this.tables.worker_jobs.find((row) => row.id === record.p_job_id);
       if (!workerJob) {
@@ -540,7 +545,7 @@ Deno.test('export_tidas_package API exposes queued worker job before artifacts e
     assertEquals((workerJobRow.payload_json as JsonRecord).job_id, queued.job_id);
     assertEquals((workerJobRow.payload_json as JsonRecord).scope, 'current_user');
     assertEquals(supabase.rpcCalls.length, 1);
-    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job');
+    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job_v1');
 
     const lookupResponse = await jobsHandler(
       new Request(`https://example.com/functions/v1/tidas_package_jobs/${queued.job_id}`, {
@@ -740,7 +745,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       prepared.source_artifact_id,
     );
     assertEquals(supabase.rpcCalls.length, 1);
-    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job');
+    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job_v1');
 
     const repeatedEnqueueResponse = await importHandler(
       new Request('https://example.com/functions/v1/import_tidas_package', {
@@ -762,7 +767,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       source_artifact_id: prepared.source_artifact_id,
     });
     assertEquals(supabase.rpcCalls.length, 2);
-    assertEquals(supabase.rpcCalls[1].fn, 'worker_read_job');
+    assertEquals(supabase.rpcCalls[1].fn, 'worker_read_job_v1');
 
     const lookupResponse = await jobsHandler(
       new Request(`https://example.com/functions/v1/tidas_package_jobs/${prepared.job_id}`, {
@@ -837,11 +842,11 @@ Deno.test(
       const prepared = await prepareResponse.json();
       const artifactSha256 = await sha256Hex(EMPTY_ZIP_BYTES);
 
-      supabase.rpcResults.set('worker_enqueue_job', {
+      supabase.rpcResults.set('worker_enqueue_job_v1', {
         data: null,
         error: {
           code: '42501',
-          message: 'permission denied for worker_enqueue_job',
+          message: 'permission denied for worker_enqueue_job_v1',
           details: { reason: 'missing_migration' },
         },
       });
