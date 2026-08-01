@@ -8,6 +8,12 @@ const LEGACY_DEFAULT_SCHEMA_ROUTINES = [
   'worker_list_jobs',
   'worker_cancel_job',
 ] as const;
+const STABLE_API_ROUTINES = LEGACY_DEFAULT_SCHEMA_ROUTINES.map((routine) => `${routine}_v1`);
+const CAPABILITY_REPOSITORY = 'supabase/functions/_shared/capabilities/worker_jobs.ts';
+
+function exactQuotedLiteral(routine: string): RegExp {
+  return new RegExp(["'", '"', '`'].map((quote) => `${quote}${routine}${quote}`).join('|'), 'g');
+}
 
 async function collectTypeScriptFiles(root: string): Promise<string[]> {
   const files: string[] = [];
@@ -22,16 +28,25 @@ async function collectTypeScriptFiles(root: string): Promise<string[]> {
   return files;
 }
 
-Deno.test('Worker runtime has zero consumers of the six default-public RPC names', async () => {
-  const offenders: string[] = [];
-  for (const path of await collectTypeScriptFiles('supabase/functions')) {
-    const source = await Deno.readTextFile(path);
-    for (const routine of LEGACY_DEFAULT_SCHEMA_ROUTINES) {
-      const exactLiteral = new RegExp(`['\"]${routine}['\"]`, 'g');
-      if (exactLiteral.test(source)) {
-        offenders.push(`${path}: ${routine}`);
+Deno.test(
+  'Worker runtime centralizes api v1 and has zero default-public RPC literals',
+  async () => {
+    const offenders: string[] = [];
+    for (const path of await collectTypeScriptFiles('supabase/functions')) {
+      const source = await Deno.readTextFile(path);
+      for (const routine of LEGACY_DEFAULT_SCHEMA_ROUTINES) {
+        if (exactQuotedLiteral(routine).test(source)) {
+          offenders.push(`${path}: legacy ${routine}`);
+        }
+      }
+      if (path !== CAPABILITY_REPOSITORY) {
+        for (const routine of STABLE_API_ROUTINES) {
+          if (exactQuotedLiteral(routine).test(source)) {
+            offenders.push(`${path}: direct ${routine}`);
+          }
+        }
       }
     }
-  }
-  assertEquals(offenders, []);
-});
+    assertEquals(offenders, []);
+  },
+);

@@ -3,6 +3,12 @@ import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2.9
 import postgres from 'postgres';
 
 import {
+  buildWorkerJobCancelRpcArgs,
+  buildWorkerJobEnqueueRpcArgs,
+  buildWorkerJobListByConcurrencyKeyRpcArgs,
+  buildWorkerJobListRpcArgs,
+  buildWorkerJobReadManyRpcArgs,
+  buildWorkerJobReadRpcArgs,
   createServiceWorkerCapabilityRepository,
   WORKER_CAPABILITY_CONTRACT,
 } from '../supabase/functions/_shared/capabilities/worker_jobs.ts';
@@ -14,6 +20,19 @@ const CONTRACT_ENABLED = Deno.env.get('WORKER_CAPABILITY_DB_CONTRACT') === '1';
 const EXPECTED_DATABASE_COMMIT = '6809528c32bac8163e9a6eec9b985d57370589e1';
 const EXPECTED_DATABASE_MIGRATION_HEAD = '20260801060304';
 const EXPECTED_HOSTED_PROJECT_REF = 'nlcyzijvoyufjoqgxlku';
+const EXPECTED_HOSTED_PARENT_PROJECT_REF = 'qgzvkongdjqiiamzbbts';
+const EXPECTED_HOSTED_BRANCH_ID = 'b3167c24-4998-4d85-8f1d-e91510d00311';
+const EXPECTED_DATABASE_BRANCH = 'codex/issue-356-worker-control-plane';
+const EXPECTED_DATABASE_PR = 365;
+const EXPECTED_DATABASE_MIGRATION_NAME = 'issue_356_worker_control_plane_physical_expand';
+const EXPECTED_DATABASE_MIGRATION_FILE =
+  'supabase/migrations/20260801060304_issue_356_worker_control_plane_physical_expand.sql';
+const EXPECTED_DATABASE_MIGRATION_FILE_SHA256 =
+  '19e3069a94d3ca42191e29f72904df4f84b5108af9896a4d0b5b9b44232a9d58';
+const EXPECTED_HOSTED_MIGRATION_RECEIPT_SHA256 =
+  'd0412c27c5311edc006e476b8a5d0b69e1dd9dfcf1423bbdf669ad1b53ad923f';
+const EXPECTED_RESIDUE_VIEW_DEFINITION_MD5 = '80779a3fc370b05053792c3f73b7a35d';
+const EXPECTED_RESIDUE_CONTRACT = 'worker-control-plane.private-physical-expand.v1';
 
 function requireEnv(...names: string[]): string {
   for (const name of names) {
@@ -38,14 +57,6 @@ function contractConfig() {
   }
   if (mode === 'hosted-preview') {
     assertEquals(hostname, `${EXPECTED_HOSTED_PROJECT_REF}.supabase.co`);
-    assertEquals(
-      requireEnv('WORKER_CAPABILITY_EXPECTED_DATABASE_COMMIT'),
-      EXPECTED_DATABASE_COMMIT,
-    );
-    assertEquals(
-      requireEnv('WORKER_CAPABILITY_EXPECTED_MIGRATION_HEAD'),
-      EXPECTED_DATABASE_MIGRATION_HEAD,
-    );
   }
   const databaseUrl = mode === 'local' ? requireEnv('WORKER_CAPABILITY_DB_URL') : undefined;
   if (databaseUrl) {
@@ -58,6 +69,10 @@ function contractConfig() {
     mode,
     url,
     databaseUrl,
+    managementAccessToken:
+      mode === 'hosted-preview'
+        ? requireEnv('WORKER_CAPABILITY_SUPABASE_ACCESS_TOKEN', 'SUPABASE_ACCESS_TOKEN')
+        : undefined,
     publishableKey: requireEnv(
       'WORKER_CAPABILITY_SUPABASE_PUBLISHABLE_KEY',
       'SUPABASE_PUBLISHABLE_KEY',
@@ -86,6 +101,189 @@ async function assertExactMigrationHead(databaseUrl: string) {
   } finally {
     await sql.end();
   }
+}
+
+async function sha256Hex(value: string | Uint8Array): Promise<string> {
+  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value;
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function fetchJson<T>(
+  url: string,
+  expectedStatus: number,
+  init: RequestInit = {},
+): Promise<T> {
+  const response = await fetch(url, init);
+  assertEquals(response.status, expectedStatus, `unexpected attestation response from ${url}`);
+  return (await response.json()) as T;
+}
+
+async function assertHostedProvenance(config: ReturnType<typeof contractConfig>) {
+  assert(config.managementAccessToken, 'hosted Preview attestation requires a management token');
+  const managementHeaders = {
+    Authorization: `Bearer ${config.managementAccessToken}`,
+    'content-type': 'application/json',
+  };
+
+  const branches = await fetchJson<
+    Array<{
+      id?: string;
+      name?: string;
+      project_ref?: string;
+      parent_project_ref?: string;
+      is_default?: boolean;
+      persistent?: boolean;
+      preview_project_status?: string;
+    }>
+  >(`https://api.supabase.com/v1/projects/${EXPECTED_HOSTED_PARENT_PROJECT_REF}/branches`, 200, {
+    headers: managementHeaders,
+  });
+  const branch = branches.find(
+    (candidate) => candidate.project_ref === EXPECTED_HOSTED_PROJECT_REF,
+  );
+  assert(branch, 'Supabase branch API must resolve the exact hosted Preview ref');
+  assertEquals(branch.id, EXPECTED_HOSTED_BRANCH_ID);
+  assertEquals(branch.name, EXPECTED_DATABASE_BRANCH);
+  assertEquals(branch.parent_project_ref, EXPECTED_HOSTED_PARENT_PROJECT_REF);
+  assertEquals(branch.is_default, false);
+  assertEquals(branch.persistent, false);
+  assertEquals(branch.preview_project_status, 'ACTIVE_HEALTHY');
+
+  const migrations = await fetchJson<Array<{ version?: string; name?: string }>>(
+    `https://api.supabase.com/v1/projects/${EXPECTED_HOSTED_PROJECT_REF}/database/migrations`,
+    200,
+    { headers: managementHeaders },
+  );
+  const migrationHead = migrations
+    .toSorted((left, right) => String(left.version).localeCompare(String(right.version)))
+    .at(-1);
+  assertEquals(migrationHead?.version, EXPECTED_DATABASE_MIGRATION_HEAD);
+  assertEquals(migrationHead?.name, EXPECTED_DATABASE_MIGRATION_NAME);
+
+  const migrationReceipt = await fetchJson<{
+    version?: string;
+    name?: string;
+    statements?: unknown[];
+  }>(
+    `https://api.supabase.com/v1/projects/${EXPECTED_HOSTED_PROJECT_REF}/database/migrations/${EXPECTED_DATABASE_MIGRATION_HEAD}`,
+    200,
+    { headers: managementHeaders },
+  );
+  assertEquals(migrationReceipt.version, EXPECTED_DATABASE_MIGRATION_HEAD);
+  assertEquals(migrationReceipt.name, EXPECTED_DATABASE_MIGRATION_NAME);
+  assert(Array.isArray(migrationReceipt.statements));
+  assertEquals(
+    await sha256Hex(
+      JSON.stringify({
+        version: migrationReceipt.version,
+        name: migrationReceipt.name,
+        statements: migrationReceipt.statements,
+      }),
+    ),
+    EXPECTED_HOSTED_MIGRATION_RECEIPT_SHA256,
+  );
+
+  const attestationQuery = `
+    select
+      ledger.migration_head,
+      residue.residue->>'contractVersion' as contract_version,
+      residue.residue->>'migrationVersion' as residue_migration_version,
+      (residue.residue->>'contractReady')::boolean as contract_ready,
+      c.relkind::text as relkind,
+      owner_role.rolname as owner,
+      pg_catalog.md5(pg_catalog.pg_get_viewdef(c.oid, true)) as definition_md5,
+      pg_catalog.has_table_privilege('service_role', 'private.worker_control_plane_contract_residue', 'select') as service_select,
+      pg_catalog.has_table_privilege('service_role', 'private.worker_control_plane_contract_residue', 'insert') as service_insert,
+      pg_catalog.has_table_privilege('service_role', 'private.worker_control_plane_contract_residue', 'update') as service_update,
+      pg_catalog.has_table_privilege('service_role', 'private.worker_control_plane_contract_residue', 'delete') as service_delete,
+      pg_catalog.has_table_privilege('anon', 'private.worker_control_plane_contract_residue', 'select') as anon_select,
+      pg_catalog.has_table_privilege('authenticated', 'private.worker_control_plane_contract_residue', 'select') as authenticated_select
+    from private.worker_control_plane_contract_residue as residue
+    cross join (
+      select pg_catalog.max(version)::text as migration_head
+      from supabase_migrations.schema_migrations
+    ) as ledger
+    join pg_catalog.pg_class as c on c.oid = 'private.worker_control_plane_contract_residue'::pg_catalog.regclass
+    join pg_catalog.pg_roles as owner_role on owner_role.oid = c.relowner
+  `;
+  const [databaseAttestation] = await fetchJson<
+    Array<{
+      migration_head?: string;
+      contract_version?: string;
+      residue_migration_version?: string;
+      contract_ready?: boolean;
+      relkind?: string;
+      owner?: string;
+      definition_md5?: string;
+      service_select?: boolean;
+      service_insert?: boolean;
+      service_update?: boolean;
+      service_delete?: boolean;
+      anon_select?: boolean;
+      authenticated_select?: boolean;
+    }>
+  >(
+    `https://api.supabase.com/v1/projects/${EXPECTED_HOSTED_PROJECT_REF}/database/query/read-only`,
+    201,
+    {
+      method: 'POST',
+      headers: managementHeaders,
+      body: JSON.stringify({ query: attestationQuery }),
+    },
+  );
+  assert(databaseAttestation, 'migration-generated database attestation must exist');
+  assertEquals(databaseAttestation.migration_head, EXPECTED_DATABASE_MIGRATION_HEAD);
+  assertEquals(databaseAttestation.contract_version, EXPECTED_RESIDUE_CONTRACT);
+  assertEquals(databaseAttestation.residue_migration_version, EXPECTED_DATABASE_MIGRATION_HEAD);
+  assertEquals(databaseAttestation.contract_ready, false);
+  assertEquals(databaseAttestation.relkind, 'v');
+  assertEquals(databaseAttestation.owner, 'postgres');
+  assertEquals(databaseAttestation.definition_md5, EXPECTED_RESIDUE_VIEW_DEFINITION_MD5);
+  assertEquals(databaseAttestation.service_select, true);
+  assertEquals(databaseAttestation.service_insert, false);
+  assertEquals(databaseAttestation.service_update, false);
+  assertEquals(databaseAttestation.service_delete, false);
+  assertEquals(databaseAttestation.anon_select, false);
+  assertEquals(databaseAttestation.authenticated_select, false);
+
+  const githubHeaders: Record<string, string> = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'tiangong-lca-edge-worker-capability-contract',
+  };
+  const githubToken = Deno.env.get('GITHUB_TOKEN')?.trim();
+  if (githubToken) {
+    githubHeaders.Authorization = `Bearer ${githubToken}`;
+  }
+  const pullRequest = await fetchJson<{
+    state?: string;
+    merged?: boolean;
+    head?: { ref?: string; sha?: string; repo?: { full_name?: string } };
+    base?: { ref?: string; repo?: { full_name?: string } };
+  }>(
+    `https://api.github.com/repos/tiangong-lca/database-engine/pulls/${EXPECTED_DATABASE_PR}`,
+    200,
+    { headers: githubHeaders },
+  );
+  assertEquals(pullRequest.state, 'closed');
+  assertEquals(pullRequest.merged, true);
+  assertEquals(pullRequest.head?.repo?.full_name, 'tiangong-lca/database-engine');
+  assertEquals(pullRequest.head?.ref, branch.name);
+  assertEquals(pullRequest.head?.sha, EXPECTED_DATABASE_COMMIT);
+  assertEquals(pullRequest.base?.repo?.full_name, 'tiangong-lca/database-engine');
+  assertEquals(pullRequest.base?.ref, 'dev');
+
+  const migrationSource = await fetchJson<{ content?: string }>(
+    `https://api.github.com/repos/tiangong-lca/database-engine/contents/${EXPECTED_DATABASE_MIGRATION_FILE}?ref=${EXPECTED_DATABASE_COMMIT}`,
+    200,
+    { headers: githubHeaders },
+  );
+  assert(migrationSource.content, 'exact database commit must contain the attested migration');
+  const sourceBytes = Uint8Array.from(
+    atob(migrationSource.content.replaceAll(/\s/g, '')),
+    (character) => character.charCodeAt(0),
+  );
+  assertEquals(await sha256Hex(sourceBytes), EXPECTED_DATABASE_MIGRATION_FILE_SHA256);
 }
 
 function requestClient(url: string, publishableKey: string, accessToken?: string): SupabaseClient {
@@ -195,9 +393,14 @@ Deno.test({
     if (config.databaseUrl) {
       await assertExactMigrationHead(config.databaseUrl);
     }
+    if (config.mode === 'hosted-preview') {
+      await assertHostedProvenance(config);
+    }
     const service = createClient(config.url, config.serviceKey, {
       auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
     });
+    const worker = createServiceWorkerCapabilityRepository(service);
+    const cleanupJobIds = new Set<string>();
     // This client is reserved for anonymous probes. Token acquisition must use
     // separate clients because supabase-js reads each client's current auth session.
     const anonymous = requestClient(config.url, config.publishableKey);
@@ -231,7 +434,6 @@ Deno.test({
       const ownerClient = requestClient(config.url, config.publishableKey, ownerToken);
       const foreignClient = requestClient(config.url, config.publishableKey, foreignToken);
       const adminClient = requestClient(config.url, config.publishableKey, adminToken);
-      const worker = createServiceWorkerCapabilityRepository(service);
       const idempotencyKey = `edge-worker-contract:${crypto.randomUUID()}`;
       const enqueueRequest = {
         jobKind: 'review_submit.gate',
@@ -252,6 +454,7 @@ Deno.test({
       const firstJob = firstEnqueue.data as { id?: string };
       const retryJob = retryEnqueue.data as { id?: string };
       assert(firstJob.id);
+      cleanupJobIds.add(firstJob.id);
       assertEquals(retryJob.id, firstJob.id);
 
       const serviceRead = await worker.read({ jobId: firstJob.id, includeInternal: true });
@@ -272,32 +475,115 @@ Deno.test({
       assert(serviceConcurrencyRead.ok, JSON.stringify(serviceConcurrencyRead));
       assertEquals(serviceConcurrencyRead.data[0]?.id, firstJob.id);
 
+      const serviceList = await worker.list({
+        requestedBy: owner.id,
+        statuses: ['queued'],
+        visibility: 'user',
+        limit: 50,
+        includeInternal: true,
+      });
+      assert(serviceList.ok, JSON.stringify(serviceList));
+      assert(
+        serviceList.data.some((job) => job.id === firstJob.id),
+        'service list must return the controlled contract job',
+      );
+
+      const serviceCancelIdempotencyKey = `edge-worker-contract-cancel:${crypto.randomUUID()}`;
+      const serviceCancelEnqueue = await worker.enqueue({
+        ...enqueueRequest,
+        idempotencyKey: serviceCancelIdempotencyKey,
+        requestHash: serviceCancelIdempotencyKey,
+        concurrencyKey: serviceCancelIdempotencyKey,
+      });
+      assert(serviceCancelEnqueue.ok, JSON.stringify(serviceCancelEnqueue));
+      assert(serviceCancelEnqueue.data.id);
+      cleanupJobIds.add(serviceCancelEnqueue.data.id);
+      const serviceCancel = await worker.cancel({
+        jobId: serviceCancelEnqueue.data.id,
+        cancelledBy: owner.id,
+        reason: 'hosted_contract_service_cancel',
+      });
+      assert(serviceCancel.ok, JSON.stringify(serviceCancel));
+      assertEquals(serviceCancel.data.status, 'cancelled');
+      cleanupJobIds.delete(serviceCancelEnqueue.data.id);
+
+      const negativeRpcProbes = [
+        {
+          label: 'enqueue',
+          routine: WORKER_CAPABILITY_CONTRACT.database.routine.enqueue,
+          args: buildWorkerJobEnqueueRpcArgs({
+            ...enqueueRequest,
+            idempotencyKey: `forbidden:${crypto.randomUUID()}`,
+            requestHash: `forbidden:${crypto.randomUUID()}`,
+            concurrencyKey: `forbidden:${crypto.randomUUID()}`,
+          }),
+        },
+        {
+          label: 'read',
+          routine: WORKER_CAPABILITY_CONTRACT.database.routine.read,
+          args: buildWorkerJobReadRpcArgs({ jobId: firstJob.id, includeInternal: false }),
+        },
+        {
+          label: 'read-many',
+          routine: WORKER_CAPABILITY_CONTRACT.database.routine.readMany,
+          args: buildWorkerJobReadManyRpcArgs([firstJob.id], false),
+        },
+        {
+          label: 'list',
+          routine: WORKER_CAPABILITY_CONTRACT.database.routine.list,
+          args: buildWorkerJobListRpcArgs({
+            requestedBy: owner.id,
+            statuses: ['queued'],
+            limit: 20,
+            includeInternal: false,
+          }),
+        },
+        {
+          label: 'concurrency-list',
+          routine: WORKER_CAPABILITY_CONTRACT.database.routine.listByConcurrencyKey,
+          args: buildWorkerJobListByConcurrencyKeyRpcArgs({
+            jobKind: enqueueRequest.jobKind,
+            concurrencyKey: idempotencyKey,
+            statuses: ['queued'],
+            limit: 20,
+            includeInternal: true,
+          }),
+        },
+        {
+          label: 'cancel',
+          routine: WORKER_CAPABILITY_CONTRACT.database.routine.cancel,
+          args: buildWorkerJobCancelRpcArgs({
+            jobId: firstJob.id,
+            cancelledBy: owner.id,
+            reason: 'forbidden_contract_probe',
+          }),
+        },
+      ] as const;
+
       for (const [label, client] of [
         ['anon', anonymous],
         ['foreign', foreignClient],
         ['owner', ownerClient],
         ['admin', adminClient],
       ] as const) {
-        const readRpc = await client
-          .schema(WORKER_CAPABILITY_CONTRACT.database.schema)
-          .rpc(WORKER_CAPABILITY_CONTRACT.database.routine.read, {
-            p_job_id: firstJob.id,
-            p_include_internal: false,
-          });
-        assertPostgrestPermissionDenied(readRpc.error, `${label} service-only api Worker read RPC`);
+        for (const probe of negativeRpcProbes) {
+          const result = await client
+            .schema(WORKER_CAPABILITY_CONTRACT.database.schema)
+            .rpc(probe.routine, probe.args);
+          assertPostgrestPermissionDenied(
+            result.error,
+            `${label} service-only api Worker ${probe.label} RPC`,
+          );
+        }
 
-        const concurrencyRpc = await client
+        const domainRefs = await client
           .schema(WORKER_CAPABILITY_CONTRACT.database.schema)
-          .rpc(WORKER_CAPABILITY_CONTRACT.database.routine.listByConcurrencyKey, {
-            p_job_kind: enqueueRequest.jobKind,
-            p_concurrency_key: idempotencyKey,
-            p_statuses: ['queued'],
-            p_limit: 20,
-            p_include_internal: true,
-          });
+          .from('worker_job_domain_refs')
+          .select('*')
+          .limit(1);
         assertPostgrestPermissionDenied(
-          concurrencyRpc.error,
-          `${label} service-only api Worker concurrency-list RPC`,
+          domainRefs.error,
+          `${label} api worker_job_domain_refs relation`,
         );
       }
 
@@ -374,7 +660,15 @@ Deno.test({
       );
       assertEquals(ownerCancel.status, 200);
       assertEquals((await ownerCancel.json()).data.status, 'cancelled');
+      cleanupJobIds.delete(firstJob.id);
     } finally {
+      for (const jobId of cleanupJobIds) {
+        await worker.cancel({
+          jobId,
+          cancelledBy: owner?.id ?? null,
+          reason: 'hosted_contract_finally_cleanup',
+        });
+      }
       if (owner) {
         await service.auth.admin.deleteUser(owner.id);
       }
