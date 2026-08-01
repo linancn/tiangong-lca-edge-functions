@@ -33,7 +33,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-01
-lastReviewedCommit: facc70a7ae1f4787cff5751f778f3cbc109ca950
+lastReviewedCommit: 5d8b8c7c77dc29befe82b3cd51f1dc544a8ab3ff
 lastReviewedNote: 'Reviewed for Issue #242: the tracked isolated Edge qualification adapter remains proof tooling under scripts/test and does not change runtime, auth, branch, deployment, or ownership boundaries.'
 related:
   - .docpact/config.yaml

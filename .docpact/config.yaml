@@ -154,6 +154,7 @@ routing:
         - supabase/functions/_shared/db_rpc/dataset_commands.ts
         - supabase/functions/_shared/db_rpc/worker_jobs.ts
         - supabase/functions/_shared/review_submit_job_worker.ts
+        - scripts/run-worker-capability-contract.cjs
         - test/app_dataset_review_submit_gate_test.ts
         - test/app_dataset_review_submit_jobs_test.ts
         - test/app_dataset_submit_review_test.ts
@@ -162,6 +163,7 @@ routing:
         - test/review_submit_job_worker_test.ts
         - test/worker_jobs_test.ts
         - test/worker_capability_db_contract_test.ts
+        - test/worker_rpc_consumer_zero_test.ts
         - README.md
         - test.example.http
     search-and-embedding:
@@ -359,6 +361,8 @@ rules:
         kind: runtime-code
       - path: supabase/functions/_shared/review_submit_job_worker.ts
         kind: runtime-code
+      - path: scripts/run-worker-capability-contract.cjs
+        kind: validation-wrapper
       - path: test/app_dataset_review_submit_gate_test.ts
         kind: runtime-test
       - path: test/app_dataset_review_submit_jobs_test.ts
@@ -372,6 +376,8 @@ rules:
       - path: test/worker_jobs_test.ts
         kind: runtime-test
       - path: test/worker_capability_db_contract_test.ts
+        kind: runtime-test
+      - path: test/worker_rpc_consumer_zero_test.ts
         kind: runtime-test
     requiredDocs:
       - path: AGENTS.md
@@ -424,6 +430,8 @@ rules:
       - path: test/**
         kind: runtime-test
       - path: scripts/deno-check-all.cjs
+        kind: validation-wrapper
+      - path: scripts/run-worker-capability-contract.cjs
         kind: validation-wrapper
       - path: scripts/run_scope_closure_edge_qualification.sh
         kind: qualification-adapter

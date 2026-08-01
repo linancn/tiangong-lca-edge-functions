@@ -17,8 +17,14 @@ const TEST_DATASET_ID = '22222222-2222-4222-8222-222222222222';
 
 class FakeRpcSupabase {
   calls: Array<{ fn: string; args: unknown }> = [];
+  schemas: string[] = [];
 
   constructor(private readonly result: { data: unknown; error: unknown }) {}
+
+  schema(schema: string) {
+    this.schemas.push(schema);
+    return this;
+  }
 
   rpc(fn: string, args: unknown) {
     this.calls.push({ fn, args: structuredClone(args) });
@@ -67,9 +73,10 @@ Deno.test('callWorkerJobEnqueueRpc forwards worker enqueue args', async () => {
       status: 'queued',
     },
   });
+  assertEquals(supabase.schemas, ['api']);
   assertEquals(supabase.calls, [
     {
-      fn: 'worker_enqueue_job',
+      fn: 'worker_enqueue_job_v1',
       args: {
         p_job_kind: 'review_submit.gate',
         p_payload_json: {
@@ -129,7 +136,7 @@ Deno.test('callWorkerJobReadRpc unwraps worker read envelopes', async () => {
   });
   assertEquals(supabase.calls, [
     {
-      fn: 'worker_read_job',
+      fn: 'worker_read_job_v1',
       args: {
         p_job_id: TEST_JOB_ID,
         p_include_internal: false,
@@ -145,13 +152,16 @@ Deno.test('worker capability repository exposes the stable service-only contract
   assertEquals(repository.access, 'service-only');
   assertEquals(WORKER_CAPABILITY_CONTRACT, {
     edgeFunction: 'app_worker_jobs',
-    rpc: {
-      enqueue: 'worker_enqueue_job',
-      read: 'worker_read_job',
-      readMany: 'worker_read_jobs_by_ids',
-      listByConcurrencyKey: 'worker_list_jobs_by_concurrency_key',
-      list: 'worker_list_jobs',
-      cancel: 'worker_cancel_job',
+    database: {
+      schema: 'api',
+      routine: {
+        enqueue: 'worker_enqueue_job_v1',
+        read: 'worker_read_job_v1',
+        readMany: 'worker_read_jobs_by_ids_v1',
+        listByConcurrencyKey: 'worker_list_jobs_by_concurrency_key_v1',
+        list: 'worker_list_jobs_v1',
+        cancel: 'worker_cancel_job_v1',
+      },
     },
   });
 });
@@ -164,7 +174,7 @@ Deno.test('callWorkerJobReadManyRpc performs one bounded deduplicated batch call
 
   assertEquals(supabase.calls, [
     {
-      fn: 'worker_read_jobs_by_ids',
+      fn: 'worker_read_jobs_by_ids_v1',
       args: {
         p_job_ids: [TEST_JOB_ID, secondJobId],
         p_include_internal: true,
@@ -204,7 +214,7 @@ Deno.test(
     assertEquals(result.ok, true);
     assertEquals(supabase.calls, [
       {
-        fn: 'worker_list_jobs_by_concurrency_key',
+        fn: 'worker_list_jobs_by_concurrency_key_v1',
         args: {
           p_job_kind: 'lca.build_snapshot',
           p_concurrency_key: 'lca.build_snapshot:full-library:request-hash',
@@ -253,7 +263,7 @@ Deno.test('callWorkerJobListRpc forwards task center list filters', async () => 
   });
   assertEquals(supabase.calls, [
     {
-      fn: 'worker_list_jobs',
+      fn: 'worker_list_jobs_v1',
       args: {
         p_requested_by: TEST_USER_ID,
         p_subject_type: 'processes',
@@ -294,7 +304,7 @@ Deno.test('callWorkerJobCancelRpc forwards cancel args', async () => {
   });
   assertEquals(supabase.calls, [
     {
-      fn: 'worker_cancel_job',
+      fn: 'worker_cancel_job_v1',
       args: {
         p_job_id: TEST_JOB_ID,
         p_cancelled_by: TEST_USER_ID,

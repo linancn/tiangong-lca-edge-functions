@@ -11,7 +11,10 @@
     "deploy:dev": "node ./scripts/deploy-function.cjs dev",
     "deploy:main": "node ./scripts/deploy-function.cjs main",
     "probe:auth": "node ./scripts/probe-functions-auth.cjs",
-    "test:worker-contract:db": "deno test --allow-env --allow-net=127.0.0.1,localhost --config supabase/functions/deno.json test/worker_capability_db_contract_test.ts",
+    "test:worker-contract:unit": "deno test --allow-env --config supabase/functions/deno.json test/worker_jobs_test.ts test/app_worker_jobs_test.ts test/worker_jobs_cutover_test.ts",
+    "test:worker-contract:consumer-zero": "deno test --allow-read=supabase/functions --config supabase/functions/deno.json test/worker_rpc_consumer_zero_test.ts",
+    "test:worker-contract:db": "node ./scripts/run-worker-capability-contract.cjs local",
+    "test:worker-contract:hosted": "node ./scripts/run-worker-capability-contract.cjs hosted-preview",
     "format": "prettier --write \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\"",
     "lint": "prettier --check \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\""
   },

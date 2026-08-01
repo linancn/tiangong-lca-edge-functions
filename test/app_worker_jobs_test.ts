@@ -22,6 +22,11 @@ class FakeWorkerJobSupabase {
     private readonly dataProductManager = true,
   ) {}
 
+  schema(schema: string) {
+    assertEquals(schema, 'api');
+    return this;
+  }
+
   from(table: string) {
     this.roleQueries.push({ table });
     return {
@@ -188,7 +193,7 @@ Deno.test('executeWorkerJobCommand lists only current user worker jobs', async (
   }
   assertEquals(supabase.rpcCalls, [
     {
-      fn: 'worker_list_jobs',
+      fn: 'worker_list_jobs_v1',
       args: {
         p_requested_by: TEST_USER_ID,
         p_subject_type: 'processes',
@@ -236,7 +241,7 @@ Deno.test(
     assertEquals(supabase.roleQueries, [{ table: 'roles' }]);
     assertEquals(supabase.rpcCalls, [
       {
-        fn: 'worker_list_jobs',
+        fn: 'worker_list_jobs_v1',
         args: {
           p_requested_by: TEST_USER_ID,
           p_subject_type: 'lcia_result_build',
@@ -358,7 +363,7 @@ Deno.test('executeWorkerJobCommand cancels owned jobs through service RPC', asyn
   }
   assertEquals(
     supabase.rpcCalls.map((call) => call.fn),
-    ['worker_read_job', 'worker_cancel_job'],
+    ['worker_read_job_v1', 'worker_cancel_job_v1'],
   );
   assertEquals(supabase.rpcCalls[1].args, {
     p_job_id: TEST_JOB_ID,

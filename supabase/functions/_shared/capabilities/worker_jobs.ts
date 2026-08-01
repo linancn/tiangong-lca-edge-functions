@@ -2,17 +2,20 @@ import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import type { DatasetCommandFailure } from '../commands/dataset/types.ts';
 
-type RpcClient = Pick<SupabaseClient, 'rpc'>;
+type RpcClient = Pick<SupabaseClient, 'schema'>;
 
 export const WORKER_CAPABILITY_CONTRACT = {
   edgeFunction: 'app_worker_jobs',
-  rpc: {
-    enqueue: 'worker_enqueue_job',
-    read: 'worker_read_job',
-    readMany: 'worker_read_jobs_by_ids',
-    listByConcurrencyKey: 'worker_list_jobs_by_concurrency_key',
-    list: 'worker_list_jobs',
-    cancel: 'worker_cancel_job',
+  database: {
+    schema: 'api',
+    routine: {
+      enqueue: 'worker_enqueue_job_v1',
+      read: 'worker_read_job_v1',
+      readMany: 'worker_read_jobs_by_ids_v1',
+      listByConcurrencyKey: 'worker_list_jobs_by_concurrency_key_v1',
+      list: 'worker_list_jobs_v1',
+      cancel: 'worker_cancel_job_v1',
+    },
   },
 } as const;
 
@@ -150,10 +153,12 @@ function isDatasetCommandFailure(data: unknown): data is DatasetCommandFailure {
 
 async function callWorkerJobRpc<T>(
   supabase: RpcClient,
-  fn: (typeof WORKER_CAPABILITY_CONTRACT.rpc)[keyof typeof WORKER_CAPABILITY_CONTRACT.rpc],
+  fn: (typeof WORKER_CAPABILITY_CONTRACT.database.routine)[keyof typeof WORKER_CAPABILITY_CONTRACT.database.routine],
   args: Record<string, unknown>,
 ): Promise<WorkerJobRpcResult<T>> {
-  const { data, error } = await supabase.rpc(fn, args);
+  const { data, error } = await supabase
+    .schema(WORKER_CAPABILITY_CONTRACT.database.schema)
+    .rpc(fn, args);
   if (error) {
     return mapRpcError(error);
   }
@@ -257,7 +262,7 @@ export function buildWorkerJobCancelRpcArgs(
 export function callWorkerJobEnqueueRpc(supabase: RpcClient, request: WorkerJobEnqueueRequest) {
   return callWorkerJobRpc<WorkerJobDto>(
     supabase,
-    WORKER_CAPABILITY_CONTRACT.rpc.enqueue,
+    WORKER_CAPABILITY_CONTRACT.database.routine.enqueue,
     buildWorkerJobEnqueueRpcArgs(request),
   );
 }
@@ -265,7 +270,7 @@ export function callWorkerJobEnqueueRpc(supabase: RpcClient, request: WorkerJobE
 export function callWorkerJobReadRpc(supabase: RpcClient, request: WorkerJobReadRequest) {
   return callWorkerJobRpc<WorkerJobDto | null>(
     supabase,
-    WORKER_CAPABILITY_CONTRACT.rpc.read,
+    WORKER_CAPABILITY_CONTRACT.database.routine.read,
     buildWorkerJobReadRpcArgs(request),
   );
 }
@@ -277,7 +282,7 @@ export function callWorkerJobReadManyRpc(
 ) {
   return callWorkerJobRpc<WorkerJobDto[]>(
     supabase,
-    WORKER_CAPABILITY_CONTRACT.rpc.readMany,
+    WORKER_CAPABILITY_CONTRACT.database.routine.readMany,
     buildWorkerJobReadManyRpcArgs(jobIds, includeInternal),
   );
 }
@@ -288,7 +293,7 @@ export function callWorkerJobListByConcurrencyKeyRpc(
 ) {
   return callWorkerJobRpc<WorkerJobDto[]>(
     supabase,
-    WORKER_CAPABILITY_CONTRACT.rpc.listByConcurrencyKey,
+    WORKER_CAPABILITY_CONTRACT.database.routine.listByConcurrencyKey,
     buildWorkerJobListByConcurrencyKeyRpcArgs(request),
   );
 }
@@ -296,7 +301,7 @@ export function callWorkerJobListByConcurrencyKeyRpc(
 export function callWorkerJobListRpc(supabase: RpcClient, request: WorkerJobListRequest) {
   return callWorkerJobRpc<WorkerJobDto[]>(
     supabase,
-    WORKER_CAPABILITY_CONTRACT.rpc.list,
+    WORKER_CAPABILITY_CONTRACT.database.routine.list,
     buildWorkerJobListRpcArgs(request),
   );
 }
@@ -304,7 +309,7 @@ export function callWorkerJobListRpc(supabase: RpcClient, request: WorkerJobList
 export function callWorkerJobCancelRpc(supabase: RpcClient, request: WorkerJobCancelRequest) {
   return callWorkerJobRpc<WorkerJobDto>(
     supabase,
-    WORKER_CAPABILITY_CONTRACT.rpc.cancel,
+    WORKER_CAPABILITY_CONTRACT.database.routine.cancel,
     buildWorkerJobCancelRpcArgs(request),
   );
 }
