@@ -1,10 +1,18 @@
 import { assertEquals, assertThrows } from 'jsr:@std/assert';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
+import {
+  createDatasetApiV1Repository,
+  DATASET_API_V1_CONTRACT,
+} from '../supabase/functions/_shared/capabilities/dataset_api_v1.ts';
 import { buildCommandAuditPayload } from '../supabase/functions/_shared/command_runtime/audit_log.ts';
 import { createRequestSchema } from '../supabase/functions/_shared/commands/dataset/create.ts';
 import { createVersionRequestSchema } from '../supabase/functions/_shared/commands/dataset/create_version.ts';
 import { deleteRequestSchema } from '../supabase/functions/_shared/commands/dataset/delete.ts';
-import { createDatasetCommandRepository } from '../supabase/functions/_shared/commands/dataset/repository.ts';
+import {
+  createDatasetCommandRepository,
+  createLegacyDatasetCommandRepository,
+} from '../supabase/functions/_shared/commands/dataset/repository.ts';
 import { reviewSubmitGateRequestSchema } from '../supabase/functions/_shared/commands/dataset/review_submit_gate.ts';
 import { reviewSubmitJobRequestSchema } from '../supabase/functions/_shared/commands/dataset/review_submit_jobs.ts';
 import { saveDraftRequestSchema } from '../supabase/functions/_shared/commands/dataset/save_draft.ts';
@@ -16,10 +24,13 @@ import {
   callDatasetReviewSubmitGateRpc,
   callDatasetReviewSubmitJobEnqueueRpc,
   callDatasetReviewSubmitJobReadRpc,
-  callDatasetSaveDraftRpc,
   callDatasetSubmitReviewRpc,
   type DatasetRpcResult,
 } from '../supabase/functions/_shared/db_rpc/dataset_commands.ts';
+import type {
+  RequestJwtSupabaseClient,
+  ServiceRoleSupabaseClient,
+} from '../supabase/functions/_shared/supabase_client.ts';
 
 Deno.test('saveDraftRequestSchema accepts optional ruleVerification metadata', () => {
   const parsed = saveDraftRequestSchema.safeParse({
@@ -158,16 +169,73 @@ Deno.test('createDatasetCommandRepository requires an explicit Supabase client',
   );
 });
 
+Deno.test('dataset api v1 fixes the complete request-JWT save-draft contract', () => {
+  assertEquals(Object.isFrozen(DATASET_API_V1_CONTRACT), true);
+  assertEquals(DATASET_API_V1_CONTRACT, {
+    contractVersion: 'supabase-consumer.v1',
+    logicalCapability: 'dataset.save-draft',
+    transport: 'data-api-rpc',
+    schema: 'api',
+    object: 'cmd_dataset_save_draft',
+    signature: 'cmd_dataset_save_draft(text,uuid,text,jsonb,uuid,boolean,jsonb)',
+    callerIdentity: 'request-jwt',
+    authPropagation: 'caller-access-token',
+    compatibility: 'preserve-request-response-error-auth-idempotency-audit',
+    fallback: 'none',
+    legacyIdentity: 'public.cmd_dataset_save_draft',
+    legacyRemovalGate: 'consumer-zero-burn-in-contract-approval',
+  });
+});
+
+function assertDatasetApiIdentityBoundary(
+  requestClient: RequestJwtSupabaseClient,
+  serviceClient: ServiceRoleSupabaseClient,
+  unclassifiedClient: SupabaseClient,
+) {
+  createDatasetApiV1Repository(requestClient);
+  createDatasetCommandRepository(requestClient);
+
+  // @ts-expect-error A service-role client cannot enter a request-JWT adapter.
+  createDatasetApiV1Repository(serviceClient);
+  // @ts-expect-error A service-role client cannot enter a request-JWT command repository.
+  createDatasetCommandRepository(serviceClient);
+  // @ts-expect-error An unclassified client cannot enter a request-JWT adapter.
+  createDatasetApiV1Repository(unclassifiedClient);
+}
+
+void assertDatasetApiIdentityBoundary;
+
 class FakeRpcSupabase {
   calls: Array<{ fn: string; args: unknown }> = [];
+  scopedCalls: Array<{ schema: string; routine: string; args: unknown }> = [];
   schemas: string[] = [];
 
   constructor(private readonly result: { data: unknown; error: unknown }) {}
 
   schema(name: string) {
     this.schemas.push(name);
-    return this;
+    return {
+      rpc: (routine: string, args: unknown) => {
+        this.scopedCalls.push({
+          schema: name,
+          routine,
+          args: structuredClone(args),
+        });
+        return Promise.resolve(this.result);
+      },
+    };
   }
+
+  rpc(fn: string, args: unknown) {
+    this.calls.push({ fn, args: structuredClone(args) });
+    return Promise.resolve(this.result);
+  }
+}
+
+class FakeLegacyRpcSupabase {
+  calls: Array<{ fn: string; args: unknown }> = [];
+
+  constructor(private readonly result: { data: unknown; error: unknown }) {}
 
   rpc(fn: string, args: unknown) {
     this.calls.push({ fn, args: structuredClone(args) });
@@ -244,6 +312,44 @@ const auditPayload = buildCommandAuditPayload({
   targetId: '11111111-1111-4111-8111-111111111111',
   targetVersion: '01.00.000',
   payload: {},
+});
+
+Deno.test('legacy dataset repository excludes save-draft from its domain methods', () => {
+  const legacy = createLegacyDatasetCommandRepository(
+    new FakeRpcSupabase({ data: null, error: null }) as never,
+  );
+
+  assertEquals('saveDraft' in legacy, false);
+});
+
+Deno.test('legacy dataset command stays on one root RPC without selecting api', async () => {
+  const supabase = new FakeLegacyRpcSupabase({
+    data: {
+      ok: true,
+      data: { id: createRequest.id, version: '01.00.000' },
+    },
+    error: null,
+  });
+  const repository = createDatasetCommandRepository(
+    supabase as unknown as RequestJwtSupabaseClient,
+  );
+
+  const result = await repository.create(createRequest, auditPayload);
+
+  assertEquals(result.ok, true);
+  assertEquals(supabase.calls, [
+    {
+      fn: 'cmd_dataset_create',
+      args: {
+        p_table: 'processes',
+        p_id: createRequest.id,
+        p_json_ordered: createRequest.jsonOrdered,
+        p_model_id: createRequest.modelId,
+        p_rule_verification: null,
+        p_audit: auditPayload,
+      },
+    },
+  ]);
 });
 
 Deno.test(
@@ -342,7 +448,7 @@ Deno.test('callDatasetDeleteRpc treats command failure envelopes as command fail
 });
 
 Deno.test(
-  'callDatasetSaveDraftRpc unwraps success envelopes returned by cmd_dataset_* RPCs',
+  'dataset api v1 repository unwraps success envelopes returned by cmd_dataset_* RPCs',
   async () => {
     const supabase = new FakeRpcSupabase({
       data: {
@@ -354,8 +460,7 @@ Deno.test(
       },
       error: null,
     });
-    const result = (await callDatasetSaveDraftRpc(
-      supabase as never,
+    const result = (await createDatasetApiV1Repository(supabase as never).saveDraft(
       draftRequest,
       auditPayload,
     )) as DatasetRpcResult;
@@ -368,13 +473,29 @@ Deno.test(
       },
     });
     assertEquals(supabase.schemas, ['api']);
+    assertEquals(supabase.calls, []);
+    assertEquals(supabase.scopedCalls, [
+      {
+        schema: 'api',
+        routine: 'cmd_dataset_save_draft',
+        args: {
+          p_table: 'flows',
+          p_id: draftRequest.id,
+          p_version: draftRequest.version,
+          p_json_ordered: draftRequest.jsonOrdered,
+          p_model_id: null,
+          p_audit: auditPayload,
+          p_rule_verification: null,
+        },
+      },
+    ]);
   },
 );
 
 Deno.test(
-  'callDatasetSaveDraftRpc treats command failure envelopes as command failures',
+  'dataset api v1 repository treats command failure envelopes as command failures',
   async () => {
-    const result = (await callDatasetSaveDraftRpc(
+    const result = (await createDatasetApiV1Repository(
       new FakeRpcSupabase({
         data: {
           ok: false,
@@ -388,9 +509,7 @@ Deno.test(
         },
         error: null,
       }) as never,
-      draftRequest,
-      auditPayload,
-    )) as DatasetRpcResult;
+    ).saveDraft(draftRequest, auditPayload)) as DatasetRpcResult;
 
     assertEquals(result, {
       ok: false,
@@ -404,6 +523,54 @@ Deno.test(
     });
   },
 );
+
+Deno.test('dataset api v1 reuses one api binding across save-draft retries', async () => {
+  const supabase = new FakeRpcSupabase({
+    data: {
+      ok: true,
+      data: { id: draftRequest.id, version: draftRequest.version },
+    },
+    error: null,
+  });
+  const repository = createDatasetCommandRepository(
+    supabase as unknown as RequestJwtSupabaseClient,
+  );
+
+  assertEquals(supabase.schemas, []);
+  await repository.saveDraft(draftRequest, auditPayload);
+  await repository.saveDraft(draftRequest, auditPayload);
+
+  assertEquals(supabase.schemas, ['api']);
+  assertEquals(supabase.calls, []);
+  assertEquals(supabase.scopedCalls.length, 2);
+  assertEquals(
+    supabase.scopedCalls.map(({ schema, routine }) => ({ schema, routine })),
+    [
+      { schema: 'api', routine: 'cmd_dataset_save_draft' },
+      { schema: 'api', routine: 'cmd_dataset_save_draft' },
+    ],
+  );
+});
+
+Deno.test('dataset api v1 returns missing-routine errors without a root fallback', async () => {
+  const supabase = new FakeRpcSupabase({
+    data: null,
+    error: { code: 'PGRST202', message: 'Could not find the function' },
+  });
+  const repository = createDatasetCommandRepository(
+    supabase as unknown as RequestJwtSupabaseClient,
+  );
+
+  const result = await repository.saveDraft(draftRequest, auditPayload);
+
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assertEquals(result.code, 'PGRST202');
+  }
+  assertEquals(supabase.schemas, ['api']);
+  assertEquals(supabase.calls, []);
+  assertEquals(supabase.scopedCalls.length, 1);
+});
 
 Deno.test(
   'callDatasetSubmitReviewRpc unwraps success envelopes returned by cmd_review_submit',

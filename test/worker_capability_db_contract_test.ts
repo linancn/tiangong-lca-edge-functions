@@ -14,6 +14,7 @@ import {
 } from '../supabase/functions/_shared/capabilities/worker_jobs.ts';
 import { resolveActorContext } from '../supabase/functions/_shared/command_runtime/actor_context.ts';
 import { executeWorkerJobCommand } from '../supabase/functions/_shared/commands/worker_jobs.ts';
+import type { RequestJwtSupabaseClient } from '../supabase/functions/_shared/supabase_client.ts';
 import { createAppWorkerJobsHandler } from '../supabase/functions/app_worker_jobs/index.ts';
 
 const CONTRACT_ENABLED = Deno.env.get('WORKER_CAPABILITY_DB_CONTRACT') === '1';
@@ -835,7 +836,11 @@ Deno.test({
         resolveActor: (request) =>
           resolveActorContext(request, {
             createSupabaseClient: (accessToken) =>
-              requestClient(config.url, config.publishableKey, accessToken),
+              requestClient(
+                config.url,
+                config.publishableKey,
+                accessToken,
+              ) as RequestJwtSupabaseClient,
           }),
         execute: (request, actor) => executeWorkerJobCommand(request, actor, service),
       });

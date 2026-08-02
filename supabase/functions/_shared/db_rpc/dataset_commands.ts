@@ -20,7 +20,7 @@ import {
   REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION,
 } from '../commands/dataset/types.ts';
 
-type RpcClient = Pick<SupabaseClient, 'rpc' | 'schema'>;
+type RpcClient = Pick<SupabaseClient, 'rpc'>;
 
 export type DatasetRpcResult = { ok: true; data: unknown } | DatasetCommandFailure;
 
@@ -52,12 +52,13 @@ function isDatasetCommandFailure(data: unknown): data is DatasetCommandFailure {
   );
 }
 
-async function callDatasetRpc(
-  supabase: RpcClient,
-  fn: string,
-  args: Record<string, unknown>,
-): Promise<DatasetRpcResult> {
-  const { data, error } = await supabase.rpc(fn, args);
+export function mapDatasetRpcResponse({
+  data,
+  error,
+}: {
+  data: unknown;
+  error: { code?: string; message?: string; details?: unknown } | null;
+}): DatasetRpcResult {
   if (error) {
     return mapRpcError(error);
   }
@@ -83,6 +84,14 @@ async function callDatasetRpc(
     ok: true,
     data,
   };
+}
+
+async function callDatasetRpc(
+  supabase: RpcClient,
+  fn: string,
+  args: Record<string, unknown>,
+): Promise<DatasetRpcResult> {
+  return mapDatasetRpcResponse(await supabase.rpc(fn, args));
 }
 
 export function buildDatasetSaveDraftRpcArgs(
@@ -237,18 +246,6 @@ export function buildDatasetReviewSubmitJobReadLatestRpcArgs(
     p_version: request.version,
     p_revision_checksum: request.revisionChecksum ?? null,
   };
-}
-
-export function callDatasetSaveDraftRpc(
-  supabase: RpcClient,
-  request: SaveDraftRequest,
-  audit: CommandAuditPayload,
-) {
-  return callDatasetRpc(
-    supabase.schema('api'),
-    'cmd_dataset_save_draft',
-    buildDatasetSaveDraftRpcArgs(request, audit),
-  );
 }
 
 export function callDatasetReviewSubmitJobEnqueueRpc(
