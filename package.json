@@ -13,6 +13,7 @@
     "probe:auth": "node ./scripts/probe-functions-auth.cjs",
     "test:worker-contract:unit": "deno test --allow-env --config supabase/functions/deno.json test/worker_jobs_test.ts test/app_worker_jobs_test.ts test/worker_jobs_cutover_test.ts",
     "test:worker-contract:consumer-zero": "deno test --allow-read=supabase/functions --config supabase/functions/deno.json test/worker_rpc_consumer_zero_test.ts",
+    "test:lca-result-family:consumer-zero": "node --test test/lca_result_family_consumer_zero_test.cjs && node scripts/lca-result-family-consumer-zero.cjs",
     "test:worker-contract:db": "node ./scripts/run-worker-capability-contract.cjs local",
     "test:worker-contract:hosted": "node ./scripts/run-worker-capability-contract.cjs hosted-preview",
     "diagnose:lca-snapshot:call-sites": "node ./scripts/diagnose-lca-snapshot-callsite-inventory.cjs",
