@@ -200,9 +200,56 @@ type CapabilityCall = {
   expression: string;
 };
 
-type BoundaryMethod = 'from' | 'rpc' | 'schema';
+type ExactSyntaxRule = readonly [string, string, string, string, string, number];
+type ExactComputedRule = readonly [string, string, string, number];
+const decodeSyntaxRule = (rule: string): ExactSyntaxRule => {
+  const [file, symbol, method, receiver, argument, count] = rule.split('|');
+  return [file, symbol, method, receiver, argument, Number(count)];
+};
+const decodeComputedRule = (rule: string): ExactComputedRule => {
+  const [file, symbol, expression, count] = rule.split('|');
+  return [file, symbol, expression, Number(count)];
+};
 
-const BOUNDARY_METHODS = new Set<BoundaryMethod>(['from', 'rpc', 'schema']);
+const TYPED_DATABASE_ADAPTER_CALLS = [
+  'supabase/functions/_shared/capabilities/schema_boundary.ts|databaseApi|schema|client|DATABASE_API_SCHEMA|1',
+  'supabase/functions/_shared/capabilities/schema_boundary.ts|callDatabaseBoundaryRpc|rpc|databaseApi(client)|apiRoutine|1',
+  'supabase/functions/_shared/capabilities/schema_boundary.ts|callDatabaseBoundaryRpc|rpc|client|publicRoutine|1',
+  'supabase/functions/_shared/capabilities/worker_jobs.ts|callWorkerJobRpc|schema|supabase|WORKER_API_SCHEMA|1',
+  'supabase/functions/_shared/capabilities/worker_jobs.ts|callWorkerJobRpc|rpc|supabase.schema(WORKER_API_SCHEMA)|fn|1',
+].map(decodeSyntaxRule);
+
+const LEGACY_PUBLIC_DATABASE_CALLS = [
+  "supabase/functions/delete_lifecycle_model_bundle/index.ts|Deno.serve|rpc|supabaseClient|'delete_lifecycle_model_bundle'|1",
+  "supabase/functions/save_lifecycle_model_bundle/handler.ts|createSaveLifecycleModelBundleHandler|rpc|deps.supabase|'save_lifecycle_model_bundle'|1",
+  "supabase/functions/_shared/review_submit_job_worker.ts|claimJobs|rpc|supabase|'cmd_dataset_review_submit_job_claim'|1",
+  "supabase/functions/_shared/review_submit_job_worker.ts|recordJobResult|rpc|supabase|'cmd_dataset_review_submit_job_record_result'|1",
+  "supabase/functions/_shared/review_submit_job_worker.ts|submitFromJob|rpc|supabase|'cmd_review_submit_from_job'|1",
+  'supabase/functions/_shared/hybrid_search_handler.ts|createHybridSearchHandler|rpc|rpcClientContext.client|config.rpcName|2',
+  'supabase/functions/_shared/db_rpc/lca_results.ts|callLcaProjectionRpc|rpc|supabase|fn|1',
+  'supabase/functions/_shared/db_rpc/dataset_commands.ts|callLegacyPublicDatasetRpc|rpc|supabase|fn|1',
+  'supabase/functions/_shared/db_rpc/membership_commands.ts|callMembershipRpc|rpc|supabase|fn|1',
+  'supabase/functions/_shared/db_rpc/notification_commands.ts|callNotificationRpc|rpc|supabase|fn|1',
+  'supabase/functions/_shared/db_rpc/lca_release_commands.ts|callLcaReleaseRpc|rpc|supabase|fn|1',
+  'supabase/functions/_shared/db_rpc/review_commands.ts|callReviewRpc|rpc|supabase|fn|1',
+  'supabase/functions/_shared/db_rpc/data_product_commands.ts|callDataProductRpc|rpc|supabase|fn|1',
+].map(decodeSyntaxRule);
+
+const EXACT_DATABASE_CALLS = [...TYPED_DATABASE_ADAPTER_CALLS, ...LEGACY_PUBLIC_DATABASE_CALLS];
+
+const LEGACY_DETACHED_DATABASE_METHODS = [
+  'supabase/functions/_shared/commands/data_product/repository.ts|requireExplicitActorClient|rpc|supabase|typeof-method-guard|1',
+  'supabase/functions/_shared/commands/dataset/repository.ts|requireExplicitClient|schema|supabase|typeof-method-guard|1',
+  'supabase/functions/_shared/commands/dataset/repository.ts|requireExplicitClient|rpc|supabase|typeof-method-guard|1',
+  'supabase/functions/_shared/commands/lca_release/repository.ts|requireExplicitActorClient|rpc|client|typeof-method-guard|1',
+  'supabase/functions/_shared/commands/membership/repository.ts|requireExplicitClient|rpc|supabase|typeof-method-guard|1',
+  'supabase/functions/_shared/commands/notification/repository.ts|requireExplicitClient|rpc|supabase|typeof-method-guard|1',
+  'supabase/functions/_shared/commands/review/repository.ts|requireExplicitClient|rpc|supabase|typeof-method-guard|1',
+].map(decodeSyntaxRule);
+
+const NON_DATABASE_COMPUTED_CALLS = [
+  'supabase/functions/_shared/dataset_extraction_worker.ts|processDatasetJob|generators[entityKind as SupportedDatasetEntityKind]|1',
+].map(decodeComputedRule);
 
 function unwrapExpression(expression: ts.Expression): ts.Expression {
   let current = expression;
@@ -233,11 +280,7 @@ type BoundaryDataflow = {
 
 type LocalFunction = ts.FunctionDeclaration | ts.FunctionExpression | ts.ArrowFunction;
 
-/**
- * Build a conservative, file-local dataflow model for Supabase clients. The audit deliberately
- * treats aliases as tainted once they can receive a controlled client: uncertainty must create a
- * finding rather than let a schema-boundary call disappear from the inventory.
- */
+/** File-local alias resolution supports relation inventory only; it does not authorize RPC/schema calls. */
 function deriveBoundaryDataflow(sourceFile: ts.SourceFile): BoundaryDataflow {
   const valueBindings = new Map<string, ts.Expression[]>();
   const clientIdentifiers = new Set<string>();
@@ -338,85 +381,6 @@ function deriveBoundaryDataflow(sourceFile: ts.SourceFile): BoundaryDataflow {
     return null;
   };
 
-  const MAX_OBJECT_PROPERTY_ALIAS_DEPTH = 16;
-  const objectPropertyBindingCache = new Map<string, ts.Expression[]>();
-  const objectLiteralPropertyName = (name: ts.PropertyName): string | null => {
-    if (ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
-      return name.text;
-    }
-    return ts.isComputedPropertyName(name) ? staticString(name.expression) : null;
-  };
-  const objectPropertyBindings = (
-    expression: ts.Expression,
-    property: string,
-    visiting = new Set<string>(),
-    depth = 0,
-  ): ts.Expression[] => {
-    if (depth >= MAX_OBJECT_PROPERTY_ALIAS_DEPTH) return [];
-    const current = unwrapExpression(expression);
-    const visitKey = `${current.pos}:${current.end}:${property}`;
-    const cached = objectPropertyBindingCache.get(visitKey);
-    if (cached) return cached;
-    if (visiting.has(visitKey)) return [];
-    const nextVisiting = new Set(visiting).add(visitKey);
-    const resolve = (candidate: ts.Expression, candidateProperty = property) =>
-      objectPropertyBindings(candidate, candidateProperty, nextVisiting, depth + 1);
-    const memoize = (bindings: ts.Expression[]) => {
-      const unique = [
-        ...new Map(bindings.map((binding) => [`${binding.pos}:${binding.end}`, binding])).values(),
-      ];
-      objectPropertyBindingCache.set(visitKey, unique);
-      return unique;
-    };
-
-    if (ts.isObjectLiteralExpression(current)) {
-      return memoize(
-        current.properties.flatMap((member): ts.Expression[] => {
-          if (ts.isPropertyAssignment(member)) {
-            return objectLiteralPropertyName(member.name) === property ? [member.initializer] : [];
-          }
-          if (ts.isShorthandPropertyAssignment(member)) {
-            return member.name.text === property ? [member.name] : [];
-          }
-          if (ts.isSpreadAssignment(member)) return resolve(member.expression);
-          return [];
-        }),
-      );
-    }
-    if (ts.isIdentifier(current)) {
-      return memoize(
-        (valueBindings.get(current.text) ?? []).flatMap((binding) => resolve(binding)),
-      );
-    }
-    if (ts.isPropertyAccessExpression(current)) {
-      return memoize(
-        objectPropertyBindings(
-          current.expression,
-          current.name.text,
-          nextVisiting,
-          depth + 1,
-        ).flatMap((binding) => resolve(binding)),
-      );
-    }
-    if (ts.isElementAccessExpression(current) && current.argumentExpression) {
-      const receiverProperty = staticString(current.argumentExpression);
-      if (receiverProperty === null) return [];
-      return memoize(
-        objectPropertyBindings(
-          current.expression,
-          receiverProperty,
-          nextVisiting,
-          depth + 1,
-        ).flatMap((binding) => resolve(binding)),
-      );
-    }
-    if (ts.isConditionalExpression(current)) {
-      return memoize([...resolve(current.whenTrue), ...resolve(current.whenFalse)]);
-    }
-    if (ts.isAwaitExpression(current)) return memoize(resolve(current.expression));
-    return memoize([]);
-  };
-
   const isClientExpression = (expression: ts.Expression, visiting = new Set<string>()): boolean => {
     const current = unwrapExpression(expression);
     const path = current.getText(sourceFile);
@@ -432,25 +396,12 @@ function deriveBoundaryDataflow(sourceFile: ts.SourceFile): BoundaryDataflow {
     }
     if (ts.isPropertyAccessExpression(current)) {
       if (current.name.text === 'storage') return false;
-      if (identifierLooksLikeSupabaseClient(current.name.text)) return true;
-      const visitKey = `member:${current.pos}:${current.end}`;
-      if (visiting.has(visitKey)) return false;
-      const nextVisiting = new Set(visiting).add(visitKey);
-      return objectPropertyBindings(current.expression, current.name.text).some((binding) =>
-        isClientExpression(binding, nextVisiting),
-      );
+      return identifierLooksLikeSupabaseClient(current.name.text);
     }
     if (ts.isElementAccessExpression(current)) {
       const property = current.argumentExpression ? staticString(current.argumentExpression) : null;
       if (property === 'storage') return false;
-      if (property === null) return false;
-      if (identifierLooksLikeSupabaseClient(property)) return true;
-      const visitKey = `member:${current.pos}:${current.end}`;
-      if (visiting.has(visitKey)) return false;
-      const nextVisiting = new Set(visiting).add(visitKey);
-      return objectPropertyBindings(current.expression, property).some((binding) =>
-        isClientExpression(binding, nextVisiting),
-      );
+      return property !== null && identifierLooksLikeSupabaseClient(property);
     }
     if (ts.isConditionalExpression(current)) {
       return (
@@ -703,14 +654,46 @@ export function deriveBoundaryMethodCalls(source: string): Record<string, number
   return counts;
 }
 
+function enclosingCallSymbol(node: ts.Node, sourceFile: ts.SourceFile): string {
+  let current: ts.Node | undefined = node.parent;
+  while (current) {
+    if (ts.isFunctionDeclaration(current) && current.name) return current.name.text;
+    if (ts.isFunctionExpression(current) || ts.isArrowFunction(current)) {
+      if (ts.isVariableDeclaration(current.parent) && ts.isIdentifier(current.parent.name)) {
+        return current.parent.name.text;
+      }
+      if (
+        ts.isCallExpression(current.parent) &&
+        current.parent.arguments.some((argument) => argument === current)
+      ) {
+        return current.parent.expression.getText(sourceFile);
+      }
+    }
+    current = current.parent;
+  }
+  return '<top-level>';
+}
+
+function databaseCallRuleKey(rule: ExactSyntaxRule): string {
+  return rule.slice(0, 5).join('\u0000');
+}
+
+function detachedDatabaseMethodRuleKey(rule: ExactSyntaxRule): string {
+  return rule.slice(0, 5).join('\u0000');
+}
+
+function nonDatabaseComputedCallRuleKey(rule: ExactComputedRule): string {
+  return rule.slice(0, 3).join('\u0000');
+}
+
 export function deriveAstBoundaryViolations(
   file: string,
   source: string,
   registrations: DynamicConsumerRegistration[],
   storage: Array<{ file: string; expressions: string[] }>,
-  allowedSchemas: string[],
-  sourceByFile: ReadonlyMap<string, string>,
-  legacyDynamicRpcFiles: readonly string[] = [],
+  _allowedSchemas: string[],
+  _sourceByFile: ReadonlyMap<string, string>,
+  _legacyDynamicRpcFiles: readonly string[] = [],
 ): SchemaBoundaryFinding[] {
   const sourceFile = ts.createSourceFile(
     file,
@@ -729,6 +712,58 @@ export function deriveAstBoundaryViolations(
       object,
       message,
     });
+  };
+  const fileRules = EXACT_DATABASE_CALLS.filter((rule) => rule[0] === file);
+  const observedRuleCounts = new Map<string, number>();
+  const detachedRules = LEGACY_DETACHED_DATABASE_METHODS.filter((rule) => rule[0] === file);
+  const observedDetachedRuleCounts = new Map<string, number>();
+  const computedRules = NON_DATABASE_COMPUTED_CALLS.filter((rule) => rule[0] === file);
+  const observedComputedRuleCounts = new Map<string, number>();
+  const recordExactDatabaseCall = (node: ts.CallExpression, method: 'rpc' | 'schema'): boolean => {
+    if (!ts.isPropertyAccessExpression(node.expression)) return false;
+    const argument = node.arguments[0];
+    const symbol = enclosingCallSymbol(node, sourceFile);
+    const receiver = node.expression.expression.getText(sourceFile);
+    const argumentText = argument?.getText(sourceFile) ?? '<missing>';
+    const rule = fileRules.find(
+      (candidate) =>
+        candidate[1] === symbol &&
+        candidate[2] === method &&
+        candidate[3] === receiver &&
+        candidate[4] === argumentText,
+    );
+    if (!rule) return false;
+    const key = databaseCallRuleKey(rule);
+    observedRuleCounts.set(key, (observedRuleCounts.get(key) ?? 0) + 1);
+    return true;
+  };
+  const recordDetachedDatabaseMethod = (
+    node: ts.PropertyAccessExpression,
+    category: 'typeof-method-guard',
+  ): boolean => {
+    const symbol = enclosingCallSymbol(node, sourceFile);
+    const rule = detachedRules.find(
+      (candidate) =>
+        candidate[1] === symbol &&
+        candidate[2] === node.name.text &&
+        candidate[3] === node.expression.getText(sourceFile) &&
+        candidate[4] === category,
+    );
+    if (!rule) return false;
+    const key = detachedDatabaseMethodRuleKey(rule);
+    observedDetachedRuleCounts.set(key, (observedDetachedRuleCounts.get(key) ?? 0) + 1);
+    return true;
+  };
+  const recordNonDatabaseComputedCall = (node: ts.CallExpression): boolean => {
+    const symbol = enclosingCallSymbol(node, sourceFile);
+    const expression = node.expression.getText(sourceFile);
+    const rule = computedRules.find(
+      (candidate) => candidate[1] === symbol && candidate[2] === expression,
+    );
+    if (!rule) return false;
+    const key = nonDatabaseComputedCallRuleKey(rule);
+    observedComputedRuleCounts.set(key, (observedComputedRuleCounts.get(key) ?? 0) + 1);
+    return true;
   };
   const bindingPatternIsControlled = (node: ts.BindingElement): boolean => {
     const declaration = node.parent.parent;
@@ -752,40 +787,52 @@ export function deriveAstBoundaryViolations(
         : ts.isComputedPropertyName(name)
           ? dataflow.staticString(name.expression)
           : null;
-      if (
-        method &&
-        BOUNDARY_METHODS.has(method as BoundaryMethod) &&
-        bindingPatternIsControlled(node)
-      ) {
+      if (method === 'rpc') {
         push(
           node,
           'destructured-data-api-method',
-          `destructuring ${method} bypasses the verifiable schema-boundary call shape`,
+          `destructuring ${method} is forbidden outside an exact database adapter call`,
           method,
         );
-      } else if (ts.isComputedPropertyName(name) && !method && bindingPatternIsControlled(node)) {
+      } else if (method === 'from' && bindingPatternIsControlled(node)) {
         push(
           node,
-          'unknown-destructured-data-api-method',
-          'computed Supabase client destructuring cannot be statically resolved',
-          name.getText(sourceFile),
+          'destructured-data-api-method',
+          'destructuring from bypasses the verifiable relation-boundary call shape',
+          method,
         );
       }
     }
 
-    if (
-      ts.isPropertyAccessExpression(node) &&
-      BOUNDARY_METHODS.has(node.name.text as BoundaryMethod)
-    ) {
-      if (
+    if (ts.isPropertyAccessExpression(node)) {
+      const detached = !(ts.isCallExpression(node.parent) && node.parent.expression === node);
+      const databaseMethod = node.name.text === 'rpc' || node.name.text === 'schema';
+      if (detached && databaseMethod && ts.isTypeOfExpression(node.parent)) {
+        if (!recordDetachedDatabaseMethod(node, 'typeof-method-guard')) {
+          push(
+            node,
+            'unregistered-detached-database-method',
+            `typeof ${node.name.text} does not match an exact legacy residue tuple`,
+            node.getText(sourceFile),
+          );
+        }
+      } else if (detached && node.name.text === 'rpc') {
+        push(
+          node,
+          'detached-data-api-method',
+          'detaching .rpc is forbidden outside an exact legacy residue tuple',
+          node.getText(sourceFile),
+        );
+      } else if (
+        detached &&
+        node.name.text === 'from' &&
         dataflow.isClientExpression(node.expression) &&
-        !(ts.isCallExpression(node.parent) && node.parent.expression === node) &&
         !ts.isTypeOfExpression(node.parent)
       ) {
         push(
           node,
           'detached-data-api-method',
-          `detaching .${node.name.text} bypasses the verifiable schema-boundary call shape`,
+          'detaching .from bypasses the verifiable relation-boundary call shape',
           node.getText(sourceFile),
         );
       }
@@ -793,49 +840,70 @@ export function deriveAstBoundaryViolations(
 
     if (
       ts.isElementAccessExpression(node) &&
-      dataflow.isClientExpression(node.expression) &&
-      !(ts.isCallExpression(node.parent) && node.parent.expression === node) &&
-      !ts.isTypeOfExpression(node.parent)
+      !(ts.isCallExpression(node.parent) && node.parent.expression === node)
     ) {
       const method = node.argumentExpression
         ? dataflow.staticString(node.argumentExpression)
         : null;
-      if (method && BOUNDARY_METHODS.has(method as BoundaryMethod)) {
+      if (method === 'rpc' || method === 'schema') {
         push(
           node,
           'detached-data-api-method',
-          `detaching computed ${method} bypasses the verifiable schema-boundary call shape`,
+          `detaching computed ${method} is forbidden outside an exact database adapter call`,
           node.getText(sourceFile),
         );
-      } else if (!method) {
+      } else if (method === 'from' && dataflow.isClientExpression(node.expression)) {
         push(
           node,
-          'unknown-computed-data-api-method',
-          'computed Supabase client method cannot be statically resolved',
+          'detached-data-api-method',
+          'detaching computed from bypasses the verifiable relation-boundary call shape',
           node.getText(sourceFile),
         );
       }
     }
 
     if (ts.isCallExpression(node)) {
-      const computedReceiver = ts.isElementAccessExpression(node.expression)
-        ? node.expression.expression
-        : null;
-      const controlledComputedReceiver = Boolean(
-        computedReceiver && dataflow.isClientExpression(computedReceiver),
-      );
       const method = resolvedCalledPropertyName(node.expression, dataflow);
-      if (controlledComputedReceiver && !method) {
-        push(
-          node,
-          'unknown-computed-data-api-call',
-          'computed Supabase client call cannot be statically resolved and is rejected fail-closed',
-          node.expression.getText(sourceFile),
-        );
+      const argument = node.arguments[0];
+      if (method === 'rpc' || method === 'schema') {
+        if (ts.isIdentifier(node.expression)) {
+          push(
+            node,
+            'detached-data-api-call',
+            `bare ${method}(...) is forbidden outside an exact database adapter call`,
+            method,
+          );
+        } else if (ts.isElementAccessExpression(node.expression)) {
+          push(
+            node,
+            'computed-database-call',
+            `computed ${method}(...) is forbidden outside an exact database adapter call`,
+            method,
+          );
+        } else if (!recordExactDatabaseCall(node, method)) {
+          push(
+            node,
+            'raw-database-call-outside-adapter',
+            `raw .${method}(...) does not match an exact typed adapter or legacy public-residue tuple`,
+            `${enclosingCallSymbol(node, sourceFile)}:${node.expression.getText(sourceFile)}`,
+          );
+        }
         ts.forEachChild(node, visit);
         return;
       }
-      if (!method || !BOUNDARY_METHODS.has(method as BoundaryMethod)) {
+      if (!method && ts.isElementAccessExpression(node.expression)) {
+        if (!recordNonDatabaseComputedCall(node)) {
+          push(
+            node,
+            'unknown-computed-database-call',
+            'unresolved computed calls are forbidden outside one exact non-database exception',
+            node.expression.getText(sourceFile),
+          );
+        }
+        ts.forEachChild(node, visit);
+        return;
+      }
+      if (method !== 'from') {
         ts.forEachChild(node, visit);
         return;
       }
@@ -848,60 +916,35 @@ export function deriveAstBoundaryViolations(
         );
       }
       if (ts.isElementAccessExpression(node.expression)) {
-        if (controlledComputedReceiver) {
+        if (dataflow.isClientExpression(node.expression.expression)) {
           push(
             node,
             'computed-data-api-call',
-            `computed ['${method}'](...) calls are forbidden at the schema boundary`,
+            `computed ['${method}'](...) calls are forbidden at the relation boundary`,
             method,
           );
         }
       }
 
-      const argument = node.arguments[0];
       if (!argument || ts.isStringLiteralLike(argument)) {
         ts.forEachChild(node, visit);
         return;
       }
       const expression = argument.getText(sourceFile);
-      if (method === 'from') {
-        const receiver =
-          ts.isPropertyAccessExpression(node.expression) ||
-          ts.isElementAccessExpression(node.expression)
-            ? node.expression.expression.getText(sourceFile)
-            : '';
-        if (receiver === 'Array' || receiver === 'Uint8Array') {
-          ts.forEachChild(node, visit);
-          return;
-        }
-        if (!classifyDynamicRelation(registrations, storage, file, expression)) {
-          push(
-            node,
-            'ast-unregistered-dynamic-from',
-            `AST-derived dynamic .from(${expression}) has no exact registration`,
-            expression,
-          );
-        }
-      } else if (method === 'rpc') {
-        const registered =
-          registrations.some(
-            (entry) => entry.file === file && entry.rpcExpressions?.includes(expression),
-          ) || legacyDynamicRpcFiles.includes(file);
-        if (!registered) {
-          push(
-            node,
-            'ast-unregistered-dynamic-rpc',
-            `AST-derived dynamic .rpc(${expression}) has no exact capability registration`,
-            expression,
-          );
-        }
-      } else if (
-        !isApprovedDynamicSchema(registrations, allowedSchemas, file, expression, sourceByFile)
-      ) {
+      const receiver =
+        ts.isPropertyAccessExpression(node.expression) ||
+        ts.isElementAccessExpression(node.expression)
+          ? node.expression.expression.getText(sourceFile)
+          : '';
+      if (receiver === 'Array' || receiver === 'Uint8Array') {
+        ts.forEachChild(node, visit);
+        return;
+      }
+      if (!classifyDynamicRelation(registrations, storage, file, expression)) {
         push(
           node,
-          'ast-unregistered-dynamic-schema',
-          `AST-derived dynamic .schema(${expression}) has no exact approved binding`,
+          'ast-unregistered-dynamic-from',
+          `AST-derived dynamic .from(${expression}) has no exact registration`,
           expression,
         );
       }
@@ -909,6 +952,39 @@ export function deriveAstBoundaryViolations(
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
+  for (const rule of fileRules) {
+    const observed = observedRuleCounts.get(databaseCallRuleKey(rule)) ?? 0;
+    if (observed !== rule[5]) {
+      push(
+        sourceFile,
+        'database-call-rule-drift',
+        `exact database call tuple expected ${rule[5]} occurrence(s), observed ${observed}`,
+        `${rule[1]}:${rule[2]}:${rule[3]}:${rule[4]}`,
+      );
+    }
+  }
+  for (const rule of detachedRules) {
+    const observed = observedDetachedRuleCounts.get(detachedDatabaseMethodRuleKey(rule)) ?? 0;
+    if (observed !== rule[5]) {
+      push(
+        sourceFile,
+        'detached-database-method-rule-drift',
+        `exact detached database method tuple expected ${rule[5]} occurrence(s), observed ${observed}`,
+        `${rule[1]}:${rule[2]}:${rule[3]}:${rule[4]}`,
+      );
+    }
+  }
+  for (const rule of computedRules) {
+    const observed = observedComputedRuleCounts.get(nonDatabaseComputedCallRuleKey(rule)) ?? 0;
+    if (observed !== rule[3]) {
+      push(
+        sourceFile,
+        'non-database-computed-call-rule-drift',
+        `exact non-database computed-call tuple expected ${rule[3]} occurrence(s), observed ${observed}`,
+        `${rule[1]}:${rule[2]}`,
+      );
+    }
+  }
   return violations;
 }
 
@@ -1152,8 +1228,7 @@ export async function auditSchemaBoundary(
       file: MANIFEST_PATH,
       line: 1,
       kind: 'source-audit-policy-drift',
-      message:
-        'source audit must retain alias, computed-property, destructuring, assignment, and parameter fail-closed controls',
+      message: 'source audit controls must retain the exact reviewed inventory',
     });
   }
 
@@ -1575,6 +1650,22 @@ export async function auditSchemaBoundary(
           'direct PGMQ operation is not registered',
         );
       }
+    }
+  }
+
+  const exactSyntaxRuleFiles = new Set([
+    ...EXACT_DATABASE_CALLS.map((rule) => rule[0]),
+    ...LEGACY_DETACHED_DATABASE_METHODS.map((rule) => rule[0]),
+    ...NON_DATABASE_COMPUTED_CALLS.map((rule) => rule[0]),
+  ]);
+  for (const file of exactSyntaxRuleFiles) {
+    if (!sourceByFile.has(file)) {
+      findings.push({
+        file,
+        line: 1,
+        kind: 'database-call-rule-file-missing',
+        message: 'an exact database adapter or legacy public-residue rule points to a missing file',
+      });
     }
   }
 

@@ -277,7 +277,7 @@ Deno.test(
     const source = `
 const table = request.table;
 const { rpc } = client;
-const detached = client.schema;
+const detached = client['schema'];
 client['from']('processes');
 client.from(
   table
@@ -340,56 +340,81 @@ query(assignedAlias, method);
   },
 );
 
-Deno.test('unknown computed methods fail closed across aliases and local parameter passing', () => {
-  const source = `
-const origin = createSupabaseServiceClient();
-const alias = origin;
-function passthrough(value) {
-  return value;
-}
-const wrappedAlias = passthrough(alias);
-function invoke(db, method) {
-  return db[method]('lca_result_cache');
-}
-invoke(wrappedAlias, request.method);
+Deno.test('syntax-first database call guard rejects direct objects and wrapper returns', () => {
+  const directObject = `
+const client = createClient();
+const holder = { db: client };
+holder.db['r' + 'pc']('cmd_dataset_create');
+holder.db[request.method]('cmd_dataset_create');
 `;
-  const violations = deriveAstBoundaryViolations(
-    'parameter.ts',
-    source,
-    [],
-    [],
-    ['api'],
-    new Map([['parameter.ts', source]]),
+  const wrapperReturn = `
+function wrapped() { return createClient(); }
+wrapped().rpc('cmd_dataset_create');
+`;
+  const harmlessWrapper = `
+function wrapped() { return { invoke: () => undefined }; }
+wrapped()[request.method]('not-a-database-routine');
+`;
+  const audit = (file: string, source: string) =>
+    deriveAstBoundaryViolations(file, source, [], [], ['api'], new Map([[file, source]]), []);
+  const directViolations = audit('direct-object.ts', directObject);
+  assertEquals(
+    directViolations.filter((finding) => finding.kind === 'computed-database-call').length,
+    1,
   );
-  assert(
-    violations.some((finding) => finding.kind === 'unknown-computed-data-api-call'),
-    'an unresolved method on a client passed through a parameter must fail closed',
+  assertEquals(
+    directViolations.filter((finding) => finding.kind === 'unknown-computed-database-call').length,
+    1,
+  );
+  assertEquals(
+    audit('wrapper-return.ts', wrapperReturn).filter(
+      (finding) => finding.kind === 'raw-database-call-outside-adapter',
+    ).length,
+    1,
+  );
+  assertEquals(
+    audit('harmless-wrapper.ts', harmlessWrapper).filter(
+      (finding) => finding.kind === 'unknown-computed-database-call',
+    ).length,
+    1,
   );
 });
 
-Deno.test('object property aliases cannot hide computed Supabase client calls', () => {
-  const source = `
-const client = createClient();
-const holder = { db: client };
-const nested = { holder };
-const harmless = { db: { invoke: () => undefined } };
-holder.db['r' + 'pc']('cmd_dataset_create');
-holder.db[request.method]('cmd_dataset_create');
-nested.holder.db['r' + 'pc']('cmd_dataset_create');
-harmless.db[request.method]('not-a-supabase-call');
-`;
-  const violations = deriveAstBoundaryViolations(
-    'object-property-alias.ts',
-    source,
-    [],
-    [],
-    ['api'],
-    new Map([['object-property-alias.ts', source]]),
+Deno.test('exact syntax tuple counts reject deletion and duplication', async () => {
+  const audit = (file: string, source: string) =>
+    deriveAstBoundaryViolations(file, source, [], [], ['api'], new Map([[file, source]]));
+  const adapterFile = 'supabase/functions/_shared/capabilities/schema_boundary.ts';
+  const adapterSource = await Deno.readTextFile(`${ROOT}/${adapterFile}`);
+  const adapterCall = 'return client.schema(DATABASE_API_SCHEMA);';
+  assert(
+    audit(adapterFile, adapterSource.replace(adapterCall, 'return client as never;')).some(
+      (finding) => finding.kind === 'database-call-rule-drift',
+    ),
   );
-  assertEquals(violations.filter((finding) => finding.kind === 'computed-data-api-call').length, 2);
-  assertEquals(
-    violations.filter((finding) => finding.kind === 'unknown-computed-data-api-call').length,
-    1,
+  assert(
+    audit(adapterFile, adapterSource.replace(adapterCall, `${adapterCall}\n${adapterCall}`)).some(
+      (finding) => finding.kind === 'database-call-rule-drift',
+    ),
+  );
+
+  const detachedFile = 'supabase/functions/_shared/commands/data_product/repository.ts';
+  const detachedSource = await Deno.readTextFile(`${ROOT}/${detachedFile}`);
+  assert(
+    audit(detachedFile, detachedSource.replace('typeof supabase.rpc', 'typeof supabase')).some(
+      (finding) => finding.kind === 'detached-database-method-rule-drift',
+    ),
+  );
+
+  const computedFile = 'supabase/functions/_shared/dataset_extraction_worker.ts';
+  const computedSource = await Deno.readTextFile(`${ROOT}/${computedFile}`);
+  assert(
+    audit(
+      computedFile,
+      computedSource.replace(
+        'generators[entityKind as SupportedDatasetEntityKind]',
+        'generators.contact',
+      ),
+    ).some((finding) => finding.kind === 'non-database-computed-call-rule-drift'),
   );
 });
 

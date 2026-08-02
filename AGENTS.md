@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-02
-lastReviewedCommit: 3eae8d31e79768dcc5e9b36aef9f15d0536f10d1
-lastReviewedNote: 'Reviewed for Issue #250: bounded object-property alias analysis remains part of the Edge-owned schema-boundary proof; exact-head CI and non-authorizing candidate database semantics are unchanged.'
+lastReviewedCommit: 2af5d7863148df35482435bcc5c73f61ebaefefb
+lastReviewedNote: 'Reviewed for Issue #250: RPC/schema authorization is confined to exact syntax tuples for the current incremental slice; the scanner does not claim global consumer-zero.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
