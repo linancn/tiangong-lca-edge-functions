@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-01
-lastReviewedCommit: 5d8b8c7c77dc29befe82b3cd51f1dc544a8ab3ff
-lastReviewedNote: 'Reviewed for Issue #242: the tracked isolated Edge qualification adapter remains proof tooling under scripts/test and does not change runtime, auth, branch, deployment, or ownership boundaries.'
+lastReviewedAt: 2026-08-02
+lastReviewedCommit: 6fa42ab
+lastReviewedNote: 'Reviewed for Issue #250: the minimal save-draft api slice preserves repository ownership, dev-target, auth, and deployment boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

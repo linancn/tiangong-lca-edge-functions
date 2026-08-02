@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-01
-lastReviewedCommit: 5956e5cc47b1086bb969f61643abc1a03b5f2d5d
-lastReviewedNote: 'Updated for Issue #249 final review: the self-enforcing hosted proof distinguishes manual Preview content attestation from Git-bound deployment provenance and verifies cleanup plus the full residue ACL matrix.'
+lastReviewedAt: 2026-08-02
+lastReviewedCommit: 6fa42ab
+lastReviewedNote: 'Reviewed for Issue #250: existing command-wrapper, targeted test, real DB, and hosted dev validation rules cover the minimal save-draft api slice.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
