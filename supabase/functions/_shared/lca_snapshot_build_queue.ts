@@ -1,5 +1,4 @@
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
-
+import { createLcaSnapshotCapabilityRepository } from './capabilities/lca_snapshot_family.ts';
 import { createServiceWorkerCapabilityRepository } from './capabilities/worker_jobs.ts';
 
 import {
@@ -14,6 +13,7 @@ import {
   type LciaFactorCoverageContract,
   type SnapshotProcessFilter,
 } from './lca_snapshot_scope.ts';
+import type { ServiceRoleSupabaseClient } from './supabase_client.ts';
 import {
   enqueueCalculatorWorkerJob,
   isWorkerJobsCutoverEnabled,
@@ -46,7 +46,7 @@ const ACTIVE_BUILD_MAX_RUNNING_MS = 2 * 60 * 60 * 1000;
 const ACTIVE_WORKER_STATUSES = ['queued', 'running', 'waiting', 'blocked'];
 
 export async function ensureLcaSnapshotBuildQueued(
-  supabase: SupabaseClient,
+  supabase: ServiceRoleSupabaseClient,
   args: {
     scope: string;
     dataScope: LcaDataScope;
@@ -54,6 +54,7 @@ export async function ensureLcaSnapshotBuildQueued(
     requestRoots?: readonly LcaSnapshotRequestRoot[];
   },
 ): Promise<LcaSnapshotBuildQueueResult> {
+  const snapshotRepository = createLcaSnapshotCapabilityRepository(supabase);
   const processFilter = await buildSnapshotProcessFilter(
     args.dataScope,
     args.userId,
@@ -113,15 +114,14 @@ export async function ensureLcaSnapshotBuildQueued(
     ...buildPayloadFields,
   };
 
-  const { error: snapshotInsertError } = await supabase.from('lca_network_snapshots').insert({
-    id: snapshotId,
+  const { error: snapshotInsertError } = await snapshotRepository.createDraft({
+    snapshotId,
     scope: 'full_library',
-    process_filter: processFilter,
-    status: 'draft',
-    created_by: args.userId,
+    processFilter,
+    createdBy: args.userId,
   });
-  if (snapshotInsertError && snapshotInsertError.code !== '23505') {
-    console.error('insert lca_network_snapshots failed', {
+  if (snapshotInsertError) {
+    console.error('create LCA snapshot draft capability failed', {
       error: snapshotInsertError.message,
       code: snapshotInsertError.code,
       snapshot_id: snapshotId,
@@ -199,7 +199,7 @@ function buildCalculationContract(
 }
 
 async function findActiveSnapshotBuildWorkerJob(
-  supabase: SupabaseClient,
+  supabase: ServiceRoleSupabaseClient,
   concurrencyKey: string,
 ): Promise<
   | { ok: true; job_id: string | null; snapshot_id: string | null; worker_job_id: string | null }

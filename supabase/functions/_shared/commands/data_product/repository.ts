@@ -1,6 +1,10 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
 import {
+  createLcaSnapshotCapabilityRepository,
+  type LcaSnapshotCapabilityRepository,
+} from '../../capabilities/lca_snapshot_family.ts';
+import {
   createServiceWorkerCapabilityRepository,
   type ServiceWorkerCapabilityRepository,
 } from '../../capabilities/worker_jobs.ts';
@@ -18,7 +22,10 @@ import {
   callTaskSummaryV2FeedRpc,
   type DataProductRpcResult,
 } from '../../db_rpc/data_product_commands.ts';
-import { createSupabaseServiceClient } from '../../supabase_client.ts';
+import {
+  createSupabaseServiceClient,
+  type ServiceRoleSupabaseClient,
+} from '../../supabase_client.ts';
 import {
   enqueueCalculatorWorkerJob,
   type WorkerJobEnqueueOutcome,
@@ -164,7 +171,7 @@ function requireExplicitActorClient(supabase: RpcClient | null | undefined): Rpc
 
 export function createDataProductCommandRepository(
   actorSupabase: RpcClient,
-  serviceSupabase: SupabaseClient = createSupabaseServiceClient(),
+  serviceSupabase: ServiceRoleSupabaseClient = createSupabaseServiceClient(),
   options: DataProductCommandRepositoryOptions = {},
 ): DataProductCommandRepository {
   const actorClient = requireExplicitActorClient(actorSupabase);
@@ -288,7 +295,8 @@ export function createDataProductCommandRepository(
         visibility: request.workerJob.visibility ?? 'operator',
       }),
     previewPackage: (request) => callDataProductPackagePreviewRpc(actorClient, request),
-    fetchSnapshotArtifactUrl: (snapshotId) => fetchSnapshotArtifactUrl(serviceSupabase, snapshotId),
+    fetchSnapshotArtifactUrl: (snapshotId) =>
+      fetchSnapshotArtifactUrl(createLcaSnapshotCapabilityRepository(serviceSupabase), snapshotId),
     fetchJsonArtifact: (artifactUrl) => fetchArtifactJson(serviceSupabase, artifactUrl),
     fetchPreviewMetadata: (request) => fetchPreviewMetadata(serviceSupabase, request),
     publishPackage: (request, audit) =>
@@ -844,7 +852,7 @@ async function listLciaResultPublications(
 }
 
 async function fetchSnapshotArtifactUrl(
-  supabase: SupabaseClient,
+  snapshotRepository: LcaSnapshotCapabilityRepository,
   snapshotId: string,
 ): Promise<
   | { ok: true; data: { snapshotId: string; artifactUrl: string } }
@@ -856,14 +864,7 @@ async function fetchSnapshotArtifactUrl(
       details?: unknown;
     }
 > {
-  const { data, error } = await supabase
-    .from('lca_snapshot_artifacts')
-    .select('snapshot_id,artifact_url,status,created_at')
-    .eq('snapshot_id', snapshotId)
-    .eq('status', 'ready')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await snapshotRepository.readArtifact(snapshotId);
 
   if (error) {
     return {

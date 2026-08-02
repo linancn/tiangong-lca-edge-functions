@@ -8,7 +8,6 @@ import {
 
 type MockState = {
   rpcCalls: Array<{ fn: string; args: Record<string, unknown> }>;
-  insertCalls: Array<{ table: string; row: Record<string, unknown> }>;
   concurrencyRows?: Array<Record<string, unknown>>;
 };
 
@@ -18,34 +17,17 @@ function createSupabaseMock(state: MockState) {
       assertEquals(schema, 'api');
       return this;
     },
-    from(table: string) {
-      return {
-        select(_columns: string) {
-          return this;
-        },
-        eq(_column: string, _value: unknown) {
-          return this;
-        },
-        in(_column: string, _value: unknown) {
-          return this;
-        },
-        order(_column: string, _options: unknown) {
-          return this;
-        },
-        limit(_limit: number) {
-          return Promise.resolve({ data: [], error: null });
-        },
-        insert(row: Record<string, unknown>) {
-          state.insertCalls.push({ table, row });
-          return Promise.resolve({ data: null, error: null });
-        },
-      };
-    },
     rpc(fn: string, args: Record<string, unknown>) {
       state.rpcCalls.push({ fn, args });
       if (fn === 'worker_list_jobs_by_concurrency_key_v1') {
         return Promise.resolve({
           data: { ok: true, data: state.concurrencyRows ?? [] },
+          error: null,
+        });
+      }
+      if (fn === 'cmd_lca_snapshot_create_v1') {
+        return Promise.resolve({
+          data: { snapshotId: args.p_snapshot_id, created: true },
           error: null,
         });
       }
@@ -66,7 +48,7 @@ function createSupabaseMock(state: MockState) {
 Deno.test(
   'snapshot queue sends exact scope, actor, LCIA source, and coverage proof to worker',
   async () => {
-    const state: MockState = { rpcCalls: [], insertCalls: [] };
+    const state: MockState = { rpcCalls: [] };
     const result = await ensureLcaSnapshotBuildQueued(createSupabaseMock(state) as never, {
       scope: 'prod',
       dataScope: 'public_plus_owner_draft',
@@ -88,25 +70,20 @@ Deno.test(
       'incomplete_coverage_not_zero',
     );
 
-    assertEquals(state.insertCalls.length, 1);
-    assertEquals(state.insertCalls[0].table, 'lca_network_snapshots');
-    assertEquals(state.insertCalls[0].row.scope, 'full_library');
-    assertEquals(state.insertCalls[0].row.created_by, 'user-1');
-    assertEquals(
-      state.insertCalls[0].row.process_filter,
-      result.calculation_contract.process_filter,
-    );
+    const snapshotCreate = state.rpcCalls.find((call) => call.fn === 'cmd_lca_snapshot_create_v1');
+    assert(snapshotCreate);
+    assertEquals(snapshotCreate.args.p_scope, 'full_library');
+    assertEquals(snapshotCreate.args.p_created_by, 'user-1');
+    assertEquals(snapshotCreate.args.p_process_filter, result.calculation_contract.process_filter);
 
-    assertEquals(state.rpcCalls.length, 2);
+    assertEquals(state.rpcCalls.length, 3);
     assertEquals(state.rpcCalls[0].fn, 'worker_list_jobs_by_concurrency_key_v1');
     assertEquals(state.rpcCalls[0].args.p_job_kind, 'lca.build_snapshot');
     assertEquals(state.rpcCalls[0].args.p_limit, 20);
-    assertEquals(
-      state.rpcCalls[0].args.p_concurrency_key,
-      state.rpcCalls[1].args.p_concurrency_key,
-    );
-    const rpcArgs = state.rpcCalls[1].args;
-    assertEquals(state.rpcCalls[1].fn, 'worker_enqueue_job_v1');
+    const enqueueCall = state.rpcCalls.find((call) => call.fn === 'worker_enqueue_job_v1');
+    assert(enqueueCall);
+    assertEquals(state.rpcCalls[0].args.p_concurrency_key, enqueueCall.args.p_concurrency_key);
+    const rpcArgs = enqueueCall.args;
     assertEquals(rpcArgs.p_job_kind, 'lca.build_snapshot');
     assertEquals(rpcArgs.p_payload_schema_version, 'lca.build_snapshot.request.v2');
     assertEquals(rpcArgs.p_requested_by, 'user-1');
@@ -149,7 +126,6 @@ Deno.test(
     const now = Date.now();
     const state: MockState = {
       rpcCalls: [],
-      insertCalls: [],
       concurrencyRows: [
         {
           id: 'expired-worker-job',
@@ -179,12 +155,11 @@ Deno.test(
     assertEquals(result.worker_job_id, 'active-worker-job');
     assertEquals(state.rpcCalls.length, 1);
     assertEquals(state.rpcCalls[0].fn, 'worker_list_jobs_by_concurrency_key_v1');
-    assertEquals(state.insertCalls, []);
   },
 );
 
 Deno.test('snapshot queue ignores client source locator and no-LCIA override fields', async () => {
-  const state: MockState = { rpcCalls: [], insertCalls: [] };
+  const state: MockState = { rpcCalls: [] };
   const enqueue = ensureLcaSnapshotBuildQueued as unknown as (
     supabase: ReturnType<typeof createSupabaseMock>,
     args: Record<string, unknown>,
@@ -200,7 +175,9 @@ Deno.test('snapshot queue ignores client source locator and no-LCIA override fie
   });
 
   assert(result.ok);
-  const payload = state.rpcCalls[1].args.p_payload_json as Record<string, unknown>;
+  const enqueueCall = state.rpcCalls.find((call) => call.fn === 'worker_enqueue_job_v1');
+  assert(enqueueCall);
+  const payload = enqueueCall.args.p_payload_json as Record<string, unknown>;
   const source = payload.lcia_method_factor_source as Record<string, unknown>;
   assertEquals(payload.no_lcia, false);
   assertEquals(source.bundle_manifest_path, LCA_STATIC_CACHE_BUNDLE_MANIFEST_PATH);
@@ -222,7 +199,7 @@ Deno.test(
     };
 
     const enqueue = async (requestRoots?: Array<typeof rootA>) => {
-      const state: MockState = { rpcCalls: [], insertCalls: [] };
+      const state: MockState = { rpcCalls: [] };
       const result = await ensureLcaSnapshotBuildQueued(createSupabaseMock(state) as never, {
         scope: 'prod',
         dataScope: 'public_plus_owner_draft',
@@ -239,7 +216,9 @@ Deno.test(
     const onlyB = await enqueue([rootB]);
     const full = await enqueue();
 
-    const canonicalArgs = canonical.state.rpcCalls[1].args;
+    const canonicalArgs = canonical.state.rpcCalls.find(
+      (call) => call.fn === 'worker_enqueue_job_v1',
+    )!.args;
     const canonicalPayload = canonicalArgs.p_payload_json as Record<string, unknown>;
     assertEquals(
       canonical.result.calculation_contract.process_filter.selection_mode,
@@ -251,15 +230,18 @@ Deno.test(
     ]);
     assertEquals(canonicalPayload.request_roots, [rootA, rootB]);
     assertEquals(
-      canonical.state.insertCalls[0].row.process_filter,
+      canonical.state.rpcCalls.find((call) => call.fn === 'cmd_lca_snapshot_create_v1')!.args
+        .p_process_filter,
       canonical.result.calculation_contract.process_filter,
     );
 
     for (const field of ['p_request_hash', 'p_idempotency_key', 'p_concurrency_key']) {
-      assertEquals(canonicalArgs[field], reordered.state.rpcCalls[1].args[field]);
-      assert(canonicalArgs[field] !== onlyA.state.rpcCalls[1].args[field]);
-      assert(onlyA.state.rpcCalls[1].args[field] !== onlyB.state.rpcCalls[1].args[field]);
-      assert(onlyA.state.rpcCalls[1].args[field] !== full.state.rpcCalls[1].args[field]);
+      const enqueueArgs = (state: MockState) =>
+        state.rpcCalls.find((call) => call.fn === 'worker_enqueue_job_v1')!.args;
+      assertEquals(canonicalArgs[field], enqueueArgs(reordered.state)[field]);
+      assert(canonicalArgs[field] !== enqueueArgs(onlyA.state)[field]);
+      assert(enqueueArgs(onlyA.state)[field] !== enqueueArgs(onlyB.state)[field]);
+      assert(enqueueArgs(onlyA.state)[field] !== enqueueArgs(full.state)[field]);
     }
   },
 );

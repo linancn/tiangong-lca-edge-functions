@@ -19,7 +19,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-02
-lastReviewedCommit: 2c02a6f80b544132fb142d8ebab8f066e0baf5a5
+lastReviewedCommit: 55cf01545bb78b80a81cb601dceb757564151ce4
+lastReviewedNote: 'Reviewed for Issue #256: the added LCA snapshot call-site inventory diagnostic does not change setup, local serve, deploy, or operator-facing runtime guidance.'
 ---
 
 # TianGong-LCA-Edge-Functions

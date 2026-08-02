@@ -15,6 +15,8 @@
     "test:worker-contract:consumer-zero": "deno test --allow-read=supabase/functions --config supabase/functions/deno.json test/worker_rpc_consumer_zero_test.ts",
     "test:worker-contract:db": "node ./scripts/run-worker-capability-contract.cjs local",
     "test:worker-contract:hosted": "node ./scripts/run-worker-capability-contract.cjs hosted-preview",
+    "diagnose:lca-snapshot:call-sites": "node ./scripts/diagnose-lca-snapshot-callsite-inventory.cjs",
+    "test:lca-snapshot:db": "node ./scripts/run-lca-snapshot-capability-contract.cjs",
     "format": "prettier --write \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\"",
     "lint": "prettier --check \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\""
   },
