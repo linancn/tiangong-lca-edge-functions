@@ -192,11 +192,22 @@ routing:
     lca-runtime:
       paths:
         - supabase/functions/lca_*/**
+        - supabase/functions/_shared/capabilities/lca_snapshot_family.ts
         - supabase/functions/_shared/lca_process_scope.ts
         - supabase/functions/_shared/lca_snapshot_scope.ts
+        - supabase/functions/_shared/lca_snapshot_scope_db.ts
         - supabase/functions/_shared/lca_snapshot_build_queue.ts
         - supabase/functions/_shared/lca_all_unit_solve_queue.ts
         - supabase/functions/_shared/lca_static_cache_bundle_manifest.json
+        - test/lca_snapshot_capability_test.ts
+        - test/lca_snapshot_capability_db_contract_test.ts
+        - test/lca_snapshot_contract_cleanup.ts
+        - test/lca_snapshot_contract_cleanup_test.ts
+        - test/lca_snapshot_endpoint_handler_test.ts
+        - scripts/diagnose-lca-snapshot-callsite-inventory.cjs
+        - scripts/run-lca-snapshot-capability-contract.cjs
+        - test/lca_snapshot_scope_db_test.ts
+        - test/lca_snapshot_build_queue_test.ts
         - scripts/lca_submit_poll_fetch.sh
     tidas-package:
       paths:
@@ -221,6 +232,8 @@ routing:
         - scripts/probe-functions-auth.cjs
         - scripts/run_scope_closure_edge_qualification.sh
         - scripts/scope_closure_edge_qualification.ts
+        - scripts/diagnose-lca-snapshot-callsite-inventory.cjs
+        - scripts/run-lca-snapshot-capability-contract.cjs
         - .github/workflows/ci.yml
         - docs/agents/repo-validation.md
         - test.example.http
@@ -437,6 +450,10 @@ rules:
         kind: qualification-adapter
       - path: scripts/scope_closure_edge_qualification.ts
         kind: qualification-adapter
+      - path: scripts/diagnose-lca-snapshot-callsite-inventory.cjs
+        kind: validation-wrapper
+      - path: scripts/run-lca-snapshot-capability-contract.cjs
+        kind: validation-wrapper
       - path: .github/workflows/ci.yml
         kind: automation
     requiredDocs:

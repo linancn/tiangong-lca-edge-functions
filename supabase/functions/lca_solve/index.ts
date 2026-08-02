@@ -2,6 +2,10 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
+import {
+  createLcaSnapshotCapabilityRepository,
+  type LcaSnapshotCapabilityRepository,
+} from '../_shared/capabilities/lca_snapshot_family.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import {
   hasClientSuppliedSnapshotRoots,
@@ -37,6 +41,8 @@ import {
   workerJobPayloadSchemaVersion,
   workerJobPayloadStringFromRpcData,
 } from '../_shared/worker_jobs_cutover.ts';
+
+const lcaSnapshotRepository = createLcaSnapshotCapabilityRepository(supabaseClient);
 
 type SolveRequest = {
   scope?: string;
@@ -102,7 +108,31 @@ type ResultCacheRow = {
 
 const REQUEST_VERSION = 'lca_solve_v2';
 
-Deno.serve(async (req) => {
+type LcaSolveHandlerDependencies = {
+  authenticateRequest: typeof authenticateRequest;
+  getRedisClient: typeof getRedisClient;
+  isSnapshotFresh: typeof isSnapshotFresh;
+  snapshotRepository: LcaSnapshotCapabilityRepository;
+};
+
+export function createLcaSolveHandler(
+  overrides: Partial<LcaSolveHandlerDependencies> = {},
+): (req: Request) => Promise<Response> {
+  const dependencies: LcaSolveHandlerDependencies = {
+    authenticateRequest,
+    getRedisClient,
+    isSnapshotFresh,
+    snapshotRepository: lcaSnapshotRepository,
+    ...overrides,
+  };
+
+  return (req) => handleLcaSolveRequest(req, dependencies);
+}
+
+async function handleLcaSolveRequest(
+  req: Request,
+  dependencies: LcaSolveHandlerDependencies,
+): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -111,9 +141,9 @@ Deno.serve(async (req) => {
     return json({ error: 'method_not_allowed' }, 405);
   }
 
-  const redis = await getRedisClient();
+  const redis = await dependencies.getRedisClient();
 
-  const authResult = await authenticateRequest(req, {
+  const authResult = await dependencies.authenticateRequest(req, {
     authClient: supabaseAuthClient,
     redis,
     allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
@@ -186,6 +216,8 @@ Deno.serve(async (req) => {
     requestedSnapshotId,
     userId,
     requestRoots,
+    dependencies.snapshotRepository,
+    dependencies.isSnapshotFresh,
   );
   if (!snapshotMeta.ok) {
     const shouldQueueBuild =
@@ -544,7 +576,11 @@ Deno.serve(async (req) => {
   };
 
   return json(queued, 202);
-});
+}
+
+if (import.meta.main) {
+  Deno.serve(createLcaSolveHandler());
+}
 
 async function resolveCalculationEvidenceBinding(input: {
   dataScope: LcaDataScope;
@@ -649,14 +685,19 @@ async function resolveReadySnapshot(
   scope: string,
   dataScope: LcaDataScope,
   requestedSnapshotId?: string,
-  userId?: string,
+  userId: string = '',
   requestRoots: readonly LcaSnapshotRequestRoot[] = [],
+  repository: LcaSnapshotCapabilityRepository = lcaSnapshotRepository,
+  freshnessCheck: typeof isSnapshotFresh = isSnapshotFresh,
 ): Promise<{ ok: true; data: ReadySnapshotMeta } | { ok: false; error: string; status: number }> {
   const explicit = requestedSnapshotId?.trim();
 
   if (explicit) {
-    const ready = await fetchReadySnapshotMeta(explicit);
-    if (!ready) {
+    const ready = await fetchReadySnapshotMetaResult(explicit, repository);
+    if (!ready.ok) {
+      if (ready.error) {
+        return { ok: false, error: 'snapshot_lookup_failed', status: 500 };
+      }
       return { ok: false, error: 'snapshot_not_ready', status: 404 };
     }
     if (dataScope === PUBLIC_PLUS_OWNER_DRAFT_SCOPE && userId) {
@@ -676,62 +717,24 @@ async function resolveReadySnapshot(
         return { ok: false, error: 'snapshot_not_in_data_scope', status: 403 };
       }
     }
-    return { ok: true, data: ready };
+    return { ok: true, data: ready.data };
   }
 
-  if (userId) {
-    const scopedReady = await fetchScopedReadySnapshot(scope, dataScope, userId, requestRoots);
-    if (scopedReady.kind === 'fresh') {
-      return { ok: true, data: scopedReady.data };
-    }
-    if (scopedReady.kind === 'stale') {
-      return { ok: false, error: 'snapshot_stale_rebuild_required', status: 409 };
-    }
-    return { ok: false, error: 'no_ready_snapshot', status: 404 };
+  const scopedReady = await fetchScopedReadySnapshot(
+    scope,
+    dataScope,
+    userId,
+    requestRoots,
+    repository,
+    freshnessCheck,
+  );
+  if (scopedReady.kind === 'fresh') {
+    return { ok: true, data: scopedReady.data };
   }
-
-  const { data: activeRow, error: activeErr } = await supabaseClient
-    .from('lca_active_snapshots')
-    .select('snapshot_id')
-    .eq('scope', scope)
-    .maybeSingle();
-
-  if (activeErr) {
-    console.warn('read lca_active_snapshots failed', { error: activeErr.message, scope });
+  if (scopedReady.kind === 'stale') {
+    return { ok: false, error: 'snapshot_stale_rebuild_required', status: 409 };
   }
-
-  if (activeRow?.snapshot_id) {
-    const activeReady = await fetchReadySnapshotMeta(String(activeRow.snapshot_id));
-    if (activeReady) {
-      return { ok: true, data: activeReady };
-    }
-  }
-
-  const { data: latestRows, error: latestErr } = await supabaseClient
-    .from('lca_snapshot_artifacts')
-    .select('snapshot_id,process_count,artifact_url,status,created_at')
-    .eq('status', 'ready')
-    .order('created_at', { ascending: false })
-    .limit(1);
-
-  if (latestErr) {
-    console.error('read latest ready snapshot failed', { error: latestErr.message });
-    return { ok: false, error: 'snapshot_lookup_failed', status: 500 };
-  }
-
-  if (!latestRows || latestRows.length === 0) {
-    return { ok: false, error: 'no_ready_snapshot', status: 404 };
-  }
-
-  const latest = latestRows[0];
-  return {
-    ok: true,
-    data: {
-      snapshot_id: String(latest.snapshot_id),
-      process_count: Number(latest.process_count),
-      artifact_url: String((latest as { artifact_url?: unknown }).artifact_url ?? ''),
-    },
-  };
+  return { ok: false, error: 'no_ready_snapshot', status: 404 };
 }
 
 async function fetchScopedReadySnapshot(
@@ -739,16 +742,14 @@ async function fetchScopedReadySnapshot(
   dataScope: LcaDataScope,
   userId: string,
   requestRoots: readonly LcaSnapshotRequestRoot[] = [],
+  repository: LcaSnapshotCapabilityRepository = lcaSnapshotRepository,
+  freshnessCheck: typeof isSnapshotFresh = isSnapshotFresh,
 ): Promise<ScopedSnapshotResolution> {
   const expectedProcessFilter = await buildSnapshotProcessFilter(dataScope, userId, requestRoots);
-  const { data, error } = await supabaseClient
-    .from('lca_network_snapshots')
-    .select('id,created_at,process_filter')
-    .eq('status', 'ready')
-    .in('scope', scope === 'full_library' ? ['full_library'] : ['full_library', scope])
-    .contains('process_filter', buildSnapshotContainsFilter(expectedProcessFilter))
-    .order('created_at', { ascending: false })
-    .limit(100);
+  const { data, error } = await repository.resolveReady(
+    scope,
+    buildSnapshotContainsFilter(expectedProcessFilter),
+  );
 
   if (error) {
     console.warn('read scoped snapshots failed', {
@@ -770,10 +771,10 @@ async function fetchScopedReadySnapshot(
     if (!matchesSnapshotProcessFilter(processFilter, expectedProcessFilter)) {
       continue;
     }
-    const ready = await fetchReadySnapshotMeta(snapshotId);
+    const ready = await fetchReadySnapshotMeta(snapshotId, repository);
     if (ready) {
       const snapshotCreatedAt = String((row as { created_at?: unknown }).created_at ?? '');
-      const freshness = await isSnapshotFresh(snapshotCreatedAt, processFilter);
+      const freshness = await freshnessCheck(snapshotCreatedAt, processFilter);
       if (freshness === 'fresh') {
         return { kind: 'fresh', data: ready };
       }
@@ -788,30 +789,37 @@ async function fetchScopedReadySnapshot(
   return { kind: 'none' };
 }
 
-async function fetchReadySnapshotMeta(snapshotId: string): Promise<ReadySnapshotMeta | null> {
-  const { data, error } = await supabaseClient
-    .from('lca_snapshot_artifacts')
-    .select('snapshot_id,process_count,artifact_url,status,created_at')
-    .eq('snapshot_id', snapshotId)
-    .eq('status', 'ready')
-    .order('created_at', { ascending: false })
-    .limit(1);
+async function fetchReadySnapshotMetaResult(
+  snapshotId: string,
+  repository: LcaSnapshotCapabilityRepository = lcaSnapshotRepository,
+): Promise<{ ok: true; data: ReadySnapshotMeta } | { ok: false; error: boolean }> {
+  const { data, error } = await repository.readArtifact(snapshotId);
 
   if (error) {
     console.error('fetch snapshot meta failed', { error: error.message, snapshot_id: snapshotId });
-    return null;
+    return { ok: false, error: true };
   }
 
-  if (!data || data.length === 0) {
-    return null;
+  if (!data) {
+    return { ok: false, error: false };
   }
 
-  const row = data[0];
   return {
-    snapshot_id: String(row.snapshot_id),
-    process_count: Number(row.process_count),
-    artifact_url: String(row.artifact_url ?? ''),
+    ok: true,
+    data: {
+      snapshot_id: String(data.snapshot_id),
+      process_count: Number(data.process_count),
+      artifact_url: String(data.artifact_url ?? ''),
+    },
   };
+}
+
+async function fetchReadySnapshotMeta(
+  snapshotId: string,
+  repository: LcaSnapshotCapabilityRepository = lcaSnapshotRepository,
+): Promise<ReadySnapshotMeta | null> {
+  const result = await fetchReadySnapshotMetaResult(snapshotId, repository);
+  return result.ok ? result.data : null;
 }
 
 type SnapshotFreshness = 'fresh' | 'stale';
@@ -870,11 +878,9 @@ async function fetchTableMaxModifiedAt(
   table: 'flows' | 'lciamethods',
   filter: ParsedSnapshotProcessFilter,
 ): Promise<string | null> {
-  let query = supabaseClient
-    .from(table)
-    .select('modified_at')
-    .order('modified_at', { ascending: false })
-    .limit(1);
+  const relation =
+    table === 'flows' ? supabaseClient.from('flows') : supabaseClient.from('lciamethods');
+  let query = relation.select('modified_at').order('modified_at', { ascending: false }).limit(1);
 
   const visibilityExpression = buildSnapshotVisibilityOrExpression(filter, {
     supportsCollaborationColumns: table === 'flows',
@@ -1042,14 +1048,7 @@ async function fetchSnapshotIndex(
   let resolvedArtifactUrl = (artifactUrl ?? '').trim();
 
   if (!resolvedArtifactUrl) {
-    const { data, error } = await supabaseClient
-      .from('lca_snapshot_artifacts')
-      .select('artifact_url')
-      .eq('snapshot_id', snapshotId)
-      .eq('status', 'ready')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data, error } = await lcaSnapshotRepository.readArtifact(snapshotId);
 
     if (error) {
       return { ok: false, error: `snapshot_artifact_lookup_failed:${error.message}` };
