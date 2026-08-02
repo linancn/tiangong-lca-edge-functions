@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-01
-lastReviewedCommit: 5d8b8c7c77dc29befe82b3cd51f1dc544a8ab3ff
-lastReviewedNote: 'Updated for Issue #249: Worker control-plane consumers use the explicit api profile and versioned v1 adapters through one service-only capability repository.'
+lastReviewedAt: 2026-08-02
+lastReviewedCommit: 6fa42ab
+lastReviewedNote: 'Reviewed for Issue #250: only save-draft selects the api schema; shared adapter architecture remains an E3-D concern.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

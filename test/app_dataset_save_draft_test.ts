@@ -9,6 +9,12 @@ const TEST_MODEL_ID = '33333333-3333-4333-8333-333333333333';
 
 class FakeRpcSupabase {
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
+  schemas: string[] = [];
+
+  schema(name: string) {
+    this.schemas.push(name);
+    return this;
+  }
 
   rpc(fn: string, args: unknown) {
     this.rpcCalls.push({
@@ -51,6 +57,7 @@ Deno.test(
     );
 
     assertEquals(result.ok, true);
+    assertEquals(supabase.schemas, ['api']);
     assertEquals(supabase.rpcCalls, [
       {
         fn: 'cmd_dataset_save_draft',
@@ -90,6 +97,7 @@ Deno.test('executeSaveDraftCommand allows process drafts without modelId', async
   );
 
   assertEquals(result.ok, true);
+  assertEquals(supabase.schemas, ['api']);
   assertEquals(supabase.rpcCalls, [
     {
       fn: 'cmd_dataset_save_draft',
