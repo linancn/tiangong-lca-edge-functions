@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-02
-lastReviewedCommit: 55cf01545bb78b80a81cb601dceb757564151ce4
-lastReviewedNote: 'Reviewed for Issue #256: the service-only LCA snapshot adapter remains inside Edge runtime ownership and preserves dev-target, request-JWT separation, and database-schema boundaries.'
+lastReviewedAt: 2026-08-03
+lastReviewedCommit: 8b9629387d839bdff343a21353438a513eb54d9c
+lastReviewedNote: 'Reviewed for Issue #258: the service-only LCA result-family adapter, cache command state machine, and loopback contract remain inside Edge runtime ownership; DB #395 owns cancelled-job reconciliation.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
