@@ -380,6 +380,27 @@ wrapped()[request.method]('not-a-database-routine');
   );
 });
 
+Deno.test('syntax-first database property guard rejects dot aliases and invocation chains', () => {
+  const source = `
+const invoke = client.schema;
+const bound = client.schema.bind(client);
+client.schema.call(client, 'api');
+client.schema.apply(client, ['api']);
+`;
+  const violations = deriveAstBoundaryViolations(
+    'property-bypass.ts',
+    source,
+    [],
+    [],
+    ['api'],
+    new Map([['property-bypass.ts', source]]),
+  );
+  assertEquals(
+    violations.filter((finding) => finding.kind === 'detached-data-api-method').length,
+    4,
+  );
+});
+
 Deno.test('exact syntax tuple counts reject deletion and duplication', async () => {
   const audit = (file: string, source: string) =>
     deriveAstBoundaryViolations(file, source, [], [], ['api'], new Map([[file, source]]));
@@ -397,12 +418,32 @@ Deno.test('exact syntax tuple counts reject deletion and duplication', async () 
     ),
   );
 
+  const legacyFile = 'supabase/functions/_shared/db_rpc/dataset_commands.ts';
+  const legacySource = await Deno.readTextFile(`${ROOT}/${legacyFile}`);
+  const legacyCall = 'supabase.rpc(fn, args)';
+  assert(
+    audit(legacyFile, legacySource.replace(legacyCall, 'supabase.invoke(fn, args)')).some(
+      (finding) => finding.kind === 'database-call-rule-drift',
+    ),
+  );
+  assert(
+    audit(legacyFile, legacySource.replace(legacyCall, `${legacyCall}; ${legacyCall}`)).some(
+      (finding) => finding.kind === 'database-call-rule-drift',
+    ),
+  );
+
   const detachedFile = 'supabase/functions/_shared/commands/data_product/repository.ts';
   const detachedSource = await Deno.readTextFile(`${ROOT}/${detachedFile}`);
   assert(
     audit(detachedFile, detachedSource.replace('typeof supabase.rpc', 'typeof supabase')).some(
       (finding) => finding.kind === 'detached-database-method-rule-drift',
     ),
+  );
+  assert(
+    audit(
+      detachedFile,
+      detachedSource.replace('typeof supabase.rpc', '(typeof supabase.rpc, typeof supabase.rpc)'),
+    ).some((finding) => finding.kind === 'detached-database-method-rule-drift'),
   );
 
   const computedFile = 'supabase/functions/_shared/dataset_extraction_worker.ts';
@@ -415,6 +456,36 @@ Deno.test('exact syntax tuple counts reject deletion and duplication', async () 
         'generators.contact',
       ),
     ).some((finding) => finding.kind === 'non-database-computed-call-rule-drift'),
+  );
+  const computedCall =
+    'const markdown = generators[entityKind as SupportedDatasetEntityKind](datasetJson);';
+  assert(
+    audit(
+      computedFile,
+      computedSource.replace(
+        computedCall,
+        `generators[entityKind as SupportedDatasetEntityKind](datasetJson);\n  ${computedCall}`,
+      ),
+    ).some((finding) => finding.kind === 'non-database-computed-call-rule-drift'),
+  );
+
+  const propertyFile = 'supabase/functions/_shared/openai_structured.ts';
+  const propertySource = await Deno.readTextFile(`${ROOT}/${propertyFile}`);
+  const schemaProperty = 'schema: request.schema,';
+  assert(
+    audit(
+      propertyFile,
+      propertySource.replace(schemaProperty, 'schema: request.outputSchema,'),
+    ).some((finding) => finding.kind === 'non-database-schema-property-rule-drift'),
+  );
+  assert(
+    audit(
+      propertyFile,
+      propertySource.replace(
+        schemaProperty,
+        `${schemaProperty}\n          schemaCopy: request.schema,`,
+      ),
+    ).some((finding) => finding.kind === 'non-database-schema-property-rule-drift'),
   );
 });
 

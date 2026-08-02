@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-02
-lastReviewedCommit: 2af5d7863148df35482435bcc5c73f61ebaefefb
-lastReviewedNote: 'Reviewed for Issue #250: RPC/schema authorization is confined to exact syntax tuples for the current incremental slice; the scanner does not claim global consumer-zero.'
+lastReviewedCommit: 97bc7246d1bda60e562d30f13fe648fad71ba11c
+lastReviewedNote: 'Reviewed for Issue #250: non-direct RPC/schema syntax is default-denied, with exact-counted ordinary schema-field tuples; this remains a slice restriction, not a consumer-zero claim.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

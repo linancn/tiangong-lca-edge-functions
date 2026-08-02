@@ -202,6 +202,7 @@ type CapabilityCall = {
 
 type ExactSyntaxRule = readonly [string, string, string, string, string, number];
 type ExactComputedRule = readonly [string, string, string, number];
+type ExactPropertyRule = readonly [string, string, string, string, number];
 const decodeSyntaxRule = (rule: string): ExactSyntaxRule => {
   const [file, symbol, method, receiver, argument, count] = rule.split('|');
   return [file, symbol, method, receiver, argument, Number(count)];
@@ -209,6 +210,10 @@ const decodeSyntaxRule = (rule: string): ExactSyntaxRule => {
 const decodeComputedRule = (rule: string): ExactComputedRule => {
   const [file, symbol, expression, count] = rule.split('|');
   return [file, symbol, expression, Number(count)];
+};
+const decodePropertyRule = (rule: string): ExactPropertyRule => {
+  const [file, symbol, expression, context, count] = rule.split('|');
+  return [file, symbol, expression, context, Number(count)];
 };
 
 const TYPED_DATABASE_ADAPTER_CALLS = [
@@ -250,6 +255,21 @@ const LEGACY_DETACHED_DATABASE_METHODS = [
 const NON_DATABASE_COMPUTED_CALLS = [
   'supabase/functions/_shared/dataset_extraction_worker.ts|processDatasetJob|generators[entityKind as SupportedDatasetEntityKind]|1',
 ].map(decodeComputedRule);
+
+const NON_DATABASE_SCHEMA_PROPERTIES = [
+  'supabase/functions/_shared/dataset_extraction_worker.ts|parseClaimedJob|message.schema|CallExpression|1',
+  'supabase/functions/_shared/dataset_extraction_worker.ts|resolveTarget|message.schema|BinaryExpression|1',
+  'supabase/functions/_shared/embedding_ft_job.ts|assertAllowedEmbeddingFtJob|job.schema|BinaryExpression|1',
+  'supabase/functions/_shared/embedding_ft_job.ts|assertAllowedEmbeddingFtJob|job.schema|TemplateSpan|1',
+  'supabase/functions/_shared/openai_structured.ts|openaiStructuredOutput|request.schema|PropertyAssignment|2',
+  'supabase/functions/embedding_ft/index.ts|processJobs|currentJob.schema|TemplateSpan|1',
+  'supabase/functions/embedding_ft/index.ts|processJob|schema|ObjectBindingPattern|1',
+  'supabase/functions/embedding_ft/index.ts|updateEmbeddingWithTimeouts|schema|ObjectBindingPattern|1',
+  'supabase/functions/embedding_ft/index.ts|ackJob|schema|ObjectBindingPattern|1',
+  'supabase/functions/embedding_ft/index.ts|deferJob|schema|ObjectBindingPattern|1',
+  'supabase/functions/embedding_ft_local/index.ts|processJobs|currentJob.schema|TemplateSpan|1',
+  'supabase/functions/embedding_ft_local/index.ts|processJob|schema|ObjectBindingPattern|1',
+].map(decodePropertyRule);
 
 function unwrapExpression(expression: ts.Expression): ts.Expression {
   let current = expression;
@@ -686,6 +706,10 @@ function nonDatabaseComputedCallRuleKey(rule: ExactComputedRule): string {
   return rule.slice(0, 3).join('\u0000');
 }
 
+function nonDatabaseSchemaPropertyRuleKey(rule: ExactPropertyRule): string {
+  return rule.slice(0, 4).join('\u0000');
+}
+
 export function deriveAstBoundaryViolations(
   file: string,
   source: string,
@@ -719,6 +743,8 @@ export function deriveAstBoundaryViolations(
   const observedDetachedRuleCounts = new Map<string, number>();
   const computedRules = NON_DATABASE_COMPUTED_CALLS.filter((rule) => rule[0] === file);
   const observedComputedRuleCounts = new Map<string, number>();
+  const propertyRules = NON_DATABASE_SCHEMA_PROPERTIES.filter((rule) => rule[0] === file);
+  const observedPropertyRuleCounts = new Map<string, number>();
   const recordExactDatabaseCall = (node: ts.CallExpression, method: 'rpc' | 'schema'): boolean => {
     if (!ts.isPropertyAccessExpression(node.expression)) return false;
     const argument = node.arguments[0];
@@ -765,6 +791,21 @@ export function deriveAstBoundaryViolations(
     observedComputedRuleCounts.set(key, (observedComputedRuleCounts.get(key) ?? 0) + 1);
     return true;
   };
+  const recordNonDatabaseSchemaProperty = (
+    node: ts.PropertyAccessExpression | ts.BindingElement,
+    expression: string,
+    context: string,
+  ): boolean => {
+    const symbol = enclosingCallSymbol(node, sourceFile);
+    const rule = propertyRules.find(
+      (candidate) =>
+        candidate[1] === symbol && candidate[2] === expression && candidate[3] === context,
+    );
+    if (!rule) return false;
+    const key = nonDatabaseSchemaPropertyRuleKey(rule);
+    observedPropertyRuleCounts.set(key, (observedPropertyRuleCounts.get(key) ?? 0) + 1);
+    return true;
+  };
   const bindingPatternIsControlled = (node: ts.BindingElement): boolean => {
     const declaration = node.parent.parent;
     if (
@@ -787,13 +828,22 @@ export function deriveAstBoundaryViolations(
         : ts.isComputedPropertyName(name)
           ? dataflow.staticString(name.expression)
           : null;
-      if (method === 'rpc') {
-        push(
-          node,
-          'destructured-data-api-method',
-          `destructuring ${method} is forbidden outside an exact database adapter call`,
-          method,
-        );
+      if (method === 'rpc' || method === 'schema') {
+        const allowedSchemaProperty =
+          method === 'schema' &&
+          recordNonDatabaseSchemaProperty(
+            node,
+            node.getText(sourceFile),
+            ts.SyntaxKind[node.parent.kind],
+          );
+        if (!allowedSchemaProperty) {
+          push(
+            node,
+            'destructured-data-api-method',
+            `destructuring ${method} is forbidden outside an exact database adapter call`,
+            method,
+          );
+        }
       } else if (method === 'from' && bindingPatternIsControlled(node)) {
         push(
           node,
@@ -816,13 +866,22 @@ export function deriveAstBoundaryViolations(
             node.getText(sourceFile),
           );
         }
-      } else if (detached && node.name.text === 'rpc') {
-        push(
-          node,
-          'detached-data-api-method',
-          'detaching .rpc is forbidden outside an exact legacy residue tuple',
-          node.getText(sourceFile),
-        );
+      } else if (detached && databaseMethod) {
+        const allowedSchemaProperty =
+          node.name.text === 'schema' &&
+          recordNonDatabaseSchemaProperty(
+            node,
+            node.getText(sourceFile),
+            ts.SyntaxKind[node.parent.kind],
+          );
+        if (!allowedSchemaProperty) {
+          push(
+            node,
+            'detached-data-api-method',
+            `non-direct .${node.name.text} access is forbidden outside an exact syntax tuple`,
+            node.getText(sourceFile),
+          );
+        }
       } else if (
         detached &&
         node.name.text === 'from' &&
@@ -982,6 +1041,17 @@ export function deriveAstBoundaryViolations(
         'non-database-computed-call-rule-drift',
         `exact non-database computed-call tuple expected ${rule[3]} occurrence(s), observed ${observed}`,
         `${rule[1]}:${rule[2]}`,
+      );
+    }
+  }
+  for (const rule of propertyRules) {
+    const observed = observedPropertyRuleCounts.get(nonDatabaseSchemaPropertyRuleKey(rule)) ?? 0;
+    if (observed !== rule[4]) {
+      push(
+        sourceFile,
+        'non-database-schema-property-rule-drift',
+        `exact non-database schema-property tuple expected ${rule[4]} occurrence(s), observed ${observed}`,
+        `${rule[1]}:${rule[2]}:${rule[3]}`,
       );
     }
   }
@@ -1657,6 +1727,7 @@ export async function auditSchemaBoundary(
     ...EXACT_DATABASE_CALLS.map((rule) => rule[0]),
     ...LEGACY_DETACHED_DATABASE_METHODS.map((rule) => rule[0]),
     ...NON_DATABASE_COMPUTED_CALLS.map((rule) => rule[0]),
+    ...NON_DATABASE_SCHEMA_PROPERTIES.map((rule) => rule[0]),
   ]);
   for (const file of exactSyntaxRuleFiles) {
     if (!sourceByFile.has(file)) {
