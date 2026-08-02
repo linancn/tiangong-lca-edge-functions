@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-02
-lastReviewedCommit: 2c02a6f80b544132fb142d8ebab8f066e0baf5a5
-lastReviewedNote: 'Reviewed for Issue #254: the family-local request-JWT adapter owns the schema-bound save-draft slice while other dataset commands remain explicitly legacy.'
+lastReviewedAt: 2026-08-03
+lastReviewedCommit: 8b9629387d839bdff343a21353438a513eb54d9c
+lastReviewedNote: 'Reviewed for Issue #258: all LCA result/cache/latest access is centralized in one strict service-role api adapter and cache commands remain mutually exclusive per request.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -59,6 +59,7 @@ This repo is organized around Edge Function families plus a shared runtime layer
 | `supabase/functions/_shared/openai_*.ts` and `hybrid_query_utils.ts` | stable | shared OpenAI and query-rewrite helpers used by AI-backed routes |
 | `supabase/functions/_shared/lca_*.ts` | stable | scope and snapshot helpers for LCA endpoints |
 | `supabase/functions/_shared/capabilities/lca_snapshot_family.ts` | stable | service-role-only, `api`-schema adapter for active/network/artifact snapshot capabilities; callers cannot select schema, relation, routine, or fallback |
+| `supabase/functions/_shared/capabilities/lca_result_family.ts` | stable | service-role-only, `api`-schema adapter for the eight versioned result/cache/latest capabilities; strict DTO decoding fails closed and no relation/default-schema fallback is permitted |
 | `supabase/functions/_shared/tidas_package.ts` | stable | import, export, and diagnostics shaping for TIDAS package flows |
 | `test/**` | stable | repo-level Deno tests for functions and shared modules |
 | `scripts/**` | stable | deno-check inventory, deploy contract, auth probe, and LCA smoke helper |
@@ -180,6 +181,8 @@ Shared scope logic lives in:
 - `supabase/functions/_shared/lca_snapshot_scope.ts`
 
 Snapshot persistence access is confined to `supabase/functions/_shared/capabilities/lca_snapshot_family.ts`. The adapter is bound to database-engine `86ba7ee2c33e45df8008117a2dec3ee4deedc32c` / migration head `20260802091342`, uses the six versioned `api` RPCs with a dedicated service-role client, and has no `public` relation fallback. Request JWTs remain separate and are never substituted into this service-only capability. Solve, query-results, and contribution-path expose production handler factories whose injected service repository and freshness dependencies are the same seams used by their deployed entrypoints.
+
+Result, cache, and latest-result persistence access is confined to `supabase/functions/_shared/capabilities/lca_result_family.ts`. The adapter pins the exact database merge receipt and migration head, exposes exactly eight versioned `api` routines, accepts only the branded service-role client, strictly decodes projection/cache/command DTOs, and has no ninth query, physical relation, private/public schema, or compatibility fallback. `lca_jobs`, `lca_results`, `lca_contribution_path_result`, and `lca_query_results` consume typed projections through production handler factories; solve, all-unit queue, and contribution-path consume atomic cache commands. After a cache read, one request may touch, admit, or reconcile, never more than one. A completed job with a not-yet-visible result returns `result_pending` and is polled without enqueue. Failed, stale, and DB-normalized cancelled contribution work converges over two polls: reconciliation alone records terminal state, then the next request enqueues and admits a replacement. Database-engine Issue #395 owns the cancelled-to-failed reconciliation rule; Edge must not add a direct Worker/result lookup or a second command to bypass it.
 
 `supabase/functions/_shared/worker_jobs_cutover.ts` owns the handoff from Edge runtime requests to database-owned `worker_jobs`, and `supabase/functions/_shared/lca_snapshot_build_queue.ts` owns shared snapshot-build enqueue/reuse. The default path enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `api.worker_enqueue_job_v1` without creating new `lca_jobs` rows. `lca_result_cache` remains retained result/cache metadata and stores both compatibility `job_id` and canonical `worker_job_id` where applicable. Setting `LCA_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new LCA worker submissions and fails closed with `legacy_queue_disabled`; it must not fall back to legacy `lca_enqueue_job`. Edge still owns auth and request normalization only; `tiangong-lca-worker` owns execution.
 

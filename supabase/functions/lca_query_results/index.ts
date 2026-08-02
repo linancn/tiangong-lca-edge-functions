@@ -3,11 +3,14 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import {
+  createLcaResultFamilyCapabilityRepository,
+  type LcaResultFamilyCapabilityRepository,
+} from '../_shared/capabilities/lca_result_family.ts';
+import {
   createLcaSnapshotCapabilityRepository,
   type LcaSnapshotCapabilityRepository,
 } from '../_shared/capabilities/lca_snapshot_family.ts';
 import { corsHeaders } from '../_shared/cors.ts';
-import { callLcaReadLatestSingleSolveResultRpc } from '../_shared/db_rpc/lca_results.ts';
 import { ensureLcaAllUnitSolveQueued } from '../_shared/lca_all_unit_solve_queue.ts';
 import {
   fetchProcessScopeLookup,
@@ -36,6 +39,7 @@ import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient, supabaseClient } from '../_shared/supabase_client.ts';
 
 const lcaSnapshotRepository = createLcaSnapshotCapabilityRepository(supabaseClient);
+const lcaResultRepository = createLcaResultFamilyCapabilityRepository(supabaseClient);
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ALL_UNIT_QUERY_FORMAT = 'all-unit-query:v1';
@@ -141,6 +145,7 @@ type LcaQueryResultsHandlerDependencies = {
   getRedisClient: typeof getRedisClient;
   isSnapshotFresh: typeof isSnapshotFresh;
   snapshotRepository: LcaSnapshotCapabilityRepository;
+  resultRepository: LcaResultFamilyCapabilityRepository;
 };
 
 export function createLcaQueryResultsHandler(
@@ -151,6 +156,7 @@ export function createLcaQueryResultsHandler(
     getRedisClient,
     isSnapshotFresh,
     snapshotRepository: lcaSnapshotRepository,
+    resultRepository: lcaResultRepository,
     ...overrides,
   };
 
@@ -269,7 +275,7 @@ async function handleLcaQueryResultsRequest(
   }
   const calculationEvidenceBinding = calculationEvidence.binding;
 
-  const latestAllUnit = await fetchLatestAllUnit(snapshotId);
+  const latestAllUnit = await fetchLatestAllUnit(snapshotId, dependencies.resultRepository);
   if (!latestAllUnit.ok) {
     return json({ error: latestAllUnit.error }, latestAllUnit.status);
   }
@@ -357,7 +363,12 @@ async function handleLcaQueryResultsRequest(
     let resultId = latestAllUnit.row.result_id;
     let computedAt = latestAllUnit.row.computed_at;
     let scale = 1;
-    const latestSingle = await fetchLatestSingleSolveForProcess(snapshotId, userId, processIndex);
+    const latestSingle = await fetchLatestSingleSolveForProcess(
+      snapshotId,
+      userId,
+      processIndex,
+      dependencies.resultRepository,
+    );
     if (latestSingle.ok && latestSingle.row) {
       const allUnitTs = Date.parse(latestAllUnit.row.computed_at);
       const singleTs = Date.parse(latestSingle.row.computed_at);
@@ -839,40 +850,32 @@ async function fetchSnapshotArtifactMeta(
 
 async function fetchLatestAllUnit(
   snapshotId: string,
+  repository: LcaResultFamilyCapabilityRepository = lcaResultRepository,
 ): Promise<
   { ok: true; row: LatestAllUnitRow | null } | { ok: false; error: string; status: number }
 > {
-  const { data, error } = await supabaseClient
-    .from('lca_latest_all_unit_results')
-    .select(
-      'snapshot_id,result_id,computed_at,query_artifact_url,query_artifact_format,status,updated_at',
-    )
-    .eq('snapshot_id', snapshotId)
-    .eq('status', 'ready')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) {
+  const result = await repository.readLatestAllUnit(snapshotId);
+  if (!result.ok) {
     console.error('query lca_latest_all_unit_results failed', {
-      error: error.message,
+      error: result.message,
+      code: result.code,
       snapshot_id: snapshotId,
     });
     return { ok: false, error: 'latest_all_unit_lookup_failed', status: 500 };
   }
 
-  if (!data) {
+  if (!result.data) {
     return { ok: true, row: null };
   }
 
   return {
     ok: true,
     row: {
-      snapshot_id: String(data.snapshot_id),
-      result_id: String(data.result_id),
-      computed_at: String(data.computed_at),
-      query_artifact_url: String(data.query_artifact_url),
-      query_artifact_format: String(data.query_artifact_format),
+      snapshot_id: result.data.snapshotId,
+      result_id: result.data.resultId,
+      computed_at: result.data.computedAt,
+      query_artifact_url: result.data.queryArtifactUrl,
+      query_artifact_format: result.data.queryArtifactFormat,
     },
   };
 }
@@ -881,8 +884,9 @@ async function fetchLatestSingleSolveForProcess(
   snapshotId: string,
   userId: string,
   processIndex: number,
+  repository: LcaResultFamilyCapabilityRepository = lcaResultRepository,
 ): Promise<{ ok: true; row: LatestSingleSolveRow | null } | { ok: false; error: string }> {
-  const projection = await callLcaReadLatestSingleSolveResultRpc(supabaseClient, {
+  const projection = await repository.readLatestSingleSolve({
     requestedBy: userId,
     snapshotId,
     processIndex,

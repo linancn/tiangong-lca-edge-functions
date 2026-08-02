@@ -1,211 +1,205 @@
 import { assert, assertEquals } from 'jsr:@std/assert';
 
+import type {
+  LcaResultCacheEntry,
+  LcaResultFamilyCapabilityRepository,
+} from '../supabase/functions/_shared/capabilities/lca_result_family.ts';
 import { ensureLcaAllUnitSolveQueued } from '../supabase/functions/_shared/lca_all_unit_solve_queue.ts';
 import { buildCalculationEvidenceV2 } from './lca_calculation_evidence_fixture.ts';
 
-type MockError = { code: string; message: string };
-type MockCacheRow = {
-  id: string;
-  status: string;
-  job_id: string | null;
-  worker_job_id: string | null;
-  result_id: string | null;
-  hit_count: number;
-};
+const SNAPSHOT_ID = '10000000-0000-4000-8000-000000000001';
+const USER_ID = '20000000-0000-4000-8000-000000000001';
+const CACHE_ID = '30000000-0000-4000-8000-000000000001';
+const LEGACY_JOB_ID = '40000000-0000-4000-8000-000000000001';
+const WORKER_JOB_ID = '50000000-0000-4000-8000-000000000001';
+const RESULT_ID = '60000000-0000-4000-8000-000000000001';
+const NOW = '2026-08-03T00:00:00.000Z';
 
-type MockState = {
-  cacheRow: MockCacheRow | null;
-  selectError: MockError | null;
-  updateError: MockError | null;
-  insertError: MockError | null;
-  rpcData: unknown;
-  rpcError: MockError | null;
+type WorkerState = {
   rpcCalls: Array<{ fn: string; args: Record<string, unknown> }>;
-  updateCalls: Array<{ table: string; patch: Record<string, unknown> }>;
-  insertCalls: Array<{ table: string; row: Record<string, unknown> }>;
 };
 
-function createMockState(overrides: Partial<MockState> = {}): MockState {
-  return {
-    cacheRow: null,
-    selectError: null,
-    updateError: null,
-    insertError: null,
-    rpcData: {
-      ok: true,
+function workerClient(state: WorkerState) {
+  const rpc = (fn: string, args: Record<string, unknown>) => {
+    state.rpcCalls.push({ fn, args });
+    return Promise.resolve({
       data: {
-        id: 'worker-job-1',
-        payload: {
-          job_id: 'lca-job-1',
-          snapshot_id: 'snapshot-1',
-        },
+        ok: true,
+        data: { id: WORKER_JOB_ID, payload: { job_id: LEGACY_JOB_ID } },
       },
+      error: null,
+    });
+  };
+  return {
+    schema(schema: string) {
+      assertEquals(schema, 'api');
+      return { rpc };
     },
-    rpcError: null,
-    rpcCalls: [],
-    updateCalls: [],
-    insertCalls: [],
+  };
+}
+
+function cache(overrides: Partial<LcaResultCacheEntry> = {}): LcaResultCacheEntry {
+  return {
+    cacheId: CACHE_ID,
+    scope: 'dev-v1',
+    snapshotId: SNAPSHOT_ID,
+    requestKey: 'request-key',
+    status: 'pending',
+    legacyJobId: LEGACY_JOB_ID,
+    workerJobId: WORKER_JOB_ID,
+    resultId: null,
+    hitCount: 1,
+    lastAccessedAt: NOW,
+    createdAt: NOW,
+    updatedAt: NOW,
     ...overrides,
   };
 }
 
-function createSupabaseMock(state: MockState) {
+function resultRepository(options: {
+  existing?: LcaResultCacheEntry | null;
+  admitted?: LcaResultCacheEntry;
+  outcome?: 'accepted' | 'reused';
+  calls: Array<{ method: string; value?: unknown }>;
+}): LcaResultFamilyCapabilityRepository {
   return {
-    from(table: string) {
-      return createTableBuilder(state, table);
+    access: 'service-only',
+    readCache: async (request) => {
+      options.calls.push({ method: 'read', value: request });
+      return { ok: true, data: options.existing ?? null };
     },
-    rpc(fn: string, args: Record<string, unknown>) {
-      state.rpcCalls.push({ fn, args });
-      return Promise.resolve({ data: state.rpcData, error: state.rpcError });
+    touchCache: async (cacheId) => {
+      options.calls.push({ method: 'touch', value: cacheId });
+      return { ok: true, data: null };
     },
-  };
-}
-
-function createTableBuilder(state: MockState, table: string) {
-  return {
-    select(_columns: string) {
-      return this;
-    },
-    eq(_column: string, _value: unknown) {
-      return this;
-    },
-    maybeSingle() {
-      return Promise.resolve({ data: state.cacheRow, error: state.selectError });
-    },
-    update(patch: Record<string, unknown>) {
-      state.updateCalls.push({ table, patch });
+    admitCache: async (request) => {
+      options.calls.push({ method: 'admit', value: request });
       return {
-        eq: (_column: string, _value: unknown) =>
-          Promise.resolve({ data: null, error: state.updateError }),
+        ok: true,
+        data: {
+          outcome: options.outcome ?? 'accepted',
+          cache:
+            options.admitted ??
+            cache({
+              requestKey: request.requestKey,
+              legacyJobId: request.legacyJobId,
+              workerJobId: request.workerJobId ?? null,
+            }),
+        },
       };
     },
-    insert(row: Record<string, unknown>) {
-      state.insertCalls.push({ table, row });
-      return Promise.resolve({ data: null, error: state.insertError });
+    readJobProjection: async () => ({ ok: true, data: null }),
+    readResultProjection: async () => ({ ok: true, data: null }),
+    readLatestSingleSolve: async () => ({ ok: true, data: null }),
+    reconcileCache: async () => {
+      throw new Error('unexpected reconcile');
     },
+    readLatestAllUnit: async () => ({ ok: true, data: null }),
   };
 }
 
-Deno.test('ensureLcaAllUnitSolveQueued reuses pending cache worker job', async () => {
-  const state = createMockState({
-    cacheRow: {
-      id: 'cache-1',
-      status: 'running',
-      job_id: 'lca-job-active',
-      worker_job_id: 'worker-job-active',
-      result_id: null,
-      hit_count: 2,
-    },
+Deno.test('all-unit active binding performs read then touch only', async () => {
+  const worker = { rpcCalls: [] } as WorkerState;
+  const calls: Array<{ method: string; value?: unknown }> = [];
+  const repository = resultRepository({
+    calls,
+    existing: cache({ status: 'running' }),
   });
-
-  const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
+  const result = await ensureLcaAllUnitSolveQueued(workerClient(worker) as never, {
     scope: 'dev-v1',
-    snapshotId: 'snapshot-1',
-    userId: 'user-1',
+    snapshotId: SNAPSHOT_ID,
+    userId: USER_ID,
+    resultRepository: repository,
   });
 
   assert(result.ok);
   assertEquals(result.mode, 'in_progress');
-  assertEquals(result.job_id, 'lca-job-active');
-  assertEquals(result.worker_job_id, 'worker-job-active');
-  assertEquals(state.rpcCalls.length, 0);
-  assertEquals(state.insertCalls.length, 0);
-  assertEquals(state.updateCalls.length, 1);
-  assertEquals(state.updateCalls[0].patch.hit_count, 3);
+  assertEquals(result.job_id, LEGACY_JOB_ID);
+  assertEquals(
+    calls.map((call) => call.method),
+    ['read', 'touch'],
+  );
+  assertEquals(worker.rpcCalls.length, 0);
 });
 
 Deno.test(
-  'ensureLcaAllUnitSolveQueued enqueues all-unit solve and inserts pending cache',
+  'all-unit enqueue performs read then admission and always replaces ready across races',
   async () => {
-    const state = createMockState();
+    for (const existing of [
+      null,
+      cache({ status: 'failed' }),
+      cache({ status: 'ready', resultId: RESULT_ID }),
+    ]) {
+      const worker = { rpcCalls: [] } as WorkerState;
+      const calls: Array<{ method: string; value?: unknown }> = [];
+      const repository = resultRepository({ calls, existing });
+      const result = await ensureLcaAllUnitSolveQueued(workerClient(worker) as never, {
+        scope: 'dev-v1',
+        snapshotId: SNAPSHOT_ID,
+        userId: USER_ID,
+        resultRepository: repository,
+      });
 
-    const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
-      scope: 'dev-v1',
-      snapshotId: 'snapshot-1',
-      userId: 'user-1',
-    });
-
-    assert(result.ok);
-    assertEquals(result.mode, 'queued');
-    assertEquals(result.job_id, 'lca-job-1');
-    assertEquals(result.worker_job_id, 'worker-job-1');
-    assertEquals(state.rpcCalls.length, 1);
-    assertEquals(state.insertCalls.length, 1);
-
-    const rpcArgs = state.rpcCalls[0].args;
-    assertEquals(rpcArgs.p_job_kind, 'lca.solve_all_unit');
-    assertEquals(rpcArgs.p_payload_schema_version, 'lca.solve_all_unit.request.v1');
-    assertEquals(rpcArgs.p_subject_type, 'lca_job');
-    assertEquals(rpcArgs.p_subject_version, 'snapshot-1');
-    assertEquals(rpcArgs.p_requested_by, 'user-1');
-    assertEquals(rpcArgs.p_queue_key, 'snapshot-1');
-    assertEquals(rpcArgs.p_request_hash, result.cache_key);
-
-    const payload = rpcArgs.p_payload_json as Record<string, unknown>;
-    assertEquals(payload.type, 'solve_all_unit');
-    assertEquals(payload.snapshot_id, 'snapshot-1');
-    assertEquals(payload.solve, { return_x: false, return_g: false, return_h: true });
-
-    const inserted = state.insertCalls[0].row;
-    assertEquals(inserted.scope, 'dev-v1');
-    assertEquals(inserted.snapshot_id, 'snapshot-1');
-    assertEquals(inserted.request_key, result.cache_key);
-    assertEquals(inserted.status, 'pending');
-    assertEquals(inserted.job_id, 'lca-job-1');
-    assertEquals(inserted.worker_job_id, 'worker-job-1');
+      assert(result.ok);
+      assertEquals(result.mode, 'queued');
+      assertEquals(
+        calls.map((call) => call.method),
+        ['read', 'admit'],
+      );
+      assertEquals((calls[1].value as { replaceReady: boolean }).replaceReady, true);
+      assertEquals(worker.rpcCalls.length, 1);
+    }
   },
 );
 
-Deno.test(
-  'ensureLcaAllUnitSolveQueued requeues ready cache when latest query pointer is missing',
-  async () => {
-    const state = createMockState({
-      cacheRow: {
-        id: 'cache-ready',
-        status: 'ready',
-        job_id: 'old-lca-job',
-        worker_job_id: 'old-worker-job',
-        result_id: 'old-result',
-        hit_count: 4,
-      },
-    });
-
-    const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
-      scope: 'dev-v1',
-      snapshotId: 'snapshot-1',
-      userId: 'user-1',
-    });
-
-    assert(result.ok);
-    assertEquals(result.mode, 'queued');
-    assertEquals(state.rpcCalls.length, 1);
-    assertEquals(state.insertCalls.length, 0);
-    assertEquals(state.updateCalls.length, 2);
-    assertEquals(state.updateCalls[1].patch.status, 'pending');
-    assertEquals(state.updateCalls[1].patch.job_id, 'lca-job-1');
-    assertEquals(state.updateCalls[1].patch.worker_job_id, 'worker-job-1');
-  },
-);
-
-Deno.test('ensureLcaAllUnitSolveQueued binds validated scope and LCIA evidence', async () => {
-  const state = createMockState();
-  const calculationEvidenceBinding = buildCalculationEvidenceV2('a'.repeat(64));
-
-  const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
+Deno.test('all-unit reused admission responds with the returned canonical binding', async () => {
+  const worker = { rpcCalls: [] } as WorkerState;
+  const calls: Array<{ method: string; value?: unknown }> = [];
+  const canonicalLegacy = '70000000-0000-4000-8000-000000000001';
+  const canonicalWorker = '80000000-0000-4000-8000-000000000001';
+  const repository = resultRepository({
+    calls,
+    existing: null,
+    outcome: 'reused',
+    admitted: cache({ legacyJobId: canonicalLegacy, workerJobId: canonicalWorker }),
+  });
+  const result = await ensureLcaAllUnitSolveQueued(workerClient(worker) as never, {
     scope: 'dev-v1',
-    snapshotId: 'snapshot-1',
-    userId: 'user-1',
-    calculationEvidenceBinding,
+    snapshotId: SNAPSHOT_ID,
+    userId: USER_ID,
+    resultRepository: repository,
   });
 
   assert(result.ok);
-  const payload = state.rpcCalls[0].args.p_payload_json as Record<string, unknown>;
-  assertEquals(state.rpcCalls[0].args.p_payload_schema_version, 'lca.solve_all_unit.request.v2');
+  assertEquals(result.mode, 'in_progress');
+  assertEquals(result.job_id, canonicalLegacy);
+  assertEquals(result.worker_job_id, canonicalWorker);
+  assertEquals(
+    calls.map((call) => call.method),
+    ['read', 'admit'],
+  );
+});
+
+Deno.test('all-unit admission binds validated scope and LCIA evidence', async () => {
+  const worker = { rpcCalls: [] } as WorkerState;
+  const calls: Array<{ method: string; value?: unknown }> = [];
+  const calculationEvidenceBinding = buildCalculationEvidenceV2('a'.repeat(64));
+  const result = await ensureLcaAllUnitSolveQueued(workerClient(worker) as never, {
+    scope: 'dev-v1',
+    snapshotId: SNAPSHOT_ID,
+    userId: USER_ID,
+    calculationEvidenceBinding,
+    resultRepository: resultRepository({ calls, existing: null }),
+  });
+
+  assert(result.ok);
+  const payload = worker.rpcCalls[0].args.p_payload_json as Record<string, unknown>;
+  assertEquals(worker.rpcCalls[0].args.p_payload_schema_version, 'lca.solve_all_unit.request.v2');
   assertEquals(payload.calculation_evidence_binding, calculationEvidenceBinding);
-  assertEquals(state.insertCalls[0].row.request_payload, {
+  assertEquals((calls[1].value as { requestPayload: unknown }).requestPayload, {
     version: 'lca_solve_v2',
     scope: 'dev-v1',
-    snapshot_id: 'snapshot-1',
+    snapshot_id: SNAPSHOT_ID,
     demand_mode: 'all_unit',
     solve: { return_x: false, return_g: false, return_h: true },
     print_level: 0,
@@ -213,20 +207,21 @@ Deno.test('ensureLcaAllUnitSolveQueued binds validated scope and LCIA evidence',
   });
 });
 
-Deno.test(
-  'ensureLcaAllUnitSolveQueued fails closed when worker jobs cutover is disabled',
-  async () => {
-    const state = createMockState();
+Deno.test('all-unit cutover-disabled branch reads cache but never touches or admits', async () => {
+  const worker = { rpcCalls: [] } as WorkerState;
+  const calls: Array<{ method: string; value?: unknown }> = [];
+  const result = await ensureLcaAllUnitSolveQueued(workerClient(worker) as never, {
+    scope: 'dev-v1',
+    snapshotId: SNAPSHOT_ID,
+    userId: USER_ID,
+    readEnv: (key) => (key === 'LCA_WORKER_JOBS_ENABLED' ? 'false' : undefined),
+    resultRepository: resultRepository({ calls, existing: null }),
+  });
 
-    const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
-      scope: 'dev-v1',
-      snapshotId: 'snapshot-1',
-      userId: 'user-1',
-      readEnv: (key) => (key === 'LCA_WORKER_JOBS_ENABLED' ? 'false' : undefined),
-    });
-
-    assertEquals(result, { ok: false, error: 'legacy_queue_disabled', status: 503 });
-    assertEquals(state.rpcCalls.length, 0);
-    assertEquals(state.insertCalls.length, 0);
-  },
-);
+  assertEquals(result, { ok: false, error: 'legacy_queue_disabled', status: 503 });
+  assertEquals(
+    calls.map((call) => call.method),
+    ['read'],
+  );
+  assertEquals(worker.rpcCalls.length, 0);
+});

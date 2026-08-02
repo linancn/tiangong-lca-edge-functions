@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-02'
-lastReviewedCommit: '2c02a6f80b544132fb142d8ebab8f066e0baf5a5'
+lastReviewedAt: '2026-08-03'
+lastReviewedCommit: '8b9629387d839bdff343a21353438a513eb54d9c'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -193,6 +193,7 @@ routing:
       paths:
         - supabase/functions/lca_*/**
         - supabase/functions/_shared/capabilities/lca_snapshot_family.ts
+        - supabase/functions/_shared/capabilities/lca_result_family.ts
         - supabase/functions/_shared/lca_process_scope.ts
         - supabase/functions/_shared/lca_snapshot_scope.ts
         - supabase/functions/_shared/lca_snapshot_scope_db.ts
@@ -206,6 +207,17 @@ routing:
         - test/lca_snapshot_endpoint_handler_test.ts
         - scripts/diagnose-lca-snapshot-callsite-inventory.cjs
         - scripts/run-lca-snapshot-capability-contract.cjs
+        - scripts/lca-result-family-consumer-zero.cjs
+        - scripts/run-lca-result-family-contract.cjs
+        - test/lca_result_family_capability_test.ts
+        - test/lca_result_family_consumer_zero_test.ts
+        - test/lca_result_family_handler_test.ts
+        - test/lca_query_result_family_handler_test.ts
+        - test/lca_solve_cache_state_test.ts
+        - test/lca_contribution_cache_state_test.ts
+        - test/lca_result_family_db_contract_test.ts
+        - test/lca_result_contract_cleanup.ts
+        - test/lca_result_contract_cleanup_test.ts
         - test/lca_snapshot_scope_db_test.ts
         - test/lca_snapshot_build_queue_test.ts
         - scripts/lca_submit_poll_fetch.sh
@@ -234,6 +246,7 @@ routing:
         - scripts/scope_closure_edge_qualification.ts
         - scripts/diagnose-lca-snapshot-callsite-inventory.cjs
         - scripts/run-lca-snapshot-capability-contract.cjs
+        - scripts/run-lca-result-family-contract.cjs
         - .github/workflows/ci.yml
         - docs/agents/repo-validation.md
         - test.example.http
@@ -453,6 +466,10 @@ rules:
       - path: scripts/diagnose-lca-snapshot-callsite-inventory.cjs
         kind: validation-wrapper
       - path: scripts/run-lca-snapshot-capability-contract.cjs
+        kind: validation-wrapper
+      - path: scripts/lca-result-family-consumer-zero.cjs
+        kind: validation-wrapper
+      - path: scripts/run-lca-result-family-contract.cjs
         kind: validation-wrapper
       - path: .github/workflows/ci.yml
         kind: automation
