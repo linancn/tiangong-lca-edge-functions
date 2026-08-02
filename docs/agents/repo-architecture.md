@@ -30,8 +30,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-02
-lastReviewedCommit: 6fa42ab
-lastReviewedNote: 'Reviewed for Issue #250: only save-draft selects the api schema; shared adapter architecture remains an E3-D concern.'
+lastReviewedCommit: 2c02a6f80b544132fb142d8ebab8f066e0baf5a5
+lastReviewedNote: 'Reviewed for Issue #254: the family-local request-JWT adapter owns the schema-bound save-draft slice while other dataset commands remain explicitly legacy.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -54,7 +54,7 @@ This repo is organized around Edge Function families plus a shared runtime layer
 | `supabase/functions/_shared/auth.ts` | stable | central runtime auth and credential-selection logic |
 | `supabase/functions/_shared/command_runtime/**` | stable | request parsing, actor context, audit payload, and command-handler skeleton |
 | `supabase/functions/_shared/commands/**` | stable | dataset, review, membership, notification, and profile command logic |
-| `supabase/functions/_shared/capabilities/**` | stable | service-bound repositories that centralize cross-service RPC names, arguments, and DTOs without exposing physical storage |
+| `supabase/functions/_shared/capabilities/**` | stable | auth-profile-bound repositories that centralize RPC capability names, arguments, and DTOs without exposing schema selection, arbitrary routines, or physical storage |
 | `supabase/functions/_shared/db_rpc/**` | stable | thin wrappers over database RPC calls; SQL truth still lives in `database-engine` |
 | `supabase/functions/_shared/openai_*.ts` and `hybrid_query_utils.ts` | stable | shared OpenAI and query-rewrite helpers used by AI-backed routes |
 | `supabase/functions/_shared/lca_*.ts` | stable | scope and snapshot helpers for LCA endpoints |
@@ -121,6 +121,8 @@ The shared layers that matter most are:
 - `supabase/functions/_shared/commands/**`
 - `supabase/functions/_shared/capabilities/**`
 - `supabase/functions/_shared/db_rpc/**`
+
+`supabase-consumer.v1` is the narrow Data API transport contract for schema-cutover capabilities. The first family-local adapter accepts only the request-JWT branded client, fixes dataset save-draft to `api.cmd_dataset_save_draft`, binds `api` once, exposes no schema/routine selector or scoped Supabase client, and has `fallback=none`. Service-role clients carry a distinct static identity and cannot enter this adapter without an explicit unsafe cast. Other dataset commands remain in the explicitly named legacy repository until matching database `api` facades exist.
 
 `app_dataset_review_submit_gate` is the edge API boundary for dataset review-submit numerical stability checks. It normalizes request and response semantics for Next, derives the authoritative revision checksum from the authorized persisted `json_ordered` row, and calls database-owned RPCs for persisted gate runs. Client-provided revision checksums are compatibility/diagnostic input only. Edge does not own worker blocker heuristics or database schema. `app_dataset_review_submit_jobs` is the user-facing orchestration API for persisted review-submit jobs, and `process_dataset_review_submit_jobs` is the service-key-only worker that advances those jobs after gate results are available. New review-submit jobs use database-owned Worker gate records through `gateWorkerJobId` / `gateWorkerJob`; the legacy `gateRunId` path remains compatibility-only until cutover is complete. `app_worker_jobs` authenticates the outer HTTP request, then the command layer converts it to the service-only repository in `supabase/functions/_shared/capabilities/worker_jobs.ts`; Edge ownership checks remain mandatory before read or cancel results cross back to the caller. That repository centralizes the explicit `api` PostgREST schema, versioned Worker v1 routine names, argument builders, and DTOs; all runtime consumers use its enqueue/read/list/cancel/bounded-batch and bounded concurrency-list capabilities instead of the physical Worker relation or default-schema compatibility wrappers. Snapshot lookup retains its existing `created_at`-ordered scan of at most 20 candidates and Edge-side expiry filtering. `app_dataset_submit_review` remains the direct compatibility path carrying gate assertion metadata for process submit-review so DB truth can reject stale, wrong-policy, wrong-checksum, or blocked gate runs before a review is created.
 

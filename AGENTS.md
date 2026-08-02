@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-02
-lastReviewedCommit: 6fa42ab
-lastReviewedNote: 'Reviewed for Issue #250: the minimal save-draft api slice preserves repository ownership, dev-target, auth, and deployment boundaries.'
+lastReviewedCommit: 2c02a6f80b544132fb142d8ebab8f066e0baf5a5
+lastReviewedNote: 'Reviewed for Issue #254: the request-JWT adapter remains inside Edge runtime ownership and preserves dev-target, auth, deployment, and database-schema boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

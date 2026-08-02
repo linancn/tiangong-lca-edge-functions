@@ -19,7 +19,7 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-02
-lastReviewedCommit: 6fa42ab
+lastReviewedCommit: 2c02a6f80b544132fb142d8ebab8f066e0baf5a5
 ---
 
 # TianGong-LCA-Edge-Functions
