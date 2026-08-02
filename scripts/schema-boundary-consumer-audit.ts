@@ -338,6 +338,85 @@ function deriveBoundaryDataflow(sourceFile: ts.SourceFile): BoundaryDataflow {
     return null;
   };
 
+  const MAX_OBJECT_PROPERTY_ALIAS_DEPTH = 16;
+  const objectPropertyBindingCache = new Map<string, ts.Expression[]>();
+  const objectLiteralPropertyName = (name: ts.PropertyName): string | null => {
+    if (ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)) {
+      return name.text;
+    }
+    return ts.isComputedPropertyName(name) ? staticString(name.expression) : null;
+  };
+  const objectPropertyBindings = (
+    expression: ts.Expression,
+    property: string,
+    visiting = new Set<string>(),
+    depth = 0,
+  ): ts.Expression[] => {
+    if (depth >= MAX_OBJECT_PROPERTY_ALIAS_DEPTH) return [];
+    const current = unwrapExpression(expression);
+    const visitKey = `${current.pos}:${current.end}:${property}`;
+    const cached = objectPropertyBindingCache.get(visitKey);
+    if (cached) return cached;
+    if (visiting.has(visitKey)) return [];
+    const nextVisiting = new Set(visiting).add(visitKey);
+    const resolve = (candidate: ts.Expression, candidateProperty = property) =>
+      objectPropertyBindings(candidate, candidateProperty, nextVisiting, depth + 1);
+    const memoize = (bindings: ts.Expression[]) => {
+      const unique = [
+        ...new Map(bindings.map((binding) => [`${binding.pos}:${binding.end}`, binding])).values(),
+      ];
+      objectPropertyBindingCache.set(visitKey, unique);
+      return unique;
+    };
+
+    if (ts.isObjectLiteralExpression(current)) {
+      return memoize(
+        current.properties.flatMap((member): ts.Expression[] => {
+          if (ts.isPropertyAssignment(member)) {
+            return objectLiteralPropertyName(member.name) === property ? [member.initializer] : [];
+          }
+          if (ts.isShorthandPropertyAssignment(member)) {
+            return member.name.text === property ? [member.name] : [];
+          }
+          if (ts.isSpreadAssignment(member)) return resolve(member.expression);
+          return [];
+        }),
+      );
+    }
+    if (ts.isIdentifier(current)) {
+      return memoize(
+        (valueBindings.get(current.text) ?? []).flatMap((binding) => resolve(binding)),
+      );
+    }
+    if (ts.isPropertyAccessExpression(current)) {
+      return memoize(
+        objectPropertyBindings(
+          current.expression,
+          current.name.text,
+          nextVisiting,
+          depth + 1,
+        ).flatMap((binding) => resolve(binding)),
+      );
+    }
+    if (ts.isElementAccessExpression(current) && current.argumentExpression) {
+      const receiverProperty = staticString(current.argumentExpression);
+      if (receiverProperty === null) return [];
+      return memoize(
+        objectPropertyBindings(
+          current.expression,
+          receiverProperty,
+          nextVisiting,
+          depth + 1,
+        ).flatMap((binding) => resolve(binding)),
+      );
+    }
+    if (ts.isConditionalExpression(current)) {
+      return memoize([...resolve(current.whenTrue), ...resolve(current.whenFalse)]);
+    }
+    if (ts.isAwaitExpression(current)) return memoize(resolve(current.expression));
+    return memoize([]);
+  };
+
   const isClientExpression = (expression: ts.Expression, visiting = new Set<string>()): boolean => {
     const current = unwrapExpression(expression);
     const path = current.getText(sourceFile);
@@ -353,12 +432,25 @@ function deriveBoundaryDataflow(sourceFile: ts.SourceFile): BoundaryDataflow {
     }
     if (ts.isPropertyAccessExpression(current)) {
       if (current.name.text === 'storage') return false;
-      return identifierLooksLikeSupabaseClient(current.name.text);
+      if (identifierLooksLikeSupabaseClient(current.name.text)) return true;
+      const visitKey = `member:${current.pos}:${current.end}`;
+      if (visiting.has(visitKey)) return false;
+      const nextVisiting = new Set(visiting).add(visitKey);
+      return objectPropertyBindings(current.expression, current.name.text).some((binding) =>
+        isClientExpression(binding, nextVisiting),
+      );
     }
     if (ts.isElementAccessExpression(current)) {
       const property = current.argumentExpression ? staticString(current.argumentExpression) : null;
       if (property === 'storage') return false;
-      return property !== null && identifierLooksLikeSupabaseClient(property);
+      if (property === null) return false;
+      if (identifierLooksLikeSupabaseClient(property)) return true;
+      const visitKey = `member:${current.pos}:${current.end}`;
+      if (visiting.has(visitKey)) return false;
+      const nextVisiting = new Set(visiting).add(visitKey);
+      return objectPropertyBindings(current.expression, property).some((binding) =>
+        isClientExpression(binding, nextVisiting),
+      );
     }
     if (ts.isConditionalExpression(current)) {
       return (

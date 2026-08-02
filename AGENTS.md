@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-02
-lastReviewedCommit: b5ad790b510b72f0022348c112d63e43fce687c5
-lastReviewedNote: 'Reviewed for Issue #250: alias-aware typed/AST-derived schema-boundary proof and exact-head pull-request CI remain Edge-owned; the candidate database binding is non-authorizing until database-engine #357 freezes v3.'
+lastReviewedCommit: 3eae8d31e79768dcc5e9b36aef9f15d0536f10d1
+lastReviewedNote: 'Reviewed for Issue #250: bounded object-property alias analysis remains part of the Edge-owned schema-boundary proof; exact-head CI and non-authorizing candidate database semantics are unchanged.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

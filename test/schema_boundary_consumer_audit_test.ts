@@ -367,6 +367,32 @@ invoke(wrappedAlias, request.method);
   );
 });
 
+Deno.test('object property aliases cannot hide computed Supabase client calls', () => {
+  const source = `
+const client = createClient();
+const holder = { db: client };
+const nested = { holder };
+const harmless = { db: { invoke: () => undefined } };
+holder.db['r' + 'pc']('cmd_dataset_create');
+holder.db[request.method]('cmd_dataset_create');
+nested.holder.db['r' + 'pc']('cmd_dataset_create');
+harmless.db[request.method]('not-a-supabase-call');
+`;
+  const violations = deriveAstBoundaryViolations(
+    'object-property-alias.ts',
+    source,
+    [],
+    [],
+    ['api'],
+    new Map([['object-property-alias.ts', source]]),
+  );
+  assertEquals(violations.filter((finding) => finding.kind === 'computed-data-api-call').length, 2);
+  assertEquals(
+    violations.filter((finding) => finding.kind === 'unknown-computed-data-api-call').length,
+    1,
+  );
+});
+
 Deno.test('client aliases cannot detach or destructure schema-boundary methods', () => {
   const source = `
 const context = { supabase: createClient() };
