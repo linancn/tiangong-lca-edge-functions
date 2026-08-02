@@ -57,6 +57,7 @@ Deno.test(
     );
 
     assertEquals(result.ok, true);
+    assertEquals(supabase.schemas, ['api']);
     assertEquals(supabase.rpcCalls, [
       {
         fn: 'cmd_dataset_save_draft',
@@ -96,6 +97,7 @@ Deno.test('executeSaveDraftCommand allows process drafts without modelId', async
   );
 
   assertEquals(result.ok, true);
+  assertEquals(supabase.schemas, ['api']);
   assertEquals(supabase.rpcCalls, [
     {
       fn: 'cmd_dataset_save_draft',

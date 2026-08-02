@@ -10,6 +10,10 @@ import {
   deriveSourceRelationOccurrences,
   exactStringSet,
   exactUniqueList,
+  EXPECTED_AUTHORIZED_DATABASE_SLICE,
+  EXPECTED_DATABASE_BASE_COMMIT,
+  EXPECTED_DATABASE_CANDIDATE_COMMENT,
+  EXPECTED_DATABASE_MIGRATION_HEAD,
   isApprovedDynamicSchema,
   isExactCoreAllowlistBinding,
   isExactSchemaBinding,
@@ -20,7 +24,8 @@ import {
 } from '../scripts/schema-boundary-consumer-audit.ts';
 import {
   DATABASE_API_ACTOR_CAPABILITIES,
-  DATABASE_API_SERVICE_CAPABILITIES,
+  DATABASE_PUBLIC_ACTOR_CAPABILITIES,
+  DATABASE_PUBLIC_SERVICE_CAPABILITIES,
 } from '../supabase/functions/_shared/capabilities/schema_boundary.ts';
 
 const ROOT = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
@@ -60,6 +65,50 @@ Deno.test(
     const missingSourceAuditControl = structuredClone(manifest);
     missingSourceAuditControl.sourceAudit.controls.pop();
     assertEquals(validate(missingSourceAuditControl), false);
+
+    const widenedActorApi = structuredClone(manifest);
+    widenedActorApi.apiCapabilities.actorRoutines.push('cmd_dataset_create');
+    assertEquals(validate(widenedActorApi), false);
+
+    const widenedServiceApi = structuredClone(manifest);
+    widenedServiceApi.apiCapabilities.serviceRoutines.push('cmd_dataset_extraction_claim');
+    assertEquals(validate(widenedServiceApi), false);
+
+    const staleDatabaseHead = structuredClone(manifest);
+    staleDatabaseHead.databaseSource.migrationHead = '20260801131918';
+    assertEquals(validate(staleDatabaseHead), false);
+
+    const widenedAuthorizedSlice = structuredClone(manifest);
+    widenedAuthorizedSlice.databaseSource.authorizedSlices[0].apiActorRoutines.push(
+      'cmd_dataset_create',
+    );
+    assertEquals(validate(widenedAuthorizedSlice), false);
+  },
+);
+
+Deno.test(
+  'canonical manifest binds the deployed E3-B database head without over-authorizing',
+  async () => {
+    const manifest = JSON.parse(
+      await Deno.readTextFile(
+        `${ROOT}/supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.json`,
+      ),
+    );
+    assertEquals(manifest.databaseSource.baseCommit, EXPECTED_DATABASE_BASE_COMMIT);
+    assertEquals(manifest.databaseSource.migrationHead, EXPECTED_DATABASE_MIGRATION_HEAD);
+    assertEquals(manifest.databaseSource.candidateComment, EXPECTED_DATABASE_CANDIDATE_COMMENT);
+    assertEquals(manifest.databaseSource.state, 'candidate-not-frozen');
+    assertEquals(manifest.databaseSource.authorization, 'not-authorized');
+    assertEquals(manifest.databaseSource.authorizedSlices, [EXPECTED_AUTHORIZED_DATABASE_SLICE]);
+    assertEquals(manifest.databaseSource.frozenManifest, {
+      path: null,
+      sha256: null,
+      sidecarPath: null,
+      contentFingerprintSha256: null,
+      edgeExposureFingerprintSha256: null,
+      commit: null,
+      reviewComment: null,
+    });
   },
 );
 
@@ -69,7 +118,7 @@ Deno.test(
     const result = await auditSchemaBoundary(ROOT, 'expand');
     assertEquals(result.findings, []);
     assertEquals(result.counts.requirementOccurrences, 48);
-    assertEquals(result.counts.apiRoutines, 13);
+    assertEquals(result.counts.apiRoutines, 1);
     assert(result.pending.length > 0, 'expand phase must not claim consumer-zero before DB #357');
   },
 );
@@ -188,7 +237,8 @@ Deno.test(
   () => {
     for (const routines of [
       Object.values(DATABASE_API_ACTOR_CAPABILITIES),
-      Object.values(DATABASE_API_SERVICE_CAPABILITIES),
+      Object.values(DATABASE_PUBLIC_ACTOR_CAPABILITIES),
+      Object.values(DATABASE_PUBLIC_SERVICE_CAPABILITIES),
     ]) {
       for (const routine of routines) {
         assertEquals(
@@ -203,7 +253,8 @@ Deno.test(
     }
     for (const capabilityIds of [
       Object.keys(DATABASE_API_ACTOR_CAPABILITIES),
-      Object.keys(DATABASE_API_SERVICE_CAPABILITIES),
+      Object.keys(DATABASE_PUBLIC_ACTOR_CAPABILITIES),
+      Object.keys(DATABASE_PUBLIC_SERVICE_CAPABILITIES),
     ]) {
       for (const capabilityId of capabilityIds) {
         assertEquals(
@@ -340,18 +391,20 @@ invoke('unsafe');
 Deno.test('dynamic capability abstraction call expressions and counts are exact', () => {
   const exact = `
 const schema = client.schema(API_SCHEMA);
-schema.rpc(routine, args);
-schema.rpc(routine, args);
+schema.rpc(apiRoutine, args);
+client.rpc(publicRoutine, args);
 schema.from(relation);
 `;
   assertEquals(deriveBoundaryMethodCalls(exact), {
     'schema:API_SCHEMA': 1,
-    'rpc:routine': 2,
+    'rpc:apiRoutine': 1,
+    'rpc:publicRoutine': 1,
     'from:relation': 1,
   });
   assertEquals(deriveBoundaryMethodCalls(`${exact}\nschema.from(otherRelation);`), {
     'schema:API_SCHEMA': 1,
-    'rpc:routine': 2,
+    'rpc:apiRoutine': 1,
+    'rpc:publicRoutine': 1,
     'from:relation': 1,
     'from:otherRelation': 1,
   });

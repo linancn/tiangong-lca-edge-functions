@@ -33,7 +33,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-02
-lastReviewedCommit: 04dfefe17794e7d1a16fe27b5023ad07143cbf0c
+lastReviewedCommit: b5ad790b510b72f0022348c112d63e43fce687c5
 lastReviewedNote: 'Reviewed for Issue #250: alias-aware typed/AST-derived schema-boundary proof and exact-head pull-request CI remain Edge-owned; the candidate database binding is non-authorizing until database-engine #357 freezes v3.'
 related:
   - .docpact/config.yaml

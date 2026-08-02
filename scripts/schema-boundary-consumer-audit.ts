@@ -4,6 +4,8 @@ import {
   DATABASE_API_ACTOR_CAPABILITIES,
   DATABASE_API_RELATION_CAPABILITIES,
   DATABASE_API_SERVICE_CAPABILITIES,
+  DATABASE_PUBLIC_ACTOR_CAPABILITIES,
+  DATABASE_PUBLIC_SERVICE_CAPABILITIES,
 } from '../supabase/functions/_shared/capabilities/schema_boundary.ts';
 
 export type SchemaBoundaryProfile = 'expand' | 'contract';
@@ -54,6 +56,7 @@ type Manifest = {
   };
   databaseSource: {
     issue: string;
+    candidateComment: number;
     repository: string;
     freezeSchemaVersion: string;
     freezeSchemaPath: string;
@@ -62,6 +65,22 @@ type Manifest = {
     publicObjectInventorySha256: string;
     state: string;
     authorization: string;
+    authorizedSlices: Array<{
+      sliceId: string;
+      issue: string;
+      mergeCommit: string;
+      migrationHead: string;
+      migrationPath: string;
+      migrationSha256: string;
+      validationComment: number;
+      state: string;
+      authorization: string;
+      apiActorRoutines: string[];
+      apiServiceRoutines: string[];
+      sourceMd5: string;
+      executeRoles: string[];
+      deniedRoles: string[];
+    }>;
     frozenManifest: {
       path: string | null;
       sha256: string | null;
@@ -540,8 +559,8 @@ function deriveCapabilityCalls(file: string, source: string): CapabilityCall[] {
   const dataflow = deriveBoundaryDataflow(sourceFile);
   const calls: CapabilityCall[] = [];
   const helperByName = new Map([
-    ['callActorDatabaseApiRpc', 'actor' as const],
-    ['callServiceDatabaseApiRpc', 'service' as const],
+    ['callActorDatabaseRpc', 'actor' as const],
+    ['callServiceDatabaseRpc', 'service' as const],
   ]);
   const visit = (node: ts.Node) => {
     if (ts.isCallExpression(node)) {
@@ -942,6 +961,25 @@ const REQUIRED_SOURCE_AUDIT_CONTROLS = [
   'local-parameter-propagation',
   'local-return-propagation',
 ] as const;
+export const EXPECTED_DATABASE_BASE_COMMIT = '2ca8ea3243f67f878533e1a46df0747987ad9b5f' as const;
+export const EXPECTED_DATABASE_MIGRATION_HEAD = '20260802022552' as const;
+export const EXPECTED_DATABASE_CANDIDATE_COMMENT = 5155276316 as const;
+export const EXPECTED_AUTHORIZED_DATABASE_SLICE = {
+  sliceId: 'e3-b-save-draft-api-v1',
+  issue: 'tiangong-lca/database-engine#372',
+  mergeCommit: EXPECTED_DATABASE_BASE_COMMIT,
+  migrationHead: EXPECTED_DATABASE_MIGRATION_HEAD,
+  migrationPath: 'supabase/migrations/20260802022552_issue_372_edge_worker_expand_slice.sql',
+  migrationSha256: '026b895768221644a1b9915c2685d993bc74e0122ed64808dda92a95e1d176a3',
+  validationComment: 5155369682,
+  state: 'persistent-dev-verified',
+  authorization: 'consumer-migration-authorized',
+  apiActorRoutines: ['cmd_dataset_save_draft'],
+  apiServiceRoutines: [],
+  sourceMd5: 'b620aa117cebe7f6e01ed5c4acfe86d6',
+  executeRoles: ['authenticated', 'service_role'],
+  deniedRoles: ['PUBLIC', 'anon'],
+} as const;
 
 function lineNumber(source: string, offset: number): number {
   return source.slice(0, offset).split('\n').length;
@@ -1075,8 +1113,11 @@ export async function auditSchemaBoundary(
     databaseSource.freezeSchemaVersion === 'database.lca-private-expand-freeze.v3' &&
     databaseSource.freezeSchemaPath ===
       'supabase/tests/contracts/lca_private_expand_freeze.v3.schema.json' &&
-    commitPattern.test(databaseSource.baseCommit) &&
-    /^\d{14}$/.test(databaseSource.migrationHead) &&
+    databaseSource.baseCommit === EXPECTED_DATABASE_BASE_COMMIT &&
+    databaseSource.migrationHead === EXPECTED_DATABASE_MIGRATION_HEAD &&
+    databaseSource.candidateComment === EXPECTED_DATABASE_CANDIDATE_COMMENT &&
+    JSON.stringify(databaseSource.authorizedSlices) ===
+      JSON.stringify([EXPECTED_AUTHORIZED_DATABASE_SLICE]) &&
     sha256Pattern.test(databaseSource.publicObjectInventorySha256) &&
     exactUniqueList(requiredFrozenBindings.consumerSource, [
       'sourceId',
@@ -1459,10 +1500,14 @@ export async function auditSchemaBoundary(
     );
   }
 
-  const actorMap = DATABASE_API_ACTOR_CAPABILITIES as Readonly<Record<string, string>>;
-  const serviceMap = DATABASE_API_SERVICE_CAPABILITIES as Readonly<Record<string, string>>;
+  const apiActorMap = DATABASE_API_ACTOR_CAPABILITIES as Readonly<Record<string, string>>;
+  const apiServiceMap = DATABASE_API_SERVICE_CAPABILITIES as Readonly<Record<string, string>>;
+  const publicActorMap = DATABASE_PUBLIC_ACTOR_CAPABILITIES as Readonly<Record<string, string>>;
+  const publicServiceMap = DATABASE_PUBLIC_SERVICE_CAPABILITIES as Readonly<Record<string, string>>;
+  const actorMap = { ...apiActorMap, ...publicActorMap };
+  const serviceMap = { ...apiServiceMap, ...publicServiceMap };
   const relationMap = DATABASE_API_RELATION_CAPABILITIES as Readonly<Record<string, string>>;
-  if (!exactUniqueList(manifest.apiCapabilities.actorRoutines, Object.values(actorMap))) {
+  if (!exactUniqueList(manifest.apiCapabilities.actorRoutines, Object.values(apiActorMap))) {
     findings.push({
       file: MANIFEST_PATH,
       line: 1,
@@ -1470,7 +1515,7 @@ export async function auditSchemaBoundary(
       message: 'typed actor routine map and manifest actor routines must be bidirectionally equal',
     });
   }
-  if (!exactUniqueList(manifest.apiCapabilities.serviceRoutines, Object.values(serviceMap))) {
+  if (!exactUniqueList(manifest.apiCapabilities.serviceRoutines, Object.values(apiServiceMap))) {
     findings.push({
       file: MANIFEST_PATH,
       line: 1,
@@ -1487,6 +1532,37 @@ export async function auditSchemaBoundary(
       message: 'typed relation map and manifest API relations must be bidirectionally equal',
     });
   }
+  const authorizedSlice = databaseSource.authorizedSlices[0];
+  if (
+    !authorizedSlice ||
+    !exactUniqueList(authorizedSlice.apiActorRoutines, Object.values(apiActorMap)) ||
+    !exactUniqueList(authorizedSlice.apiServiceRoutines, Object.values(apiServiceMap))
+  ) {
+    findings.push({
+      file: MANIFEST_PATH,
+      line: 1,
+      kind: 'authorized-slice-capability-drift',
+      message:
+        'the exact authorized database slice and typed API-ready capability maps must be bidirectionally equal',
+    });
+  }
+  const publicCapabilityRoutines = [
+    ...Object.values(publicActorMap),
+    ...Object.values(publicServiceMap),
+  ];
+  if (
+    publicCapabilityRoutines.some(
+      (routine) => !pendingRoutines.has(routine) || apiRoutines.has(routine),
+    )
+  ) {
+    findings.push({
+      file: MANIFEST_PATH,
+      line: 1,
+      kind: 'public-capability-residue-drift',
+      message:
+        'typed public-preservation routines must remain in publicResidue and outside apiCapabilities',
+    });
+  }
 
   for (const call of capabilityCalls) {
     const map = call.helper === 'actor' ? actorMap : serviceMap;
@@ -1496,7 +1572,7 @@ export async function auditSchemaBoundary(
         line: call.line,
         kind: 'dynamic-or-unknown-api-capability',
         object: call.expression,
-        message: `${call.helper} API helper requires an exact registered literal capability ID`,
+        message: `${call.helper} database helper requires an exact registered literal capability ID`,
       });
     }
   }
@@ -1529,7 +1605,25 @@ export async function auditSchemaBoundary(
         'observed service capability IDs and typed service map must be bidirectionally equal',
     });
   }
-  apiRoutineCount = actorCalls.length + serviceCalls.length;
+  for (const call of capabilityCalls) {
+    if (!call.capabilityId) continue;
+    const publicMap = call.helper === 'actor' ? publicActorMap : publicServiceMap;
+    const routine = publicMap[call.capabilityId];
+    if (routine) {
+      pending.push({
+        file: call.file,
+        line: call.line,
+        kind: 'public-capability-routine-residue',
+        object: routine,
+        message: `${call.helper} capability ${call.capabilityId} intentionally remains on public until its api facade is deployed`,
+      });
+    }
+  }
+  apiRoutineCount = capabilityCalls.filter((call) => {
+    if (!call.capabilityId) return false;
+    const map = call.helper === 'actor' ? apiActorMap : apiServiceMap;
+    return call.capabilityId in map;
+  }).length;
 
   const occurrenceComparison = compareRelationOccurrenceInventories(
     sourceOccurrences,

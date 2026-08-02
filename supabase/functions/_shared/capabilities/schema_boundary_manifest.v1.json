@@ -4,7 +4,7 @@
     "algorithm": "sha256",
     "sidecar": "supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.sha256",
     "schemaPath": "supabase/functions/_shared/capabilities/schema_boundary_manifest.v1.schema.json",
-    "schemaSha256": "4044a88983f066661f1e8a0e6c963ca61fc6bd0dc0c9ba58e5016d33bf91b6cf"
+    "schemaSha256": "8c60dbc4d8758b11cae516ca510c40f3c0520b0834c2f14144611cefdead4bc2"
   },
   "edgeBaseCommit": "04dfefe17794e7d1a16fe27b5023ad07143cbf0c",
   "sourceAudit": {
@@ -21,15 +21,33 @@
   },
   "databaseSource": {
     "issue": "tiangong-lca/database-engine#357",
-    "candidateComment": 5152567125,
+    "candidateComment": 5155276316,
     "repository": "tiangong-lca/database-engine",
     "freezeSchemaVersion": "database.lca-private-expand-freeze.v3",
     "freezeSchemaPath": "supabase/tests/contracts/lca_private_expand_freeze.v3.schema.json",
-    "baseCommit": "afe31240567b6225620ace080829a346bc5fcfd4",
-    "migrationHead": "20260801131918",
+    "baseCommit": "2ca8ea3243f67f878533e1a46df0747987ad9b5f",
+    "migrationHead": "20260802022552",
     "publicObjectInventorySha256": "2526146dc64e2b32bdf9afb2ebcc0495f5a174f241c2abbd7f0f1b5348aa8c18",
     "state": "candidate-not-frozen",
     "authorization": "not-authorized",
+    "authorizedSlices": [
+      {
+        "sliceId": "e3-b-save-draft-api-v1",
+        "issue": "tiangong-lca/database-engine#372",
+        "mergeCommit": "2ca8ea3243f67f878533e1a46df0747987ad9b5f",
+        "migrationHead": "20260802022552",
+        "migrationPath": "supabase/migrations/20260802022552_issue_372_edge_worker_expand_slice.sql",
+        "migrationSha256": "026b895768221644a1b9915c2685d993bc74e0122ed64808dda92a95e1d176a3",
+        "validationComment": 5155369682,
+        "state": "persistent-dev-verified",
+        "authorization": "consumer-migration-authorized",
+        "apiActorRoutines": ["cmd_dataset_save_draft"],
+        "apiServiceRoutines": [],
+        "sourceMd5": "b620aa117cebe7f6e01ed5c4acfe86d6",
+        "executeRoles": ["authenticated", "service_role"],
+        "deniedRoles": ["PUBLIC", "anon"]
+      }
+    ],
     "frozenManifest": {
       "path": null,
       "sha256": null,
@@ -96,38 +114,8 @@
       "identity_center_processed_events_v1",
       "team_roles_v1"
     ],
-    "actorRoutines": [
-      "cmd_dataset_save_draft",
-      "cmd_dataset_review_submit_job_enqueue",
-      "cmd_dataset_review_submit_job_read",
-      "cmd_dataset_review_submit_job_read_latest",
-      "cmd_dataset_create",
-      "cmd_dataset_create_version",
-      "cmd_dataset_delete",
-      "cmd_dataset_assign_team",
-      "cmd_dataset_publish",
-      "cmd_dataset_review_submit_gate"
-    ],
-    "serviceRoutines": [
-      "cmd_dataset_extraction_record_failure",
-      "cmd_dataset_extraction_claim",
-      "cmd_dataset_extraction_ack"
-    ]
-  },
-  "relationOccurrenceScope": {
-    "sourceKind": "typescript-ast-resolved-from-call",
-    "relations": [
-      "lcia_result_publications",
-      "lcia_result_packages",
-      "lca_snapshot_artifacts",
-      "lca_network_snapshots",
-      "lca_result_cache",
-      "lca_active_snapshots",
-      "lca_latest_all_unit_results",
-      "lca_results",
-      "lca_package_artifacts",
-      "lca_package_request_cache"
-    ]
+    "actorRoutines": ["cmd_dataset_save_draft"],
+    "serviceRoutines": []
   },
   "publicResidue": {
     "relations": [
@@ -146,6 +134,18 @@
       "lca_package_request_cache"
     ],
     "routines": [
+      "cmd_dataset_review_submit_job_enqueue",
+      "cmd_dataset_review_submit_job_read",
+      "cmd_dataset_review_submit_job_read_latest",
+      "cmd_dataset_create",
+      "cmd_dataset_create_version",
+      "cmd_dataset_delete",
+      "cmd_dataset_assign_team",
+      "cmd_dataset_publish",
+      "cmd_dataset_review_submit_gate",
+      "cmd_dataset_extraction_record_failure",
+      "cmd_dataset_extraction_claim",
+      "cmd_dataset_extraction_ack",
       "cmd_dataset_review_submit_job_claim",
       "cmd_dataset_review_submit_job_record_result",
       "cmd_review_submit_from_job",
@@ -161,6 +161,21 @@
       "supabase/functions/_shared/db_rpc/notification_commands.ts",
       "supabase/functions/_shared/db_rpc/review_commands.ts",
       "supabase/functions/_shared/hybrid_search_handler.ts"
+    ]
+  },
+  "relationOccurrenceScope": {
+    "sourceKind": "typescript-ast-resolved-from-call",
+    "relations": [
+      "lcia_result_publications",
+      "lcia_result_packages",
+      "lca_snapshot_artifacts",
+      "lca_network_snapshots",
+      "lca_result_cache",
+      "lca_active_snapshots",
+      "lca_latest_all_unit_results",
+      "lca_results",
+      "lca_package_artifacts",
+      "lca_package_request_cache"
     ]
   },
   "dynamicConsumers": [
@@ -278,10 +293,11 @@
       "file": "supabase/functions/_shared/capabilities/schema_boundary.ts",
       "kind": "api-abstraction",
       "relationExpressions": ["relation"],
-      "rpcExpressions": ["routine"],
+      "rpcExpressions": ["apiRoutine", "publicRoutine"],
       "dynamicCallCounts": {
         "schema:DATABASE_API_SCHEMA": 1,
-        "rpc:routine": 2,
+        "rpc:apiRoutine": 1,
+        "rpc:publicRoutine": 1,
         "from:relation": 1
       },
       "schemaExpressions": ["DATABASE_API_SCHEMA"],

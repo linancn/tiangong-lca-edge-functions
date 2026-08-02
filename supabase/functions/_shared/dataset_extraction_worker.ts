@@ -1,6 +1,6 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import { callServiceDatabaseApiRpc } from './capabilities/schema_boundary.ts';
+import { callServiceDatabaseRpc } from './capabilities/schema_boundary.ts';
 import { generateFlowMarkdown, normalizeJsonOrdered } from './flow_extraction.ts';
 import {
   generateContactMarkdown,
@@ -171,7 +171,7 @@ async function recordTerminalFailure(
   reason: string,
   message: string,
 ): Promise<void> {
-  const { error } = await callServiceDatabaseApiRpc(supabase, 'dataset-extraction.record-failure', {
+  const { error } = await callServiceDatabaseRpc(supabase, 'dataset-extraction.record-failure', {
     p_msg_id: job.msg_id,
     p_read_count: job.read_ct,
     p_reason: reason,
@@ -249,7 +249,7 @@ export async function processDatasetExtractionJobs(
     ...options.markdownGenerators,
   };
 
-  const { data, error } = await callServiceDatabaseApiRpc(
+  const { data, error } = await callServiceDatabaseRpc(
     options.supabase,
     'dataset-extraction.claim',
     {
@@ -324,7 +324,7 @@ export async function processDatasetExtractionJobs(
   }
 
   if (ackIds.length > 0) {
-    const { error: ackError } = await callServiceDatabaseApiRpc(
+    const { error: ackError } = await callServiceDatabaseRpc(
       options.supabase,
       'dataset-extraction.ack',
       { p_msg_ids: ackIds },

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import { callActorDatabaseApiRpc } from '../capabilities/schema_boundary.ts';
+import { callActorDatabaseRpc } from '../capabilities/schema_boundary.ts';
 import type { CommandAuditPayload } from '../command_runtime/audit_log.ts';
 import type {
   AssignTeamRequest,
@@ -267,7 +267,7 @@ export function callDatasetSaveDraftRpc(
   audit: CommandAuditPayload,
 ) {
   return callDatasetRpc(
-    callActorDatabaseApiRpc(
+    callActorDatabaseRpc(
       supabase,
       'dataset.save-draft',
       buildDatasetSaveDraftRpcArgs(request, audit),
@@ -281,7 +281,7 @@ export function callDatasetReviewSubmitJobEnqueueRpc(
   audit: CommandAuditPayload,
 ) {
   return callDatasetRpc(
-    callActorDatabaseApiRpc(
+    callActorDatabaseRpc(
       supabase,
       'dataset.review-submit-job-enqueue',
       buildDatasetReviewSubmitJobEnqueueRpcArgs(request, audit),
@@ -294,7 +294,7 @@ export function callDatasetReviewSubmitJobReadRpc(
   request: ReviewSubmitJobReadRequest,
 ) {
   return callDatasetRpc(
-    callActorDatabaseApiRpc(
+    callActorDatabaseRpc(
       supabase,
       'dataset.review-submit-job-read',
       buildDatasetReviewSubmitJobReadRpcArgs(request),
@@ -307,7 +307,7 @@ export function callDatasetReviewSubmitJobReadLatestRpc(
   request: ReviewSubmitJobReadLatestRequest,
 ) {
   return callDatasetRpc(
-    callActorDatabaseApiRpc(
+    callActorDatabaseRpc(
       supabase,
       'dataset.review-submit-job-read-latest',
       buildDatasetReviewSubmitJobReadLatestRpcArgs(request),
@@ -321,7 +321,7 @@ export function callDatasetCreateRpc(
   audit: CommandAuditPayload,
 ) {
   return callDatasetRpc(
-    callActorDatabaseApiRpc(supabase, 'dataset.create', buildDatasetCreateRpcArgs(request, audit)),
+    callActorDatabaseRpc(supabase, 'dataset.create', buildDatasetCreateRpcArgs(request, audit)),
   );
 }
 
@@ -331,7 +331,7 @@ export function callDatasetCreateVersionRpc(
   audit: CommandAuditPayload,
 ) {
   return callDatasetRpc(
-    callActorDatabaseApiRpc(
+    callActorDatabaseRpc(
       supabase,
       'dataset.create-version',
       buildDatasetCreateVersionRpcArgs(request, audit),
@@ -345,7 +345,7 @@ export function callDatasetDeleteRpc(
   audit: CommandAuditPayload,
 ) {
   return callDatasetRpc(
-    callActorDatabaseApiRpc(supabase, 'dataset.delete', buildDatasetDeleteRpcArgs(request, audit)),
+    callActorDatabaseRpc(supabase, 'dataset.delete', buildDatasetDeleteRpcArgs(request, audit)),
   );
 }
 
@@ -355,7 +355,7 @@ export function callDatasetAssignTeamRpc(
   audit: CommandAuditPayload,
 ) {
   return callDatasetRpc(
-    callActorDatabaseApiRpc(
+    callActorDatabaseRpc(
       supabase,
       'dataset.assign-team',
       buildDatasetAssignTeamRpcArgs(request, audit),
@@ -369,11 +369,7 @@ export function callDatasetPublishRpc(
   audit: CommandAuditPayload,
 ) {
   return callDatasetRpc(
-    callActorDatabaseApiRpc(
-      supabase,
-      'dataset.publish',
-      buildDatasetPublishRpcArgs(request, audit),
-    ),
+    callActorDatabaseRpc(supabase, 'dataset.publish', buildDatasetPublishRpcArgs(request, audit)),
   );
 }
 
@@ -395,7 +391,7 @@ export function callDatasetReviewSubmitGateRpc(
   audit: CommandAuditPayload,
 ) {
   return callDatasetRpc(
-    callActorDatabaseApiRpc(
+    callActorDatabaseRpc(
       supabase,
       'dataset.review-submit-gate',
       buildDatasetReviewSubmitGateRpcArgs(request, audit),

@@ -62,6 +62,7 @@
       "type": "object",
       "required": [
         "issue",
+        "candidateComment",
         "repository",
         "freezeSchemaVersion",
         "freezeSchemaPath",
@@ -70,21 +71,42 @@
         "publicObjectInventorySha256",
         "state",
         "authorization",
+        "authorizedSlices",
         "frozenManifest",
         "requiredFrozenBindings"
       ],
       "properties": {
         "issue": { "const": "tiangong-lca/database-engine#357" },
-        "candidateComment": { "type": "integer", "minimum": 1 },
+        "candidateComment": { "const": 5155276316 },
         "repository": { "const": "tiangong-lca/database-engine" },
         "freezeSchemaVersion": { "const": "database.lca-private-expand-freeze.v3" },
         "freezeSchemaPath": { "type": "string", "minLength": 1 },
-        "baseCommit": { "$ref": "#/$defs/commit" },
-        "migrationHead": { "type": "string", "pattern": "^[0-9]{14}$" },
+        "baseCommit": { "const": "2ca8ea3243f67f878533e1a46df0747987ad9b5f" },
+        "migrationHead": { "const": "20260802022552" },
         "publicObjectInventorySha256": { "$ref": "#/$defs/sha256" },
         "state": { "enum": ["candidate-not-frozen", "reviewed-frozen"] },
         "authorization": {
           "enum": ["not-authorized", "consumer-migration-authorized"]
+        },
+        "authorizedSlices": {
+          "const": [
+            {
+              "sliceId": "e3-b-save-draft-api-v1",
+              "issue": "tiangong-lca/database-engine#372",
+              "mergeCommit": "2ca8ea3243f67f878533e1a46df0747987ad9b5f",
+              "migrationHead": "20260802022552",
+              "migrationPath": "supabase/migrations/20260802022552_issue_372_edge_worker_expand_slice.sql",
+              "migrationSha256": "026b895768221644a1b9915c2685d993bc74e0122ed64808dda92a95e1d176a3",
+              "validationComment": 5155369682,
+              "state": "persistent-dev-verified",
+              "authorization": "consumer-migration-authorized",
+              "apiActorRoutines": ["cmd_dataset_save_draft"],
+              "apiServiceRoutines": [],
+              "sourceMd5": "b620aa117cebe7f6e01ed5c4acfe86d6",
+              "executeRoles": ["authenticated", "service_role"],
+              "deniedRoles": ["PUBLIC", "anon"]
+            }
+          ]
         },
         "frozenManifest": { "type": "object" },
         "requiredFrozenBindings": { "type": "object" }
@@ -113,13 +135,11 @@
       "properties": {
         "relations": { "$ref": "#/$defs/threeUniqueStrings" },
         "actorRoutines": {
-          "type": "array",
-          "minItems": 10,
-          "maxItems": 10,
-          "uniqueItems": true,
-          "items": { "type": "string" }
+          "const": ["cmd_dataset_save_draft"]
         },
-        "serviceRoutines": { "$ref": "#/$defs/threeUniqueStrings" }
+        "serviceRoutines": {
+          "const": []
+        }
       }
     },
     "relationOccurrenceScope": {

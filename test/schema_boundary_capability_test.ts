@@ -1,16 +1,18 @@
 import { assertEquals, assertThrows } from 'jsr:@std/assert';
 
 import {
-  callActorDatabaseApiRpc,
-  callServiceDatabaseApiRpc,
+  callActorDatabaseRpc,
+  callServiceDatabaseRpc,
   DATABASE_API_ACTOR_CAPABILITIES,
   DATABASE_API_RELATION_CAPABILITIES,
   DATABASE_API_SERVICE_CAPABILITIES,
+  DATABASE_PUBLIC_ACTOR_CAPABILITIES,
+  DATABASE_PUBLIC_SERVICE_CAPABILITIES,
   databaseApi,
   fromDatabaseApi,
-  type DatabaseApiActorCapabilityId,
+  type DatabaseActorCapabilityId,
   type DatabaseApiRelationCapabilityId,
-  type DatabaseApiServiceCapabilityId,
+  type DatabaseServiceCapabilityId,
 } from '../supabase/functions/_shared/capabilities/schema_boundary.ts';
 
 class FakeCredentialBoundClient {
@@ -47,51 +49,60 @@ Deno.test('database API capability selects api schema without changing bound cre
   }
 });
 
-Deno.test(
-  'all 10 actor capability IDs resolve exact routines through actor credentials',
-  async () => {
-    assertEquals(Object.keys(DATABASE_API_ACTOR_CAPABILITIES).length, 10);
-    for (const [capabilityId, routine] of Object.entries(DATABASE_API_ACTOR_CAPABILITIES)) {
-      const client = new FakeCredentialBoundClient('authenticated');
-      await callActorDatabaseApiRpc(client as never, capabilityId as DatabaseApiActorCapabilityId, {
-        proof: capabilityId,
-      });
-      assertEquals(client.calls, [
-        { operation: 'schema', schema: 'api', credentialRole: 'authenticated' },
-        {
-          operation: 'rpc',
-          routine,
-          args: { proof: capabilityId },
-          credentialRole: 'authenticated',
-        },
-      ]);
-    }
-  },
-);
+Deno.test('save-draft is the only actor capability routed through api', async () => {
+  assertEquals(DATABASE_API_ACTOR_CAPABILITIES, {
+    'dataset.save-draft': 'cmd_dataset_save_draft',
+  });
+  assertEquals(DATABASE_API_SERVICE_CAPABILITIES, {});
+  const client = new FakeCredentialBoundClient('authenticated');
+  await callActorDatabaseRpc(client as never, 'dataset.save-draft', {
+    proof: 'dataset.save-draft',
+  });
+  assertEquals(client.calls, [
+    { operation: 'schema', schema: 'api', credentialRole: 'authenticated' },
+    {
+      operation: 'rpc',
+      routine: 'cmd_dataset_save_draft',
+      args: { proof: 'dataset.save-draft' },
+      credentialRole: 'authenticated',
+    },
+  ]);
+});
 
-Deno.test(
-  'all 3 service capability IDs resolve exact routines through service credentials',
-  async () => {
-    assertEquals(Object.keys(DATABASE_API_SERVICE_CAPABILITIES).length, 3);
-    for (const [capabilityId, routine] of Object.entries(DATABASE_API_SERVICE_CAPABILITIES)) {
-      const client = new FakeCredentialBoundClient('service_role');
-      await callServiceDatabaseApiRpc(
-        client as never,
-        capabilityId as DatabaseApiServiceCapabilityId,
-        { proof: capabilityId },
-      );
-      assertEquals(client.calls, [
-        { operation: 'schema', schema: 'api', credentialRole: 'service_role' },
-        {
-          operation: 'rpc',
-          routine,
-          args: { proof: capabilityId },
-          credentialRole: 'service_role',
-        },
-      ]);
-    }
-  },
-);
+Deno.test('the other 9 actor and 3 service capabilities explicitly remain on public', async () => {
+  assertEquals(Object.keys(DATABASE_PUBLIC_ACTOR_CAPABILITIES).length, 9);
+  assertEquals(Object.keys(DATABASE_PUBLIC_SERVICE_CAPABILITIES).length, 3);
+
+  for (const [capabilityId, routine] of Object.entries(DATABASE_PUBLIC_ACTOR_CAPABILITIES)) {
+    const client = new FakeCredentialBoundClient('authenticated');
+    await callActorDatabaseRpc(client as never, capabilityId as DatabaseActorCapabilityId, {
+      proof: capabilityId,
+    });
+    assertEquals(client.calls, [
+      {
+        operation: 'rpc',
+        routine,
+        args: { proof: capabilityId },
+        credentialRole: 'authenticated',
+      },
+    ]);
+  }
+
+  for (const [capabilityId, routine] of Object.entries(DATABASE_PUBLIC_SERVICE_CAPABILITIES)) {
+    const client = new FakeCredentialBoundClient('service_role');
+    await callServiceDatabaseRpc(client as never, capabilityId as DatabaseServiceCapabilityId, {
+      proof: capabilityId,
+    });
+    assertEquals(client.calls, [
+      {
+        operation: 'rpc',
+        routine,
+        args: { proof: capabilityId },
+        credentialRole: 'service_role',
+      },
+    ]);
+  }
+});
 
 Deno.test('all relation capability IDs resolve exact api facade relations', () => {
   for (const [capabilityId, relation] of Object.entries(DATABASE_API_RELATION_CAPABILITIES)) {
@@ -109,11 +120,7 @@ Deno.test('forged actor, service, and relation capability IDs fail before a Data
   const actorClient = new FakeCredentialBoundClient('authenticated');
   assertThrows(
     () =>
-      callActorDatabaseApiRpc(
-        actorClient as never,
-        'forged.actor' as DatabaseApiActorCapabilityId,
-        {},
-      ),
+      callActorDatabaseRpc(actorClient as never, 'forged.actor' as DatabaseActorCapabilityId, {}),
     Error,
     'Unregistered database API capability',
   );
@@ -122,9 +129,9 @@ Deno.test('forged actor, service, and relation capability IDs fail before a Data
   const serviceClient = new FakeCredentialBoundClient('service_role');
   assertThrows(
     () =>
-      callServiceDatabaseApiRpc(
+      callServiceDatabaseRpc(
         serviceClient as never,
-        'forged.service' as DatabaseApiServiceCapabilityId,
+        'forged.service' as DatabaseServiceCapabilityId,
         {},
       ),
     Error,

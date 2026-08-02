@@ -4,6 +4,9 @@ export const DATABASE_API_SCHEMA = 'api' as const;
 
 export const DATABASE_API_ACTOR_CAPABILITIES = {
   'dataset.save-draft': 'cmd_dataset_save_draft',
+} as const;
+
+export const DATABASE_PUBLIC_ACTOR_CAPABILITIES = {
   'dataset.review-submit-job-enqueue': 'cmd_dataset_review_submit_job_enqueue',
   'dataset.review-submit-job-read': 'cmd_dataset_review_submit_job_read',
   'dataset.review-submit-job-read-latest': 'cmd_dataset_review_submit_job_read_latest',
@@ -15,7 +18,9 @@ export const DATABASE_API_ACTOR_CAPABILITIES = {
   'dataset.review-submit-gate': 'cmd_dataset_review_submit_gate',
 } as const;
 
-export const DATABASE_API_SERVICE_CAPABILITIES = {
+export const DATABASE_API_SERVICE_CAPABILITIES = {} as const;
+
+export const DATABASE_PUBLIC_SERVICE_CAPABILITIES = {
   'dataset-extraction.record-failure': 'cmd_dataset_extraction_record_failure',
   'dataset-extraction.claim': 'cmd_dataset_extraction_claim',
   'dataset-extraction.ack': 'cmd_dataset_extraction_ack',
@@ -27,11 +32,14 @@ export const DATABASE_API_RELATION_CAPABILITIES = {
   'team.roles': 'team_roles_v1',
 } as const;
 
-export type DatabaseApiActorCapabilityId = keyof typeof DATABASE_API_ACTOR_CAPABILITIES;
-export type DatabaseApiServiceCapabilityId = keyof typeof DATABASE_API_SERVICE_CAPABILITIES;
+export type DatabaseActorCapabilityId =
+  keyof typeof DATABASE_API_ACTOR_CAPABILITIES | keyof typeof DATABASE_PUBLIC_ACTOR_CAPABILITIES;
+export type DatabaseServiceCapabilityId =
+  | keyof typeof DATABASE_API_SERVICE_CAPABILITIES
+  | keyof typeof DATABASE_PUBLIC_SERVICE_CAPABILITIES;
 export type DatabaseApiRelationCapabilityId = keyof typeof DATABASE_API_RELATION_CAPABILITIES;
 
-export type SchemaBoundaryClient = Pick<SupabaseClient, 'schema'>;
+export type SchemaBoundaryClient = Pick<SupabaseClient, 'schema' | 'rpc'>;
 
 function requireCapability<T extends string>(
   capabilities: Readonly<Record<string, T>>,
@@ -51,22 +59,46 @@ export function databaseApi(client: SchemaBoundaryClient) {
   return client.schema(DATABASE_API_SCHEMA);
 }
 
-export function callActorDatabaseApiRpc(
+function callDatabaseBoundaryRpc(
   client: SchemaBoundaryClient,
-  capabilityId: DatabaseApiActorCapabilityId,
+  apiCapabilities: Readonly<Record<string, string>>,
+  publicCapabilities: Readonly<Record<string, string>>,
+  capabilityId: string,
   args: Record<string, unknown>,
 ) {
-  const routine = requireCapability(DATABASE_API_ACTOR_CAPABILITIES, capabilityId);
-  return databaseApi(client).rpc(routine, args);
+  const apiRoutine = apiCapabilities[capabilityId];
+  if (apiRoutine) return databaseApi(client).rpc(apiRoutine, args);
+
+  const publicRoutine = requireCapability(publicCapabilities, capabilityId);
+  return client.rpc(publicRoutine, args);
 }
 
-export function callServiceDatabaseApiRpc(
+export function callActorDatabaseRpc(
   client: SchemaBoundaryClient,
-  capabilityId: DatabaseApiServiceCapabilityId,
+  capabilityId: DatabaseActorCapabilityId,
   args: Record<string, unknown>,
 ) {
-  const routine = requireCapability(DATABASE_API_SERVICE_CAPABILITIES, capabilityId);
-  return databaseApi(client).rpc(routine, args);
+  return callDatabaseBoundaryRpc(
+    client,
+    DATABASE_API_ACTOR_CAPABILITIES,
+    DATABASE_PUBLIC_ACTOR_CAPABILITIES,
+    capabilityId,
+    args,
+  );
+}
+
+export function callServiceDatabaseRpc(
+  client: SchemaBoundaryClient,
+  capabilityId: DatabaseServiceCapabilityId,
+  args: Record<string, unknown>,
+) {
+  return callDatabaseBoundaryRpc(
+    client,
+    DATABASE_API_SERVICE_CAPABILITIES,
+    DATABASE_PUBLIC_SERVICE_CAPABILITIES,
+    capabilityId,
+    args,
+  );
 }
 
 export function fromDatabaseApi(
