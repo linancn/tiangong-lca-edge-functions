@@ -160,8 +160,14 @@ Deno.test('createDatasetCommandRepository requires an explicit Supabase client',
 
 class FakeRpcSupabase {
   calls: Array<{ fn: string; args: unknown }> = [];
+  schemas: string[] = [];
 
   constructor(private readonly result: { data: unknown; error: unknown }) {}
+
+  schema(name: string) {
+    this.schemas.push(name);
+    return this;
+  }
 
   rpc(fn: string, args: unknown) {
     this.calls.push({ fn, args: structuredClone(args) });
@@ -338,17 +344,18 @@ Deno.test('callDatasetDeleteRpc treats command failure envelopes as command fail
 Deno.test(
   'callDatasetSaveDraftRpc unwraps success envelopes returned by cmd_dataset_* RPCs',
   async () => {
-    const result = (await callDatasetSaveDraftRpc(
-      new FakeRpcSupabase({
+    const supabase = new FakeRpcSupabase({
+      data: {
+        ok: true,
         data: {
-          ok: true,
-          data: {
-            id: draftRequest.id,
-            version: draftRequest.version,
-          },
+          id: draftRequest.id,
+          version: draftRequest.version,
         },
-        error: null,
-      }) as never,
+      },
+      error: null,
+    });
+    const result = (await callDatasetSaveDraftRpc(
+      supabase as never,
       draftRequest,
       auditPayload,
     )) as DatasetRpcResult;
@@ -360,6 +367,7 @@ Deno.test(
         version: draftRequest.version,
       },
     });
+    assertEquals(supabase.schemas, ['api']);
   },
 );
 

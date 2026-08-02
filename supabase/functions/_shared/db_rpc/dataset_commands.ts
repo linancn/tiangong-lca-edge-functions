@@ -20,7 +20,7 @@ import {
   REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION,
 } from '../commands/dataset/types.ts';
 
-type RpcClient = Pick<SupabaseClient, 'rpc'>;
+type RpcClient = Pick<SupabaseClient, 'rpc' | 'schema'>;
 
 export type DatasetRpcResult = { ok: true; data: unknown } | DatasetCommandFailure;
 
@@ -245,7 +245,7 @@ export function callDatasetSaveDraftRpc(
   audit: CommandAuditPayload,
 ) {
   return callDatasetRpc(
-    supabase,
+    supabase.schema('api'),
     'cmd_dataset_save_draft',
     buildDatasetSaveDraftRpcArgs(request, audit),
   );
