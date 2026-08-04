@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-03'
-lastReviewedCommit: '8b9629387d839bdff343a21353438a513eb54d9c'
+lastReviewedAt: '2026-07-31'
+lastReviewedCommit: '45f78ad679599850128f1e959f2970bfb56a71c8'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -114,7 +114,6 @@ routing:
         - supabase/functions/admin_*/**
         - supabase/functions/_shared/command_runtime/**
         - supabase/functions/_shared/commands/**
-        - supabase/functions/_shared/capabilities/**
         - supabase/functions/_shared/db_rpc/**
     data-product-runtime:
       paths:
@@ -145,7 +144,6 @@ routing:
         - supabase/functions/app_worker_jobs/**
         - supabase/functions/process_dataset_review_submit_jobs/**
         - supabase/functions/_shared/commands/worker_jobs.ts
-        - supabase/functions/_shared/capabilities/worker_jobs.ts
         - supabase/functions/_shared/commands/dataset/review_submit_gate.ts
         - supabase/functions/_shared/commands/dataset/review_submit_jobs.ts
         - supabase/functions/_shared/commands/dataset/submit_review.ts
@@ -154,7 +152,6 @@ routing:
         - supabase/functions/_shared/db_rpc/dataset_commands.ts
         - supabase/functions/_shared/db_rpc/worker_jobs.ts
         - supabase/functions/_shared/review_submit_job_worker.ts
-        - scripts/run-worker-capability-contract.cjs
         - test/app_dataset_review_submit_gate_test.ts
         - test/app_dataset_review_submit_jobs_test.ts
         - test/app_dataset_submit_review_test.ts
@@ -162,8 +159,6 @@ routing:
         - test/dataset_command_rpc_contract_test.ts
         - test/review_submit_job_worker_test.ts
         - test/worker_jobs_test.ts
-        - test/worker_capability_db_contract_test.ts
-        - test/worker_rpc_consumer_zero_test.ts
         - README.md
         - test.example.http
     search-and-embedding:
@@ -192,34 +187,11 @@ routing:
     lca-runtime:
       paths:
         - supabase/functions/lca_*/**
-        - supabase/functions/_shared/capabilities/lca_snapshot_family.ts
-        - supabase/functions/_shared/capabilities/lca_result_family.ts
         - supabase/functions/_shared/lca_process_scope.ts
         - supabase/functions/_shared/lca_snapshot_scope.ts
-        - supabase/functions/_shared/lca_snapshot_scope_db.ts
         - supabase/functions/_shared/lca_snapshot_build_queue.ts
         - supabase/functions/_shared/lca_all_unit_solve_queue.ts
         - supabase/functions/_shared/lca_static_cache_bundle_manifest.json
-        - test/lca_snapshot_capability_test.ts
-        - test/lca_snapshot_capability_db_contract_test.ts
-        - test/lca_snapshot_contract_cleanup.ts
-        - test/lca_snapshot_contract_cleanup_test.ts
-        - test/lca_snapshot_endpoint_handler_test.ts
-        - scripts/diagnose-lca-snapshot-callsite-inventory.cjs
-        - scripts/run-lca-snapshot-capability-contract.cjs
-        - scripts/lca-result-family-consumer-zero.cjs
-        - scripts/run-lca-result-family-contract.cjs
-        - test/lca_result_family_capability_test.ts
-        - test/lca_result_family_consumer_zero_test.ts
-        - test/lca_result_family_handler_test.ts
-        - test/lca_query_result_family_handler_test.ts
-        - test/lca_solve_cache_state_test.ts
-        - test/lca_contribution_cache_state_test.ts
-        - test/lca_result_family_db_contract_test.ts
-        - test/lca_result_contract_cleanup.ts
-        - test/lca_result_contract_cleanup_test.ts
-        - test/lca_snapshot_scope_db_test.ts
-        - test/lca_snapshot_build_queue_test.ts
         - scripts/lca_submit_poll_fetch.sh
     tidas-package:
       paths:
@@ -244,9 +216,6 @@ routing:
         - scripts/probe-functions-auth.cjs
         - scripts/run_scope_closure_edge_qualification.sh
         - scripts/scope_closure_edge_qualification.ts
-        - scripts/diagnose-lca-snapshot-callsite-inventory.cjs
-        - scripts/run-lca-snapshot-capability-contract.cjs
-        - scripts/run-lca-result-family-contract.cjs
         - .github/workflows/ci.yml
         - docs/agents/repo-validation.md
         - test.example.http
@@ -373,8 +342,6 @@ rules:
         kind: runtime-code
       - path: supabase/functions/_shared/commands/worker_jobs.ts
         kind: runtime-code
-      - path: supabase/functions/_shared/capabilities/worker_jobs.ts
-        kind: runtime-code
       - path: supabase/functions/_shared/commands/dataset/review_submit_gate.ts
         kind: runtime-code
       - path: supabase/functions/_shared/commands/dataset/review_submit_jobs.ts
@@ -387,8 +354,6 @@ rules:
         kind: runtime-code
       - path: supabase/functions/_shared/review_submit_job_worker.ts
         kind: runtime-code
-      - path: scripts/run-worker-capability-contract.cjs
-        kind: validation-wrapper
       - path: test/app_dataset_review_submit_gate_test.ts
         kind: runtime-test
       - path: test/app_dataset_review_submit_jobs_test.ts
@@ -400,10 +365,6 @@ rules:
       - path: test/review_submit_job_worker_test.ts
         kind: runtime-test
       - path: test/worker_jobs_test.ts
-        kind: runtime-test
-      - path: test/worker_capability_db_contract_test.ts
-        kind: runtime-test
-      - path: test/worker_rpc_consumer_zero_test.ts
         kind: runtime-test
     requiredDocs:
       - path: AGENTS.md
@@ -455,22 +416,14 @@ rules:
     triggers:
       - path: test/**
         kind: runtime-test
+      - path: scripts/**
+        kind: validation-or-ops-script
       - path: scripts/deno-check-all.cjs
-        kind: validation-wrapper
-      - path: scripts/run-worker-capability-contract.cjs
         kind: validation-wrapper
       - path: scripts/run_scope_closure_edge_qualification.sh
         kind: qualification-adapter
       - path: scripts/scope_closure_edge_qualification.ts
         kind: qualification-adapter
-      - path: scripts/diagnose-lca-snapshot-callsite-inventory.cjs
-        kind: validation-wrapper
-      - path: scripts/run-lca-snapshot-capability-contract.cjs
-        kind: validation-wrapper
-      - path: scripts/lca-result-family-consumer-zero.cjs
-        kind: validation-wrapper
-      - path: scripts/run-lca-result-family-contract.cjs
-        kind: validation-wrapper
       - path: .github/workflows/ci.yml
         kind: automation
     requiredDocs:

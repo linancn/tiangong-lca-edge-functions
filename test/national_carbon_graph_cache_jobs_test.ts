@@ -22,11 +22,6 @@ class FakeNationalCarbonGraphCacheSupabase {
     private readonly systemManager = true,
   ) {}
 
-  schema(schema: string) {
-    assertEquals(schema, 'api');
-    return this;
-  }
-
   from(table: string) {
     this.roleQueries.push({ table });
     const state: Record<string, unknown> = { table };
@@ -166,7 +161,7 @@ Deno.test(
     assertEquals(supabase.roleQueries, [{ table: 'roles' }]);
     assertEquals(supabase.rpcCalls, [
       {
-        fn: 'worker_enqueue_job_v1',
+        fn: 'worker_enqueue_job',
         args: {
           p_job_kind: NATIONAL_CARBON_GRAPH_CACHE_JOB_KIND,
           p_payload_json: {
@@ -322,7 +317,7 @@ Deno.test(
     }
     assertEquals(supabase.rpcCalls, [
       {
-        fn: 'worker_list_jobs_v1',
+        fn: 'worker_list_jobs',
         args: {
           p_requested_by: null,
           p_subject_type: NATIONAL_CARBON_GRAPH_CACHE_SUBJECT_TYPE,

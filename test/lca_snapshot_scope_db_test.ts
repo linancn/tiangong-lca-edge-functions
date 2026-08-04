@@ -11,14 +11,22 @@ type MockState = {
 
 function createSupabaseMock(state: MockState) {
   return {
-    schema(schema: string) {
-      assertEquals(schema, 'api');
-      return this;
-    },
-    rpc(fn: string, args: Record<string, unknown>) {
-      assertEquals(fn, 'lca_snapshot_scope_read_v1');
-      state.snapshotIds.push(args.p_snapshot_id);
-      return Promise.resolve({ data: state.row ? [state.row] : [], error: state.error });
+    from(table: string) {
+      assertEquals(table, 'lca_network_snapshots');
+      return {
+        select(columns: string) {
+          assertEquals(columns, 'process_filter');
+          return this;
+        },
+        eq(column: string, value: unknown) {
+          assertEquals(column, 'id');
+          state.snapshotIds.push(value);
+          return this;
+        },
+        maybeSingle() {
+          return Promise.resolve({ data: state.row, error: state.error });
+        },
+      };
     },
   };
 }

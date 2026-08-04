@@ -45,18 +45,13 @@ class FakeSupabase {
     return new FakeQueryBuilder(this, table);
   }
 
-  schema(schema: string) {
-    assertEquals(schema, 'api');
-    return this;
-  }
-
   rpc(fn: string, args: unknown) {
     this.rpcCalls.push({ fn, args: structuredClone(args) });
     const configured = this.rpcResults.get(fn);
     if (configured) {
       return Promise.resolve(structuredClone(configured));
     }
-    if (fn === 'worker_enqueue_job_v1') {
+    if (fn === 'worker_enqueue_job') {
       const record = asJsonRecord(args);
       const payload = asJsonRecord(record.p_payload_json);
       const nowIso = new Date().toISOString();
@@ -82,34 +77,6 @@ class FakeSupabase {
             id: TEST_WORKER_JOB_ID,
             payload,
             status: 'queued',
-          },
-        },
-        error: null,
-      });
-    }
-    if (fn === 'worker_read_job_v1') {
-      const record = asJsonRecord(args);
-      const workerJob = this.tables.worker_jobs.find((row) => row.id === record.p_job_id);
-      if (!workerJob) {
-        return Promise.resolve({ data: { ok: true, data: null }, error: null });
-      }
-      return Promise.resolve({
-        data: {
-          ok: true,
-          data: {
-            id: workerJob.id,
-            jobKind: workerJob.job_kind,
-            status: workerJob.status,
-            requestedBy: workerJob.requested_by,
-            requestHash: workerJob.request_hash,
-            payload: workerJob.payload_json,
-            diagnostics: workerJob.diagnostics,
-            errorCode: workerJob.error_code,
-            errorMessage: workerJob.error_message,
-            createdAt: workerJob.created_at,
-            startedAt: workerJob.started_at,
-            finishedAt: workerJob.finished_at,
-            updatedAt: workerJob.updated_at,
           },
         },
         error: null,
@@ -545,7 +512,7 @@ Deno.test('export_tidas_package API exposes queued worker job before artifacts e
     assertEquals((workerJobRow.payload_json as JsonRecord).job_id, queued.job_id);
     assertEquals((workerJobRow.payload_json as JsonRecord).scope, 'current_user');
     assertEquals(supabase.rpcCalls.length, 1);
-    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job_v1');
+    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job');
 
     const lookupResponse = await jobsHandler(
       new Request(`https://example.com/functions/v1/tidas_package_jobs/${queued.job_id}`, {
@@ -745,7 +712,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       prepared.source_artifact_id,
     );
     assertEquals(supabase.rpcCalls.length, 1);
-    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job_v1');
+    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job');
 
     const repeatedEnqueueResponse = await importHandler(
       new Request('https://example.com/functions/v1/import_tidas_package', {
@@ -766,8 +733,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       worker_job_id: TEST_WORKER_JOB_ID,
       source_artifact_id: prepared.source_artifact_id,
     });
-    assertEquals(supabase.rpcCalls.length, 2);
-    assertEquals(supabase.rpcCalls[1].fn, 'worker_read_job_v1');
+    assertEquals(supabase.rpcCalls.length, 1);
 
     const lookupResponse = await jobsHandler(
       new Request(`https://example.com/functions/v1/tidas_package_jobs/${prepared.job_id}`, {
@@ -842,11 +808,11 @@ Deno.test(
       const prepared = await prepareResponse.json();
       const artifactSha256 = await sha256Hex(EMPTY_ZIP_BYTES);
 
-      supabase.rpcResults.set('worker_enqueue_job_v1', {
+      supabase.rpcResults.set('worker_enqueue_job', {
         data: null,
         error: {
           code: '42501',
-          message: 'permission denied for worker_enqueue_job_v1',
+          message: 'permission denied for worker_enqueue_job',
           details: { reason: 'missing_migration' },
         },
       });
