@@ -1,6 +1,5 @@
 # Hybrid Search v2 accepts one lexical_weight and one semantic_weight.
 # Do not restore the retired full_text_weight or extracted_text_weight fields.
-# Authenticated command examples use the caller JWT; never substitute a service-role credential.
 ### @name Flow_Hybrid_Search：Remote
 
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/flow_hybrid_search' \

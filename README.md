@@ -18,9 +18,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-03
-lastReviewedCommit: 8b9629387d839bdff343a21353438a513eb54d9c
-lastReviewedNote: 'Reviewed for Issue #258: added operator-facing result-family unit, consumer-zero, and loopback DB contract commands.'
+lastReviewedAt: 2026-07-30
+lastReviewedCommit: 60f3bd97bd3f3da161a6fda17758f21fa87cefe7
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -337,25 +336,12 @@ deno check --config supabase/functions/deno.json <changed-file>
 
 LCA solve/snapshot/contribution path, TIDAS package import/export, and review-submit orchestration use database-owned `worker_jobs` RPCs for canonical task lifecycle state. The target database must include the `database-engine` worker job contract migrations before these Edge Functions are deployed:
 
-- `api.worker_enqueue_job_v1(...)`
-- `api.worker_read_job_v1(...)`
-- `api.worker_read_jobs_by_ids_v1(...)`
-- `api.worker_list_jobs_by_concurrency_key_v1(...)` with a maximum limit of 20 and `created_at DESC, id DESC` ordering
-- `api.worker_list_jobs_v1(...)`
-- `api.worker_cancel_job_v1(...)`
+- `public.worker_enqueue_job(...)`
+- `public.worker_read_job(...)`
+- `public.worker_list_jobs(...)`
+- `public.worker_cancel_job(...)`
 
-The Issue #249 cutover contract checks hosted catalog content against the reviewed `database-engine` PR `#365` contract at commit `6809528c32bac8163e9a6eec9b985d57370589e1`, migration head `20260801060304`, and `20260801060304_issue_356_worker_control_plane_physical_expand.sql`. The npm wrapper fixes contract enablement/mode and rejects zero executed or ignored tests. Hosted execution requires `WORKER_CAPABILITY_SUPABASE_ACCESS_TOKEN` only as a Management API credential; caller-provided expected commit or migration-head values are not accepted. The current disposable Preview is manual, not Git-bound: its Git/PR/check fields are null, branch workflow is `MIGRATIONS_FAILED` with a dead migrate action, while the isolated Preview project is healthy and the migration was applied separately. The test therefore claims exact hosted contract-content parity, not that Supabase deployed a Git SHA. It binds parent/branch UUID/Preview facts, migration API receipt and read-only ledger, the migration-generated private residue view definition/full ACL matrix, then independently verifies the merged GitHub PR head, migration SHA, and checked-in qualification receipt with base/migration/rollback/source bindings. Cleanup failures cannot be swallowed: every controlled job/user is attempted, failures are aggregated with the primary test result, and read-only SQL proves jobs are cancelled and users absent. A Git-bound deployment SHA remains a later persistent-dev merge-SHA readback gate. The capability repository always selects the exposed `api` schema explicitly; default-schema `public.worker_*` compatibility wrappers are not Edge runtime contracts. Deploy only after an equivalent or newer database head containing the versioned API adapters is present.
-
-Retained domain tables such as `lca_jobs`, `lca_result_cache`, `lca_package_jobs`, `lca_package_artifacts`, and `dataset_review_submit_jobs` still carry result/cache/artifact/history metadata, but they are not the user-facing task fact. New LCA solve/snapshot/contribution and TIDAS package import/export submissions enqueue canonical Worker jobs through the capability repository; the legacy job ids returned by those APIs are compatibility ids carried in Worker payloads, not newly inserted `lca_jobs` / `lca_package_jobs` rows. Legacy `lca_enqueue_job` / `lca_package_enqueue_job` must not be used as enqueue fallback. If `LCA_WORKER_JOBS_ENABLED=false`, `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false`, or `WORKER_JOBS_CUTOVER_ENABLED=false`, new worker-owned submissions fail closed with `legacy_queue_disabled` / `LEGACY_QUEUE_DISABLED` instead of writing to the legacy queue path.
-
-LCA job/result/latest reads and result-cache mutations use the eight service-only `api` routines pinned by `supabase/functions/_shared/capabilities/lca_result_family.ts`. Before integration, run:
-
-```bash
-npm run test:lca-result-family:unit
-npm run test:lca-result-family:consumer-zero
-```
-
-For the exact loopback database-engine stack, also set every `LCA_RESULT_CONTRACT_*` URL/key variable plus `LCA_RESULT_CONTRACT_DATABASE_COMMIT` and `LCA_RESULT_CONTRACT_MIGRATION_HEAD`, then run `npm run test:lca-result-family:db`. The runner rejects non-loopback targets, a receipt that differs from the adapter pin, a database ledger head that differs from the receipt, ignored tests, partial execution, role leakage, or cleanup residue. Database-engine Issue #395 must be merged first so cancelled contribution jobs reconcile to a retryable failed cache state; Edge intentionally performs reconciliation and replacement admission on separate polls.
+Retained domain tables such as `lca_jobs`, `lca_result_cache`, `lca_package_jobs`, `lca_package_artifacts`, and `dataset_review_submit_jobs` still carry result/cache/artifact/history metadata, but they are not the user-facing task fact. New LCA solve/snapshot/contribution and TIDAS package import/export submissions enqueue `worker_jobs` directly; the legacy job ids returned by those APIs are compatibility ids carried in worker payloads, not newly inserted `lca_jobs` / `lca_package_jobs` rows. Legacy `lca_enqueue_job` / `lca_package_enqueue_job` must not be used as enqueue fallback. If `LCA_WORKER_JOBS_ENABLED=false`, `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false`, or `WORKER_JOBS_CUTOVER_ENABLED=false`, new worker-owned submissions fail closed with `legacy_queue_disabled` / `LEGACY_QUEUE_DISABLED` instead of writing to the legacy queue path.
 
 ## Review-submit Gate Function Call Pattern
 
@@ -398,7 +384,7 @@ Job response states map to HTTP status as follows:
 
 `process_dataset_review_submit_jobs` is a service-key-only worker endpoint. It claims DB submit jobs, records `waiting_gate` when the worker gate is not ready, maps terminal blocked/cancelled/failed gate worker states back to the coordinator, and calls DB-owned `cmd_review_submit_from_job` only after the gate worker job has completed with a passed result. Recurring invocation should be enabled only after the database RPC migration and this Edge Function are both deployed.
 
-`app_worker_jobs` is the authenticated task-center API for user-visible worker jobs. It supports `list`, `read`, and `cancel`; the handler authenticates the outer user request, and the command layer converts that request to the service-only Worker capability façade while enforcing requester ownership before returning or cancelling a job. The repository in `supabase/functions/_shared/capabilities/worker_jobs.ts` is the single Edge contract for the explicit `api` schema, versioned Worker routine names, arguments, and DTOs; runtime call sites do not read the physical Worker relation or call the default `public` profile. It does not expose generic user enqueue; job-specific APIs such as `app_dataset_review_submit_jobs` own enqueue semantics and payload validation.
+`app_worker_jobs` is the authenticated task-center API for user-visible `worker_jobs`. It supports `list`, `read`, and `cancel`, calls service-role DB RPCs from Edge, and enforces requester ownership before returning or cancelling a job. It does not expose generic user enqueue; job-specific APIs such as `app_dataset_review_submit_jobs` own enqueue semantics and payload validation.
 
 ## LCA Function Call Patterns
 

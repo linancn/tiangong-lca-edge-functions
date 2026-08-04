@@ -4,16 +4,13 @@ import type { ActorContext } from '../../command_runtime/actor_context.ts';
 import { buildCommandAuditPayload } from '../../command_runtime/audit_log.ts';
 import type { CommandParseResult } from '../../command_runtime/command.ts';
 import { stableJsonSha256 } from './canonical_json.ts';
-import {
-  createLegacyDatasetCommandRepository,
-  type LegacyDatasetCommandRepository,
-} from './repository.ts';
+import { createDatasetCommandRepository, type DatasetCommandRepository } from './repository.ts';
 import {
   DATASET_TABLES,
-  type DatasetCommandExecutionResult,
-  type DatasetCommandFailure,
   REVIEW_SUBMIT_GATE_POLICY_PROFILE,
   REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION,
+  type DatasetCommandExecutionResult,
+  type DatasetCommandFailure,
   type ReviewSubmitGateRequest,
   type ReviewSubmitGateResult,
   type ReviewSubmitGateStatus,
@@ -189,7 +186,7 @@ export async function resolveAuthoritativeReviewSubmitRevision(
 export async function executeReviewSubmitGateCommand(
   request: ReviewSubmitGateRequest,
   actor: ActorContext,
-  repository: LegacyDatasetCommandRepository = createLegacyDatasetCommandRepository(actor.supabase),
+  repository: DatasetCommandRepository = createDatasetCommandRepository(actor.supabase),
   resolveRevision: ReviewSubmitGateRevisionResolver = resolveAuthoritativeReviewSubmitRevision,
 ): Promise<DatasetCommandExecutionResult> {
   const revisionResult = await resolveRevision(request, actor);

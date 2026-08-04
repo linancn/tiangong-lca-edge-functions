@@ -4,7 +4,6 @@ import { createClient } from 'jsr:@supabase/supabase-js@2.98.0';
 import type { ActorContext } from '../supabase/functions/_shared/command_runtime/actor_context.ts';
 import { executeDataProductCommand } from '../supabase/functions/_shared/commands/data_product/command.ts';
 import { createDataProductCommandRepository } from '../supabase/functions/_shared/commands/data_product/repository.ts';
-import type { ServiceRoleSupabaseClient } from '../supabase/functions/_shared/supabase_client.ts';
 import { createAppDataProductCommandsHandler } from '../supabase/functions/app_data_product_commands/index.ts';
 
 const CLOSURE_CHECK_ID = '45454545-4545-4454-8454-454545454545';
@@ -90,7 +89,7 @@ Deno.test(
           detectSessionInUrl: false,
           persistSession: false,
         },
-      }) as ServiceRoleSupabaseClient;
+      });
       const actor: ActorContext = {
         userId: USER_ID,
         accessToken: 'local-user-token',

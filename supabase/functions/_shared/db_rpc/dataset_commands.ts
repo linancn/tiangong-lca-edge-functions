@@ -52,13 +52,12 @@ function isDatasetCommandFailure(data: unknown): data is DatasetCommandFailure {
   );
 }
 
-export function mapDatasetRpcResponse({
-  data,
-  error,
-}: {
-  data: unknown;
-  error: { code?: string; message?: string; details?: unknown } | null;
-}): DatasetRpcResult {
+async function callDatasetRpc(
+  supabase: RpcClient,
+  fn: string,
+  args: Record<string, unknown>,
+): Promise<DatasetRpcResult> {
+  const { data, error } = await supabase.rpc(fn, args);
   if (error) {
     return mapRpcError(error);
   }
@@ -84,14 +83,6 @@ export function mapDatasetRpcResponse({
     ok: true,
     data,
   };
-}
-
-async function callDatasetRpc(
-  supabase: RpcClient,
-  fn: string,
-  args: Record<string, unknown>,
-): Promise<DatasetRpcResult> {
-  return mapDatasetRpcResponse(await supabase.rpc(fn, args));
 }
 
 export function buildDatasetSaveDraftRpcArgs(
@@ -246,6 +237,18 @@ export function buildDatasetReviewSubmitJobReadLatestRpcArgs(
     p_version: request.version,
     p_revision_checksum: request.revisionChecksum ?? null,
   };
+}
+
+export function callDatasetSaveDraftRpc(
+  supabase: RpcClient,
+  request: SaveDraftRequest,
+  audit: CommandAuditPayload,
+) {
+  return callDatasetRpc(
+    supabase,
+    'cmd_dataset_save_draft',
+    buildDatasetSaveDraftRpcArgs(request, audit),
+  );
 }
 
 export function callDatasetReviewSubmitJobEnqueueRpc(

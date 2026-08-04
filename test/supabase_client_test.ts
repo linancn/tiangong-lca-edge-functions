@@ -70,10 +70,6 @@ Deno.test('shared Supabase client falls back when remote env vars are blank', as
       if (!module.createRequestSupabaseClient()) {
         throw new Error('expected request-scoped client to be created');
       }
-
-      if (!module.createRequestJwtSupabaseClient('request-jwt-for-tests')) {
-        throw new Error('expected request-JWT client to be created');
-      }
     },
   );
 });
@@ -140,16 +136,6 @@ Deno.test(
     );
   },
 );
-
-Deno.test('request-JWT Supabase client rejects an empty bearer token', async () => {
-  const module = await importSupabaseClientModule();
-
-  assertThrows(
-    () => module.createRequestJwtSupabaseClient('  '),
-    Error,
-    'requires a non-empty access token',
-  );
-});
 
 Deno.test('shared Supabase client supports secret-key envs for privileged execution', async () => {
   await withSupabaseEnv(

@@ -3,7 +3,6 @@ import { createClient } from 'jsr:@supabase/supabase-js@2.98.0';
 import type { ActorContext } from '../supabase/functions/_shared/command_runtime/actor_context.ts';
 import { executeDataProductCommand } from '../supabase/functions/_shared/commands/data_product/command.ts';
 import { createDataProductCommandRepository } from '../supabase/functions/_shared/commands/data_product/repository.ts';
-import type { ServiceRoleSupabaseClient } from '../supabase/functions/_shared/supabase_client.ts';
 import { createAppDataProductCommandsHandler } from '../supabase/functions/app_data_product_commands/index.ts';
 
 const PROVIDER_OWNER_SCHEMA = 'lcia.scope-closure-provider-owned-result.v1';
@@ -427,7 +426,7 @@ export async function runEdgeQualification(runId: string): Promise<ProviderOwned
         detectSessionInUrl: false,
         persistSession: false,
       },
-    }) as ServiceRoleSupabaseClient;
+    });
     const handler = createAppDataProductCommandsHandler({
       resolveActor: (request) => {
         const authorization = request.headers.get('authorization');

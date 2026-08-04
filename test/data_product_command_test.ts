@@ -42,11 +42,6 @@ class FakeRpcSupabase {
 
   constructor(private readonly result: { data: unknown; error: unknown }) {}
 
-  schema(schema: string) {
-    assertEquals(schema, 'api');
-    return this;
-  }
-
   rpc(fn: string, args: unknown) {
     this.calls.push({ fn, args: structuredClone(args) });
     return Promise.resolve(this.result);
@@ -420,7 +415,7 @@ Deno.test('createDataProductCommandRepository enqueues LCIA result package paylo
   });
   assertEquals(serviceClient.calls, [
     {
-      fn: 'worker_enqueue_job_v1',
+      fn: 'worker_enqueue_job',
       args: {
         p_job_kind: 'lcia_result.package_build',
         p_payload_json: {
