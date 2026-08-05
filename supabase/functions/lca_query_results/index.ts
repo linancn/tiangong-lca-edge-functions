@@ -4,6 +4,12 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { callLcaReadLatestSingleSolveResultRpc } from '../_shared/db_rpc/lca_results.ts';
+import {
+  parseAllUnitQueryArtifact,
+  readImpactColumn,
+  readProcessImpactRow,
+  type AllUnitQueryResult,
+} from '../_shared/lca_all_unit_query_artifact.ts';
 import { ensureLcaAllUnitSolveQueued } from '../_shared/lca_all_unit_solve_queue.ts';
 import {
   fetchProcessScopeLookup,
@@ -32,7 +38,6 @@ import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient, supabaseClient } from '../_shared/supabase_client.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ALL_UNIT_QUERY_FORMAT = 'all-unit-query:v1';
 const DEFAULT_HOTSPOT_LIMIT = 20;
 const MAX_HOTSPOT_LIMIT = 200;
 
@@ -65,6 +70,7 @@ type SnapshotIndexProcessEntry = {
 type SnapshotIndexImpactEntry = {
   impact_id: string;
   impact_index: number;
+  impact_version?: string;
   impact_key: string;
   impact_name: string;
   unit: string;
@@ -78,16 +84,6 @@ type SnapshotIndexDocument = {
   process_map: SnapshotIndexProcessEntry[];
   impact_map: SnapshotIndexImpactEntry[];
   calculation_evidence?: unknown;
-};
-
-type AllUnitQueryEnvelope = {
-  version: number;
-  format: string;
-  snapshot_id: string;
-  job_id: string;
-  process_count: number;
-  impact_count: number;
-  h_matrix: number[][];
 };
 
 type SnapshotArtifactMeta = {
@@ -110,6 +106,8 @@ type LatestAllUnitRow = {
   computed_at: string;
   query_artifact_url: string;
   query_artifact_format: string;
+  query_artifact_sha256: string;
+  query_artifact_byte_size: number;
 };
 
 type LatestSingleSolveRow = {
@@ -258,22 +256,28 @@ Deno.serve(async (req) => {
     );
   }
 
-  const queryArtifact = await fetchArtifactJson<AllUnitQueryEnvelope>(
-    latestAllUnit.row.query_artifact_url,
-  );
+  const queryArtifact = await fetchVerifiedQueryArtifactJson(latestAllUnit.row);
   if (!queryArtifact.ok) {
+    return queryArtifactReadErrorResponse(queryArtifact);
+  }
+
+  const impacts = [...snapshotIndex.data.impact_map].sort(
+    (left, right) => left.impact_index - right.impact_index,
+  );
+  const parsedQueryArtifact = parseAllUnitQueryArtifact(queryArtifact.data, {
+    expectedFormat: latestAllUnit.row.query_artifact_format,
+    snapshotId,
+    processCount: snapshotIndex.data.process_count,
+    impacts,
+  });
+  if (!parsedQueryArtifact.ok) {
     return json(
-      { error: 'all_unit_query_artifact_fetch_failed', detail: queryArtifact.error },
-      502,
+      {
+        error: parsedQueryArtifact.error,
+        ...(parsedQueryArtifact.detail ? { detail: parsedQueryArtifact.detail } : {}),
+      },
+      500,
     );
-  }
-
-  if (queryArtifact.data.format !== ALL_UNIT_QUERY_FORMAT) {
-    return json({ error: 'unsupported_query_artifact_format' }, 500);
-  }
-
-  if (queryArtifact.data.snapshot_id !== snapshotId) {
-    return json({ error: 'query_artifact_snapshot_mismatch' }, 500);
   }
 
   if (mode === 'process_all_impacts') {
@@ -304,14 +308,15 @@ Deno.serve(async (req) => {
       return json(processScopeValidation.body, processScopeValidation.status);
     }
 
-    const hRow = queryArtifact.data.h_matrix[processIndex];
-    if (!Array.isArray(hRow)) {
-      return json({ error: 'query_artifact_shape_invalid' }, 500);
-    }
-
-    const impacts = [...snapshotIndex.data.impact_map].sort(
-      (a, b) => a.impact_index - b.impact_index,
+    const hRow = await readProcessImpactRow(
+      parsedQueryArtifact.data,
+      impacts,
+      processIndex,
+      fetchArtifactBytes,
     );
+    if (!hRow.ok) {
+      return queryArtifactReadErrorResponse(hRow);
+    }
 
     let source: 'all_unit' | 'fallback_solve_one' = 'all_unit';
     let resultId = latestAllUnit.row.result_id;
@@ -337,7 +342,7 @@ Deno.serve(async (req) => {
       impact_key: impact.impact_key,
       impact_name: impact.impact_name,
       unit: impact.unit,
-      value: Number(hRow[impact.impact_index] ?? 0) * scale,
+      value: hRow.data[impact.impact_index] * scale,
     }));
 
     return json(
@@ -424,6 +429,16 @@ Deno.serve(async (req) => {
 
     const rankedValues: RankedProcessValue[] = [];
     let totalAbsoluteValue = 0;
+    const impactColumn = await readImpactColumn(
+      parsedQueryArtifact.data,
+      impacts,
+      impactIndex,
+      null,
+      fetchArtifactBytes,
+    );
+    if (!impactColumn.ok) {
+      return queryArtifactReadErrorResponse(impactColumn);
+    }
 
     for (const entry of snapshotIndex.data.process_map) {
       if (
@@ -440,12 +455,10 @@ Deno.serve(async (req) => {
         return json({ error: 'snapshot_index_invalid', process_id: entry.process_id }, 500);
       }
 
-      const hRow = queryArtifact.data.h_matrix[entry.process_index];
-      if (!Array.isArray(hRow)) {
+      const value = impactColumn.data.get(entry.process_index);
+      if (value === undefined) {
         return json({ error: 'query_artifact_shape_invalid' }, 500);
       }
-
-      const value = Number(hRow[impactIndex] ?? 0);
       const absoluteValue = Math.abs(value);
       totalAbsoluteValue += absoluteValue;
 
@@ -535,12 +548,22 @@ Deno.serve(async (req) => {
     return json(processScopeValidation.body, processScopeValidation.status);
   }
 
+  const impactColumn = await readImpactColumn(
+    parsedQueryArtifact.data,
+    impacts,
+    impactIndex,
+    requestedEntries.map((entry) => entry.process_index),
+    fetchArtifactBytes,
+  );
+  if (!impactColumn.ok) {
+    return queryArtifactReadErrorResponse(impactColumn);
+  }
   for (const processEntry of requestedEntries) {
-    const hRow = queryArtifact.data.h_matrix[processEntry.process_index];
-    if (!Array.isArray(hRow)) {
+    const value = impactColumn.data.get(processEntry.process_index);
+    if (value === undefined) {
       return json({ error: 'query_artifact_shape_invalid' }, 500);
     }
-    values[processEntry.process_id] = Number(hRow[impactIndex] ?? 0);
+    values[processEntry.process_id] = value;
   }
 
   return json(
@@ -844,7 +867,7 @@ async function fetchLatestAllUnit(
   const { data, error } = await supabaseClient
     .from('lca_latest_all_unit_results')
     .select(
-      'snapshot_id,result_id,computed_at,query_artifact_url,query_artifact_format,status,updated_at',
+      'snapshot_id,result_id,computed_at,query_artifact_url,query_artifact_format,query_artifact_sha256,query_artifact_byte_size,status,updated_at',
     )
     .eq('snapshot_id', snapshotId)
     .eq('status', 'ready')
@@ -872,6 +895,8 @@ async function fetchLatestAllUnit(
       computed_at: String(data.computed_at),
       query_artifact_url: String(data.query_artifact_url),
       query_artifact_format: String(data.query_artifact_format),
+      query_artifact_sha256: String(data.query_artifact_sha256),
+      query_artifact_byte_size: Number(data.query_artifact_byte_size),
     },
   };
 }
@@ -1135,6 +1160,112 @@ async function fetchArtifactJson<T>(
     return { ok: false, error: `${storageError};${httpResult.error}` };
   }
   return httpResult;
+}
+
+async function fetchVerifiedQueryArtifactJson(
+  row: LatestAllUnitRow,
+): Promise<AllUnitQueryResult<unknown>> {
+  const expectedSha256 = row.query_artifact_sha256.trim().toLowerCase();
+  if (
+    !/^[0-9a-f]{64}$/.test(expectedSha256) ||
+    !Number.isSafeInteger(row.query_artifact_byte_size) ||
+    row.query_artifact_byte_size <= 0
+  ) {
+    return {
+      ok: false,
+      error: 'all_unit_query_artifact_integrity_invalid',
+      detail: 'persisted query artifact integrity metadata is invalid',
+    };
+  }
+  const fetched = await fetchArtifactBytes(
+    row.query_artifact_url,
+    'all_unit_query_artifact_fetch_failed',
+  );
+  if (!fetched.ok) {
+    return fetched;
+  }
+  if (fetched.data.byteLength !== row.query_artifact_byte_size) {
+    return {
+      ok: false,
+      error: 'all_unit_query_artifact_integrity_invalid',
+      detail: `expected_bytes=${row.query_artifact_byte_size} actual_bytes=${fetched.data.byteLength}`,
+    };
+  }
+  if ((await sha256Hex(fetched.data)) !== expectedSha256) {
+    return {
+      ok: false,
+      error: 'all_unit_query_artifact_integrity_invalid',
+      detail: 'sha256_mismatch',
+    };
+  }
+  try {
+    return { ok: true, data: JSON.parse(new TextDecoder().decode(fetched.data)) };
+  } catch (error) {
+    return {
+      ok: false,
+      error: 'all_unit_query_artifact_fetch_failed',
+      detail: error instanceof Error ? `json_parse_failed:${error.message}` : 'json_parse_failed',
+    };
+  }
+}
+
+async function fetchArtifactBytes(
+  artifactUrl: string,
+  fetchError = 'all_unit_query_artifact_chunk_fetch_failed',
+): Promise<AllUnitQueryResult<Uint8Array>> {
+  const storagePath = parseStoragePathFromArtifactUrl(artifactUrl);
+  let storageError: string | null = null;
+  if (storagePath) {
+    const downloaded = await supabaseClient.storage
+      .from(storagePath.bucket)
+      .download(storagePath.objectPath);
+    if (!downloaded.error) {
+      return { ok: true, data: new Uint8Array(await downloaded.data.arrayBuffer()) };
+    }
+    storageError = `storage_download_failed:${downloaded.error.message}`;
+  }
+
+  try {
+    const response = await fetch(artifactUrl, { method: 'GET' });
+    if (!response.ok) {
+      const httpError = `http_${response.status}`;
+      return {
+        ok: false,
+        error: fetchError,
+        detail: storageError ? `${storageError};${httpError}` : httpError,
+      };
+    }
+    return { ok: true, data: new Uint8Array(await response.arrayBuffer()) };
+  } catch (error) {
+    const httpError = error instanceof Error ? error.message : 'fetch_failed';
+    return {
+      ok: false,
+      error: fetchError,
+      detail: storageError ? `${storageError};${httpError}` : httpError,
+    };
+  }
+}
+
+async function sha256Hex(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function queryArtifactReadErrorResponse(result: {
+  ok: false;
+  error: string;
+  detail?: string;
+}): Response {
+  return json(
+    {
+      error: result.error,
+      ...(result.detail ? { detail: result.detail } : {}),
+    },
+    result.error === 'all_unit_query_artifact_chunk_fetch_failed' ||
+      result.error === 'all_unit_query_artifact_fetch_failed'
+      ? 502
+      : 500,
+  );
 }
 
 function parseStoragePathFromArtifactUrl(

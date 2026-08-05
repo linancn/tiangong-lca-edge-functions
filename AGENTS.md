@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-31
-lastReviewedCommit: 45f78ad679599850128f1e959f2970bfb56a71c8
-lastReviewedNote: 'Reviewed for Issue #242: the tracked isolated Edge qualification adapter remains proof tooling under scripts/test and does not change runtime, auth, branch, deployment, or ownership boundaries.'
+lastReviewedAt: 2026-08-06
+lastReviewedCommit: 45ea122c888d06bc5bd7c4a528908750e61b2a2d
+lastReviewedNote: 'Reviewed for Issue #264: the all-unit query v2 reader remains inside the existing LCA runtime ownership, production hotfix, validation, and workspace-integration boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
