@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-31
-lastReviewedCommit: 45f78ad679599850128f1e959f2970bfb56a71c8
-lastReviewedNote: 'Reviewed for Issue #242: the isolated scope-closure adapter exercises the existing Data Product download boundary and adds no new production runtime family or ownership boundary.'
+lastReviewedAt: 2026-08-05
+lastReviewedCommit: b6c87d6cef9edd43b0d55c1f91da958884545e79
+lastReviewedNote: 'Reviewed for Issue #262: changing the persistent-dev deployment target does not add runtime families or alter repository shape and ownership.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

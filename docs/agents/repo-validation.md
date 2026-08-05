@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-31
-lastReviewedCommit: 45f78ad679599850128f1e959f2970bfb56a71c8
-lastReviewedNote: 'Reviewed for Issue #242: added exact-SHA isolated Edge provider qualification proof without changing the runtime validation baseline or deployment requirements.'
+lastReviewedAt: 2026-08-05
+lastReviewedCommit: b6c87d6cef9edd43b0d55c1f91da958884545e79
+lastReviewedNote: 'Reviewed for Issue #262: project-ref replacement still requires lint, Deno check, exact remote deployment, and auth/connectivity readback; the proof matrix is unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

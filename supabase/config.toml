@@ -3,7 +3,7 @@
 # - Daily trunk is Git `dev`; `dev -> main` is the promote path.
 # - This file is for Edge Function local serve and deploy configuration, not the database schema source of truth.
 # - Database schema / migration / branch config ownership lives in `tiangong-lca/database-engine`.
-# - Persistent Git `dev` deploy target maps to the remote project `fotofiyqnuyvgtotswie` via `[remotes.dev]`.
+# - Persistent Git `dev` deploy target maps to the remote project `submidrhbtknjxfympna` via `[remotes.dev]`.
 # - The production / `main` deploy target used by scripts is `qgzvkongdjqiiamzbbts`.
 #
 # A string used to distinguish different Supabase projects on the same host. Defaults to the
@@ -160,7 +160,7 @@ skip_nonce_check = false
 
 [remotes.dev]
 # Persistent Supabase branch project used by Git `dev`.
-project_id = "fotofiyqnuyvgtotswie"
+project_id = "submidrhbtknjxfympna"
 
 [analytics]
 enabled = false
