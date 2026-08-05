@@ -50,7 +50,7 @@ These files are the low-token entry path for repo ownership, branch and deploy r
 - GitHub default branch 继续保持 `main`，这是平台层例外，不代表日常 trunk 改回 `main`。
 - 远端环境映射：
   - `main` project ref：`qgzvkongdjqiiamzbbts`
-  - `dev` project ref：`fotofiyqnuyvgtotswie`
+  - `dev` project ref：`submidrhbtknjxfympna`
 - 远端 `main` 与 `dev` 的函数部署都统一使用 `--no-verify-jwt`。这是正式仓库规则，不是临时口头 workaround。
 - 安全边界在函数运行时：gateway 不做 JWT 校验，不等于函数可以匿名执行。新函数不得假设 gateway `verify_jwt=true` 已经帮你兜底，必须继续显式做认证与授权。
 
@@ -164,7 +164,7 @@ Authenticate the Supabase CLI when needed:
 ./node_modules/.bin/supabase login
 ```
 
-Deploy to the persistent `dev` project (`fotofiyqnuyvgtotswie`) from the Git `dev` line or a reviewed PR branch:
+Deploy to the persistent `dev` project (`submidrhbtknjxfympna`) from the Git `dev` line or a reviewed PR branch:
 
 ```bash
 npm run deploy:dev -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft

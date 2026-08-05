@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-07-31
-lastReviewedCommit: 45f78ad679599850128f1e959f2970bfb56a71c8
-lastReviewedNote: 'Reviewed for Issue #242: the tracked isolated Edge qualification adapter remains proof tooling under scripts/test and does not change runtime, auth, branch, deployment, or ownership boundaries.'
+lastReviewedAt: 2026-08-05
+lastReviewedCommit: b6c87d6cef9edd43b0d55c1f91da958884545e79
+lastReviewedNote: 'Reviewed for Issue #262: the persistent-dev project ref changed after database recreation; Edge ownership, dev-first delivery, runtime auth, and deployment boundaries remain unchanged.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
