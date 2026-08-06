@@ -412,6 +412,9 @@ Job response states map to HTTP status as follows:
   - `GET`: `/functions/v1/lca_results/{resultId}` or `?result_id=...`
   - `POST`: body `{ "result_id": "<uuid>" }`
 - `lca_query_results`: `POST` only.
+  - reads both the historical inline `all-unit-query:v1` artifact and the chunked `all-unit-query:v2` index emitted by current workers; callers do not select the storage format
+  - v2 reads verify the persisted index byte size and SHA-256, Calculation Bundle binding, safe chunk paths, contiguous process coverage, per-chunk byte size/SHA-256, gzip decoding, record counts, and exact process/method order before returning values
+  - row queries download only the chunks covering the requested processes; hotspot queries stream the selected impact column across chunks and do not reconstruct or persist the complete matrix in Edge
 
 ## LCI/LCIA Release Function Call Patterns
 

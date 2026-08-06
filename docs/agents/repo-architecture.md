@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-05
-lastReviewedCommit: b6c87d6cef9edd43b0d55c1f91da958884545e79
-lastReviewedNote: 'Reviewed for Issue #262: changing the persistent-dev deployment target does not add runtime families or alter repository shape and ownership.'
+lastReviewedAt: 2026-08-06
+lastReviewedCommit: 45ea122c888d06bc5bd7c4a528908750e61b2a2d
+lastReviewedNote: 'Reviewed for Issue #264: document the bounded v1/v2 all-unit query reader without changing LCA runtime or storage ownership.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -177,6 +177,8 @@ Shared scope logic lives in:
 `supabase/functions/_shared/worker_jobs_cutover.ts` owns the handoff from Edge runtime requests to database-owned `worker_jobs`, and `supabase/functions/_shared/lca_snapshot_build_queue.ts` owns shared snapshot-build enqueue/reuse. The default path enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `worker_enqueue_job` without creating new `lca_jobs` rows. `lca_result_cache` remains retained result/cache metadata and stores both compatibility `job_id` and canonical `worker_job_id` where applicable. Setting `LCA_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new LCA worker submissions and fails closed with `legacy_queue_disabled`; it must not fall back to legacy `lca_enqueue_job`. Edge still owns auth and request normalization only; `tiangong-lca-worker` owns execution.
 
 The named `public_plus_owner_draft` calculation scope is a distinct versioned snapshot family. Edge freezes the authenticated actor and exact public-state-100 plus owner-state-0 predicate in a manifest and SHA-256; the owner-draft branch additionally requires null `team_id` and `review_id` on process/flow rows so team/reviewer visibility cannot leak into account-local calculation. That scope manifest applies only to processes and flows. LCIA method/factor truth is bound separately to the reviewed frontend static-cache manifest: Edge embeds the exact manifest bytes, raw SHA-256, path, and release hashes, but never accepts a client URL, path, or hash; the worker resolves the base URL from trusted configuration. Worker execution must independently enforce request/snapshot v2 and return exact `lca.calculation_evidence.v2` with all four source hashes and a non-empty 25-row `exchange_method_pair` coverage matrix. Every method identity and artifact locator must match the reviewed manifest, every row must have the same pair cardinality, aggregate counts must equal the row sums, and v2 gap-artifact record counts must equal all unmatched, invalid, and unsupported-direction pairs. Solve, query, and contribution-path routes reject v1 database/union evidence, the superseded combined-scope hash, missing evidence, and any source, identity, cardinality, count, status, or artifact drift before returning numeric values. Missing characterization factors are never represented as complete zero impact; raw private-storage gap URLs remain immutable evidence locators rather than browser download links.
+
+`lca_query_results` keeps historical `all-unit-query:v1` matrix reads and consumes `all-unit-query:v2` as a bounded index over Calculation Bundle LCIA chunks. The v2 path verifies the persisted query-index size and SHA-256, keeps child paths inside the referenced bundle, and validates each downloaded gzip chunk's size, SHA-256, process range, record count, method identity, ordering, and finite values before returning a row or hotspot projection. It loads only the covering chunks for selected queries and processes full-hotspot chunks sequentially instead of rebuilding the removed full H matrix.
 
 ### TIDAS package flows
 
