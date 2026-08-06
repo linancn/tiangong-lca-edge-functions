@@ -69,11 +69,19 @@ class FakeNationalCarbonGraphCacheSupabase {
   }
 }
 
-function actor(): ActorContext {
+function actor(systemManager = true): ActorContext {
   return {
     userId: TEST_USER_ID,
     accessToken: 'access-token',
-    supabase: {} as SupabaseClient,
+    supabase: {
+      rpc(fn: string) {
+        assertEquals(fn, 'qry_membership_get_mine');
+        return Promise.resolve({
+          data: systemManager ? [{ team_id: SYSTEM_TEAM_ID, role: 'admin' }] : [],
+          error: null,
+        });
+      },
+    } as unknown as SupabaseClient,
   };
 }
 
@@ -102,7 +110,7 @@ Deno.test(
 
     const result = await executeNationalCarbonGraphCacheJobCommand(
       { action: 'enqueue' },
-      actor(),
+      actor(false),
       supabase as unknown as SupabaseClient,
     );
 
@@ -158,10 +166,10 @@ Deno.test(
         },
       });
     }
-    assertEquals(supabase.roleQueries, [{ table: 'roles' }]);
+    assertEquals(supabase.roleQueries, []);
     assertEquals(supabase.rpcCalls, [
       {
-        fn: 'worker_enqueue_job',
+        fn: 'svc_worker_enqueue_job',
         args: {
           p_job_kind: NATIONAL_CARBON_GRAPH_CACHE_JOB_KIND,
           p_payload_json: {
@@ -317,7 +325,7 @@ Deno.test(
     }
     assertEquals(supabase.rpcCalls, [
       {
-        fn: 'worker_list_jobs',
+        fn: 'svc_worker_list_jobs',
         args: {
           p_requested_by: null,
           p_subject_type: NATIONAL_CARBON_GRAPH_CACHE_SUBJECT_TYPE,

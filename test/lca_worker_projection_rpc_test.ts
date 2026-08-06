@@ -55,7 +55,7 @@ Deno.test('callLcaReadJobProjectionRpc forwards worker and legacy lookup args', 
   });
   assertEquals(supabase.calls, [
     {
-      fn: 'lca_read_job_projection',
+      fn: 'svc_lca_read_job_projection',
       args: {
         p_requested_by: TEST_USER_ID,
         p_worker_job_id: TEST_WORKER_JOB_ID,
@@ -95,7 +95,7 @@ Deno.test('callLcaReadResultProjectionRpc forwards result auth and format args',
   });
   assertEquals(supabase.calls, [
     {
-      fn: 'lca_read_result_projection',
+      fn: 'svc_lca_read_result_projection',
       args: {
         p_requested_by: TEST_USER_ID,
         p_result_id: TEST_RESULT_ID,
@@ -127,7 +127,7 @@ Deno.test('callLcaReadLatestSingleSolveResultRpc forwards snapshot process args'
   });
   assertEquals(supabase.calls, [
     {
-      fn: 'lca_read_latest_single_solve_result',
+      fn: 'svc_lca_read_latest_single_solve_result',
       args: {
         p_requested_by: TEST_USER_ID,
         p_snapshot_id: TEST_SNAPSHOT_ID,

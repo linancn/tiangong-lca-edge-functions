@@ -177,6 +177,7 @@ async function fetchDatasetJson(
   version: string,
 ): Promise<unknown | null> {
   const { data, error } = await supabase
+    .schema('public')
     .from(table)
     .select('id,version,json_ordered')
     .eq('id', id)
@@ -195,6 +196,7 @@ async function updateDatasetExtraction(
   extractedMarkdown: string,
 ): Promise<void> {
   const { error } = await supabase
+    .schema('public')
     .from(table)
     .update({ extracted_md: extractedMarkdown })
     .eq('id', id)

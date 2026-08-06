@@ -109,7 +109,7 @@ Deno.test('processReviewSubmitJobs returns waiting_gate jobs without submitting'
   assertEquals(result.submitted, 0);
   assertEquals(
     supabase.rpcCalls.map((call) => call.fn),
-    ['cmd_dataset_review_submit_job_claim', 'cmd_dataset_review_submit_job_record_result'],
+    ['svc_dataset_review_submit_job_claim', 'svc_dataset_review_submit_job_record_result'],
   );
   assertEquals(supabase.rpcCalls[1].args.p_status, 'waiting_gate');
 });
@@ -142,7 +142,7 @@ Deno.test('processReviewSubmitJobs submits jobs whose gate already passed', asyn
   assertEquals(result.submitted, 1);
   assertEquals(
     supabase.rpcCalls.map((call) => call.fn),
-    ['cmd_dataset_review_submit_job_claim', 'cmd_review_submit_from_job'],
+    ['svc_dataset_review_submit_job_claim', 'svc_review_submit_from_job'],
   );
   assertEquals(supabase.rpcCalls[1].args.p_job_id, TEST_JOB_ID);
 });
@@ -175,7 +175,7 @@ Deno.test('processReviewSubmitJobs submits jobs whose worker gate completed', as
   assertEquals(result.submitted, 1);
   assertEquals(
     supabase.rpcCalls.map((call) => call.fn),
-    ['cmd_dataset_review_submit_job_claim', 'cmd_review_submit_from_job'],
+    ['svc_dataset_review_submit_job_claim', 'svc_review_submit_from_job'],
   );
   assertEquals(supabase.rpcCalls[1].args.p_job_id, TEST_JOB_ID);
   assertEquals(
@@ -212,7 +212,7 @@ Deno.test('processReviewSubmitJobs records terminal blocked gate state', async (
   assertEquals(result.blocked, 1);
   assertEquals(
     supabase.rpcCalls.map((call) => call.fn),
-    ['cmd_dataset_review_submit_job_claim', 'cmd_dataset_review_submit_job_record_result'],
+    ['svc_dataset_review_submit_job_claim', 'svc_dataset_review_submit_job_record_result'],
   );
   assertEquals(supabase.rpcCalls[1].args.p_status, 'blocked');
   assertEquals(supabase.rpcCalls[1].args.p_error_code, 'REVIEW_SUBMIT_GATE_BLOCKED');
@@ -246,7 +246,7 @@ Deno.test('processReviewSubmitJobs records terminal blocked worker gate state', 
   assertEquals(result.blocked, 1);
   assertEquals(
     supabase.rpcCalls.map((call) => call.fn),
-    ['cmd_dataset_review_submit_job_claim', 'cmd_dataset_review_submit_job_record_result'],
+    ['svc_dataset_review_submit_job_claim', 'svc_dataset_review_submit_job_record_result'],
   );
   assertEquals(supabase.rpcCalls[1].args.p_status, 'blocked');
   assertEquals(supabase.rpcCalls[1].args.p_error_code, 'REVIEW_SUBMIT_GATE_BLOCKED');
@@ -292,7 +292,7 @@ Deno.test('processReviewSubmitJobs records malformed job payloads as terminal er
   assertEquals(result.failed, 1);
   assertEquals(
     supabase.rpcCalls.map((call) => call.fn),
-    ['cmd_dataset_review_submit_job_claim', 'cmd_dataset_review_submit_job_record_result'],
+    ['svc_dataset_review_submit_job_claim', 'svc_dataset_review_submit_job_record_result'],
   );
   assertEquals(supabase.rpcCalls[1].args.p_status, 'error');
   assertEquals(supabase.rpcCalls[1].args.p_error_code, 'INVALID_REVIEW_SUBMIT_JOB_GATE');

@@ -53,11 +53,24 @@ class FakeWorkerJobSupabase {
   }
 }
 
-function actor(): ActorContext {
+function actor(dataProductManager = true): ActorContext {
   return {
     userId: TEST_USER_ID,
     accessToken: 'access-token',
-    supabase: {} as SupabaseClient,
+    supabase: {
+      rpc(fn: string) {
+        assertEquals(fn, 'qry_membership_get_mine');
+        return Promise.resolve({
+          data: [
+            {
+              team_id: '00000000-0000-0000-0000-000000000000',
+              role: dataProductManager ? 'data_product_manager' : 'member',
+            },
+          ],
+          error: null,
+        });
+      },
+    } as unknown as SupabaseClient,
   };
 }
 
@@ -188,7 +201,7 @@ Deno.test('executeWorkerJobCommand lists only current user worker jobs', async (
   }
   assertEquals(supabase.rpcCalls, [
     {
-      fn: 'worker_list_jobs',
+      fn: 'svc_worker_list_jobs',
       args: {
         p_requested_by: TEST_USER_ID,
         p_subject_type: 'processes',
@@ -233,10 +246,10 @@ Deno.test(
     );
 
     assertEquals(result.ok, true);
-    assertEquals(supabase.roleQueries, [{ table: 'roles' }]);
+    assertEquals(supabase.roleQueries, []);
     assertEquals(supabase.rpcCalls, [
       {
-        fn: 'worker_list_jobs',
+        fn: 'svc_worker_list_jobs',
         args: {
           p_requested_by: TEST_USER_ID,
           p_subject_type: 'lcia_result_build',
@@ -262,7 +275,7 @@ Deno.test(
         subjectType: 'lcia_result_build',
         visibility: 'operator',
       },
-      actor(),
+      actor(false),
       supabase as unknown as SupabaseClient,
     );
 
@@ -358,7 +371,7 @@ Deno.test('executeWorkerJobCommand cancels owned jobs through service RPC', asyn
   }
   assertEquals(
     supabase.rpcCalls.map((call) => call.fn),
-    ['worker_read_job', 'worker_cancel_job'],
+    ['svc_worker_read_job', 'svc_worker_cancel_job'],
   );
   assertEquals(supabase.rpcCalls[1].args, {
     p_job_id: TEST_JOB_ID,

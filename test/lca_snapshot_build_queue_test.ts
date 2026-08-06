@@ -8,43 +8,19 @@ import {
 
 type MockState = {
   rpcCalls: Array<{ fn: string; args: Record<string, unknown> }>;
-  insertCalls: Array<{ table: string; row: Record<string, unknown> }>;
 };
 
 function createSupabaseMock(state: MockState) {
   return {
-    from(table: string) {
-      return {
-        select(_columns: string) {
-          return this;
-        },
-        eq(_column: string, _value: unknown) {
-          return this;
-        },
-        in(_column: string, _value: unknown) {
-          return this;
-        },
-        order(_column: string, _options: unknown) {
-          return this;
-        },
-        limit(_limit: number) {
-          return Promise.resolve({ data: [], error: null });
-        },
-        insert(row: Record<string, unknown>) {
-          state.insertCalls.push({ table, row });
-          return Promise.resolve({ data: null, error: null });
-        },
-      };
-    },
     rpc(fn: string, args: Record<string, unknown>) {
       state.rpcCalls.push({ fn, args });
       return Promise.resolve({
         data: {
           ok: true,
-          data: {
-            id: 'worker-job-1',
-            payload: args.p_payload_json,
-          },
+          mode: 'queued',
+          job_id: 'lca-job-1',
+          snapshot_id: 'snapshot-1',
+          worker_job_id: 'worker-job-1',
         },
         error: null,
       });
@@ -55,7 +31,7 @@ function createSupabaseMock(state: MockState) {
 Deno.test(
   'snapshot queue sends exact scope, actor, LCIA source, and coverage proof to worker',
   async () => {
-    const state: MockState = { rpcCalls: [], insertCalls: [] };
+    const state: MockState = { rpcCalls: [] };
     const result = await ensureLcaSnapshotBuildQueued(createSupabaseMock(state) as never, {
       scope: 'prod',
       dataScope: 'public_plus_owner_draft',
@@ -77,23 +53,15 @@ Deno.test(
       'incomplete_coverage_not_zero',
     );
 
-    assertEquals(state.insertCalls.length, 1);
-    assertEquals(state.insertCalls[0].table, 'lca_network_snapshots');
-    assertEquals(state.insertCalls[0].row.scope, 'full_library');
-    assertEquals(state.insertCalls[0].row.created_by, 'user-1');
-    assertEquals(
-      state.insertCalls[0].row.process_filter,
-      result.calculation_contract.process_filter,
-    );
-
     assertEquals(state.rpcCalls.length, 1);
     const rpcArgs = state.rpcCalls[0].args;
-    assertEquals(state.rpcCalls[0].fn, 'worker_enqueue_job');
-    assertEquals(rpcArgs.p_job_kind, 'lca.build_snapshot');
+    assertEquals(state.rpcCalls[0].fn, 'svc_lca_snapshot_build_enqueue');
+    assertEquals(rpcArgs.p_scope, 'prod');
+    assertEquals(rpcArgs.p_process_filter, result.calculation_contract.process_filter);
     assertEquals(rpcArgs.p_payload_schema_version, 'lca.build_snapshot.request.v2');
     assertEquals(rpcArgs.p_requested_by, 'user-1');
 
-    const payload = rpcArgs.p_payload_json as Record<string, unknown>;
+    const payload = rpcArgs.p_payload as Record<string, unknown>;
     assertEquals(payload.data_scope, 'public_plus_owner_draft');
     assertEquals(payload.process_states, '100');
     assertEquals(payload.include_user_id, 'user-1');
@@ -126,7 +94,7 @@ Deno.test(
 );
 
 Deno.test('snapshot queue ignores client source locator and no-LCIA override fields', async () => {
-  const state: MockState = { rpcCalls: [], insertCalls: [] };
+  const state: MockState = { rpcCalls: [] };
   const enqueue = ensureLcaSnapshotBuildQueued as unknown as (
     supabase: ReturnType<typeof createSupabaseMock>,
     args: Record<string, unknown>,
@@ -142,7 +110,7 @@ Deno.test('snapshot queue ignores client source locator and no-LCIA override fie
   });
 
   assert(result.ok);
-  const payload = state.rpcCalls[0].args.p_payload_json as Record<string, unknown>;
+  const payload = state.rpcCalls[0].args.p_payload as Record<string, unknown>;
   const source = payload.lcia_method_factor_source as Record<string, unknown>;
   assertEquals(payload.no_lcia, false);
   assertEquals(source.bundle_manifest_path, LCA_STATIC_CACHE_BUNDLE_MANIFEST_PATH);
@@ -164,7 +132,7 @@ Deno.test(
     };
 
     const enqueue = async (requestRoots?: Array<typeof rootA>) => {
-      const state: MockState = { rpcCalls: [], insertCalls: [] };
+      const state: MockState = { rpcCalls: [] };
       const result = await ensureLcaSnapshotBuildQueued(createSupabaseMock(state) as never, {
         scope: 'prod',
         dataScope: 'public_plus_owner_draft',
@@ -182,7 +150,7 @@ Deno.test(
     const full = await enqueue();
 
     const canonicalArgs = canonical.state.rpcCalls[0].args;
-    const canonicalPayload = canonicalArgs.p_payload_json as Record<string, unknown>;
+    const canonicalPayload = canonicalArgs.p_payload as Record<string, unknown>;
     assertEquals(
       canonical.result.calculation_contract.process_filter.selection_mode,
       'request_roots_closure',
@@ -193,15 +161,14 @@ Deno.test(
     ]);
     assertEquals(canonicalPayload.request_roots, [rootA, rootB]);
     assertEquals(
-      canonical.state.insertCalls[0].row.process_filter,
+      canonicalArgs.p_process_filter,
       canonical.result.calculation_contract.process_filter,
     );
 
-    for (const field of ['p_request_hash', 'p_idempotency_key', 'p_concurrency_key']) {
-      assertEquals(canonicalArgs[field], reordered.state.rpcCalls[0].args[field]);
-      assert(canonicalArgs[field] !== onlyA.state.rpcCalls[0].args[field]);
-      assert(onlyA.state.rpcCalls[0].args[field] !== onlyB.state.rpcCalls[0].args[field]);
-      assert(onlyA.state.rpcCalls[0].args[field] !== full.state.rpcCalls[0].args[field]);
-    }
+    const field = 'p_request_key';
+    assertEquals(canonicalArgs[field], reordered.state.rpcCalls[0].args[field]);
+    assert(canonicalArgs[field] !== onlyA.state.rpcCalls[0].args[field]);
+    assert(onlyA.state.rpcCalls[0].args[field] !== onlyB.state.rpcCalls[0].args[field]);
+    assert(onlyA.state.rpcCalls[0].args[field] !== full.state.rpcCalls[0].args[field]);
   },
 );
