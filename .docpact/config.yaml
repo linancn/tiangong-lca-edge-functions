@@ -1,7 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-07-31'
-lastReviewedCommit: '45f78ad679599850128f1e959f2970bfb56a71c8'
+lastReviewedAt: '2026-08-06'
+lastReviewedCommit: '45ea122c888d06bc5bd7c4a528908750e61b2a2d'
+lastReviewedNote: 'Reviewed for Issue #264: v1/v2 all-unit query consumption remains routed to the existing lca-runtime and proof ownership surfaces.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
