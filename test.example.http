@@ -445,6 +445,8 @@ curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/tidas_package_jobs/
     --header 'Authorization: Bearer {{$dotenv USER_JWT}}'
 
 
+### `lca_query_results` resolves the persisted v1/v2 query-artifact format automatically.
+### These request bodies are identical for historical inline and current chunked results.
 ### @name LCA_Query_Results：Local (single process -> all impacts)
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_query_results' \
     --header 'Content-Type: application/json' \

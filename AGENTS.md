@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-05
-lastReviewedCommit: b6c87d6cef9edd43b0d55c1f91da958884545e79
-lastReviewedNote: 'Reviewed for Issue #262: the persistent-dev project ref changed after database recreation; Edge ownership, dev-first delivery, runtime auth, and deployment boundaries remain unchanged.'
+lastReviewedAt: 2026-08-06
+lastReviewedCommit: 45ea122c888d06bc5bd7c4a528908750e61b2a2d
+lastReviewedNote: 'Reviewed for Issue #264: the all-unit query v2 reader remains inside the existing LCA runtime ownership, production hotfix, validation, and workspace-integration boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
