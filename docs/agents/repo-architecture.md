@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-06
-lastReviewedCommit: 45ea122c888d06bc5bd7c4a528908750e61b2a2d
-lastReviewedNote: 'Reviewed for Issue #264: document the bounded v1/v2 all-unit query reader without changing LCA runtime or storage ownership.'
+lastReviewedAt: 2026-08-07
+lastReviewedCommit: 02e1aeb99aa7b336ef9009947655d9e69c85ffbc
+lastReviewedNote: 'Reviewed for Issue #422 schema cutover: document explicit public/api selection and facade-only access to non-core database state.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -44,6 +44,8 @@ related:
 ## Repo Shape
 
 This repo is organized around Edge Function families plus a shared runtime layer under `supabase/functions/_shared`.
+
+Shared Supabase clients default database operations to `api`. Every direct relation access selects `public` explicitly and is limited to the nine core entity tables. Worker, identity, review, LCA, TIDAS, and Data Product internal state is consumed only through database-owned capability façades; Edge never selects `private` through the Data API.
 
 ## Stable Path Map
 
@@ -174,7 +176,7 @@ Shared scope logic lives in:
 - `supabase/functions/_shared/lca_process_scope.ts`
 - `supabase/functions/_shared/lca_snapshot_scope.ts`
 
-`supabase/functions/_shared/worker_jobs_cutover.ts` owns the handoff from Edge runtime requests to database-owned `worker_jobs`, and `supabase/functions/_shared/lca_snapshot_build_queue.ts` owns shared snapshot-build enqueue/reuse. The default path enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `worker_enqueue_job` without creating new `lca_jobs` rows. `lca_result_cache` remains retained result/cache metadata and stores both compatibility `job_id` and canonical `worker_job_id` where applicable. Setting `LCA_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new LCA worker submissions and fails closed with `legacy_queue_disabled`; it must not fall back to legacy `lca_enqueue_job`. Edge still owns auth and request normalization only; `tiangong-lca-worker` owns execution.
+`supabase/functions/_shared/worker_jobs_cutover.ts` owns the handoff from Edge runtime requests to database-owned `worker_jobs`, while `lca_snapshot_capabilities.ts` and `lca_snapshot_build_queue.ts` consume the service-only snapshot read/enqueue façades. The default path enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `svc_lca_*`/`svc_worker_*` capability RPCs without directly reading or writing internal job, cache, result, or snapshot relations. Setting `LCA_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new LCA worker submissions and fails closed with `legacy_queue_disabled`; it must not fall back to legacy `lca_enqueue_job`. Edge still owns auth and request normalization only; `database-engine` owns persistence and `tiangong-lca-worker` owns execution.
 
 The named `public_plus_owner_draft` calculation scope is a distinct versioned snapshot family. Edge freezes the authenticated actor and exact public-state-100 plus owner-state-0 predicate in a manifest and SHA-256; the owner-draft branch additionally requires null `team_id` and `review_id` on process/flow rows so team/reviewer visibility cannot leak into account-local calculation. That scope manifest applies only to processes and flows. LCIA method/factor truth is bound separately to the reviewed frontend static-cache manifest: Edge embeds the exact manifest bytes, raw SHA-256, path, and release hashes, but never accepts a client URL, path, or hash; the worker resolves the base URL from trusted configuration. Worker execution must independently enforce request/snapshot v2 and return exact `lca.calculation_evidence.v2` with all four source hashes and a non-empty 25-row `exchange_method_pair` coverage matrix. Every method identity and artifact locator must match the reviewed manifest, every row must have the same pair cardinality, aggregate counts must equal the row sums, and v2 gap-artifact record counts must equal all unmatched, invalid, and unsupported-direction pairs. Solve, query, and contribution-path routes reject v1 database/union evidence, the superseded combined-scope hash, missing evidence, and any source, identity, cardinality, count, status, or artifact drift before returning numeric values. Missing characterization factors are never represented as complete zero impact; raw private-storage gap URLs remain immutable evidence locators rather than browser download links.
 
@@ -193,7 +195,7 @@ Shared behavior lives in:
 - `supabase/functions/_shared/tidas_package.ts`
 - `supabase/functions/_shared/redis_client.ts`
 
-The default TIDAS package path enqueues `tidas.import_package` and `tidas.export_package` through `worker_enqueue_job` without creating new `lca_package_jobs` rows. Import prepare creates an `import_source` artifact row for upload coordination; import enqueue links that artifact to the canonical `worker_jobs` row. Export request cache stores both compatibility `job_id` and canonical `worker_job_id` where applicable. Setting `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new package worker submissions and fails closed with `LEGACY_QUEUE_DISABLED`; it must not fall back to legacy `lca_package_enqueue_job`. Existing package domain rows, request cache, artifacts, and lookup APIs remain retained compatibility metadata; `worker_jobs` is the canonical task lifecycle projection and worker delivery mechanism.
+The default TIDAS package path uses the four `svc_tidas_package_*` façades for export enqueue, import prepare, import enqueue, and job/artifact projection. Edge shapes upload/download responses but does not directly read or mutate package cache, artifact, or worker relations. Setting `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new package worker submissions and fails closed with `LEGACY_QUEUE_DISABLED`; it must not fall back to legacy `lca_package_enqueue_job`. The database preserves compatibility identifiers, canonical worker lifecycle, DTOs, and deleted/expired artifact semantics.
 
 ### LCI/LCIA release control plane
 
