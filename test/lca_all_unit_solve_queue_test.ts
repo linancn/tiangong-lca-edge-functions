@@ -33,13 +33,9 @@ function createMockState(overrides: Partial<MockState> = {}): MockState {
     insertError: null,
     rpcData: {
       ok: true,
-      data: {
-        id: 'worker-job-1',
-        payload: {
-          job_id: 'lca-job-1',
-          snapshot_id: 'snapshot-1',
-        },
-      },
+      mode: 'queued',
+      job_id: 'lca-job-1',
+      worker_job_id: 'worker-job-1',
     },
     rpcError: null,
     rpcCalls: [],
@@ -88,13 +84,11 @@ function createTableBuilder(state: MockState, table: string) {
 
 Deno.test('ensureLcaAllUnitSolveQueued reuses pending cache worker job', async () => {
   const state = createMockState({
-    cacheRow: {
-      id: 'cache-1',
-      status: 'running',
+    rpcData: {
+      ok: true,
+      mode: 'in_progress',
       job_id: 'lca-job-active',
       worker_job_id: 'worker-job-active',
-      result_id: null,
-      hit_count: 2,
     },
   });
 
@@ -108,10 +102,9 @@ Deno.test('ensureLcaAllUnitSolveQueued reuses pending cache worker job', async (
   assertEquals(result.mode, 'in_progress');
   assertEquals(result.job_id, 'lca-job-active');
   assertEquals(result.worker_job_id, 'worker-job-active');
-  assertEquals(state.rpcCalls.length, 0);
+  assertEquals(state.rpcCalls.length, 1);
   assertEquals(state.insertCalls.length, 0);
-  assertEquals(state.updateCalls.length, 1);
-  assertEquals(state.updateCalls[0].patch.hit_count, 3);
+  assertEquals(state.updateCalls.length, 0);
 });
 
 Deno.test(
@@ -130,29 +123,24 @@ Deno.test(
     assertEquals(result.job_id, 'lca-job-1');
     assertEquals(result.worker_job_id, 'worker-job-1');
     assertEquals(state.rpcCalls.length, 1);
-    assertEquals(state.insertCalls.length, 1);
+    assertEquals(state.insertCalls.length, 0);
 
     const rpcArgs = state.rpcCalls[0].args;
+    assertEquals(state.rpcCalls[0].fn, 'svc_lca_cached_job_enqueue');
     assertEquals(rpcArgs.p_job_kind, 'lca.solve_all_unit');
     assertEquals(rpcArgs.p_payload_schema_version, 'lca.solve_all_unit.request.v1');
-    assertEquals(rpcArgs.p_subject_type, 'lca_job');
-    assertEquals(rpcArgs.p_subject_version, 'snapshot-1');
     assertEquals(rpcArgs.p_requested_by, 'user-1');
     assertEquals(rpcArgs.p_queue_key, 'snapshot-1');
-    assertEquals(rpcArgs.p_request_hash, result.cache_key);
+    assertEquals(rpcArgs.p_request_key, result.cache_key);
 
-    const payload = rpcArgs.p_payload_json as Record<string, unknown>;
+    const payload = rpcArgs.p_payload as Record<string, unknown>;
     assertEquals(payload.type, 'solve_all_unit');
     assertEquals(payload.snapshot_id, 'snapshot-1');
     assertEquals(payload.solve, { return_x: false, return_g: false, return_h: true });
 
-    const inserted = state.insertCalls[0].row;
-    assertEquals(inserted.scope, 'dev-v1');
-    assertEquals(inserted.snapshot_id, 'snapshot-1');
-    assertEquals(inserted.request_key, result.cache_key);
-    assertEquals(inserted.status, 'pending');
-    assertEquals(inserted.job_id, 'lca-job-1');
-    assertEquals(inserted.worker_job_id, 'worker-job-1');
+    const requestPayload = rpcArgs.p_request_payload as Record<string, unknown>;
+    assertEquals(requestPayload.scope, 'dev-v1');
+    assertEquals(requestPayload.snapshot_id, 'snapshot-1');
   },
 );
 
@@ -160,13 +148,11 @@ Deno.test(
   'ensureLcaAllUnitSolveQueued requeues ready cache when latest query pointer is missing',
   async () => {
     const state = createMockState({
-      cacheRow: {
-        id: 'cache-ready',
-        status: 'ready',
-        job_id: 'old-lca-job',
-        worker_job_id: 'old-worker-job',
-        result_id: 'old-result',
-        hit_count: 4,
+      rpcData: {
+        ok: true,
+        mode: 'queued',
+        job_id: 'lca-job-1',
+        worker_job_id: 'worker-job-1',
       },
     });
 
@@ -180,10 +166,7 @@ Deno.test(
     assertEquals(result.mode, 'queued');
     assertEquals(state.rpcCalls.length, 1);
     assertEquals(state.insertCalls.length, 0);
-    assertEquals(state.updateCalls.length, 2);
-    assertEquals(state.updateCalls[1].patch.status, 'pending');
-    assertEquals(state.updateCalls[1].patch.job_id, 'lca-job-1');
-    assertEquals(state.updateCalls[1].patch.worker_job_id, 'worker-job-1');
+    assertEquals(state.updateCalls.length, 0);
   },
 );
 
@@ -199,10 +182,10 @@ Deno.test('ensureLcaAllUnitSolveQueued binds validated scope and LCIA evidence',
   });
 
   assert(result.ok);
-  const payload = state.rpcCalls[0].args.p_payload_json as Record<string, unknown>;
+  const payload = state.rpcCalls[0].args.p_payload as Record<string, unknown>;
   assertEquals(state.rpcCalls[0].args.p_payload_schema_version, 'lca.solve_all_unit.request.v2');
   assertEquals(payload.calculation_evidence_binding, calculationEvidenceBinding);
-  assertEquals(state.insertCalls[0].row.request_payload, {
+  assertEquals(state.rpcCalls[0].args.p_request_payload, {
     version: 'lca_solve_v2',
     scope: 'dev-v1',
     snapshot_id: 'snapshot-1',

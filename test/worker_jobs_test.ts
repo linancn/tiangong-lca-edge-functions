@@ -65,7 +65,7 @@ Deno.test('callWorkerJobEnqueueRpc forwards worker enqueue args', async () => {
   });
   assertEquals(supabase.calls, [
     {
-      fn: 'worker_enqueue_job',
+      fn: 'svc_worker_enqueue_job',
       args: {
         p_job_kind: 'review_submit.gate',
         p_payload_json: {
@@ -125,7 +125,7 @@ Deno.test('callWorkerJobReadRpc unwraps worker read envelopes', async () => {
   });
   assertEquals(supabase.calls, [
     {
-      fn: 'worker_read_job',
+      fn: 'svc_worker_read_job',
       args: {
         p_job_id: TEST_JOB_ID,
         p_include_internal: false,
@@ -158,7 +158,7 @@ Deno.test('callWorkerJobListRpc forwards task center list filters', async () => 
   });
   assertEquals(supabase.calls, [
     {
-      fn: 'worker_list_jobs',
+      fn: 'svc_worker_list_jobs',
       args: {
         p_requested_by: TEST_USER_ID,
         p_subject_type: 'processes',
@@ -199,7 +199,7 @@ Deno.test('callWorkerJobCancelRpc forwards cancel args', async () => {
   });
   assertEquals(supabase.calls, [
     {
-      fn: 'worker_cancel_job',
+      fn: 'svc_worker_cancel_job',
       args: {
         p_job_id: TEST_JOB_ID,
         p_cancelled_by: TEST_USER_ID,

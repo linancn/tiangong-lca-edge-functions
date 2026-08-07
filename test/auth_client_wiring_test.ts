@@ -69,7 +69,7 @@ Deno.test(
     assertEquals(response.status, 200);
     assertEquals(seenAuthClients, [authClient]);
     assertEquals(serviceRpcCalls.length, 1);
-    assertEquals(serviceRpcCalls[0].fn, 'save_lifecycle_model_bundle');
+    assertEquals(serviceRpcCalls[0].fn, 'cmd_lifecycle_model_bundle_save');
     assertEquals(
       (serviceRpcCalls[0].args as { p_plan: { actorUserId: string } }).p_plan.actorUserId,
       TEST_USER_ID,

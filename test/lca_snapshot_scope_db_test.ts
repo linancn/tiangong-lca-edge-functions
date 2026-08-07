@@ -11,22 +11,30 @@ type MockState = {
 
 function createSupabaseMock(state: MockState) {
   return {
-    from(table: string) {
-      assertEquals(table, 'lca_network_snapshots');
-      return {
-        select(columns: string) {
-          assertEquals(columns, 'process_filter');
-          return this;
+    rpc(fn: string, args: Record<string, unknown>) {
+      assertEquals(fn, 'svc_lca_snapshot_candidates');
+      state.snapshotIds.push(args.p_snapshot_id);
+      if (state.error) {
+        return Promise.resolve({ data: null, error: state.error });
+      }
+      return Promise.resolve({
+        data: {
+          ok: true,
+          data: state.row
+            ? [
+                {
+                  snapshotId: args.p_snapshot_id,
+                  scope: 'full_library',
+                  processFilter: state.row.process_filter,
+                  createdAt: '2026-08-07T00:00:00Z',
+                  isActive: true,
+                  artifact: { artifactUrl: 's3://snapshot' },
+                },
+              ]
+            : [],
         },
-        eq(column: string, value: unknown) {
-          assertEquals(column, 'id');
-          state.snapshotIds.push(value);
-          return this;
-        },
-        maybeSingle() {
-          return Promise.resolve({ data: state.row, error: state.error });
-        },
-      };
+        error: null,
+      });
     },
   };
 }

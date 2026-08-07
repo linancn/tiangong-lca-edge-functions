@@ -415,7 +415,7 @@ Deno.test('createDataProductCommandRepository enqueues LCIA result package paylo
   });
   assertEquals(serviceClient.calls, [
     {
-      fn: 'worker_enqueue_job',
+      fn: 'svc_worker_enqueue_job',
       args: {
         p_job_kind: 'lcia_result.package_build',
         p_payload_json: {

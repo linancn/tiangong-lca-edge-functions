@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-06
-lastReviewedCommit: 45ea122c888d06bc5bd7c4a528908750e61b2a2d
-lastReviewedNote: 'Reviewed for Issue #264: the all-unit query v2 reader remains inside the existing LCA runtime ownership, production hotfix, validation, and workspace-integration boundaries.'
+lastReviewedAt: 2026-08-07
+lastReviewedCommit: 02e1aeb99aa7b336ef9009947655d9e69c85ffbc
+lastReviewedNote: 'Reviewed for Issue #422 schema cutover: Edge selects public for the nine core tables, api for RPC facades, and never exposes private relations.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -89,6 +89,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - Node baseline: `22`
 - local serve command: `npm start`
 - baseline local validation: non-mutating `npm run lint` and `npm run check`
+- schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `npm run format`
 - remote deploy entrypoints:
   - `npm run deploy:dev -- <function-name> [more-function-names...]`

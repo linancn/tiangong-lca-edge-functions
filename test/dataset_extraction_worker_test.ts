@@ -99,6 +99,11 @@ class FakeSupabase {
     return Promise.resolve({ data: { ok: true }, error: null });
   }
 
+  schema(schema: string): this {
+    assertEquals(schema, 'public');
+    return this;
+  }
+
   from(table: string): FakeDatasetQuery {
     this.rows[table] ??= [];
     return new FakeDatasetQuery(this.rows[table]);
