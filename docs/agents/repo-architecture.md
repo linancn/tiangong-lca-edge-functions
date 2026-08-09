@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-07
-lastReviewedCommit: 02e1aeb99aa7b336ef9009947655d9e69c85ffbc
+lastReviewedAt: 2026-08-09
+lastReviewedCommit: e7e2fdb107aa933650b364309848d5980f783e86
 lastReviewedNote: 'Reviewed for Issue #422 schema cutover: document explicit public/api selection and facade-only access to non-core database state.'
 related:
   - ../../AGENTS.md
@@ -177,6 +177,8 @@ Shared scope logic lives in:
 - `supabase/functions/_shared/lca_snapshot_scope.ts`
 
 `supabase/functions/_shared/worker_jobs_cutover.ts` owns the handoff from Edge runtime requests to database-owned `worker_jobs`, while `lca_snapshot_capabilities.ts` and `lca_snapshot_build_queue.ts` consume the service-only snapshot read/enqueue façades. The default path enqueues `lca.solve_one`, `lca.solve_all_unit`, `lca.build_snapshot`, and `lca.contribution_path` through `svc_lca_*`/`svc_worker_*` capability RPCs without directly reading or writing internal job, cache, result, or snapshot relations. Setting `LCA_WORKER_JOBS_ENABLED=false` or `WORKER_JOBS_CUTOVER_ENABLED=false` disables new LCA worker submissions and fails closed with `legacy_queue_disabled`; it must not fall back to legacy `lca_enqueue_job`. Edge still owns auth and request normalization only; `database-engine` owns persistence and `tiangong-lca-worker` owns execution.
+
+The public `scope` field on solve, result-query, and contribution-path requests selects a database snapshot family; it is not a deployment-environment label or an arbitrary cache namespace. Edge defaults an omitted or blank value to `full_library`, accepts `data_product` as the only alternate value, rejects every other value before snapshot lookup or enqueue, and carries the same canonical value through candidate lookup, request hashing, cached-job enqueue, and snapshot-build enqueue.
 
 The named `public_plus_owner_draft` calculation scope is a distinct versioned snapshot family. Edge freezes the authenticated actor and exact public-state-100 plus owner-state-0 predicate in a manifest and SHA-256; the owner-draft branch additionally requires null `team_id` and `review_id` on process/flow rows so team/reviewer visibility cannot leak into account-local calculation. That scope manifest applies only to processes and flows. LCIA method/factor truth is bound separately to the reviewed frontend static-cache manifest: Edge embeds the exact manifest bytes, raw SHA-256, path, and release hashes, but never accepts a client URL, path, or hash; the worker resolves the base URL from trusted configuration. Worker execution must independently enforce request/snapshot v2 and return exact `lca.calculation_evidence.v2` with all four source hashes and a non-empty 25-row `exchange_method_pair` coverage matrix. Every method identity and artifact locator must match the reviewed manifest, every row must have the same pair cardinality, aggregate counts must equal the row sums, and v2 gap-artifact record counts must equal all unmatched, invalid, and unsupported-direction pairs. Solve, query, and contribution-path routes reject v1 database/union evidence, the superseded combined-scope hash, missing evidence, and any source, identity, cardinality, count, status, or artifact drift before returning numeric values. Missing characterization factors are never represented as complete zero impact; raw private-storage gap URLs remain immutable evidence locators rather than browser download links.
 

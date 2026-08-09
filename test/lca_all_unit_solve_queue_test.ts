@@ -93,7 +93,7 @@ Deno.test('ensureLcaAllUnitSolveQueued reuses pending cache worker job', async (
   });
 
   const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
-    scope: 'dev-v1',
+    scope: 'full_library',
     snapshotId: 'snapshot-1',
     userId: 'user-1',
   });
@@ -113,7 +113,7 @@ Deno.test(
     const state = createMockState();
 
     const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
-      scope: 'dev-v1',
+      scope: 'full_library',
       snapshotId: 'snapshot-1',
       userId: 'user-1',
     });
@@ -139,7 +139,7 @@ Deno.test(
     assertEquals(payload.solve, { return_x: false, return_g: false, return_h: true });
 
     const requestPayload = rpcArgs.p_request_payload as Record<string, unknown>;
-    assertEquals(requestPayload.scope, 'dev-v1');
+    assertEquals(requestPayload.scope, 'full_library');
     assertEquals(requestPayload.snapshot_id, 'snapshot-1');
   },
 );
@@ -157,7 +157,7 @@ Deno.test(
     });
 
     const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
-      scope: 'dev-v1',
+      scope: 'full_library',
       snapshotId: 'snapshot-1',
       userId: 'user-1',
     });
@@ -175,7 +175,7 @@ Deno.test('ensureLcaAllUnitSolveQueued binds validated scope and LCIA evidence',
   const calculationEvidenceBinding = buildCalculationEvidenceV2('a'.repeat(64));
 
   const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
-    scope: 'dev-v1',
+    scope: 'full_library',
     snapshotId: 'snapshot-1',
     userId: 'user-1',
     calculationEvidenceBinding,
@@ -187,7 +187,7 @@ Deno.test('ensureLcaAllUnitSolveQueued binds validated scope and LCIA evidence',
   assertEquals(payload.calculation_evidence_binding, calculationEvidenceBinding);
   assertEquals(state.rpcCalls[0].args.p_request_payload, {
     version: 'lca_solve_v2',
-    scope: 'dev-v1',
+    scope: 'full_library',
     snapshot_id: 'snapshot-1',
     demand_mode: 'all_unit',
     solve: { return_x: false, return_g: false, return_h: true },
@@ -202,7 +202,7 @@ Deno.test(
     const state = createMockState();
 
     const result = await ensureLcaAllUnitSolveQueued(createSupabaseMock(state) as never, {
-      scope: 'dev-v1',
+      scope: 'full_library',
       snapshotId: 'snapshot-1',
       userId: 'user-1',
       readEnv: (key) => (key === 'LCA_WORKER_JOBS_ENABLED' ? 'false' : undefined),
