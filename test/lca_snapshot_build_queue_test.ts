@@ -33,7 +33,7 @@ Deno.test(
   async () => {
     const state: MockState = { rpcCalls: [] };
     const result = await ensureLcaSnapshotBuildQueued(createSupabaseMock(state) as never, {
-      scope: 'prod',
+      scope: 'full_library',
       dataScope: 'public_plus_owner_draft',
       userId: 'user-1',
     });
@@ -56,7 +56,7 @@ Deno.test(
     assertEquals(state.rpcCalls.length, 1);
     const rpcArgs = state.rpcCalls[0].args;
     assertEquals(state.rpcCalls[0].fn, 'svc_lca_snapshot_build_enqueue');
-    assertEquals(rpcArgs.p_scope, 'prod');
+    assertEquals(rpcArgs.p_scope, 'full_library');
     assertEquals(rpcArgs.p_process_filter, result.calculation_contract.process_filter);
     assertEquals(rpcArgs.p_payload_schema_version, 'lca.build_snapshot.request.v2');
     assertEquals(rpcArgs.p_requested_by, 'user-1');
@@ -100,7 +100,7 @@ Deno.test('snapshot queue ignores client source locator and no-LCIA override fie
     args: Record<string, unknown>,
   ) => ReturnType<typeof ensureLcaSnapshotBuildQueued>;
   const result = await enqueue(createSupabaseMock(state), {
-    scope: 'prod',
+    scope: 'full_library',
     dataScope: 'public_plus_owner_draft',
     userId: 'user-1',
     no_lcia: true,
@@ -134,7 +134,7 @@ Deno.test(
     const enqueue = async (requestRoots?: Array<typeof rootA>) => {
       const state: MockState = { rpcCalls: [] };
       const result = await ensureLcaSnapshotBuildQueued(createSupabaseMock(state) as never, {
-        scope: 'prod',
+        scope: 'full_library',
         dataScope: 'public_plus_owner_draft',
         userId: 'user-1',
         requestRoots,
