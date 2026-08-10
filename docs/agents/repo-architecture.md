@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-09
-lastReviewedCommit: e7e2fdb107aa933650b364309848d5980f783e86
-lastReviewedNote: 'Reviewed for Issue #422 schema cutover: document explicit public/api selection and facade-only access to non-core database state.'
+lastReviewedAt: 2026-08-10
+lastReviewedCommit: 6aa9d19b42c74fa0aa9c7dd63b48e726b7e03fad
+lastReviewedNote: 'Reviewed for Edge Issue #272 / workspace Issue #566: successful terminal diagnostics remain an Edge response-projection concern; repository boundaries are unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

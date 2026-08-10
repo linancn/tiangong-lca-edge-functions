@@ -186,6 +186,51 @@ Deno.test('buildPackageJobDiagnosticsSummary preserves structured upload diagnos
 });
 
 Deno.test(
+  'buildPackageJobDiagnosticsSummary suppresses stale errors for successful terminal jobs',
+  () => {
+    for (const status of ['ready', 'completed'] as const) {
+      const summary = buildPackageJobDiagnosticsSummary({
+        status,
+        diagnostics: {
+          error_code: 'artifact_too_large',
+          message: 'stale failure from a previous attempt',
+          stage: 'upload_object',
+          upload_mode: 'multipart',
+          artifact_byte_size: 123456,
+          http_status: 413,
+          storage_error_code: 'EntityTooLarge',
+        },
+        artifactsByKind: {},
+        requestCache: {
+          id: 'cache-1',
+          status: 'failed',
+          error_code: 'job_execution_failed',
+          error_message: 'stale cache failure',
+          hit_count: 1,
+          last_accessed_at: null,
+          created_at: null,
+          updated_at: null,
+          export_artifact_id: null,
+          report_artifact_id: null,
+        },
+      });
+
+      assertEquals(summary, {
+        error_code: null,
+        message: null,
+        stage: 'upload_object',
+        upload_mode: 'multipart',
+        artifact_byte_size: 123456,
+        http_status: null,
+        storage_error_code: null,
+        is_oversize: false,
+        source: 'none',
+      });
+    }
+  },
+);
+
+Deno.test(
   'buildPackageJobDiagnosticsSummary classifies legacy oversize strings from request cache',
   () => {
     const summary = buildPackageJobDiagnosticsSummary({

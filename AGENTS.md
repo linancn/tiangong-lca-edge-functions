@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-09
-lastReviewedCommit: e7e2fdb107aa933650b364309848d5980f783e86
-lastReviewedNote: 'Reviewed for Issue #422 schema cutover: Edge selects public for the nine core tables, api for RPC facades, and never exposes private relations.'
+lastReviewedAt: 2026-08-10
+lastReviewedCommit: 6aa9d19b42c74fa0aa9c7dd63b48e726b7e03fad
+lastReviewedNote: 'Reviewed for Edge Issue #272 / workspace Issue #566: the package diagnostics fix stays within the existing Edge runtime and test ownership boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
