@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-10'
-lastReviewedCommit: '605da2ae634fc5bd5b25ababee8c4cc0751bd5cf'
+lastReviewedAt: '2026-08-11'
+lastReviewedCommit: 'e25f650efcfc747e9350ca3ae0b0129702d03e84'
 lastReviewedNote: 'Edge search uses seven explicit multilingual search_text projectors, atomically dual-writes extracted_md and search_text during normal extraction, isolates search-only replay to search_text, and calls formal hybrid_search_* RPCs.'
 
 # Keep deterministic governance facts here.

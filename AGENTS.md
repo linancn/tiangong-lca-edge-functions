@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-10
-lastReviewedCommit: 605da2ae634fc5bd5b25ababee8c4cc0751bd5cf
-lastReviewedNote: 'Edge runtime owns seven explicit multilingual search_text projectors, atomic extracted_md/search_text dual-write, search-only replay, and formal hybrid_search_* callers while preserving existing auth, validation, deployment, and cross-repo boundaries.'
+lastReviewedAt: 2026-08-11
+lastReviewedCommit: e25f650efcfc747e9350ca3ae0b0129702d03e84
+lastReviewedNote: 'Edge runtime owns seven explicit multilingual search_text projectors, atomic extracted_md/search_text dual-write, the embedding_ft allowlist of seven dataset tables and nine unique schema-qualified function targets, search-only replay, and formal hybrid_search_* callers while preserving existing auth, validation, deployment, and cross-repo boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
