@@ -30,8 +30,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-10
-lastReviewedCommit: 6aa9d19b42c74fa0aa9c7dd63b48e726b7e03fad
-lastReviewedNote: 'Reviewed for Edge Issue #272 / workspace Issue #566: successful terminal diagnostics remain an Edge response-projection concern; repository boundaries are unchanged.'
+lastReviewedCommit: bd1c783516a7cea08534d035c9bdb90d60329de6
+lastReviewedNote: 'Reviewed for Edge Issue #271: request-scoped lifecycle bundle commands reinforce the existing actor-client and service-preflight boundary; repo shape is unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

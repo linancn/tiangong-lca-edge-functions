@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-10'
-lastReviewedCommit: '6aa9d19b42c74fa0aa9c7dd63b48e726b7e03fad'
-lastReviewedNote: 'Reviewed for Edge Issue #272 / workspace Issue #566: successful terminal package diagnostics suppress stale attempt errors without changing routing or ownership rules.'
+lastReviewedCommit: 'bd1c783516a7cea08534d035c9bdb90d60329de6'
+lastReviewedNote: 'Reviewed for Edge Issue #271: request-scoped lifecycle bundle commands use existing runtime ownership and routing rules without changing the governance graph.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

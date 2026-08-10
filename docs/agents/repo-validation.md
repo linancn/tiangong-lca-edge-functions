@@ -30,8 +30,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-10
-lastReviewedCommit: 6aa9d19b42c74fa0aa9c7dd63b48e726b7e03fad
-lastReviewedNote: 'Reviewed for Edge Issue #272 / workspace Issue #566: focused package diagnostics tests plus existing lint/check and CI remain the required proof path.'
+lastReviewedCommit: bd1c783516a7cea08534d035c9bdb90d60329de6
+lastReviewedNote: 'Reviewed for Edge Issue #271: focused lifecycle bundle wiring/schema tests plus the existing lint and check baseline remain the required proof path.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
