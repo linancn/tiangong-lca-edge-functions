@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-10
-lastReviewedCommit: 6aa9d19b42c74fa0aa9c7dd63b48e726b7e03fad
-lastReviewedNote: 'Reviewed for Edge Issue #272 / workspace Issue #566: the package diagnostics fix stays within the existing Edge runtime and test ownership boundaries.'
+lastReviewedCommit: bd1c783516a7cea08534d035c9bdb90d60329de6
+lastReviewedNote: 'Reviewed for Edge Issue #271: lifecycle bundle actor commands stay within the existing Edge auth, runtime, validation, and deployment boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

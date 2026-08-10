@@ -73,3 +73,31 @@ Deno.test('shared Supabase clients default RPC calls to schema api', async () =>
     );
   }
 });
+
+Deno.test('lifecycle bundle actor commands use request-scoped clients', async () => {
+  for (const [relativePath, rpcName] of [
+    [
+      '../supabase/functions/save_lifecycle_model_bundle/handler.ts',
+      'cmd_lifecycle_model_bundle_save',
+    ],
+    [
+      '../supabase/functions/delete_lifecycle_model_bundle/handler.ts',
+      'cmd_lifecycle_model_bundle_delete',
+    ],
+  ] as const) {
+    const source = await Deno.readTextFile(new URL(relativePath, import.meta.url));
+
+    assert(
+      source.includes('createRequestSupabaseClient'),
+      `${relativePath} must construct a request-scoped actor client`,
+    );
+    assert(
+      source.includes(`actorSupabase.rpc('${rpcName}'`),
+      `${relativePath} must execute ${rpcName} with the actor client`,
+    );
+    assert(
+      !source.includes(`serviceSupabase.rpc('${rpcName}'`),
+      `${relativePath} must not execute ${rpcName} with bare service role`,
+    );
+  }
+});
