@@ -24,7 +24,7 @@ Deno.test('parseHybridSearchClientRequest normalizes full hybrid search options'
 
   assertEquals(parsed.queryText, 'electricity');
   assertEquals(parsed.rpcOptions, {
-    filter_condition: '{"flowType":"Elementary flow"}',
+    filter_condition: { flowType: 'Elementary flow' },
     match_threshold: 0.42,
     match_count: 50,
     lexical_weight: 0.5,
@@ -46,7 +46,7 @@ Deno.test('parseHybridSearchClientRequest accepts explicit filter_condition stri
     filter_condition: '{"classification":["materials"]}',
   });
 
-  assertEquals(parsed.rpcOptions.filter_condition, '{"classification":["materials"]}');
+  assertEquals(parsed.rpcOptions.filter_condition, { classification: ['materials'] });
   assertEquals(parsed.rpcOptions.data_source, 'tg');
   assertEquals(parsed.rpcOptions.page_size, 10);
   assertEquals(parsed.rpcOptions.page_current, 1);
@@ -82,6 +82,18 @@ Deno.test('parseHybridSearchClientRequest rejects invalid filter_condition JSON'
 
   assertEquals(error.message, 'filter_condition must be a valid JSON object string');
 });
+
+Deno.test(
+  'parseHybridSearchClientRequest rejects array, scalar, and invalid string filters',
+  () => {
+    for (const filter_condition of [[], 0, false, '[]', '"scalar"', 'classification = materials']) {
+      assertThrows(
+        () => parseHybridSearchClientRequest({ query: 'steel', filter_condition }),
+        HybridSearchRequestError,
+      );
+    }
+  },
+);
 
 Deno.test('parseHybridSearchClientRequest rejects unsupported data_source', () => {
   const error = assertThrows(
@@ -127,7 +139,7 @@ Deno.test('buildHybridSearchRpcRequest builds the database RPC payload', () => {
     query_text: 'steel',
     query_terms: ['steel', 'stainless steel'],
     query_embedding: '[0.1,0.2]',
-    filter_condition: '{}',
+    filter_condition: {},
     match_threshold: 0.5,
     match_count: 20,
     lexical_weight: 0.5,

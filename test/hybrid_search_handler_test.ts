@@ -59,6 +59,7 @@ Deno.test(
         },
         body: JSON.stringify({
           query: 'private contact query',
+          filter_condition: '{"classification":["materials"]}',
           data_source: 'my',
           state_code: 0,
           team_id: 'c3000000-0000-4000-8000-000000000297',
@@ -77,6 +78,9 @@ Deno.test(
       [0.5, 0],
     );
     assertEquals(rpcCalls[0].body.data_source, 'my');
+    assertEquals(rpcCalls[0].body.filter_condition, { classification: ['materials'] });
+    assertEquals(typeof rpcCalls[0].body.filter_condition, 'object');
+    assertEquals(rpcCalls[1].body.filter_condition, { classification: ['materials'] });
     assertEquals(rpcCalls[0].body.state_code_filter, 0);
     assertEquals(rpcCalls[0].body.team_id_filter, 'c3000000-0000-4000-8000-000000000297');
     assertEquals(rpcCalls[1].body.state_code_filter, 0);

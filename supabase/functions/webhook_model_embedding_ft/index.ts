@@ -3,6 +3,17 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
+import {
+  asArray as sharedAsArray,
+  collectLocalizedTexts as sharedCollectLocalizedTexts,
+  isRecord as sharedIsRecord,
+  pickProperty as sharedPickProperty,
+  readClassificationPath as sharedReadClassificationPath,
+  readLocalizedText as sharedReadLocalizedText,
+  readPreferredLocalizedText as sharedReadPreferredLocalizedText,
+  readReferenceShortDescription as sharedReadReferenceShortDescription,
+  readDisplayTextLeaf as sharedReadTextLeaf,
+} from '../_shared/projection_primitives.ts';
 import { projectLifecycleModelSearchText } from '../_shared/search_text_projection.ts';
 import { supabaseClient } from '../_shared/supabase_client.ts';
 
@@ -16,82 +27,12 @@ interface WebhookPayload {
 
 const DEFAULT_LANG = 'en';
 
-const isObject = (value: unknown): value is Record<string, any> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
+const isObject = sharedIsRecord;
+const pickProperty = sharedPickProperty;
+const ensureArray = sharedAsArray;
+const getTextFromDict = sharedReadTextLeaf;
 
-const pickProperty = (obj: any, names: string[]) => {
-  if (!obj || typeof obj !== 'object') return undefined;
-  for (const name of names) {
-    const value = (obj as any)[name];
-    if (value !== undefined && value !== null) return value;
-  }
-  return undefined;
-};
-
-const ensureArray = <T>(obj: T | T[] | null | undefined): T[] => {
-  if (obj === null || obj === undefined) return [];
-  return Array.isArray(obj) ? obj : [obj];
-};
-
-const getTextFromDict = (data: any): string | null => {
-  if (data === null || data === undefined) return null;
-  if (typeof data === 'string' || typeof data === 'number') {
-    const text = String(data).trim();
-    return text || null;
-  }
-  if (isObject(data)) {
-    const text = data['#text'] ?? data['text'] ?? data['_text'];
-    if (typeof text === 'string') {
-      const trimmed = text.trim();
-      return trimmed || null;
-    }
-  }
-  return null;
-};
-
-const getLangText = (value: any, lang = DEFAULT_LANG): string | null => {
-  if (value === null || value === undefined) return null;
-
-  if (typeof value === 'string' || typeof value === 'number') {
-    const text = String(value).trim();
-    return text || null;
-  }
-
-  if (Array.isArray(value)) {
-    const exact = value.find(
-      (item) => isObject(item) && item['@xml:lang'] && item['@xml:lang'] === lang,
-    );
-    if (exact !== undefined) {
-      const text = getLangText(exact, lang);
-      if (text) return text;
-    }
-    for (const item of value) {
-      const text = getLangText(item, lang);
-      if (text) return text;
-    }
-    return null;
-  }
-
-  if (isObject(value)) {
-    if (typeof (value as any).get_text === 'function') {
-      const text = (value as any).get_text(lang);
-      if (text) {
-        const trimmed = String(text).trim();
-        if (trimmed) return trimmed;
-      }
-    }
-    const text = getTextFromDict(value);
-    if (text) return text;
-    for (const key of Object.keys(value)) {
-      if (key.toLowerCase().includes('text')) {
-        const nestedText = getLangText((value as any)[key], lang);
-        if (nestedText) return nestedText;
-      }
-    }
-  }
-
-  return null;
-};
+const getLangText = sharedReadPreferredLocalizedText;
 
 const toDisplayText = (value: any, lang = DEFAULT_LANG): string | null => {
   if (value === null || value === undefined) return null;
@@ -154,74 +95,8 @@ const formatNumber = (value: any): string => {
   return fixed.includes('.') ? fixed.replace(/\.?0+$/, '') : fixed;
 };
 
-const collectTexts = (value: any, lang = DEFAULT_LANG): string[] => {
-  if (value === null || value === undefined) return [];
-
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    const text = String(value).trim();
-    return text ? [text] : [];
-  }
-
-  let entries: any[] = [];
-  if (Array.isArray(value)) {
-    entries = value;
-  } else if (isObject(value)) {
-    entries = [value];
-  } else {
-    return [];
-  }
-
-  const langMatches: string[] = [];
-  const fallback: string[] = [];
-  for (const entry of entries) {
-    if (entry === null || entry === undefined) {
-      continue;
-    }
-    if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') {
-      const text = String(entry).trim();
-      if (text) fallback.push(text);
-      continue;
-    }
-    if (!isObject(entry)) continue;
-    const entryLang = pickProperty(entry, ['@xml:lang', 'xml:lang', 'xml_lang', 'lang']);
-    const text = getTextFromDict(entry);
-    if (!text) continue;
-    if (lang && entryLang === lang) {
-      langMatches.push(text);
-    } else {
-      fallback.push(text);
-    }
-  }
-  return langMatches.length ? langMatches : fallback;
-};
-
-const pickText = (value: any, lang = DEFAULT_LANG): string | null => {
-  if (value === null || value === undefined) return null;
-
-  if (Array.isArray(value)) {
-    const texts = collectTexts(value, lang);
-    return texts.length ? texts[0] : null;
-  }
-
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    const text = String(value).trim();
-    return text || null;
-  }
-
-  if (isObject(value)) {
-    if (typeof (value as any).get_text === 'function') {
-      const text = (value as any).get_text(lang);
-      if (text) {
-        const trimmed = String(text).trim();
-        if (trimmed) return trimmed;
-      }
-    }
-    const direct = getTextFromDict(value);
-    if (direct) return direct;
-  }
-
-  return null;
-};
+const collectTexts = sharedCollectLocalizedTexts;
+const pickText = sharedReadLocalizedText;
 
 const joinTexts = (value: any, lang = DEFAULT_LANG, sep = '\n\n'): string | null => {
   const texts = collectTexts(value, lang)
@@ -230,24 +105,7 @@ const joinTexts = (value: any, lang = DEFAULT_LANG, sep = '\n\n'): string | null
   return texts.length ? texts.join(sep) : null;
 };
 
-const pickShortDescription = (ref: any, lang = DEFAULT_LANG): string | null => {
-  if (ref === null || ref === undefined) return null;
-  if (Array.isArray(ref)) {
-    for (const entry of ref) {
-      const text = pickShortDescription(entry, lang);
-      if (text) return text;
-    }
-    return null;
-  }
-  if (isObject(ref)) {
-    const shortDesc = pickProperty(ref, ['common:shortDescription', 'common_short_description']);
-    const text = pickText(shortDesc, lang);
-    if (text) return text;
-    const direct = getTextFromDict(ref);
-    if (direct) return direct;
-  }
-  return null;
-};
+const pickShortDescription = sharedReadReferenceShortDescription;
 
 const findProcessDataSet = (data: any): any => {
   if (!isObject(data)) return null;
@@ -605,50 +463,7 @@ const getReferenceFlowSummary = (
   return { name, amount };
 };
 
-const getClassificationPath = (dataInfo: any): string | null => {
-  if (!dataInfo) return null;
-
-  const classificationInfo = pickProperty(dataInfo, [
-    'classificationInformation',
-    'classification_information',
-  ]);
-  if (!classificationInfo) return null;
-
-  const commonClassification = pickProperty(classificationInfo, [
-    'common:classification',
-    'common_classification',
-    'classification',
-  ]);
-  if (!commonClassification) return null;
-
-  const classes = ensureArray(
-    pickProperty(commonClassification, ['common:class', 'common_class', 'class']),
-  );
-  if (!classes.length) return null;
-
-  const getLevel = (item: any): number | null => {
-    const level = isObject(item) ? pickProperty(item, ['@level', 'level']) : null;
-    if (level === undefined || level === null) return null;
-    const parsed = Number(level);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const sorted = classes.slice().sort((a, b) => {
-    const levelA = getLevel(a);
-    const levelB = getLevel(b);
-    if (levelA === null && levelB === null) return 0;
-    if (levelA === null) return 1;
-    if (levelB === null) return -1;
-    return levelA - levelB;
-  });
-
-  const parts: string[] = [];
-  for (const entry of sorted) {
-    const text = getTextFromDict(entry);
-    if (text) parts.push(text);
-  }
-  return parts.length ? parts.join(' > ') : null;
-};
+const getClassificationPath = sharedReadClassificationPath;
 
 const getTimeCoverage = (processInfo: any, lang = DEFAULT_LANG): string | null => {
   const timeInfo = processInfo ? pickProperty(processInfo, ['time']) : null;

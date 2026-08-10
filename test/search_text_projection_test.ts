@@ -36,7 +36,10 @@ const PROCESS_FIXTURE = {
           functionalUnitFlowProperties: [{ '@xml:lang': 'en', '#text': 'mass' }],
         },
         identifierOfSubDataSet: 'SUB-1',
-        'common:synonyms': [{ '@xml:lang': 'en', '#text': 'same-value' }],
+        'common:synonyms': [
+          { '@xml:lang': 'en', '#text': 'same-value' },
+          { '@xml:lang': 'en', '#text': 'process synonym' },
+        ],
         classificationInformation: {
           'common:classification': {
             'common:class': [
@@ -45,7 +48,10 @@ const PROCESS_FIXTURE = {
             ],
           },
         },
-        'common:generalComment': [{ '@xml:lang': 'en', '#text': 'same-value' }],
+        'common:generalComment': [
+          { '@xml:lang': 'en', '#text': 'same-value' },
+          { '@xml:lang': 'en', '#text': 'Process general comment' },
+        ],
       },
       quantitativeReference: {
         functionalUnitOrOther: [{ '@xml:lang': 'en', '#text': 'one kilogram' }],
@@ -86,13 +92,19 @@ const PROCESS_FIXTURE = {
       },
       dataSourcesTreatmentAndRepresentativeness: {
         dataCutOffAndCompletenessPrinciples: [{ '@xml:lang': 'en', '#text': 'complete' }],
-        deviationsFromCutOffAndCompletenessPrinciples: [{ '@xml:lang': 'en', '#text': 'none' }],
+        deviationsFromCutOffAndCompletenessPrinciples: [
+          { '@xml:lang': 'en', '#text': 'No cutoff deviation' },
+        ],
         dataSelectionAndCombinationPrinciples: [{ '@xml:lang': 'en', '#text': 'measured' }],
-        deviationsFromSelectionAndCombinationPrinciples: [{ '@xml:lang': 'en', '#text': 'none' }],
+        deviationsFromSelectionAndCombinationPrinciples: [
+          { '@xml:lang': 'en', '#text': 'No selection deviation' },
+        ],
         dataTreatmentAndExtrapolationsPrinciples: [{ '@xml:lang': 'en', '#text': 'direct' }],
-        deviationsFromTreatmentAndExtrapolationPrinciples: [{ '@xml:lang': 'en', '#text': 'none' }],
+        deviationsFromTreatmentAndExtrapolationPrinciples: [
+          { '@xml:lang': 'en', '#text': 'No treatment deviation' },
+        ],
         samplingProcedure: [{ '@xml:lang': 'en', '#text': 'random' }],
-        dataCollectionPeriod: [{ '@xml:lang': 'en', '#text': '2024' }],
+        dataCollectionPeriod: [{ '@xml:lang': 'en', '#text': '2024 collection period' }],
         uncertaintyAdjustments: [{ '@xml:lang': 'en', '#text': 'low' }],
         useAdviceForDataSet: [{ '@xml:lang': 'en', '#text': 'Use for kiln studies' }],
       },
@@ -132,7 +144,10 @@ const FLOW_FIXTURE = {
           mixAndLocationTypes: [{ '@xml:lang': 'de', '#text': 'Mischung' }],
           flowProperties: [{ '@xml:lang': 'en', '#text': 'Mass' }],
         },
-        'common:synonyms': [{ '@xml:lang': 'en', '#text': 'same-value' }],
+        'common:synonyms': [
+          { '@xml:lang': 'en', '#text': 'same-value' },
+          { '@xml:lang': 'en', '#text': 'flow synonym' },
+        ],
         classificationInformation: {
           'common:elementaryFlowCategorization': {
             'common:category': [{ '@level': 0, '#text': 'Emissions' }],
@@ -152,7 +167,7 @@ const FLOW_FIXTURE = {
     flowProperties: {
       flowProperty: [
         {
-          dataSetInternalID: '0',
+          dataSetInternalID: 'FLOW-PROPERTY-INTERNAL-ID',
           meanValue: 'EXCLUDED-MEAN',
           referenceToFlowPropertyDataSet: [
             {
@@ -325,31 +340,157 @@ const UNIT_GROUP_FIXTURE = {
         { name: 'g', generalComment: [{ '@xml:lang': 'de', '#text': 'Gramm' }] },
       ],
     },
+    administrativeInformation: {
+      publicationAndOwnership: { 'common:dataSetVersion': 'EXCLUDED-UNIT-VERSION' },
+    },
   },
 };
+
+type ContractValue = { path: string; value: string };
 
 const CASES: Array<{
   kind: SearchTextDatasetKind;
   fixture: unknown;
   projector: (value: unknown, rowId: string) => string;
-  included: string[];
-  excluded: string[];
+  included: ContractValue[];
+  excluded: ContractValue[];
   ownUuid: string;
 }> = [
   {
     kind: 'process',
     fixture: PROCESS_FIXTURE,
     projector: projectProcessSearchText,
-    included: ['Deutscher Prozess', '中文流程', 'CN', 'CN-31', 'Reference product', 'same-value'],
-    excluded: ['EXCLUDED-VERSION', 'REF-UUID', 'EXCLUDED-AMOUNT', 'EXCLUDED-NON-REFERENCE'],
+    included: [
+      { path: 'name.baseName', value: 'English process' },
+      { path: 'name.treatmentStandardsRoutes', value: 'voie française' },
+      { path: 'name.mixAndLocationTypes', value: 'market mix' },
+      { path: 'name.functionalUnitFlowProperties', value: 'mass' },
+      { path: 'identifierOfSubDataSet', value: 'SUB-1' },
+      { path: 'common:synonyms', value: 'process synonym' },
+      { path: 'classificationInformation.common:classification.common:class', value: 'Class root' },
+      { path: 'common:generalComment', value: 'Process general comment' },
+      { path: 'quantitativeReference.functionalUnitOrOther', value: 'one kilogram' },
+      { path: 'time.common:timeRepresentativenessDescription', value: '2024 production period' },
+      { path: 'geography.locationOfOperationSupplyOrProduction.@location', value: 'CN' },
+      {
+        path: 'geography.locationOfOperationSupplyOrProduction.descriptionOfRestrictions',
+        value: '区域限制',
+      },
+      {
+        path: 'geography.subLocationOfOperationSupplyOrProduction.@subLocation',
+        value: 'CN-31',
+      },
+      {
+        path: 'geography.subLocationOfOperationSupplyOrProduction.descriptionOfRestrictions',
+        value: 'Shanghai only',
+      },
+      {
+        path: 'technology.technologyDescriptionAndIncludedProcesses',
+        value: 'Included kiln process',
+      },
+      { path: 'technology.technologicalApplicability', value: 'Industrial kiln' },
+      { path: 'LCIMethodAndAllocation.LCIMethodPrinciple', value: 'Attributional' },
+      {
+        path: 'LCIMethodAndAllocation.deviationsFromLCIMethodPrinciple',
+        value: 'No deviation',
+      },
+      { path: 'LCIMethodAndAllocation.LCIMethodApproaches', value: 'Cut-off' },
+      { path: 'LCIMethodAndAllocation.deviationsFromLCIMethodApproaches', value: 'None' },
+      { path: 'LCIMethodAndAllocation.modellingConstants', value: 'constant A' },
+      {
+        path: 'LCIMethodAndAllocation.deviationsFromModellingConstants',
+        value: 'No constant deviation',
+      },
+      {
+        path: 'dataSourcesTreatmentAndRepresentativeness.dataCutOffAndCompletenessPrinciples',
+        value: 'complete',
+      },
+      {
+        path: 'dataSourcesTreatmentAndRepresentativeness.deviationsFromCutOffAndCompletenessPrinciples',
+        value: 'No cutoff deviation',
+      },
+      {
+        path: 'dataSourcesTreatmentAndRepresentativeness.dataSelectionAndCombinationPrinciples',
+        value: 'measured',
+      },
+      {
+        path: 'dataSourcesTreatmentAndRepresentativeness.deviationsFromSelectionAndCombinationPrinciples',
+        value: 'No selection deviation',
+      },
+      {
+        path: 'dataSourcesTreatmentAndRepresentativeness.dataTreatmentAndExtrapolationsPrinciples',
+        value: 'direct',
+      },
+      {
+        path: 'dataSourcesTreatmentAndRepresentativeness.deviationsFromTreatmentAndExtrapolationPrinciples',
+        value: 'No treatment deviation',
+      },
+      { path: 'dataSourcesTreatmentAndRepresentativeness.samplingProcedure', value: 'random' },
+      {
+        path: 'dataSourcesTreatmentAndRepresentativeness.dataCollectionPeriod',
+        value: '2024 collection period',
+      },
+      { path: 'dataSourcesTreatmentAndRepresentativeness.uncertaintyAdjustments', value: 'low' },
+      {
+        path: 'dataSourcesTreatmentAndRepresentativeness.useAdviceForDataSet',
+        value: 'Use for kiln studies',
+      },
+      {
+        path: 'referenceToReferenceFlow.referenceToFlowDataSet.shortDescription',
+        value: 'Reference product',
+      },
+    ],
+    excluded: [
+      {
+        path: 'administrativeInformation.publicationAndOwnership.common:dataSetVersion',
+        value: 'EXCLUDED-VERSION',
+      },
+      { path: 'referenceToReferenceFlow.exchange.internalId', value: 'ref-flow-1' },
+      { path: 'referenceToReferenceFlow.referenceToFlowDataSet.@refObjectId', value: 'REF-UUID' },
+      { path: 'referenceToReferenceFlow.exchange.amount', value: 'EXCLUDED-AMOUNT' },
+      {
+        path: 'nonReferenceExchange.referenceToFlowDataSet.shortDescription',
+        value: 'EXCLUDED-NON-REFERENCE',
+      },
+    ],
     ownUuid: PROCESS_UUID,
   },
   {
     kind: 'flow',
     fixture: FLOW_FIXTURE,
     projector: projectFlowSearchText,
-    included: ['English flow', '处理路线', '50-00-0', '200-001-8', 'Mass property', '质量属性'],
-    excluded: ['EXCLUDED-VERSION', 'FLOW-PROPERTY-UUID', 'EXCLUDED-MEAN'],
+    included: [
+      { path: 'name.baseName', value: 'English flow' },
+      { path: 'name.treatmentStandardsRoutes', value: '处理路线' },
+      { path: 'name.mixAndLocationTypes', value: 'Mischung' },
+      { path: 'name.flowProperties', value: 'Mass' },
+      { path: 'common:synonyms', value: 'flow synonym' },
+      {
+        path: 'classificationInformation.common:elementaryFlowCategorization.common:category',
+        value: 'Emissions',
+      },
+      { path: 'classificationInformation.common:classification.common:class', value: 'Product' },
+      { path: 'CASNumber', value: '50-00-0' },
+      { path: 'common:other.ecn:ECNumber', value: '200-001-8' },
+      { path: 'sumFormula', value: 'CH2O' },
+      { path: 'common:generalComment', value: 'Commentaire' },
+      { path: 'geography.locationOfSupply.@location', value: 'GLO' },
+      { path: 'technology.technologicalApplicability', value: 'All sites' },
+      { path: 'referenceToFlowPropertyDataSet.common:shortDescription', value: 'Mass property' },
+      { path: 'referenceToFlowPropertyDataSet.common:shortDescription', value: '质量属性' },
+    ],
+    excluded: [
+      {
+        path: 'administrativeInformation.publicationAndOwnership.common:dataSetVersion',
+        value: 'EXCLUDED-VERSION',
+      },
+      { path: 'flowProperty.dataSetInternalID', value: 'FLOW-PROPERTY-INTERNAL-ID' },
+      {
+        path: 'flowProperty.referenceToFlowPropertyDataSet.@refObjectId',
+        value: 'FLOW-PROPERTY-UUID',
+      },
+      { path: 'flowProperty.meanValue', value: 'EXCLUDED-MEAN' },
+    ],
     ownUuid: FLOW_UUID,
   },
   {
@@ -357,20 +498,37 @@ const CASES: Array<{
     fixture: LIFECYCLE_MODEL_FIXTURE,
     projector: projectLifecycleModelSearchText,
     included: [
-      'Model name',
-      '组合',
-      'Resulting process',
-      'External guide',
-      'Foreground group',
-      'Model process',
-      'Model use advice',
+      { path: 'name.baseName', value: 'Model name' },
+      { path: 'name.treatmentStandardsRoutes', value: 'Route' },
+      { path: 'name.mixAndLocationTypes', value: '组合' },
+      { path: 'name.functionalUnitFlowProperties', value: 'unité' },
+      {
+        path: 'classificationInformation.common:classification.common:class',
+        value: 'Model class',
+      },
+      { path: 'common:generalComment', value: 'Model description' },
+      { path: 'referenceToResultingProcess.common:shortDescription', value: 'Resulting process' },
+      { path: 'referenceToExternalDocumentation.common:shortDescription', value: 'External guide' },
+      { path: 'technology.groupDeclarations.group.groupName', value: 'Foreground group' },
+      {
+        path: 'technology.processes.processInstance.referenceToProcess.common:shortDescription',
+        value: 'Model process',
+      },
+      { path: 'dataSourcesTreatmentEtc.useAdviceForDataSet', value: 'Model use advice' },
     ],
     excluded: [
-      'EXCLUDED-VERSION',
-      'RESULTING-PROCESS-UUID',
-      'PROCESS-UUID',
-      'INSTANCE-ID',
-      'EXCLUDED-SCALE',
+      {
+        path: 'administrativeInformation.publicationAndOwnership.common:dataSetVersion',
+        value: 'EXCLUDED-VERSION',
+      },
+      { path: 'referenceToResultingProcess.@refObjectId', value: 'RESULTING-PROCESS-UUID' },
+      { path: 'referenceToExternalDocumentation.@uri', value: 'https://excluded.example.test/doc' },
+      {
+        path: 'technology.processes.processInstance.referenceToProcess.@refObjectId',
+        value: 'PROCESS-UUID',
+      },
+      { path: 'technology.processes.processInstance.@dataSetInternalID', value: 'INSTANCE-ID' },
+      { path: 'technology.processes.processInstance.scalingFactor', value: 'EXCLUDED-SCALE' },
     ],
     ownUuid: MODEL_UUID,
   },
@@ -378,16 +536,33 @@ const CASES: Array<{
     kind: 'contact',
     fixture: CONTACT_FIXTURE,
     projector: projectContactSearchText,
-    included: ['Alice', '爱丽丝', 'A. Beispiel', 'alice@example.test', 'Contact notes'],
-    excluded: ['EXCLUDED-WEBSITE'],
+    included: [
+      { path: 'common:name', value: 'Alice' },
+      { path: 'common:name', value: '爱丽丝' },
+      { path: 'common:shortName', value: 'A. Beispiel' },
+      { path: 'classificationInformation.common:classification.common:class', value: 'Researcher' },
+      { path: 'contactAddress', value: '1 Main Street' },
+      { path: 'email', value: 'alice@example.test' },
+      { path: 'telephone', value: '+1-555-0100' },
+      { path: 'telefax', value: '+1-555-0101' },
+      { path: 'centralContactPoint', value: 'Central desk' },
+      { path: 'contactDescriptionOrComment', value: 'Contact notes' },
+    ],
+    excluded: [{ path: 'WWWAddress', value: 'EXCLUDED-WEBSITE' }],
     ownUuid: CONTACT_UUID,
   },
   {
     kind: 'flowproperty',
     fixture: FLOW_PROPERTY_FIXTURE,
     projector: projectFlowPropertySearchText,
-    included: ['Net calorific value', '低位热值', 'Energy per mass'],
-    excluded: ['UNIT-GROUP-UUID'],
+    included: [
+      { path: 'common:name', value: 'Net calorific value' },
+      { path: 'common:synonyms', value: '低位热值' },
+      { path: 'classificationInformation.common:classification.common:class', value: 'Energy' },
+      { path: 'common:generalComment', value: 'Energy value' },
+      { path: 'referenceToReferenceUnitGroup.common:shortDescription', value: 'Energy per mass' },
+    ],
+    excluded: [{ path: 'referenceToReferenceUnitGroup.@refObjectId', value: 'UNIT-GROUP-UUID' }],
     ownUuid: PROPERTY_UUID,
   },
   {
@@ -395,21 +570,43 @@ const CASES: Array<{
     fixture: SOURCE_FIXTURE,
     projector: projectSourceSearchText,
     included: [
-      'IPCC source',
-      'IPCC 2025 DOI 10.0000/example',
-      'Technical report',
-      'Description source',
-      'Author group',
+      { path: 'common:shortName', value: 'IPCC source' },
+      { path: 'classificationInformation.common:classification.common:class', value: 'Report' },
+      { path: 'sourceCitation', value: 'IPCC 2025 DOI 10.0000/example' },
+      { path: 'publicationType', value: 'Technical report' },
+      { path: 'sourceDescriptionOrComment', value: 'Description source' },
+      { path: 'referenceToContact.common:shortDescription', value: 'Author group' },
     ],
-    excluded: ['CONTACT-UUID', 'EXCLUDED-URI'],
+    excluded: [
+      { path: 'referenceToContact.@refObjectId', value: 'CONTACT-UUID' },
+      { path: 'referenceToDigitalFile.@uri', value: 'EXCLUDED-URI' },
+    ],
     ownUuid: SOURCE_UUID,
   },
   {
     kind: 'unitgroup',
     fixture: UNIT_GROUP_FIXTURE,
     projector: projectUnitGroupSearchText,
-    included: ['Units of mass', 'Physical unit', '质量单位', 'kg', 'kilogram', 'g', 'Gramm'],
-    excluded: ['UNIT-INTERNAL-ID', 'EXCLUDED-MEAN'],
+    included: [
+      { path: 'common:name', value: 'Units of mass' },
+      {
+        path: 'classificationInformation.common:classification.common:class',
+        value: 'Physical unit',
+      },
+      { path: 'common:generalComment', value: '质量单位' },
+      { path: 'units.unit[0].name', value: 'kg' },
+      { path: 'units.unit[0].generalComment', value: 'kilogram' },
+      { path: 'units.unit[1].name', value: 'g' },
+      { path: 'units.unit[1].generalComment', value: 'Gramm' },
+    ],
+    excluded: [
+      { path: 'units.unit[0].@dataSetInternalID', value: 'UNIT-INTERNAL-ID' },
+      { path: 'units.unit[0].meanValue', value: 'EXCLUDED-MEAN' },
+      {
+        path: 'administrativeInformation.publicationAndOwnership.common:dataSetVersion',
+        value: 'EXCLUDED-UNIT-VERSION',
+      },
+    ],
     ownUuid: UNIT_GROUP_UUID,
   },
 ];
@@ -417,9 +614,11 @@ const CASES: Array<{
 Deno.test('seven explicit projectors honor included/excluded path contracts', () => {
   for (const testCase of CASES) {
     const text = testCase.projector(testCase.fixture, testCase.ownUuid);
-    for (const value of testCase.included) assertStringIncludes(text, value, testCase.kind);
-    for (const value of testCase.excluded) {
-      assert(!text.includes(value), `${testCase.kind} leaked excluded value ${value}`);
+    for (const { path, value } of testCase.included) {
+      assertStringIncludes(text, value, `${testCase.kind} included path ${path}`);
+    }
+    for (const { path, value } of testCase.excluded) {
+      assert(!text.includes(value), `${testCase.kind} leaked excluded path ${path}: ${value}`);
     }
     assertEquals(
       text.split('\n').filter((line) => line === 'same-value').length,

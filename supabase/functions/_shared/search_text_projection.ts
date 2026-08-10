@@ -10,13 +10,18 @@
 export type SearchTextDatasetKind =
   'process' | 'flow' | 'lifecyclemodel' | 'contact' | 'flowproperty' | 'source' | 'unitgroup';
 
-type JsonRecord = Record<string, unknown>;
-type PathSegment = readonly string[];
-
-interface LocalizedFragment {
-  language: string;
-  text: string;
-}
+import type { JsonRecord, LocalizedFragment, PathSegment } from './projection_primitives.ts';
+import {
+  asArray,
+  isRecord,
+  nestedItems,
+  pick,
+  readLocalizedFragments,
+  readPath,
+  readReferenceShortDescriptionFragments,
+  readScalarValue,
+  scalarText,
+} from './projection_primitives.ts';
 
 interface ProjectionFragment extends LocalizedFragment {
   fieldIndex: number;
@@ -24,123 +29,6 @@ interface ProjectionFragment extends LocalizedFragment {
 }
 
 const keys = (...values: string[]): PathSegment => values;
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function asArray(value: unknown): unknown[] {
-  if (value === undefined || value === null) return [];
-  return Array.isArray(value) ? value : [value];
-}
-
-function nestedItems(value: unknown, itemNames: PathSegment): unknown[] {
-  if (value === undefined || value === null) return [];
-  return asArray(value).flatMap((item) => {
-    const nested = readPath(item, itemNames);
-    return nested === undefined || nested === null ? [item] : asArray(nested);
-  });
-}
-
-function pick(record: unknown, ...names: string[]): unknown {
-  if (!isRecord(record)) return undefined;
-  for (const name of names) {
-    const value = record[name];
-    if (value !== undefined && value !== null) return value;
-  }
-  return undefined;
-}
-
-function readPath(value: unknown, ...segments: PathSegment[]): unknown {
-  let current = value;
-  for (const segment of segments) {
-    current = pick(current, ...segment);
-    if (current === undefined || current === null) return undefined;
-  }
-  return current;
-}
-
-function scalarText(value: unknown): string | null {
-  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') {
-    return null;
-  }
-  const text = String(value).trim();
-  return text || null;
-}
-
-function readTextLeaf(value: unknown): string | null {
-  const scalar = scalarText(value);
-  if (scalar) return scalar;
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const text = readTextLeaf(item);
-      if (text) return text;
-    }
-    return null;
-  }
-  if (!isRecord(value)) return null;
-
-  for (const name of ['#text', 'text', '_text']) {
-    const text = readTextLeaf(value[name]);
-    if (text) return text;
-  }
-  const scalarValue = scalarText(value.value);
-  if (scalarValue) return scalarValue;
-  return null;
-}
-
-function languageOf(value: JsonRecord): string {
-  return (scalarText(pick(value, '@xml:lang', 'xml:lang', 'xml_lang', 'lang')) ?? '').toLowerCase();
-}
-
-function isLanguageKey(value: string): boolean {
-  return /^[a-z]{2,3}(?:[-_][a-z0-9]{2,8})?$/iu.test(value);
-}
-
-function readLocalizedFragments(value: unknown): LocalizedFragment[] {
-  const fragments: LocalizedFragment[] = [];
-
-  const visit = (candidate: unknown, inheritedLanguage = ''): void => {
-    const scalar = scalarText(candidate);
-    if (scalar) {
-      fragments.push({ language: inheritedLanguage, text: scalar });
-      return;
-    }
-
-    if (Array.isArray(candidate)) {
-      for (const item of candidate) visit(item, inheritedLanguage);
-      return;
-    }
-
-    if (!isRecord(candidate)) return;
-
-    const language = languageOf(candidate) || inheritedLanguage;
-    const direct = readTextLeaf(candidate);
-    if (direct) {
-      fragments.push({ language, text: direct });
-      return;
-    }
-
-    const languageEntries = Object.entries(candidate).filter(
-      ([name]) => isLanguageKey(name) && !name.startsWith('@'),
-    );
-    if (languageEntries.length > 0) {
-      for (const [name, child] of languageEntries) visit(child, name.toLowerCase());
-      return;
-    }
-
-    for (const name of ['items', 'values', 'entries', 'value']) {
-      if (candidate[name] !== undefined) visit(candidate[name], language);
-    }
-  };
-
-  visit(value);
-  return fragments;
-}
-
-function readScalarValue(value: unknown): string | null {
-  return readLocalizedFragments(value)[0]?.text ?? null;
-}
 
 function readAttributeOrText(value: unknown, attributeNames: PathSegment): string | null {
   for (const item of asArray(value)) {
@@ -253,13 +141,17 @@ class ProjectionBuilder {
 
   addLocalized(fieldIndex: number, value: unknown): void {
     for (const fragment of readLocalizedFragments(value)) {
-      this.fragments.push({
-        fieldIndex,
-        language: fragment.language,
-        text: fragment.text,
-        sourceIndex: this.nextSourceIndex++,
-      });
+      this.addFragment(fieldIndex, fragment);
     }
+  }
+
+  addFragment(fieldIndex: number, fragment: LocalizedFragment): void {
+    this.fragments.push({
+      fieldIndex,
+      language: fragment.language,
+      text: fragment.text,
+      sourceIndex: this.nextSourceIndex++,
+    });
   }
 
   addScalar(fieldIndex: number, value: unknown): void {
@@ -322,18 +214,9 @@ function addReferenceDescriptions(
   references: unknown,
 ): void {
   for (const reference of asArray(references)) {
-    builder.addLocalized(
-      fieldIndex,
-      readPath(
-        reference,
-        keys(
-          'common:shortDescription',
-          'common_short_description',
-          'shortDescription',
-          'short_description',
-        ),
-      ),
-    );
+    for (const fragment of readReferenceShortDescriptionFragments(reference)) {
+      builder.addFragment(fieldIndex, fragment);
+    }
   }
 }
 
@@ -622,18 +505,9 @@ export function projectProcessSearchText(jsonOrdered: unknown, rowId: string): s
 
   const referenceDescriptions = processReferenceFlowDescriptions(dataset, quantitativeReference);
   for (const reference of referenceDescriptions) {
-    builder.addLocalized(
-      field,
-      readPath(
-        reference,
-        keys(
-          'common:shortDescription',
-          'common_short_description',
-          'shortDescription',
-          'short_description',
-        ),
-      ),
-    );
+    for (const fragment of readReferenceShortDescriptionFragments(reference)) {
+      builder.addFragment(field, fragment);
+    }
   }
   field++;
   addOwnUuid(builder, field, rowId);

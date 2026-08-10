@@ -443,26 +443,33 @@ Deno.test('max-read generator failures are recorded and removed', async () => {
   assertEquals(supabase.rpcCalls.at(-1)?.fn, 'cmd_dataset_extraction_record_failure');
 });
 
-Deno.test('unsupported extraction kind and process jobs fail deterministically', async () => {
-  const supabase = new FakeSupabase();
-  supabase.claimedJobs = [
-    buildJob(60, 'flow', 'flows', undefined, '01.00.000', 'legacy_kind'),
-    buildJob(61, 'process', 'processes'),
-  ];
+Deno.test(
+  'unsupported extraction kinds fail; Process extracted_md jobs require an injected Markdown generator',
+  async () => {
+    const supabase = new FakeSupabase();
+    supabase.claimedJobs = [
+      buildJob(60, 'flow', 'flows', undefined, '01.00.000', 'legacy_kind'),
+      buildJob(61, 'process', 'processes'),
+    ];
 
-  const result = await processDatasetExtractionJobs({
-    supabase: supabase as unknown as SupabaseClient,
-  });
+    const result = await processDatasetExtractionJobs({
+      supabase: supabase as unknown as SupabaseClient,
+    });
 
-  assertEquals(
-    result.results.map((item) => item.status),
-    ['unsupported', 'unsupported'],
-  );
-  assertEquals(
-    result.results.map((item) => item.error_code),
-    ['UNSUPPORTED_EXTRACTION_KIND', 'UNSUPPORTED_ENTITY_KIND'],
-  );
-});
+    assertEquals(
+      result.results.map((item) => item.status),
+      ['unsupported', 'unsupported'],
+    );
+    assertEquals(
+      result.results.map((item) => item.error_code),
+      ['UNSUPPORTED_EXTRACTION_KIND', 'UNSUPPORTED_ENTITY_KIND'],
+    );
+    assertEquals(
+      result.results[1].error_message,
+      'No extracted_md generator registered for process',
+    );
+  },
+);
 
 Deno.test('flow extraction helpers retain string json_ordered compatibility', () => {
   const parsed = normalizeJsonOrdered(JSON.stringify(FIXTURES.flow));
