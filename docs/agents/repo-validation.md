@@ -31,7 +31,7 @@ checkPaths:
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-10
 lastReviewedCommit: bd1c783516a7cea08534d035c9bdb90d60329de6
-lastReviewedNote: 'Reviewed for Edge Issue #271: focused lifecycle bundle wiring/schema tests plus the existing lint and check baseline remain the required proof path.'
+lastReviewedNote: 'Reviewed for Edge Issues #271 and #275: focused lifecycle, v2 package-preview, and Calculation Bundle schema tests retain the existing lint and check baseline.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

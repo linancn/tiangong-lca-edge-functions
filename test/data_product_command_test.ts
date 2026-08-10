@@ -60,6 +60,7 @@ const auditPayload = buildCommandAuditPayload({
 const unusedPreviewProjectionDeps = {
   fetchSnapshotArtifactUrl: () => Promise.reject(new Error('not used')),
   fetchJsonArtifact: () => Promise.reject(new Error('not used')),
+  fetchArtifactBytes: () => Promise.reject(new Error('not used')),
   fetchPreviewMetadata: () => Promise.reject(new Error('not used')),
 };
 
@@ -113,8 +114,18 @@ Deno.test(
       action: 'create_closure_check',
       requestedScope: {
         coverageMode: 'subset',
-        processes: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
-        lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+        processes: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            version: '01.00.000',
+          },
+        ],
+        lciaMethods: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            version: '01.00.000',
+          },
+        ],
         linkPolicy: { technosphereBoundaryPolicy: 'closed' },
       },
       requestIdempotencyToken: 'new-check-token',
@@ -188,7 +199,12 @@ Deno.test(
       action: 'create_closure_check',
       requestedScope: {
         coverageMode: 'global_eligible',
-        lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+        lciaMethods: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            version: '01.00.000',
+          },
+        ],
         requestedScopeHash: 'client-must-not-bind-this',
       },
       requestIdempotencyToken: 'token',
@@ -219,7 +235,12 @@ Deno.test(
           action: 'create_closure_check',
           requestedScope: {
             coverageMode: 'global_eligible',
-            lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+            lciaMethods: [
+              {
+                id: '11111111-1111-4111-8111-111111111111',
+                version: '01.00.000',
+              },
+            ],
           },
           requestIdempotencyToken: 'token',
         },
@@ -228,7 +249,12 @@ Deno.test(
       {
         p_requested_scope: {
           coverageMode: 'global_eligible',
-          lciaMethods: [{ id: '11111111-1111-4111-8111-111111111111', version: '01.00.000' }],
+          lciaMethods: [
+            {
+              id: '11111111-1111-4111-8111-111111111111',
+              version: '01.00.000',
+            },
+          ],
         },
         p_request_idempotency_token: 'token',
         p_audit: auditPayload,
@@ -238,7 +264,10 @@ Deno.test(
       buildTaskSummaryV2FeedRpcArgs({
         action: 'list_task_feed',
         category: 'data_product',
-        cursor: { updatedAt: '2026-07-22T00:00:00.000Z', jobId: TEST_WORKER_JOB_ID },
+        cursor: {
+          updatedAt: '2026-07-22T00:00:00.000Z',
+          jobId: TEST_WORKER_JOB_ID,
+        },
         rootOnly: true,
       }),
       {
@@ -617,7 +646,11 @@ Deno.test(
       {
         ...baseProjection,
         summary: {
-          groups: [{ children: [{ serviceCredential: 'service-role-secret' }] }],
+          groups: [
+            {
+              children: [{ serviceCredential: 'service-role-secret' }],
+            },
+          ],
         },
       },
     ];
@@ -689,7 +722,10 @@ Deno.test(
       closureDownloadDescriptor({ filename: '../check.xlsx' }),
       closureDownloadDescriptor({ artifactExpiresAt: 'not-a-timestamp' }),
       closureDownloadDescriptor({ artifactState: 'unknown' }),
-      closureDownloadDescriptor({ artifactRole: 'closure_bundle', format: 'json' }),
+      closureDownloadDescriptor({
+        artifactRole: 'closure_bundle',
+        format: 'json',
+      }),
       closureDownloadDescriptor({
         artifactRole: 'closure_issues_partition_000000',
         filename: `scope-closure-${TEST_CLOSURE_CHECK_ID}-issues-000000.ndjson.zst`,
@@ -705,7 +741,10 @@ Deno.test(
       closureDownloadDescriptor({ format: 'json' }),
       closureDownloadDescriptor({ bucket: '' }),
       closureDownloadDescriptor({ objectPath: null }),
-      { ...closureDownloadDescriptor(), serviceCredential: 'must-not-cross-the-boundary' },
+      {
+        ...closureDownloadDescriptor(),
+        serviceCredential: 'must-not-cross-the-boundary',
+      },
     ];
 
     for (const descriptor of malformedDescriptors) {
@@ -956,7 +995,9 @@ Deno.test(
             createSignedUrl: () => {
               delayedNowMs += 6_000;
               return Promise.resolve({
-                data: { signedUrl: 'https://signed.example/must-not-be-returned' },
+                data: {
+                  signedUrl: 'https://signed.example/must-not-be-returned',
+                },
                 error: null,
               });
             },
@@ -1024,10 +1065,15 @@ Deno.test(
         artifactState: 'expired',
         artifactExpiresAt: '2020-01-01T00:00:00.000Z',
       }),
-      closureDownloadDescriptor({ artifactExpiresAt: '2020-01-01T00:00:00.000Z' }),
+      closureDownloadDescriptor({
+        artifactExpiresAt: '2020-01-01T00:00:00.000Z',
+      }),
     ]) {
       const expiredRepository = createDataProductCommandRepository(
-        new FakeRpcSupabase({ data: { ok: true, data: descriptor }, error: null }) as never,
+        new FakeRpcSupabase({
+          data: { ok: true, data: descriptor },
+          error: null,
+        }) as never,
         {
           storage: {
             from: () => ({
@@ -1084,8 +1130,18 @@ Deno.test(
   'closure artifact download keeps unauthorized, unavailable, deleted, and unready outcomes opaque',
   async () => {
     for (const failure of [
-      { ok: false, code: 'closure_check_not_found', status: 404, message: 'not found' },
-      { ok: false, code: 'not_data_product_manager', status: 403, message: 'forbidden' },
+      {
+        ok: false,
+        code: 'closure_check_not_found',
+        status: 404,
+        message: 'not found',
+      },
+      {
+        ok: false,
+        code: 'not_data_product_manager',
+        status: 403,
+        message: 'forbidden',
+      },
       {
         ok: false,
         code: 'closure_report_unavailable',
@@ -1115,7 +1171,10 @@ Deno.test(
     for (const artifactState of ['pending', 'deleted', 'failed']) {
       const repository = createDataProductCommandRepository(
         new FakeRpcSupabase({
-          data: { ok: true, data: closureDownloadDescriptor({ artifactState }) },
+          data: {
+            ok: true,
+            data: closureDownloadDescriptor({ artifactState }),
+          },
           error: null,
         }) as never,
         {
@@ -1159,7 +1218,10 @@ Deno.test(
         error: {
           code: 'PGRST202',
           message: `PGRST source rejection bucket=${sourceValues[0]}`,
-          details: { objectPath: sourceValues[1], credentials: sourceValues[2] },
+          details: {
+            objectPath: sourceValues[1],
+            credentials: sourceValues[2],
+          },
         },
       }),
       new FakeRpcSupabase({
@@ -1168,7 +1230,10 @@ Deno.test(
           code: 'unknown_closure_failure',
           status: 500,
           message: `PGRST source rejection bucket=${sourceValues[0]}`,
-          details: { objectPath: sourceValues[1], credentials: sourceValues[2] },
+          details: {
+            objectPath: sourceValues[1],
+            credentials: sourceValues[2],
+          },
         },
         error: null,
       }),
@@ -1550,9 +1615,15 @@ Deno.test(
           data: data as T,
         });
       },
+      fetchArtifactBytes: () => Promise.reject(new Error('not used for v1 query artifacts')),
       fetchPreviewMetadata: (request) => {
         assertEquals(request, {
-          processes: [{ processId: testProcessId, processVersion: '01.00.000' }],
+          processes: [
+            {
+              processId: testProcessId,
+              processVersion: '01.00.000',
+            },
+          ],
           impactCategoryIds: ['impact-climate'],
         });
         return Promise.resolve({
@@ -1660,6 +1731,150 @@ Deno.test(
     });
   },
 );
+
+Deno.test('executeDataProductCommand preview_package reads a verified v2 LCIA chunk', async () => {
+  const snapshotId = '77777777-7777-4777-8777-777777777777';
+  const processId = '88888888-8888-4888-8888-888888888888';
+  const impactId = '99999999-9999-4999-8999-999999999999';
+  const bundleManifestUrl =
+    'https://example.supabase.co/storage/v1/s3/lca_results/calculation-bundles/build/hash/calculation-bundle.json';
+  const chunkBody = `${JSON.stringify({
+    processIndex: 0,
+    method: { id: impactId, version: '01.00.000' },
+    meanAmount: 17.5,
+  })}\n`;
+  const compressed = new Blob([chunkBody]).stream().pipeThrough(new CompressionStream('gzip'));
+  const chunkBytes = new Uint8Array(await new Response(compressed).arrayBuffer());
+  const chunkSha = await sha256HexForTest(chunkBytes);
+  const queryDocument = {
+    version: 2,
+    format: 'all-unit-query:v2',
+    snapshotId,
+    jobId: TEST_BUILD_ID,
+    processCount: 1,
+    impactCount: 1,
+    calculationBundle: {
+      schemaVersion: 'tiangong.calculation-bundle.v2',
+      calculationId: TEST_BUILD_ID,
+      bundleContentHash: 'a'.repeat(64),
+      manifestUrl: bundleManifestUrl,
+      manifestSha256: 'b'.repeat(64),
+      manifestByteSize: 1024,
+      artifactCount: 1,
+    },
+    lciaChunks: [
+      {
+        path: 'results/lcia-000000.ndjson.gz',
+        schemaVersion: 'tiangong.calculation-bundle.lcia.v1',
+        compression: 'gzip',
+        sha256: chunkSha,
+        byteSize: chunkBytes.byteLength,
+        recordCount: 1,
+        firstProcessIndex: 0,
+        lastProcessIndex: 0,
+      },
+    ],
+  };
+  const queryBytes = new TextEncoder().encode(JSON.stringify(queryDocument));
+  const querySha = await sha256HexForTest(queryBytes);
+  const queryUrl = 's3://lca-artifacts/results/query-v2.json';
+
+  const repository: DataProductCommandRepository = {
+    createBuild: () => Promise.reject(new Error('not used')),
+    enqueuePackageBuild: () => Promise.reject(new Error('not used')),
+    previewPackage: () =>
+      Promise.resolve({
+        ok: true,
+        data: {
+          summary: { packageId: TEST_PACKAGE_ID, snapshotId },
+          inputManifest: {
+            processes: [{ id: processId, version: '01.00.000' }],
+          },
+          queryArtifact: {
+            artifactUrl: queryUrl,
+            artifactFormat: 'all-unit-query:v2',
+            artifactSha256: querySha,
+            artifactByteSize: queryBytes.byteLength,
+          },
+        },
+      }),
+    fetchSnapshotArtifactUrl: () =>
+      Promise.resolve({
+        ok: true,
+        data: {
+          snapshotId,
+          artifactUrl: 's3://lca-artifacts/snapshots/sparse.h5',
+        },
+      }),
+    fetchJsonArtifact: <T>() =>
+      Promise.resolve({
+        ok: true,
+        data: {
+          version: 1,
+          snapshot_id: snapshotId,
+          process_count: 1,
+          impact_count: 1,
+          process_map: [
+            {
+              process_id: processId,
+              process_version: '01.00.000',
+              process_index: 0,
+            },
+          ],
+          impact_map: [
+            {
+              impact_id: impactId,
+              impact_version: '01.00.000',
+              impact_key: `method:${impactId}`,
+              impact_index: 0,
+              impact_name: 'Climate change',
+              unit: 'kg CO2 eq',
+            },
+          ],
+        } as T,
+      }),
+    fetchArtifactBytes: (artifactUrl) => {
+      if (artifactUrl === queryUrl) {
+        return Promise.resolve({ ok: true, data: queryBytes });
+      }
+      assertEquals(
+        artifactUrl,
+        bundleManifestUrl.replace('calculation-bundle.json', 'results/lcia-000000.ndjson.gz'),
+      );
+      return Promise.resolve({ ok: true, data: chunkBytes });
+    },
+    fetchPreviewMetadata: () => Promise.resolve({ ok: true, data: { processes: [], impacts: [] } }),
+    ...unusedClosureCommandDeps,
+    publishPackage: () => Promise.reject(new Error('not used')),
+    unpublishPublication: () => Promise.reject(new Error('not used')),
+    listPublications: () => Promise.reject(new Error('not used')),
+  };
+
+  const result = await executeDataProductCommand(
+    {
+      action: 'preview_package',
+      packageId: TEST_PACKAGE_ID,
+      impactCategoryId: impactId,
+      rowLimit: 25,
+    },
+    fakeActor,
+    repository,
+  );
+  assertEquals(result.ok, true);
+  if (result.ok) {
+    const body = result.body as { data: unknown };
+    const data = body.data as {
+      detailPage: { status: string; rows: Array<{ value: number }> };
+    };
+    assertEquals(data.detailPage.status, 'ready');
+    assertEquals(data.detailPage.rows[0].value, 17.5);
+  }
+});
+
+async function sha256HexForTest(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
+}
 
 Deno.test(
   'executeDataProductCommand list_publications returns publication management rows',
