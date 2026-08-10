@@ -34,7 +34,7 @@ checkPaths:
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-10
 lastReviewedCommit: bd1c783516a7cea08534d035c9bdb90d60329de6
-lastReviewedNote: 'Reviewed for Edge Issue #271: lifecycle bundle actor commands stay within the existing Edge auth, runtime, validation, and deployment boundaries.'
+lastReviewedNote: 'Reviewed for Edge Issues #271 and #275: lifecycle commands and bounded v2 artifact reads preserve the existing Edge auth, runtime, validation, deployment, and cross-repo boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

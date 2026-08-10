@@ -37,6 +37,10 @@ export const LCA_RELEASE_SIGNED_URL_EXPIRES_IN_SECONDS = 15 * 60;
 export const LCA_CALCULATION_BUNDLE_MAX_MANIFEST_BYTES = 5 * 1024 * 1024;
 const DEFAULT_RELEASE_STORAGE_BUCKET = 'lca_results';
 const RELEASE_STORAGE_PREFIX = 'lca-releases/v1';
+const SUPPORTED_CALCULATION_BUNDLE_SCHEMAS = new Set([
+  'tiangong.calculation-bundle.v1',
+  'tiangong.calculation-bundle.v2',
+]);
 
 export type LcaReleaseArtifactUpload = LcaReleaseUploadedArtifact & {
   token: string;
@@ -398,6 +402,7 @@ async function getCalculationBundle(
   const manifestByteSize = finiteInteger(bundleRef?.manifestByteSize);
   const bundleContentHash = stringValue(bundleRef?.bundleContentHash);
   const artifactCount = finiteInteger(bundleRef?.artifactCount);
+  const durableSchemaVersion = stringValue(bundleRef?.schemaVersion);
   if (
     !data ||
     !bundleRef ||
@@ -405,7 +410,9 @@ async function getCalculationBundle(
     !manifestSha256 ||
     manifestByteSize === null ||
     !bundleContentHash ||
-    artifactCount === null
+    artifactCount === null ||
+    !durableSchemaVersion ||
+    !SUPPORTED_CALCULATION_BUNDLE_SCHEMAS.has(durableSchemaVersion)
   ) {
     return failure(
       'calculation_bundle_ref_invalid',
@@ -473,7 +480,7 @@ async function getCalculationBundle(
   }
   const manifestArtifacts = Array.isArray(manifest.artifacts) ? manifest.artifacts : null;
   if (
-    manifest.schemaVersion !== 'tiangong.calculation-bundle.v1' ||
+    manifest.schemaVersion !== durableSchemaVersion ||
     manifest.bundleContentHash !== bundleContentHash ||
     !manifestArtifacts ||
     manifestArtifacts.length !== artifactCount

@@ -417,6 +417,7 @@ Job response states map to HTTP status as follows:
   - reads both the historical inline `all-unit-query:v1` artifact and the chunked `all-unit-query:v2` index emitted by current workers; callers do not select the storage format
   - v2 reads verify the persisted index byte size and SHA-256, Calculation Bundle binding, safe chunk paths, contiguous process coverage, per-chunk byte size/SHA-256, gzip decoding, record counts, and exact process/method order before returning values
   - row queries download only the chunks covering the requested processes; hotspot queries stream the selected impact column across chunks and do not reconstruct or persist the complete matrix in Edge
+- Data Product package preview uses the same verified `all-unit-query:v1` / `all-unit-query:v2` reader. For v2 it reads only the LCIA chunks covering the requested page and selected impact category, instead of requiring the removed inline `h_matrix`.
 
 ## LCI/LCIA Release Function Call Patterns
 
@@ -425,7 +426,7 @@ Job response states map to HTTP status as follows:
   - authenticated reads: `get_release`, `get_current`, `get_calculation_bundle`, `create_artifact_download`
   - exactly four ZIPs are accepted: Unit Process and standalone LifecycleModel+Result, each in TIDAS and ILCD. Maximum size is 50 MiB per ZIP.
   - `create_artifact_uploads` returns short-lived signed upload URLs for private, content-addressed, server-derived paths. The signed upload permits idempotent replacement at the same immutable plan/profile/format/hash identity so an interrupted upload can be retried; `finalize_artifacts` still downloads every object and verifies its exact byte size and SHA-256 before the service-only finalize RPC.
-  - `get_calculation_bundle` verifies the private Calculation Bundle manifest against its durable byte size, SHA-256, content hash, artifact count, and safe relative paths, then returns 15-minute signed URLs for the manifest and each LCI/LCIA chunk.
+  - `get_calculation_bundle` accepts the historical `tiangong.calculation-bundle.v1` and current `tiangong.calculation-bundle.v2`, verifies that the durable schema exactly matches the private manifest together with byte size, SHA-256, content hash, artifact count, and safe relative paths, then returns 15-minute signed URLs for the manifest and each LCI/LCIA chunk.
 - `lca_release_results`: `GET` or `POST` read endpoint.
   - no payload or `mode=current` returns the current public release
   - `mode=process&processId=<uuid>&processVersion=<XX.XX.XXX>` returns the current public release plus the exact Unit Process, generated LifecycleModel, and Result Process identities for that source Process
