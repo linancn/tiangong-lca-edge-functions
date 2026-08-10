@@ -30,8 +30,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-10
-lastReviewedCommit: bd1c783516a7cea08534d035c9bdb90d60329de6
-lastReviewedNote: 'Reviewed for Edge Issues #271 and #275: focused lifecycle, v2 package-preview, and Calculation Bundle schema tests retain the existing lint and check baseline.'
+lastReviewedCommit: 79b8f8d23c2c35442ed6293e737b68a9d318e9a7
+lastReviewedNote: 'Validation covers seven explicit search_text projectors, extracted_md byte snapshots, atomic dual-write, search-only replay isolation, and formal hybrid_search_* caller contracts.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-10
-lastReviewedCommit: bd1c783516a7cea08534d035c9bdb90d60329de6
-lastReviewedNote: 'Reviewed for Edge Issues #271 and #275: lifecycle commands and bounded v2 artifact reads preserve the existing Edge auth, runtime, validation, deployment, and cross-repo boundaries.'
+lastReviewedCommit: 79b8f8d23c2c35442ed6293e737b68a9d318e9a7
+lastReviewedNote: 'Edge runtime owns seven explicit multilingual search_text projectors, atomic extracted_md/search_text dual-write, search-only replay, and formal hybrid_search_* callers while preserving existing auth, validation, deployment, and cross-repo boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
