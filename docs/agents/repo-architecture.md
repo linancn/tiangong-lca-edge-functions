@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-06
-lastReviewedCommit: 45ea122c888d06bc5bd7c4a528908750e61b2a2d
-lastReviewedNote: 'Reviewed for Issue #264: document the bounded v1/v2 all-unit query reader without changing LCA runtime or storage ownership.'
+lastReviewedAt: 2026-08-10
+lastReviewedCommit: c22d42a8dbf6c3504482f1b8065d882234b0bc98
+lastReviewedNote: 'Updated for Issue #275: package preview shares the bounded v1/v2 query reader and Calculation Bundle reads bind the exact durable v1/v2 schema.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -180,6 +180,8 @@ The named `public_plus_owner_draft` calculation scope is a distinct versioned sn
 
 `lca_query_results` keeps historical `all-unit-query:v1` matrix reads and consumes `all-unit-query:v2` as a bounded index over Calculation Bundle LCIA chunks. The v2 path verifies the persisted query-index size and SHA-256, keeps child paths inside the referenced bundle, and validates each downloaded gzip chunk's size, SHA-256, process range, record count, method identity, ordering, and finite values before returning a row or hotspot projection. It loads only the covering chunks for selected queries and processes full-hotspot chunks sequentially instead of rebuilding the removed full H matrix.
 
+Data Product package preview shares that strict v1/v2 artifact reader. Historical v1 packages retain inline-matrix compatibility; current v2 packages verify the durable query-index size and SHA-256 and read only the LCIA chunks covering the requested result page and selected impact category. Package preview must not require an inline `h_matrix` from v2 or reconstruct the complete result matrix in Edge.
+
 ### TIDAS package flows
 
 This cluster includes:
@@ -201,7 +203,7 @@ The default TIDAS package path enqueues `tidas.import_package` and `tidas.export
 
 The artifact path deliberately has two identities. Actor-bound RPCs authorize the requested release and bind its exact publish-plan hash. The Edge service client then creates retryable signed uploads under a server-derived private object key; upsert is confined to that content-addressed release/plan/profile/format/hash identity. It downloads each of the four TIDAS/ILCD profile ZIPs, verifies byte size and SHA-256, repeats the actor-bound role check, and invokes the service-only finalize RPC. Release clients never receive the Supabase secret/service-role key and cannot select a storage bucket or object key.
 
-Calculation Bundle reads follow the same projection rule. The database returns only the manager-authorized immutable bundle ref. Edge downloads the private manifest, verifies its exact size and SHA-256 plus schema/content-hash/artifact-count binding, rejects unsafe child paths, and returns short-lived signed URLs for the manifest and each LCI/LCIA chunk. Raw worker object URLs are never browser download contracts.
+Calculation Bundle reads follow the same projection rule. The database returns only the manager-authorized immutable bundle ref. Edge accepts historical `tiangong.calculation-bundle.v1` and current `tiangong.calculation-bundle.v2`, downloads the private manifest, verifies its exact size and SHA-256 plus exact durable-schema/content-hash/artifact-count binding, rejects unsafe child paths, and returns short-lived signed URLs for the manifest and each LCI/LCIA chunk. Raw worker object URLs are never browser download contracts.
 
 `lca_release_results` exposes current or superseded public release metadata, source-Process-to-Model/Result identity projections, and signed artifact downloads without requiring a session. Process projections bind an exact Process UUID/version and return no storage locator. A matching Supabase project publishable key, including the configured legacy anon key, may appear as a Bearer credential on ordinary browser-client requests and remains a public read rather than actor authentication. Any other Authorization header must authenticate successfully, and private release reads remain subject to the database projection's manager check. The endpoint never signs an object until the database returns an authorized bucket/object-key projection. It resolves the authoritative release version and profile before signing, returns a server-derived `downloadFilename`, and binds that same semantic filename into the signed URL rather than exposing the content-addressed object name to browser downloads.
 

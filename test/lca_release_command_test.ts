@@ -46,7 +46,11 @@ class FakeSupabase {
   storage = {
     from: (bucket: string) => ({
       createSignedUploadUrl: async (objectKey: string, options?: { upsert?: boolean }) => {
-        this.signedUploadCalls.push({ bucket, objectKey, upsert: options?.upsert === true });
+        this.signedUploadCalls.push({
+          bucket,
+          objectKey,
+          upsert: options?.upsert === true,
+        });
         if (this.storageError) return { data: null, error: this.storageError };
         return {
           data: {
@@ -77,7 +81,9 @@ class FakeSupabase {
         });
         if (this.storageError) return { data: null, error: this.storageError };
         return {
-          data: { signedUrl: `https://download.example/${bucket}/${objectKey}` },
+          data: {
+            signedUrl: `https://download.example/${bucket}/${objectKey}`,
+          },
           error: null,
         };
       },
@@ -349,7 +355,9 @@ Deno.test('finalize rejects object-key and content hash drift before service RPC
     createLcaReleaseCommandRepository(actorSupabase as never, serviceSupabase as never),
   );
   assertEquals(pathResult.ok && true, false);
-  if (!pathResult.ok) assertEquals(pathResult.code, 'release_artifact_storage_ref_invalid');
+  if (!pathResult.ok) {
+    assertEquals(pathResult.code, 'release_artifact_storage_ref_invalid');
+  }
 
   const hashResult = await executeLcaReleaseCommand(
     request,
@@ -357,7 +365,9 @@ Deno.test('finalize rejects object-key and content hash drift before service RPC
     createLcaReleaseCommandRepository(actorSupabase as never, serviceSupabase as never),
   );
   assertEquals(hashResult.ok && true, false);
-  if (!hashResult.ok) assertEquals(hashResult.code, 'release_artifact_hash_mismatch');
+  if (!hashResult.ok) {
+    assertEquals(hashResult.code, 'release_artifact_hash_mismatch');
+  }
   assertEquals(serviceSupabase.rpcCalls, []);
 });
 
@@ -453,7 +463,7 @@ Deno.test(
     const bundleContentHash = '1'.repeat(64);
     const chunkHash = '2'.repeat(64);
     const manifest = {
-      schemaVersion: 'tiangong.calculation-bundle.v1',
+      schemaVersion: 'tiangong.calculation-bundle.v2',
       bundleContentHash,
       scope: { coverageMode: 'global_eligible', processCount: 1 },
       artifacts: [
@@ -476,7 +486,7 @@ Deno.test(
       rpcSuccess({
         packageId: PACKAGE_ID,
         calculationBundle: {
-          schemaVersion: 'tiangong.calculation-bundle.v1',
+          schemaVersion: 'tiangong.calculation-bundle.v2',
           calculationId: RELEASE_RUN_ID,
           bundleContentHash,
           manifestUrl: `https://example.supabase.co/storage/v1/s3/lca_results/${manifestObjectKey}`,
@@ -548,6 +558,7 @@ Deno.test('calculation bundle read rejects path traversal and manifest hash drif
     'get_lcia_result_calculation_bundle',
     rpcSuccess({
       calculationBundle: {
+        schemaVersion: 'tiangong.calculation-bundle.v1',
         manifestUrl: `https://example.supabase.co/storage/v1/s3/lca_results/${manifestObjectKey}`,
         manifestSha256: await sha256Blob(manifestBlob),
         manifestByteSize: manifestBlob.size,
@@ -568,12 +579,15 @@ Deno.test('calculation bundle read rejects path traversal and manifest hash drif
     repository,
   );
   assertEquals(unsafe.ok, false);
-  if (!unsafe.ok) assertEquals(unsafe.code, 'calculation_bundle_artifact_ref_invalid');
+  if (!unsafe.ok) {
+    assertEquals(unsafe.code, 'calculation_bundle_artifact_ref_invalid');
+  }
 
   actorSupabase.rpcResults.set(
     'get_lcia_result_calculation_bundle',
     rpcSuccess({
       calculationBundle: {
+        schemaVersion: 'tiangong.calculation-bundle.v1',
         manifestUrl: `https://example.supabase.co/storage/v1/s3/lca_results/${manifestObjectKey}`,
         manifestSha256: '5'.repeat(64),
         manifestByteSize: manifestBlob.size,
@@ -588,7 +602,9 @@ Deno.test('calculation bundle read rejects path traversal and manifest hash drif
     repository,
   );
   assertEquals(drift.ok, false);
-  if (!drift.ok) assertEquals(drift.code, 'calculation_bundle_manifest_hash_mismatch');
+  if (!drift.ok) {
+    assertEquals(drift.code, 'calculation_bundle_manifest_hash_mismatch');
+  }
 });
 
 Deno.test('artifact download signs only the actor-authorized DB storage ref', async () => {

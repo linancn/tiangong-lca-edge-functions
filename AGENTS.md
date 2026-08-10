@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-06
-lastReviewedCommit: 45ea122c888d06bc5bd7c4a528908750e61b2a2d
-lastReviewedNote: 'Reviewed for Issue #264: the all-unit query v2 reader remains inside the existing LCA runtime ownership, production hotfix, validation, and workspace-integration boundaries.'
+lastReviewedAt: 2026-08-10
+lastReviewedCommit: c22d42a8dbf6c3504482f1b8065d882234b0bc98
+lastReviewedNote: 'Reviewed for Issue #275: Calculation Bundle v2 and bounded package-preview reads preserve existing Edge artifact-read and cross-repo ownership boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

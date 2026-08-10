@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-06
-lastReviewedCommit: 45ea122c888d06bc5bd7c4a528908750e61b2a2d
-lastReviewedNote: 'Reviewed for Issue #264: add focused v1/v2 all-unit query artifact proof while retaining the existing LCA runtime baseline.'
+lastReviewedAt: 2026-08-10
+lastReviewedCommit: c22d42a8dbf6c3504482f1b8065d882234b0bc98
+lastReviewedNote: 'Reviewed for Issue #275: focused v2 package-preview and Calculation Bundle schema tests retain the existing Edge runtime baseline.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

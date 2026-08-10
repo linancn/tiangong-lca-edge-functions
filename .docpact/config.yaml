@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-06'
-lastReviewedCommit: '45ea122c888d06bc5bd7c4a528908750e61b2a2d'
-lastReviewedNote: 'Reviewed for Issue #264: v1/v2 all-unit query consumption remains routed to the existing lca-runtime and proof ownership surfaces.'
+lastReviewedAt: '2026-08-10'
+lastReviewedCommit: 'c22d42a8dbf6c3504482f1b8065d882234b0bc98'
+lastReviewedNote: 'Reviewed for Issue #275: Calculation Bundle v2 reads and bounded Data Product preview remain in the existing release, data-product, and proof ownership surfaces.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
