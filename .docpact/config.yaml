@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-09'
-lastReviewedCommit: 'e7e2fdb107aa933650b364309848d5980f783e86'
-lastReviewedNote: 'Reviewed for Issue #422 schema cutover: explicit public relation access, api facade consumption, and the boundary regression test are governed together.'
+lastReviewedAt: '2026-08-10'
+lastReviewedCommit: '6aa9d19b42c74fa0aa9c7dd63b48e726b7e03fad'
+lastReviewedNote: 'Reviewed for Edge Issue #272 / workspace Issue #566: successful terminal package diagnostics suppress stale attempt errors without changing routing or ownership rules.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

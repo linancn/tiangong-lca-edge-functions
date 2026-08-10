@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-09
-lastReviewedCommit: e7e2fdb107aa933650b364309848d5980f783e86
-lastReviewedNote: 'Reviewed for Issue #422 schema cutover: require full tests plus static public/api boundary proof for cross-cutting consumer migration.'
+lastReviewedAt: 2026-08-10
+lastReviewedCommit: 6aa9d19b42c74fa0aa9c7dd63b48e726b7e03fad
+lastReviewedNote: 'Reviewed for Edge Issue #272 / workspace Issue #566: focused package diagnostics tests plus existing lint/check and CI remain the required proof path.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
