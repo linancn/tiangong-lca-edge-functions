@@ -1,7 +1,7 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-10'
-lastReviewedCommit: 'bd1c783516a7cea08534d035c9bdb90d60329de6'
+lastReviewedCommit: '79b8f8d23c2c35442ed6293e737b68a9d318e9a7'
 lastReviewedNote: 'Reviewed for Edge Issues #271 and #275: lifecycle bundle commands, Calculation Bundle v2 reads, and bounded Data Product preview retain the existing runtime ownership and routing graph.'
 
 # Keep deterministic governance facts here.

@@ -11,7 +11,7 @@ const CONTACT_CONFIG: HybridSearchRouteConfig = {
   entityKind: 'contact',
   entityLabel: 'Contact',
   entityPlural: 'contacts',
-  rpcName: 'hybrid_search_contacts_v2',
+  rpcName: 'hybrid_search_contacts',
   forwardVisibilityContext: true,
 };
 
@@ -70,7 +70,7 @@ Deno.test(
     assertEquals(await response.json(), { data: [{ id: 'contact-1' }] });
     assertEquals(
       rpcCalls.map((call) => call.name),
-      ['hybrid_search_contacts_v2', 'hybrid_search_contacts_v2'],
+      ['hybrid_search_contacts', 'hybrid_search_contacts'],
     );
     assertEquals(
       rpcCalls.map((call) => call.body.match_threshold),

@@ -4,6 +4,7 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { generateFlowMarkdown, normalizeJsonOrdered } from '../_shared/flow_extraction.ts';
+import { projectFlowSearchText } from '../_shared/search_text_projection.ts';
 import { supabaseClient } from '../_shared/supabase_client.ts';
 
 interface WebhookPayload {
@@ -637,18 +638,21 @@ Deno.serve(async (req) => {
       }
 
       const markdown = generateFlowMarkdown(jsonData);
+      const searchText = projectFlowSearchText(jsonData, id);
       console.log(markdown);
       // console.log("[webhook_flow_embedding_ft] markdown generated", {
       //   index,
       //   length: markdown?.length ?? 0,
       // });
       if (!markdown) throw new Error(`batch index ${index}: Empty extracted markdown`);
+      if (!searchText) throw new Error(`batch index ${index}: Empty search text projection`);
 
       const { error: updateError } = await supabaseClient
         .schema('public')
         .from('flows')
         .update({
           extracted_md: markdown,
+          search_text: searchText,
         })
         .eq('id', id)
         .eq('version', version);
