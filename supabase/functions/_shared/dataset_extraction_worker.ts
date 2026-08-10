@@ -15,6 +15,7 @@ import {
   projectProcessSearchText,
   projectSourceSearchText,
   projectUnitGroupSearchText,
+  type SearchTextProjector,
 } from './search_text_projection.ts';
 
 export type DatasetExtractionKind = 'extracted_md' | 'search_text';
@@ -58,7 +59,6 @@ export interface DatasetExtractionWorkerResult {
 }
 
 type MarkdownGenerator = (jsonOrdered: unknown) => string;
-type SearchTextProjector = (jsonOrdered: unknown, rowId: string) => string;
 
 export interface DatasetExtractionWorkerOptions {
   supabase: SupabaseClient;
@@ -230,7 +230,7 @@ async function updateDatasetExtraction(
   table: string,
   id: string,
   version: string,
-  values: { extracted_md?: string; search_text?: string },
+  values: { extracted_md?: string; search_text?: string[] },
 ): Promise<void> {
   const { error } = await supabase
     .schema('public')
@@ -259,7 +259,7 @@ async function processDatasetJob(
   if (datasetJson === null) return 'stale';
 
   const searchText = searchTextProjectors[kind](datasetJson, id);
-  if (!searchText.trim()) {
+  if (searchText.length === 0) {
     throw Object.assign(new Error('Empty search text projection'), {
       code: 'EMPTY_SEARCH_TEXT',
     });

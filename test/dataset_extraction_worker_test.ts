@@ -14,6 +14,13 @@ import {
 type JsonRecord = Record<string, unknown>;
 type Filter = { field: string; value: unknown };
 
+function searchTextFragments(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((fragment) => typeof fragment !== 'string')) {
+    throw new Error('Expected search_text to be a string[]');
+  }
+  return value;
+}
+
 const FIXTURES: Partial<Record<SupportedDatasetEntityKind, unknown>> = {
   process: {
     processDataSet: {
@@ -252,10 +259,22 @@ Deno.test('processDatasetExtractionJobs writes and ACKs all four foundation data
   );
   assertStringIncludes(String(supabase.rows.sources[0].extracted_md), '**Entity:** Source');
   assertStringIncludes(String(supabase.rows.unitgroups[0].extracted_md), '**Entity:** Unit Group');
-  assertStringIncludes(String(supabase.rows.contacts[0].search_text), 'Alice Example');
-  assertStringIncludes(String(supabase.rows.flowproperties[0].search_text), 'Mass');
-  assertStringIncludes(String(supabase.rows.sources[0].search_text), 'Reference source');
-  assertStringIncludes(String(supabase.rows.unitgroups[0].search_text), 'Units of length');
+  assertEquals(
+    searchTextFragments(supabase.rows.contacts[0].search_text).includes('Alice Example'),
+    true,
+  );
+  assertEquals(
+    searchTextFragments(supabase.rows.flowproperties[0].search_text).includes('Mass'),
+    true,
+  );
+  assertEquals(
+    searchTextFragments(supabase.rows.sources[0].search_text).includes('Reference source'),
+    true,
+  );
+  assertEquals(
+    searchTextFragments(supabase.rows.unitgroups[0].search_text).includes('Units of length'),
+    true,
+  );
   assertEquals(supabase.rpcCalls.at(-1), {
     fn: 'cmd_dataset_extraction_ack',
     args: { p_msg_ids: [1, 2, 3, 4] },
@@ -295,11 +314,16 @@ Deno.test(
       ['success', 'success'],
     );
     assertEquals(supabase.rows.processes[0].extracted_md, jobs[0].markdown);
-    assertStringIncludes(String(supabase.rows.processes[0].search_text), 'Test process');
+    assertEquals(
+      searchTextFragments(supabase.rows.processes[0].search_text).includes('Test process'),
+      true,
+    );
     assertEquals(supabase.rows.lifecyclemodels[0].extracted_md, jobs[1].markdown);
-    assertStringIncludes(
-      String(supabase.rows.lifecyclemodels[0].search_text),
-      'Test lifecycle model',
+    assertEquals(
+      searchTextFragments(supabase.rows.lifecyclemodels[0].search_text).includes(
+        'Test lifecycle model',
+      ),
+      true,
     );
     assertEquals(supabase.selectCounts.processes, 1);
     assertEquals(supabase.selectCounts.lifecyclemodels, 1);
@@ -309,6 +333,10 @@ Deno.test(
         ['extracted_md', 'search_text'],
         ['extracted_md', 'search_text'],
       ],
+    );
+    assertEquals(
+      supabase.updatePayloads.map(({ values }) => Array.isArray(values.search_text)),
+      [true, true],
     );
   },
 );
@@ -333,7 +361,13 @@ Deno.test('search_text replay writes only search_text and keeps extracted_md byt
   const id = '97000000-0000-0000-0000-000000000011';
   const markdownSnapshot = '# existing markdown bytes';
   supabase.rows.flows = [
-    { id, version: '01.00.000', json_ordered: FIXTURES.flow, extracted_md: markdownSnapshot },
+    {
+      id,
+      version: '01.00.000',
+      json_ordered: FIXTURES.flow,
+      extracted_md: markdownSnapshot,
+      modified_at: 'before-replay',
+    },
   ];
   supabase.claimedJobs = [buildJob(11, 'flow', 'flows', id, '01.00.000', 'search_text')];
 
@@ -343,15 +377,16 @@ Deno.test('search_text replay writes only search_text and keeps extracted_md byt
 
   assertEquals(result.results[0].status, 'success');
   assertEquals(supabase.rows.flows[0].extracted_md, markdownSnapshot);
-  assertStringIncludes(String(supabase.rows.flows[0].search_text), 'Test flow');
+  const searchText = searchTextFragments(supabase.rows.flows[0].search_text);
+  assertEquals(searchText.includes('Test flow'), true);
+  assertEquals(supabase.rows.flows[0].modified_at, 'before-replay');
   assertEquals(supabase.selectCounts.flows, 1);
-  assertEquals(supabase.updatePayloads, [
-    { table: 'flows', values: { search_text: supabase.rows.flows[0].search_text } },
-  ]);
+  assertEquals(supabase.updatePayloads, [{ table: 'flows', values: { search_text: searchText } }]);
   assertEquals(
     supabase.rpcCalls.some(
       (call) =>
         call.fn === 'cmd_dataset_extraction_record_failure' ||
+        call.fn.includes('embedding') ||
         (call.fn === 'cmd_dataset_extraction_ack' &&
           JSON.stringify(call.args).includes('extracted_md')),
     ),

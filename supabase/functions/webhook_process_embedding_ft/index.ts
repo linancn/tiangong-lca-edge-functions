@@ -650,7 +650,9 @@ if (import.meta.main) {
         //   length: markdown?.length ?? 0,
         // });
         if (!markdown) throw new Error(`batch index ${index}: Empty extracted markdown`);
-        if (!searchText) throw new Error(`batch index ${index}: Empty search text projection`);
+        if (searchText.length === 0) {
+          throw new Error(`batch index ${index}: Empty search text projection`);
+        }
 
         const { error: updateError } = await supabaseClient
           .schema('public')
