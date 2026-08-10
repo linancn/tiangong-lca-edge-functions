@@ -1,4 +1,4 @@
-import { assert, assertEquals, assertStringIncludes } from 'jsr:@std/assert';
+import { assert, assertEquals } from 'jsr:@std/assert';
 
 import {
   projectContactSearchText,
@@ -351,7 +351,7 @@ type ContractValue = { path: string; value: string };
 const CASES: Array<{
   kind: SearchTextDatasetKind;
   fixture: unknown;
-  projector: (value: unknown, rowId: string) => string;
+  projector: (value: unknown, rowId: string) => string[];
   included: ContractValue[];
   excluded: ContractValue[];
   ownUuid: string;
@@ -613,42 +613,51 @@ const CASES: Array<{
 
 Deno.test('seven explicit projectors honor included/excluded path contracts', () => {
   for (const testCase of CASES) {
-    const text = testCase.projector(testCase.fixture, testCase.ownUuid);
+    const fragments = testCase.projector(testCase.fixture, testCase.ownUuid);
     for (const { path, value } of testCase.included) {
-      assertStringIncludes(text, value, `${testCase.kind} included path ${path}`);
+      assert(fragments.includes(value), `${testCase.kind} included path ${path}`);
     }
     for (const { path, value } of testCase.excluded) {
-      assert(!text.includes(value), `${testCase.kind} leaked excluded path ${path}: ${value}`);
+      assert(!fragments.includes(value), `${testCase.kind} leaked excluded path ${path}: ${value}`);
     }
     assertEquals(
-      text.split('\n').filter((line) => line === 'same-value').length,
+      fragments.filter((fragment) => fragment === 'same-value').length,
       testCase.kind === 'process' || testCase.kind === 'flow' ? 1 : 0,
     );
-    assertEquals(text.split(testCase.ownUuid).length - 1, 1, `${testCase.kind} UUID count`);
+    assertEquals(
+      fragments.filter((fragment) => fragment === testCase.ownUuid).length,
+      1,
+      `${testCase.kind} UUID count`,
+    );
   }
 });
 
 Deno.test(
-  'projectors sort languages, normalize fragments, globally deduplicate, and newline-join',
+  'projectors return independently ordered, normalized, globally deduplicated fragments',
   () => {
-    const text = projectSearchText('process', PROCESS_UUID, PROCESS_FIXTURE);
-    const lines = text.split('\n');
+    const fragments = projectSearchText('process', PROCESS_UUID, PROCESS_FIXTURE);
 
-    assertEquals(lines[0], 'Deutscher Prozess');
-    assertEquals(lines[1], 'English process');
-    assertEquals(lines[2], '中文流程');
-    assertEquals(new Set(lines).size, lines.length);
-    assertEquals(text.includes('name'), false);
-    assertEquals(text.includes('processInformation'), false);
+    assertEquals(fragments.slice(0, 3), ['Deutscher Prozess', 'English process', '中文流程']);
+    assertEquals(new Set(fragments).size, fragments.length);
+    assertEquals(
+      fragments.every((fragment) => fragment === fragment.trim()),
+      true,
+    );
+    assertEquals(
+      fragments.every((fragment) => !fragment.includes('\n')),
+      true,
+    );
+    assertEquals(fragments.includes('name'), false);
+    assertEquals(fragments.includes('processInformation'), false);
   },
 );
 
 Deno.test('projectors inject the trusted row identity instead of JSON UUID', () => {
   const trustedRowId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-  const text = projectProcessSearchText(PROCESS_FIXTURE, trustedRowId);
+  const fragments = projectProcessSearchText(PROCESS_FIXTURE, trustedRowId);
 
-  assertStringIncludes(text, trustedRowId);
-  assertEquals(text.includes(PROCESS_UUID), false);
+  assertEquals(fragments.includes(trustedRowId), true);
+  assertEquals(fragments.includes(PROCESS_UUID), false);
 });
 
 Deno.test('projectors accept direct roots and nested authored-value containers', () => {
@@ -665,10 +674,10 @@ Deno.test('projectors accept direct roots and nested authored-value containers',
     { 'common:class': [{ '#text': 'Array child' }] },
   ];
 
-  const text = projectProcessSearchText(directProcess, PROCESS_UUID);
-  assertStringIncludes(text, 'Proceso directo');
-  assertStringIncludes(text, 'Array root');
-  assertStringIncludes(text, 'Array child');
+  const fragments = projectProcessSearchText(directProcess, PROCESS_UUID);
+  assertEquals(fragments.includes('Proceso directo'), true);
+  assertEquals(fragments.includes('Array root'), true);
+  assertEquals(fragments.includes('Array child'), true);
 });
 
 Deno.test('projectSearchText rejects a mismatched dataset root', () => {

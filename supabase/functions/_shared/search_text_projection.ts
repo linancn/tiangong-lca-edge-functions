@@ -10,6 +10,8 @@
 export type SearchTextDatasetKind =
   'process' | 'flow' | 'lifecyclemodel' | 'contact' | 'flowproperty' | 'source' | 'unitgroup';
 
+export type SearchTextProjector = (jsonOrdered: unknown, rowId: string) => string[];
+
 import type { JsonRecord, LocalizedFragment, PathSegment } from './projection_primitives.ts';
 import {
   asArray,
@@ -187,7 +189,7 @@ class ProjectionBuilder {
     }
   }
 
-  finish(): string {
+  finish(): string[] {
     const seen = new Set<string>();
     return this.fragments
       .slice()
@@ -203,8 +205,7 @@ class ProjectionBuilder {
         if (!text || seen.has(text)) return false;
         seen.add(text);
         return true;
-      })
-      .join('\n');
+      });
   }
 }
 
@@ -262,7 +263,7 @@ function processReferenceFlowDescriptions(
   });
 }
 
-export function projectProcessSearchText(jsonOrdered: unknown, rowId: string): string {
+export function projectProcessSearchText(jsonOrdered: unknown, rowId: string): string[] {
   const dataset = requireDataset(
     jsonOrdered,
     keys('processDataSet', 'process_data_set', 'processdataset'),
@@ -515,7 +516,7 @@ export function projectProcessSearchText(jsonOrdered: unknown, rowId: string): s
   return builder.finish();
 }
 
-export function projectFlowSearchText(jsonOrdered: unknown, rowId: string): string {
+export function projectFlowSearchText(jsonOrdered: unknown, rowId: string): string[] {
   const dataset = requireDataset(
     jsonOrdered,
     keys('flowDataSet', 'flow_data_set', 'flowdataset', 'flow_dataset'),
@@ -608,7 +609,7 @@ export function projectFlowSearchText(jsonOrdered: unknown, rowId: string): stri
   return builder.finish();
 }
 
-export function projectLifecycleModelSearchText(jsonOrdered: unknown, rowId: string): string {
+export function projectLifecycleModelSearchText(jsonOrdered: unknown, rowId: string): string[] {
   const dataset = requireDataset(
     jsonOrdered,
     keys(
@@ -710,7 +711,7 @@ export function projectLifecycleModelSearchText(jsonOrdered: unknown, rowId: str
   return builder.finish();
 }
 
-export function projectContactSearchText(jsonOrdered: unknown, rowId: string): string {
+export function projectContactSearchText(jsonOrdered: unknown, rowId: string): string[] {
   const dataset = requireDataset(
     jsonOrdered,
     keys('contactDataSet', 'contact_data_set'),
@@ -754,7 +755,7 @@ export function projectContactSearchText(jsonOrdered: unknown, rowId: string): s
   return builder.finish();
 }
 
-export function projectFlowPropertySearchText(jsonOrdered: unknown, rowId: string): string {
+export function projectFlowPropertySearchText(jsonOrdered: unknown, rowId: string): string[] {
   const dataset = requireDataset(
     jsonOrdered,
     keys('flowPropertyDataSet', 'flow_property_data_set', 'flowpropertyDataSet'),
@@ -812,7 +813,7 @@ export function projectFlowPropertySearchText(jsonOrdered: unknown, rowId: strin
   return builder.finish();
 }
 
-export function projectSourceSearchText(jsonOrdered: unknown, rowId: string): string {
+export function projectSourceSearchText(jsonOrdered: unknown, rowId: string): string[] {
   const dataset = requireDataset(jsonOrdered, keys('sourceDataSet', 'source_data_set'), 'source');
   const dataInfo = dataSetInformation(dataset, keys('sourceInformation', 'source_information'));
   const builder = new ProjectionBuilder();
@@ -850,7 +851,7 @@ export function projectSourceSearchText(jsonOrdered: unknown, rowId: string): st
   return builder.finish();
 }
 
-export function projectUnitGroupSearchText(jsonOrdered: unknown, rowId: string): string {
+export function projectUnitGroupSearchText(jsonOrdered: unknown, rowId: string): string[] {
   const dataset = requireDataset(
     jsonOrdered,
     keys('unitGroupDataSet', 'unit_group_data_set'),
@@ -898,22 +899,21 @@ export function projectUnitGroupSearchText(jsonOrdered: unknown, rowId: string):
   return builder.finish();
 }
 
-export const SEARCH_TEXT_PROJECTORS: Readonly<
-  Record<SearchTextDatasetKind, (jsonOrdered: unknown, rowId: string) => string>
-> = {
-  process: projectProcessSearchText,
-  flow: projectFlowSearchText,
-  lifecyclemodel: projectLifecycleModelSearchText,
-  contact: projectContactSearchText,
-  flowproperty: projectFlowPropertySearchText,
-  source: projectSourceSearchText,
-  unitgroup: projectUnitGroupSearchText,
-};
+export const SEARCH_TEXT_PROJECTORS: Readonly<Record<SearchTextDatasetKind, SearchTextProjector>> =
+  {
+    process: projectProcessSearchText,
+    flow: projectFlowSearchText,
+    lifecyclemodel: projectLifecycleModelSearchText,
+    contact: projectContactSearchText,
+    flowproperty: projectFlowPropertySearchText,
+    source: projectSourceSearchText,
+    unitgroup: projectUnitGroupSearchText,
+  };
 
 export function projectSearchText(
   kind: SearchTextDatasetKind,
   rowId: string,
   jsonOrdered: unknown,
-): string {
+): string[] {
   return SEARCH_TEXT_PROJECTORS[kind](jsonOrdered, rowId);
 }
