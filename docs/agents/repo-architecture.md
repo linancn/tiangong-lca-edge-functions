@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-10
-lastReviewedCommit: 605da2ae634fc5bd5b25ababee8c4cc0751bd5cf
+lastReviewedAt: 2026-08-11
+lastReviewedCommit: c09292f5b0aae125c413514ec468576a1c37f8c5
 lastReviewedNote: 'Seven explicit search_text projectors remain independent from extracted_md; normal extraction atomically dual-writes both fields, search-only replay writes only search_text, and hybrid callers use formal hybrid_search_* RPCs.'
 related:
   - ../../AGENTS.md
