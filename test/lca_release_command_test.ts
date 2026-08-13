@@ -45,7 +45,7 @@ class FakeSupabase {
 
   storage = {
     from: (bucket: string) => ({
-      createSignedUploadUrl: async (objectKey: string, options?: { upsert?: boolean }) => {
+      createSignedUploadUrl: (objectKey: string, options?: { upsert?: boolean }) => {
         this.signedUploadCalls.push({
           bucket,
           objectKey,
@@ -61,14 +61,14 @@ class FakeSupabase {
           error: null,
         };
       },
-      download: async (objectKey: string) => {
+      download: (objectKey: string) => {
         if (this.storageError) return { data: null, error: this.storageError };
         const data = this.downloadedObjects.get(`${bucket}/${objectKey}`);
         return data
           ? { data, error: null }
           : { data: null, error: { message: 'Object not found' } };
       },
-      createSignedUrl: async (
+      createSignedUrl: (
         objectKey: string,
         expiresIn: number,
         options?: { download?: string | boolean },
@@ -101,6 +101,42 @@ function actorFor(supabase: FakeSupabase) {
     accessToken: 'actor-access-token',
     supabase: supabase as unknown as SupabaseClient,
   };
+}
+
+function calculationProductDownloads(bundleContentHash: string) {
+  const prefix = `calculation-bundles/${RELEASE_RUN_ID}/${bundleContentHash}/downloads`;
+  return [
+    [
+      'lcia_results_xlsx',
+      'results',
+      'lcia-results.xlsx',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ],
+    ['lcia_results_csv_zip', 'results', 'lcia-results.csv.zip', 'application/zip'],
+    [
+      'lci_inventory_parquet',
+      'advanced_data',
+      'lci-inventory.parquet',
+      'application/vnd.apache.parquet',
+    ],
+    ['lci_inventory_csv_zip', 'advanced_data', 'lci-inventory-csv.zip', 'application/zip'],
+    [
+      'calculation_evidence_bundle',
+      'audit_evidence',
+      'calculation-evidence-bundle.zip',
+      'application/zip',
+    ],
+  ].map(([role, group, fileName, mediaType]) => ({
+    role,
+    group,
+    fileName,
+    mediaType,
+    schemaVersion: 'tiangong.calculation-download.v1',
+    artifactUrl: `https://example.supabase.co/storage/v1/s3/lca_results/${prefix}/${fileName}`,
+    sha256: '9'.repeat(64),
+    byteSize: 456,
+    recordCount: 1,
+  }));
 }
 
 function artifacts(sha256: string, byteSize: number): LcaReleaseArtifactInput[] {
@@ -485,6 +521,7 @@ Deno.test(
       'get_lcia_result_calculation_bundle',
       rpcSuccess({
         packageId: PACKAGE_ID,
+        productDownloads: calculationProductDownloads(bundleContentHash),
         calculationBundle: {
           schemaVersion: 'tiangong.calculation-bundle.v2',
           calculationId: RELEASE_RUN_ID,
@@ -512,6 +549,12 @@ Deno.test(
         objectKey: `calculation-bundles/${RELEASE_RUN_ID}/${bundleContentHash}/chunks/lci-00000.jsonl.gz`,
         expiresIn: 900,
       },
+      ...calculationProductDownloads(bundleContentHash).map((download) => ({
+        bucket: 'lca_results',
+        objectKey: `calculation-bundles/${RELEASE_RUN_ID}/${bundleContentHash}/downloads/${download.fileName}`,
+        expiresIn: 900,
+        download: download.fileName,
+      })),
     ]);
     if (result.ok) {
       const body = result.body as {
@@ -520,6 +563,7 @@ Deno.test(
             manifestUrl?: string;
             manifestDownload: Record<string, unknown>;
             artifacts: Array<Record<string, unknown> & { signedDownloadUrl: string }>;
+            downloads: Array<Record<string, unknown> & { signedDownloadUrl: string }>;
           };
         };
       };
@@ -533,6 +577,36 @@ Deno.test(
       assertEquals('objectKey' in body.data.calculationBundle.manifestDownload, false);
       assertEquals('storageBucket' in body.data.calculationBundle.artifacts[0], false);
       assertEquals('objectKey' in body.data.calculationBundle.artifacts[0], false);
+      assertEquals(body.data.calculationBundle.downloads.length, 5);
+      assertEquals('artifactUrl' in body.data.calculationBundle.downloads[0], false);
+    }
+
+    const invalidDownloads = calculationProductDownloads(bundleContentHash);
+    invalidDownloads[0].mediaType = 'text/plain';
+    actorSupabase.rpcResults.set(
+      'get_lcia_result_calculation_bundle',
+      rpcSuccess({
+        packageId: PACKAGE_ID,
+        productDownloads: invalidDownloads,
+        calculationBundle: {
+          schemaVersion: 'tiangong.calculation-bundle.v2',
+          calculationId: RELEASE_RUN_ID,
+          bundleContentHash,
+          manifestUrl: `https://example.supabase.co/storage/v1/s3/lca_results/${manifestObjectKey}`,
+          manifestSha256,
+          manifestByteSize: manifestBlob.size,
+          artifactCount: 1,
+        },
+      }),
+    );
+    const invalid = await executeLcaReleaseCommand(
+      { action: 'get_calculation_bundle', packageId: PACKAGE_ID },
+      actorFor(actorSupabase),
+      createLcaReleaseCommandRepository(actorSupabase as never, serviceSupabase as never),
+    );
+    assertEquals(invalid.ok, false);
+    if (!invalid.ok) {
+      assertEquals(invalid.code, 'calculation_download_ref_invalid');
     }
   },
 );
@@ -557,6 +631,7 @@ Deno.test('calculation bundle read rejects path traversal and manifest hash drif
   actorSupabase.rpcResults.set(
     'get_lcia_result_calculation_bundle',
     rpcSuccess({
+      productDownloads: [],
       calculationBundle: {
         schemaVersion: 'tiangong.calculation-bundle.v1',
         manifestUrl: `https://example.supabase.co/storage/v1/s3/lca_results/${manifestObjectKey}`,
@@ -586,6 +661,7 @@ Deno.test('calculation bundle read rejects path traversal and manifest hash drif
   actorSupabase.rpcResults.set(
     'get_lcia_result_calculation_bundle',
     rpcSuccess({
+      productDownloads: [],
       calculationBundle: {
         schemaVersion: 'tiangong.calculation-bundle.v1',
         manifestUrl: `https://example.supabase.co/storage/v1/s3/lca_results/${manifestObjectKey}`,
