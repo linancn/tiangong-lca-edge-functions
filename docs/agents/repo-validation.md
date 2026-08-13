@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-11
-lastReviewedCommit: c09292f5b0aae125c413514ec468576a1c37f8c5
+lastReviewedAt: 2026-08-13
+lastReviewedCommit: 4cdb19ec2c2d00bae3dd133866bd80b0df1cc77d
 lastReviewedNote: 'Validation covers seven explicit search_text projectors, extracted_md byte snapshots, atomic dual-write, search-only replay isolation, and formal hybrid_search_* caller contracts.'
 related:
   - ../../AGENTS.md
