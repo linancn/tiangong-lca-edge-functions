@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-13
-lastReviewedCommit: f54afcf18548a21cae08d93a01a4ae78040bf367
-lastReviewedNote: 'Edge now sends review submissions directly to the stable database command and exposes a Review Admin-only manual quality diagnostic while retaining the old Gate/coordinator endpoints only for compatibility.'
+lastReviewedCommit: 4cdb19ec2c2d00bae3dd133866bd80b0df1cc77d
+lastReviewedNote: 'Edge submits reviews through the stable database command, exposes a manual non-blocking Review Admin diagnostic, retains old Gate endpoints only for compatibility, and preserves current search and calculation-download boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
