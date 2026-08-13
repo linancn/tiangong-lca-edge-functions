@@ -77,8 +77,8 @@ Deno.test(
     assertEquals(first.process_states, [100]);
     assertEquals(first.include_user_id, 'user-1');
     assertEquals(first.include_user_state_codes, [0]);
-    assertEquals(first.include_user_unassigned_only, true);
-    assertEquals(first.include_user_review_free_only, true);
+    assertEquals(first.include_user_unassigned_only, undefined);
+    assertEquals(first.include_user_review_free_only, undefined);
     assertEquals(first.selection_mode, 'filtered_library');
     assertEquals(first.request_roots, []);
     assertEquals(first.scope_manifest?.schema_version, LCA_SCOPE_MANIFEST_SCHEMA_VERSION);
@@ -92,10 +92,7 @@ Deno.test(
       user_id: 'user-1',
     });
     assertEquals(first.scope_manifest?.applies_to, ['processes', 'flows']);
-    assertEquals(first.scope_manifest?.owner_draft_collaboration_guards, {
-      processes: { team_id: { is: null }, review_id: { is: null } },
-      flows: { team_id: { is: null }, review_id: { is: null } },
-    });
+    assertEquals('owner_draft_collaboration_guards' in first.scope_manifest!, false);
     assertEquals(first.scope_manifest?.predicate, {
       operator: 'or',
       clauses: [
@@ -124,7 +121,7 @@ Deno.test('BAFU actor scope hash rejects the superseded combined LCIA scope hash
   );
   assertEquals(
     binding.manifest_sha256,
-    '621966942c1980dd8786b3ccfb0fda040fb77e5a842c9eb97a9e97e9c889841d',
+    '40bf56e121cfd1dd82cf55cf429609fc5d481d08a20364fe7625de0698e789a3',
   );
   assertNotEquals(
     binding.manifest_sha256,
@@ -148,7 +145,7 @@ Deno.test(
       false,
     );
     assertEquals(
-      matchesSnapshotProcessFilter({ ...expected, include_user_unassigned_only: false }, expected),
+      matchesSnapshotProcessFilter({ ...expected, include_user_unassigned_only: true }, expected),
       false,
     );
     assertEquals(
@@ -228,8 +225,8 @@ Deno.test('query/build helpers carry exact worker and LCIA proof contracts', asy
   assertEquals(payload.process_states, '100');
   assertEquals(payload.include_user_id, 'user-1');
   assertEquals(payload.include_user_state_codes, '0');
-  assertEquals(payload.include_user_unassigned_only, true);
-  assertEquals(payload.include_user_review_free_only, true);
+  assertEquals('include_user_unassigned_only' in payload, false);
+  assertEquals('include_user_review_free_only' in payload, false);
   assertEquals(payload.data_scope, 'public_plus_owner_draft');
   assertEquals(payload.scope_manifest, filter.scope_manifest);
   assertEquals(payload.scope_manifest_sha256, filter.scope_manifest_sha256);
@@ -281,13 +278,13 @@ Deno.test('root-scoped build payload sends normalized request_roots to Worker', 
   assertEquals(buildSnapshotContainsFilter(filter).request_roots, [root]);
 });
 
-Deno.test('freshness visibility expression preserves owner state zero restriction', async () => {
+Deno.test('freshness visibility expression includes every actor-owned state-zero row', async () => {
   const exact = parseSnapshotProcessFilter(
     await buildSnapshotProcessFilter('public_plus_owner_draft', 'user-1'),
   );
   assertEquals(
     buildSnapshotVisibilityOrExpression(exact),
-    'state_code.in.(100),and(user_id.eq.user-1,state_code.in.(0),team_id.is.null,review_id.is.null)',
+    'state_code.in.(100),and(user_id.eq.user-1,state_code.in.(0))',
   );
   assertEquals(
     buildSnapshotVisibilityOrExpression(exact, { supportsCollaborationColumns: false }),
