@@ -15,11 +15,6 @@ import type {
   SaveDraftRequest,
   SubmitReviewRequest,
 } from '../commands/dataset/types.ts';
-import {
-  REVIEW_SUBMIT_GATE_POLICY_PROFILE,
-  REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION,
-} from '../commands/dataset/types.ts';
-
 type RpcClient = Pick<SupabaseClient, 'rpc'>;
 
 export type DatasetRpcResult = { ok: true; data: unknown } | DatasetCommandFailure;
@@ -174,16 +169,6 @@ export function buildDatasetSubmitReviewRpcArgs(
     p_target_table: request.table,
     p_target_id: request.id,
     p_target_version: request.version,
-    p_gate_context:
-      request.table === 'processes'
-        ? {
-            reviewSubmitGateRunId: request.reviewSubmitGateRunId,
-            revisionChecksum: request.revisionChecksum,
-            policyProfile: request.reviewSubmitPolicyProfile ?? REVIEW_SUBMIT_GATE_POLICY_PROFILE,
-            reportSchemaVersion:
-              request.reviewSubmitReportSchemaVersion ?? REVIEW_SUBMIT_GATE_REPORT_SCHEMA_VERSION,
-          }
-        : null,
     p_audit: audit,
   };
 }
@@ -344,7 +329,7 @@ export function callDatasetSubmitReviewRpc(
 ) {
   return callDatasetRpc(
     supabase,
-    'cmd_review_submit_v2',
+    'cmd_review_submit',
     buildDatasetSubmitReviewRpcArgs(request, audit),
   );
 }

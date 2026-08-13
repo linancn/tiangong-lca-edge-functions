@@ -7,6 +7,8 @@ import {
   callReviewerDecisionRpc,
   callReviewFinalizeApproveByIdRpc,
   callReviewFinalizeRejectByIdRpc,
+  callReviewQualityDiagnosticReadRpc,
+  callReviewQualityDiagnosticStartRpc,
   callReviewRejectRpc,
   callReviewRevokeReviewerRpc,
   callReviewSaveAssignmentDraftRpc,
@@ -21,6 +23,7 @@ import type {
   RejectReviewRequest,
   ReviewerDecisionRequest,
   ReviewIdRequest,
+  ReviewQualityDiagnosticRequest,
   RevokeReviewerRequest,
   SaveAssignmentDraftRequest,
   SaveCommentDraftRequest,
@@ -75,6 +78,10 @@ export type ReviewCommandRepository = {
     request: ReviewerDecisionRequest,
     audit: CommandAuditPayload,
   ) => Promise<ReviewRpcResult>;
+  startQualityDiagnostic: () => Promise<ReviewRpcResult>;
+  readQualityDiagnostic: (
+    request: Extract<ReviewQualityDiagnosticRequest, { action: 'read' }>,
+  ) => Promise<ReviewRpcResult>;
 };
 
 function requireExplicitClient(supabase: RpcClient | null | undefined): RpcClient {
@@ -102,5 +109,7 @@ export function createReviewCommandRepository(supabase: RpcClient): ReviewComman
       callReviewFinalizeApproveByIdRpc(client, request, audit),
     finalizeRejectById: (request, audit) => callReviewFinalizeRejectByIdRpc(client, request, audit),
     submitReviewerDecision: (request, audit) => callReviewerDecisionRpc(client, request, audit),
+    startQualityDiagnostic: () => callReviewQualityDiagnosticStartRpc(client),
+    readQualityDiagnostic: (request) => callReviewQualityDiagnosticReadRpc(client, request),
   };
 }
