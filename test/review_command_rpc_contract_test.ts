@@ -12,6 +12,7 @@ import {
   buildReviewRejectRpcArgs,
   buildReviewSaveCommentDraftRpcArgs,
   buildReviewSubmitCommentRpcArgs,
+  buildSimpleReviewDecisionRpcArgs,
   callReviewApproveRpc,
   callReviewRejectRpc,
   callReviewSaveAssignmentDraftRpc,
@@ -246,15 +247,28 @@ Deno.test('review comment RPC arg builders use the DB contract field names', () 
 
 Deno.test('review decision RPC arg builders forward table and reason fields', () => {
   assertEquals(buildReviewApproveRpcArgs(approveRequest, auditPayload), {
-    p_table: approveRequest.table,
     p_review_id: approveRequest.reviewId,
     p_audit: auditPayload,
   });
 
   assertEquals(buildReviewRejectRpcArgs(rejectRequest, auditPayload), {
-    p_table: rejectRequest.table,
     p_review_id: rejectRequest.reviewId,
     p_reason: rejectRequest.reason,
     p_audit: auditPayload,
   });
+});
+
+Deno.test('simple review decision RPC omits a reason for approval', () => {
+  assertEquals(
+    buildSimpleReviewDecisionRpcArgs(
+      { reviewId: approveRequest.reviewId, decision: 'approve' },
+      auditPayload,
+    ),
+    {
+      p_review_id: approveRequest.reviewId,
+      p_decision: 'approve',
+      p_reason: null,
+      p_audit: auditPayload,
+    },
+  );
 });

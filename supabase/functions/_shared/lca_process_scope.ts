@@ -181,6 +181,7 @@ export async function fetchProcessScopeLookup(
   for (let index = 0; index < uniqueIds.length; index += chunkSize) {
     const chunk = uniqueIds.slice(index, index + chunkSize);
     const { data, error } = await supabaseClient
+      .schema('public')
       .from('processes')
       .select('id,version,state_code,user_id,team_id,review_id')
       .in('id', chunk);

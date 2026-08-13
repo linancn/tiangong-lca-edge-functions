@@ -19,6 +19,11 @@ import {
 } from '../_shared/lca_process_scope.ts';
 import { ensureLcaSnapshotBuildQueued } from '../_shared/lca_snapshot_build_queue.ts';
 import {
+  parseLcaSnapshotScope,
+  queryLcaSnapshotCandidates,
+  type LcaSnapshotScope,
+} from '../_shared/lca_snapshot_capabilities.ts';
+import {
   buildLcaCalculationEvidenceBinding,
   buildSnapshotContainsFilter,
   buildSnapshotProcessFilter,
@@ -164,7 +169,10 @@ Deno.serve(async (req) => {
     return json({ error: 'invalid_payload' }, 400);
   }
 
-  const scope = (body.scope ?? 'prod').trim() || 'prod';
+  const scope = parseLcaSnapshotScope(body.scope);
+  if (!scope) {
+    return json({ error: 'invalid_scope' }, 400);
+  }
   const dataScope = parseLcaDataScope(body.data_scope);
   const mode = body.mode;
   const allowFallback = body.allow_fallback ?? true;
@@ -227,7 +235,7 @@ Deno.serve(async (req) => {
   }
   const calculationEvidenceBinding = calculationEvidence.binding;
 
-  const latestAllUnit = await fetchLatestAllUnit(snapshotId);
+  const latestAllUnit = await fetchLatestAllUnit(snapshotId, userId);
   if (!latestAllUnit.ok) {
     return json({ error: latestAllUnit.error }, latestAllUnit.status);
   }
@@ -607,7 +615,7 @@ async function resolveCalculationEvidenceBinding(
 }
 
 async function resolveReadySnapshot(
-  scope: string,
+  scope: LcaSnapshotScope,
   requestedSnapshotId?: string,
   userId?: string,
   dataScope: LcaDataScope = 'current_user',
@@ -653,65 +661,41 @@ async function resolveReadySnapshot(
     return { ok: false, error: 'no_ready_snapshot', status: 404 };
   }
 
-  const { data: activeRow, error: activeErr } = await supabaseClient
-    .from('lca_active_snapshots')
-    .select('snapshot_id')
-    .eq('scope', scope)
-    .maybeSingle();
-
-  if (activeErr) {
-    console.warn('read lca_active_snapshots failed', { error: activeErr.message, scope });
-  }
-
-  if (activeRow?.snapshot_id) {
-    const ready = await fetchSnapshotArtifactMeta(String(activeRow.snapshot_id));
-    if (ready.ok) {
-      return { ok: true, data: { snapshot_id: ready.data.snapshot_id } };
-    }
-  }
-
-  const { data: latestRows, error: latestErr } = await supabaseClient
-    .from('lca_snapshot_artifacts')
-    .select('snapshot_id,status,created_at')
-    .eq('status', 'ready')
-    .order('created_at', { ascending: false })
-    .limit(1);
-
-  if (latestErr) {
-    console.error('read latest ready snapshot failed', { error: latestErr.message });
+  const candidates = await queryLcaSnapshotCandidates(supabaseClient, {
+    scope,
+    limit: 1,
+  });
+  if (!candidates.ok) {
+    console.error('read latest ready snapshot failed', { code: candidates.code });
     return { ok: false, error: 'snapshot_lookup_failed', status: 500 };
   }
-
-  if (!latestRows || latestRows.length === 0) {
+  const latest = candidates.data[0];
+  if (!latest) {
     return { ok: false, error: 'no_ready_snapshot', status: 404 };
   }
-
   return {
     ok: true,
     data: {
-      snapshot_id: String(latestRows[0].snapshot_id),
+      snapshot_id: latest.snapshotId,
     },
   };
 }
 
 async function fetchReadySnapshotForDataScope(
-  scope: string,
+  scope: LcaSnapshotScope,
   userId: string,
   dataScope: LcaDataScope,
 ): Promise<ScopedSnapshotResolution> {
   const expectedProcessFilter = await buildSnapshotProcessFilter(dataScope, userId);
-  const { data, error } = await supabaseClient
-    .from('lca_network_snapshots')
-    .select('id,created_at,process_filter')
-    .eq('status', 'ready')
-    .in('scope', scope === 'full_library' ? ['full_library'] : ['full_library', scope])
-    .contains('process_filter', buildSnapshotContainsFilter(expectedProcessFilter))
-    .order('created_at', { ascending: false })
-    .limit(100);
+  const result = await queryLcaSnapshotCandidates(supabaseClient, {
+    scope,
+    processFilterContains: buildSnapshotContainsFilter(expectedProcessFilter),
+    limit: 100,
+  });
 
-  if (error) {
+  if (!result.ok) {
     console.warn('read scoped snapshots failed', {
-      error: error.message,
+      code: result.code,
       scope,
       user_id: userId,
       data_scope: dataScope,
@@ -720,26 +704,22 @@ async function fetchReadySnapshotForDataScope(
   }
 
   let latestStaleSnapshotId: string | null = null;
-  for (const row of data ?? []) {
-    const snapshotId = String((row as { id?: unknown }).id ?? '').trim();
+  for (const row of result.data) {
+    const snapshotId = row.snapshotId.trim();
     if (!snapshotId) {
       continue;
     }
-    const processFilter = (row as { process_filter?: unknown }).process_filter;
+    const processFilter = row.processFilter;
     if (!matchesSnapshotProcessFilter(processFilter, expectedProcessFilter)) {
       continue;
     }
 
-    const ready = await fetchSnapshotArtifactMeta(snapshotId);
-    if (ready.ok) {
-      const snapshotCreatedAt = String((row as { created_at?: unknown }).created_at ?? '');
-      const freshness = await isSnapshotFresh(snapshotCreatedAt, processFilter);
-      if (freshness === 'fresh') {
-        return { kind: 'fresh', data: { snapshot_id: ready.data.snapshot_id } };
-      }
-      latestStaleSnapshotId = snapshotId;
-      break;
+    const freshness = await isSnapshotFresh(row.createdAt, processFilter);
+    if (freshness === 'fresh') {
+      return { kind: 'fresh', data: { snapshot_id: snapshotId } };
     }
+    latestStaleSnapshotId = snapshotId;
+    break;
   }
 
   if (latestStaleSnapshotId) {
@@ -782,6 +762,7 @@ async function fetchProcessMaxModifiedAt(
   filter: ParsedSnapshotProcessFilter,
 ): Promise<string | null> {
   let query = supabaseClient
+    .schema('public')
     .from('processes')
     .select('modified_at')
     .order('modified_at', { ascending: false })
@@ -805,6 +786,7 @@ async function fetchTableMaxModifiedAt(
   filter: ParsedSnapshotProcessFilter,
 ): Promise<string | null> {
   let query = supabaseClient
+    .schema('public')
     .from(table)
     .select('modified_at')
     .order('modified_at', { ascending: false })
@@ -830,50 +812,44 @@ async function fetchSnapshotArtifactMeta(
 ): Promise<
   { ok: true; data: SnapshotArtifactMeta } | { ok: false; error: string; status: number }
 > {
-  const { data, error } = await supabaseClient
-    .from('lca_snapshot_artifacts')
-    .select('snapshot_id,artifact_url,status,created_at')
-    .eq('snapshot_id', snapshotId)
-    .eq('status', 'ready')
-    .order('created_at', { ascending: false })
-    .limit(1);
+  const result = await queryLcaSnapshotCandidates(supabaseClient, {
+    scope: 'full_library',
+    snapshotId,
+    limit: 1,
+  });
 
-  if (error) {
+  if (!result.ok) {
     console.error('query lca_snapshot_artifacts failed', {
-      error: error.message,
+      code: result.code,
       snapshot_id: snapshotId,
     });
     return { ok: false, error: 'snapshot_artifact_lookup_failed', status: 500 };
   }
 
-  if (!data || data.length === 0) {
+  const row = result.data[0];
+  if (!row) {
     return { ok: false, error: 'snapshot_not_ready', status: 404 };
   }
 
   return {
     ok: true,
     data: {
-      snapshot_id: String(data[0].snapshot_id),
-      artifact_url: String(data[0].artifact_url),
+      snapshot_id: row.snapshotId,
+      artifact_url: row.artifact.artifactUrl,
     },
   };
 }
 
 async function fetchLatestAllUnit(
   snapshotId: string,
+  userId: string,
 ): Promise<
   { ok: true; row: LatestAllUnitRow | null } | { ok: false; error: string; status: number }
 > {
-  const { data, error } = await supabaseClient
-    .from('lca_latest_all_unit_results')
-    .select(
-      'snapshot_id,result_id,computed_at,query_artifact_url,query_artifact_format,query_artifact_sha256,query_artifact_byte_size,status,updated_at',
-    )
-    .eq('snapshot_id', snapshotId)
-    .eq('status', 'ready')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: envelope, error } = await supabaseClient.rpc('svc_lca_latest_all_unit_result', {
+    p_snapshot_id: snapshotId,
+    p_requested_by: userId,
+  });
 
   if (error) {
     console.error('query lca_latest_all_unit_results failed', {
@@ -883,6 +859,7 @@ async function fetchLatestAllUnit(
     return { ok: false, error: 'latest_all_unit_lookup_failed', status: 500 };
   }
 
+  const data = (envelope as { data?: Record<string, unknown> | null } | null)?.data ?? null;
   if (!data) {
     return { ok: true, row: null };
   }
@@ -890,13 +867,13 @@ async function fetchLatestAllUnit(
   return {
     ok: true,
     row: {
-      snapshot_id: String(data.snapshot_id),
-      result_id: String(data.result_id),
-      computed_at: String(data.computed_at),
-      query_artifact_url: String(data.query_artifact_url),
-      query_artifact_format: String(data.query_artifact_format),
-      query_artifact_sha256: String(data.query_artifact_sha256),
-      query_artifact_byte_size: Number(data.query_artifact_byte_size),
+      snapshot_id: String(data.snapshotId),
+      result_id: String(data.resultId),
+      computed_at: String(data.computedAt),
+      query_artifact_url: String(data.queryArtifactUrl),
+      query_artifact_format: String(data.queryArtifactFormat),
+      query_artifact_sha256: String(data.queryArtifactSha256),
+      query_artifact_byte_size: Number(data.queryArtifactByteSize),
     },
   };
 }

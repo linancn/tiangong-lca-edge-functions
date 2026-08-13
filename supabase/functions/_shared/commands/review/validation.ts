@@ -2,13 +2,15 @@ import { z } from 'zod';
 
 import type { CommandParseResult } from '../../command_runtime/command.ts';
 import {
+  REVIEW_DECISION_TABLES,
   type ApproveReviewRequest,
   type AssignReviewersRequest,
   type RejectReviewRequest,
-  REVIEW_DECISION_TABLES,
+  type ReviewBatchDecisionRequest,
   type RevokeReviewerRequest,
   type SaveAssignmentDraftRequest,
   type SaveCommentDraftRequest,
+  type SimpleReviewDecisionRequest,
   type SubmitCommentRequest,
 } from './types.ts';
 
@@ -71,6 +73,49 @@ export const rejectReviewRequestSchema = decisionBaseSchema
     reason: z.string().trim().min(1, 'reason is required'),
   })
   .strict();
+
+export const simpleReviewDecisionRequestSchema = z.discriminatedUnion('decision', [
+  reviewBaseSchema
+    .extend({
+      decision: z.literal('approve'),
+    })
+    .strict(),
+  reviewBaseSchema
+    .extend({
+      decision: z.literal('reject'),
+      reason: z.string().trim().min(1, 'reason is required'),
+    })
+    .strict(),
+]);
+
+export const reviewBatchDecisionRequestSchema = z
+  .object({
+    reviewIds: z.array(uuidSchema).min(1).max(50),
+    decision: z.enum(['approve', 'reject']),
+    reason: z.string().trim().max(1000).optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.decision === 'reject' && !value.reason?.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reason'],
+        message: 'reason is required for reject',
+      });
+    }
+    if (value.decision === 'approve' && value.reason?.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['reason'],
+        message: 'approve does not accept a reason',
+      });
+    }
+  })
+  .transform((value) => ({
+    ...value,
+    reviewIds: [...new Set(value.reviewIds)],
+    ...(value.reason?.trim() ? { reason: value.reason.trim() } : {}),
+  }));
 
 function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResult<T> {
   return {
@@ -146,6 +191,28 @@ export function parseRejectReviewRequest(body: unknown): CommandParseResult<Reje
   const parsed = rejectReviewRequestSchema.safeParse(body);
   if (!parsed.success) {
     return invalidPayload('Invalid review reject payload', parsed.error);
+  }
+
+  return { ok: true, value: parsed.data };
+}
+
+export function parseSimpleReviewDecisionRequest(
+  body: unknown,
+): CommandParseResult<SimpleReviewDecisionRequest> {
+  const parsed = simpleReviewDecisionRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload('Invalid simple review decision payload', parsed.error);
+  }
+
+  return { ok: true, value: parsed.data };
+}
+
+export function parseReviewBatchDecisionRequest(
+  body: unknown,
+): CommandParseResult<ReviewBatchDecisionRequest> {
+  const parsed = reviewBatchDecisionRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload('Invalid review batch decision payload', parsed.error);
   }
 
   return { ok: true, value: parsed.data };

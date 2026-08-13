@@ -1,4 +1,12 @@
-export const REVIEW_DECISION_TABLES = ['processes', 'lifecyclemodels'] as const;
+export const REVIEW_DECISION_TABLES = [
+  'contacts',
+  'sources',
+  'unitgroups',
+  'flowproperties',
+  'flows',
+  'processes',
+  'lifecyclemodels',
+] as const;
 
 export type ReviewDecisionTable = (typeof REVIEW_DECISION_TABLES)[number];
 
@@ -38,6 +46,45 @@ export type RejectReviewRequest = {
   table: ReviewDecisionTable;
   reviewId: string;
   reason: string;
+};
+
+export type ReviewKind = 'root' | 'reference';
+
+export type SimpleReviewDecision = 'approve' | 'reject';
+
+export type SimpleReviewDecisionRequest =
+  | {
+      reviewId: string;
+      decision: 'approve';
+    }
+  | {
+      reviewId: string;
+      decision: 'reject';
+      reason: string;
+    };
+
+export type ReviewBatchDecisionRequest = {
+  reviewIds: string[];
+  decision: SimpleReviewDecision;
+  reason?: string;
+};
+
+export type ReviewIdRequest = {
+  reviewId: string;
+};
+
+export type ReviewerDecisionRequest = ReviewIdRequest & {
+  decision: SimpleReviewDecision;
+  reason?: string;
+};
+
+export type ReviewResponsibility = {
+  reviewId: string;
+  reviewKind: ReviewKind;
+  targetTable: ReviewDecisionTable;
+  targetId: string;
+  targetVersion: string;
+  ownerId: string;
 };
 
 export type ReviewCommandFailure = {

@@ -200,6 +200,10 @@ Deno.test(
       process_version: '00.00.001',
     };
     const createClient = (row: Record<string, unknown> | null) => ({
+      schema(schema: string) {
+        assertEquals(schema, 'public');
+        return this;
+      },
       from(table: string) {
         assertEquals(table, 'processes');
         return {

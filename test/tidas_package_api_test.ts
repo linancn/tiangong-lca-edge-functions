@@ -51,8 +51,268 @@ class FakeSupabase {
     if (configured) {
       return Promise.resolve(structuredClone(configured));
     }
-    if (fn === 'worker_enqueue_job') {
-      const record = asJsonRecord(args);
+    const record = asJsonRecord(args);
+    if (fn === 'svc_tidas_package_export_enqueue') {
+      const existing = this.tables.lca_package_request_cache.find(
+        (row) =>
+          row.requested_by === record.p_requested_by && row.request_key === record.p_request_key,
+      );
+      if (existing) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            mode: 'in_progress',
+            job_id: existing.job_id,
+            worker_job_id: existing.worker_job_id,
+          },
+          error: null,
+        });
+      }
+      const nowIso = new Date().toISOString();
+      const payload = {
+        type: 'export_package',
+        job_id: record.p_job_id,
+        requested_by: record.p_requested_by,
+        scope: record.p_scope,
+        roots: record.p_roots,
+      };
+      this.tables.worker_jobs.push({
+        id: TEST_WORKER_JOB_ID,
+        job_kind: 'tidas.export_package',
+        subject_id: record.p_job_id,
+        status: 'queued',
+        requested_by: record.p_requested_by,
+        request_hash: record.p_request_key,
+        payload_json: payload,
+        diagnostics: {},
+        created_at: nowIso,
+        updated_at: nowIso,
+      });
+      this.tables.lca_package_request_cache.push({
+        id: crypto.randomUUID(),
+        requested_by: record.p_requested_by,
+        operation: 'export_package',
+        request_key: record.p_request_key,
+        status: 'pending',
+        job_id: record.p_job_id,
+        worker_job_id: TEST_WORKER_JOB_ID,
+        hit_count: 1,
+        created_at: nowIso,
+        updated_at: nowIso,
+      });
+      return Promise.resolve({
+        data: {
+          ok: true,
+          mode: 'queued',
+          job_id: record.p_job_id,
+          worker_job_id: TEST_WORKER_JOB_ID,
+        },
+        error: null,
+      });
+    }
+    if (fn === 'svc_tidas_package_import_prepare') {
+      const existing = this.tables.lca_package_artifacts.find((row) => {
+        const metadata = asJsonRecord(row.metadata);
+        return (
+          metadata.requested_by === record.p_requested_by &&
+          record.p_idempotency_key &&
+          metadata.import_prepare_idempotency_key === record.p_idempotency_key
+        );
+      });
+      if (existing) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            mode: 'reused',
+            job_id: existing.job_id,
+            source_artifact_id: existing.id,
+            artifact_url: existing.artifact_url,
+          },
+          error: null,
+        });
+      }
+      const nowIso = new Date().toISOString();
+      this.tables.lca_package_artifacts.push({
+        id: record.p_source_artifact_id,
+        job_id: record.p_job_id,
+        worker_job_id: null,
+        artifact_kind: 'import_source',
+        status: 'pending',
+        artifact_url: record.p_artifact_url,
+        artifact_format: 'tidas-package-zip:v1',
+        content_type: record.p_content_type,
+        metadata: {
+          filename: record.p_filename,
+          original_filename: record.p_filename,
+          upload_state: 'prepared',
+          requested_by: record.p_requested_by,
+          import_prepare_idempotency_key: record.p_idempotency_key,
+        },
+        created_at: nowIso,
+        updated_at: nowIso,
+      });
+      return Promise.resolve({
+        data: {
+          ok: true,
+          mode: 'prepared',
+          job_id: record.p_job_id,
+          source_artifact_id: record.p_source_artifact_id,
+          artifact_url: record.p_artifact_url,
+        },
+        error: null,
+      });
+    }
+    if (fn === 'svc_tidas_package_import_enqueue') {
+      const artifact = this.tables.lca_package_artifacts.find(
+        (row) => row.id === record.p_source_artifact_id && row.job_id === record.p_job_id,
+      );
+      if (!artifact || asJsonRecord(artifact.metadata).requested_by !== record.p_requested_by) {
+        return Promise.resolve({
+          data: { ok: false, code: 'PACKAGE_JOB_NOT_FOUND', status: 404 },
+          error: null,
+        });
+      }
+      if (artifact.status === 'deleted') {
+        return Promise.resolve({
+          data: {
+            ok: false,
+            code: 'PACKAGE_ARTIFACT_DELETED',
+            status: 410,
+            message: 'Package artifact payload has been deleted; create a new package job',
+          },
+          error: null,
+        });
+      }
+      const existingWorker = artifact.worker_job_id
+        ? this.tables.worker_jobs.find((row) => row.id === artifact.worker_job_id)
+        : null;
+      if (existingWorker) {
+        return Promise.resolve({
+          data: {
+            ok: true,
+            mode: existingWorker.status === 'completed' ? 'completed' : 'in_progress',
+            job_id: record.p_job_id,
+            worker_job_id: existingWorker.id,
+            source_artifact_id: artifact.id,
+          },
+          error: null,
+        });
+      }
+      const metadata = asJsonRecord(artifact.metadata);
+      artifact.status = 'ready';
+      artifact.artifact_sha256 = record.p_artifact_sha256;
+      artifact.artifact_byte_size = record.p_artifact_byte_size;
+      artifact.content_type = record.p_content_type;
+      artifact.worker_job_id = TEST_WORKER_JOB_ID;
+      artifact.metadata = {
+        ...metadata,
+        filename: record.p_filename,
+        original_filename: record.p_filename,
+        upload_state: 'uploaded',
+        phase: 'enqueue_import',
+      };
+      const nowIso = new Date().toISOString();
+      this.tables.worker_jobs.push({
+        id: TEST_WORKER_JOB_ID,
+        job_kind: 'tidas.import_package',
+        subject_id: record.p_job_id,
+        status: 'queued',
+        requested_by: record.p_requested_by,
+        request_hash: record.p_artifact_sha256,
+        payload_json: {
+          type: 'import_package',
+          job_id: record.p_job_id,
+          requested_by: record.p_requested_by,
+          source_artifact_id: artifact.id,
+        },
+        diagnostics: {},
+        created_at: nowIso,
+        updated_at: nowIso,
+      });
+      return Promise.resolve({
+        data: {
+          ok: true,
+          mode: 'queued',
+          job_id: record.p_job_id,
+          worker_job_id: TEST_WORKER_JOB_ID,
+          source_artifact_id: artifact.id,
+        },
+        error: null,
+      });
+    }
+    if (fn === 'svc_tidas_package_read') {
+      const cache = this.tables.lca_package_request_cache.find(
+        (row) =>
+          row.requested_by === record.p_requested_by &&
+          (row.job_id === record.p_lookup_id || row.worker_job_id === record.p_lookup_id),
+      );
+      const effectiveJobId = cache?.job_id ?? record.p_lookup_id;
+      const worker = this.tables.worker_jobs.find(
+        (row) =>
+          row.requested_by === record.p_requested_by &&
+          (row.id === record.p_lookup_id ||
+            row.subject_id === effectiveJobId ||
+            asJsonRecord(row.payload_json).job_id === effectiveJobId),
+      );
+      const artifacts = this.tables.lca_package_artifacts.filter(
+        (row) =>
+          row.job_id === effectiveJobId &&
+          asJsonRecord(row.metadata).requested_by === record.p_requested_by,
+      );
+      if (!cache && !worker && artifacts.length === 0) {
+        return Promise.resolve({ data: { ok: true, data: null }, error: null });
+      }
+      const payload = asJsonRecord(worker?.payload_json);
+      return Promise.resolve({
+        data: {
+          ok: true,
+          data: {
+            jobId: effectiveJobId,
+            workerJobId: worker?.id ?? cache?.worker_job_id,
+            status: worker?.status ?? cache?.status,
+            operation:
+              cache?.operation ??
+              (worker?.job_kind === 'tidas.import_package' ? 'import_package' : 'export_package'),
+            scope: payload.scope,
+            rootCount: Array.isArray(payload.roots) ? payload.roots.length : 0,
+            requestKey: cache?.request_key ?? worker?.request_hash,
+            payload,
+            diagnostics: worker?.diagnostics ?? {},
+            artifacts: artifacts.map((artifact) => ({
+              id: artifact.id,
+              workerJobId: artifact.worker_job_id,
+              artifactKind: artifact.artifact_kind,
+              status: artifact.status,
+              artifactUrl: artifact.artifact_url,
+              artifactSha256: artifact.artifact_sha256,
+              artifactByteSize: artifact.artifact_byte_size,
+              artifactFormat: artifact.artifact_format,
+              contentType: artifact.content_type,
+              metadata: artifact.metadata,
+              expiresAt: artifact.expires_at,
+              isPinned: artifact.is_pinned,
+              createdAt: artifact.created_at,
+              updatedAt: artifact.updated_at,
+            })),
+            requestCache: cache
+              ? {
+                  id: cache.id,
+                  status: cache.status,
+                  hit_count: cache.hit_count,
+                  created_at: cache.created_at,
+                  updated_at: cache.updated_at,
+                  export_artifact_id: cache.export_artifact_id,
+                  report_artifact_id: cache.report_artifact_id,
+                }
+              : null,
+            createdAt: worker?.created_at ?? cache?.created_at,
+            updatedAt: worker?.updated_at ?? cache?.updated_at,
+          },
+        },
+        error: null,
+      });
+    }
+    if (fn === 'svc_worker_enqueue_job') {
       const payload = asJsonRecord(record.p_payload_json);
       const nowIso = new Date().toISOString();
       this.tables.worker_jobs.push({
@@ -512,7 +772,7 @@ Deno.test('export_tidas_package API exposes queued worker job before artifacts e
     assertEquals((workerJobRow.payload_json as JsonRecord).job_id, queued.job_id);
     assertEquals((workerJobRow.payload_json as JsonRecord).scope, 'current_user');
     assertEquals(supabase.rpcCalls.length, 1);
-    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job');
+    assertEquals(supabase.rpcCalls[0].fn, 'svc_tidas_package_export_enqueue');
 
     const lookupResponse = await jobsHandler(
       new Request(`https://example.com/functions/v1/tidas_package_jobs/${queued.job_id}`, {
@@ -711,8 +971,8 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       (workerJobRow.payload_json as JsonRecord).source_artifact_id,
       prepared.source_artifact_id,
     );
-    assertEquals(supabase.rpcCalls.length, 1);
-    assertEquals(supabase.rpcCalls[0].fn, 'worker_enqueue_job');
+    assertEquals(supabase.rpcCalls.length, 3);
+    assertEquals(supabase.rpcCalls[2].fn, 'svc_tidas_package_import_enqueue');
 
     const repeatedEnqueueResponse = await importHandler(
       new Request('https://example.com/functions/v1/import_tidas_package', {
@@ -733,7 +993,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       worker_job_id: TEST_WORKER_JOB_ID,
       source_artifact_id: prepared.source_artifact_id,
     });
-    assertEquals(supabase.rpcCalls.length, 1);
+    assertEquals(supabase.rpcCalls.length, 4);
 
     const lookupResponse = await jobsHandler(
       new Request(`https://example.com/functions/v1/tidas_package_jobs/${prepared.job_id}`, {
@@ -808,13 +1068,14 @@ Deno.test(
       const prepared = await prepareResponse.json();
       const artifactSha256 = await sha256Hex(EMPTY_ZIP_BYTES);
 
-      supabase.rpcResults.set('worker_enqueue_job', {
-        data: null,
-        error: {
-          code: '42501',
-          message: 'permission denied for worker_enqueue_job',
-          details: { reason: 'missing_migration' },
+      supabase.rpcResults.set('svc_tidas_package_import_enqueue', {
+        data: {
+          ok: false,
+          code: 'WORKER_JOBS_ENQUEUE_FAILED',
+          status: 403,
+          message: 'Failed to enqueue import worker job',
         },
+        error: null,
       });
 
       const enqueueResponse = await handler(
@@ -844,9 +1105,9 @@ Deno.test(
       });
       assertEquals(supabase.getRows('lca_package_jobs').length, 0);
       const artifactRow = supabase.getRows('lca_package_artifacts')[0];
-      assertEquals(artifactRow.status, 'ready');
+      assertEquals(artifactRow.status, 'pending');
       assertEquals(artifactRow.worker_job_id, null);
-      assertEquals(supabase.rpcCalls.length, 1);
+      assertEquals(supabase.rpcCalls.length, 2);
     });
   },
 );
@@ -914,7 +1175,7 @@ Deno.test(
       const artifactRow = supabase.getRows('lca_package_artifacts')[0];
       assertEquals(artifactRow.status, 'pending');
       assertEquals((artifactRow.metadata as JsonRecord).upload_state, 'prepared');
-      assertEquals(supabase.rpcCalls.length, 0);
+      assertEquals(supabase.rpcCalls.length, 1);
     });
   },
 );
@@ -1115,7 +1376,7 @@ Deno.test('import_tidas_package rejects enqueue for deleted source artifacts', a
       code: 'PACKAGE_ARTIFACT_DELETED',
       message: 'Package artifact payload has been deleted; create a new package job',
     });
-    assertEquals(supabase.rpcCalls.length, 0);
+    assertEquals(supabase.rpcCalls.length, 1);
   });
 });
 

@@ -18,8 +18,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-07-30
-lastReviewedCommit: 60f3bd97bd3f3da161a6fda17758f21fa87cefe7
+lastReviewedAt: 2026-08-07
+lastReviewedCommit: 02e1aeb99aa7b336ef9009947655d9e69c85ffbc
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -31,6 +31,8 @@ Supabase Edge Functions for LCA search, embedding, TIDAS package orchestration, 
 - Runtime: Supabase Edge Runtime (Deno 2.1.x)
 - Functions root: `supabase/functions`
 - Local serve command: `npm start`
+
+Database clients default RPC calls to the exposed `api` schema. Direct table access always selects `public` explicitly and is restricted to the nine core entity tables; internal worker, identity, review, LCA, TIDAS, and Data Product state is available only through database-engine capability façades.
 
 ## AI Docs Entry
 
@@ -50,7 +52,7 @@ These files are the low-token entry path for repo ownership, branch and deploy r
 - GitHub default branch 继续保持 `main`，这是平台层例外，不代表日常 trunk 改回 `main`。
 - 远端环境映射：
   - `main` project ref：`qgzvkongdjqiiamzbbts`
-  - `dev` project ref：`fotofiyqnuyvgtotswie`
+  - `dev` project ref：`submidrhbtknjxfympna`
 - 远端 `main` 与 `dev` 的函数部署都统一使用 `--no-verify-jwt`。这是正式仓库规则，不是临时口头 workaround。
 - 安全边界在函数运行时：gateway 不做 JWT 校验，不等于函数可以匿名执行。新函数不得假设 gateway `verify_jwt=true` 已经帮你兜底，必须继续显式做认证与授权。
 
@@ -164,7 +166,7 @@ Authenticate the Supabase CLI when needed:
 ./node_modules/.bin/supabase login
 ```
 
-Deploy to the persistent `dev` project (`fotofiyqnuyvgtotswie`) from the Git `dev` line or a reviewed PR branch:
+Deploy to the persistent `dev` project (`submidrhbtknjxfympna`) from the Git `dev` line or a reviewed PR branch:
 
 ```bash
 npm run deploy:dev -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
@@ -341,7 +343,7 @@ LCA solve/snapshot/contribution path, TIDAS package import/export, and review-su
 - `public.worker_list_jobs(...)`
 - `public.worker_cancel_job(...)`
 
-Retained domain tables such as `lca_jobs`, `lca_result_cache`, `lca_package_jobs`, `lca_package_artifacts`, and `dataset_review_submit_jobs` still carry result/cache/artifact/history metadata, but they are not the user-facing task fact. New LCA solve/snapshot/contribution and TIDAS package import/export submissions enqueue `worker_jobs` directly; the legacy job ids returned by those APIs are compatibility ids carried in worker payloads, not newly inserted `lca_jobs` / `lca_package_jobs` rows. Legacy `lca_enqueue_job` / `lca_package_enqueue_job` must not be used as enqueue fallback. If `LCA_WORKER_JOBS_ENABLED=false`, `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false`, or `WORKER_JOBS_CUTOVER_ENABLED=false`, new worker-owned submissions fail closed with `legacy_queue_disabled` / `LEGACY_QUEUE_DISABLED` instead of writing to the legacy queue path.
+Retained domain tables such as `lca_jobs`, `lca_result_cache`, `lca_package_jobs`, `lca_package_artifacts`, and `dataset_review_submit_jobs` still carry result/cache/artifact/history metadata, but Edge no longer accesses them directly. New LCA solve/snapshot/contribution and TIDAS package import/export submissions use service-only capability RPCs that atomically manage canonical `worker_jobs` and compatibility state. Legacy `lca_enqueue_job` / `lca_package_enqueue_job` must not be used as enqueue fallback. If `LCA_WORKER_JOBS_ENABLED=false`, `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false`, or `WORKER_JOBS_CUTOVER_ENABLED=false`, new worker-owned submissions fail closed with `legacy_queue_disabled` / `LEGACY_QUEUE_DISABLED` instead of writing to the legacy queue path.
 
 ## Review-submit Gate Function Call Pattern
 
@@ -382,7 +384,7 @@ Job response states map to HTTP status as follows:
 - `blocked` / `stale` / `cancelled`: HTTP `409`, not submit-ready or no longer active.
 - `error`: HTTP `502`, backend worker or DB orchestration failed.
 
-`process_dataset_review_submit_jobs` is a service-key-only worker endpoint. It claims DB submit jobs, records `waiting_gate` when the worker gate is not ready, maps terminal blocked/cancelled/failed gate worker states back to the coordinator, and calls DB-owned `cmd_review_submit_from_job` only after the gate worker job has completed with a passed result. Recurring invocation should be enabled only after the database RPC migration and this Edge Function are both deployed.
+`process_dataset_review_submit_jobs` is a service-key-only worker endpoint. It uses service-only submit-job claim/result and submit façades, records `waiting_gate` when the worker gate is not ready, and maps terminal blocked/cancelled/failed gate worker states back to the coordinator. Recurring invocation should be enabled only after the matching database façade migration and this Edge Function are both deployed.
 
 `app_worker_jobs` is the authenticated task-center API for user-visible `worker_jobs`. It supports `list`, `read`, and `cancel`, calls service-role DB RPCs from Edge, and enforces requester ownership before returning or cancelling a job. It does not expose generic user enqueue; job-specific APIs such as `app_dataset_review_submit_jobs` own enqueue semantics and payload validation.
 

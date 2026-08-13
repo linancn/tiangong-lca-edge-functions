@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-10
-lastReviewedCommit: c22d42a8dbf6c3504482f1b8065d882234b0bc98
-lastReviewedNote: 'Reviewed for Issue #275: Calculation Bundle v2 and bounded package-preview reads preserve existing Edge artifact-read and cross-repo ownership boundaries.'
+lastReviewedAt: 2026-08-11
+lastReviewedCommit: c09292f5b0aae125c413514ec468576a1c37f8c5
+lastReviewedNote: 'Edge runtime owns seven explicit multilingual search_text projectors, atomic extracted_md/search_text dual-write, the embedding_ft allowlist of seven dataset tables and nine unique schema-qualified function targets, search-only replay, and formal hybrid_search_* callers while preserving existing auth, validation, deployment, and cross-repo boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -89,6 +89,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - Node baseline: `22`
 - local serve command: `npm start`
 - baseline local validation: non-mutating `npm run lint` and `npm run check`
+- schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `npm run format`
 - remote deploy entrypoints:
   - `npm run deploy:dev -- <function-name> [more-function-names...]`

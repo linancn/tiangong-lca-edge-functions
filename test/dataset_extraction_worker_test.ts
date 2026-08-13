@@ -14,7 +14,24 @@ import {
 type JsonRecord = Record<string, unknown>;
 type Filter = { field: string; value: unknown };
 
-const FIXTURES: Record<SupportedDatasetEntityKind, unknown> = {
+function searchTextFragments(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((fragment) => typeof fragment !== 'string')) {
+    throw new Error('Expected search_text to be a string[]');
+  }
+  return value;
+}
+
+const FIXTURES: Partial<Record<SupportedDatasetEntityKind, unknown>> = {
+  process: {
+    processDataSet: {
+      processInformation: {
+        dataSetInformation: {
+          'common:UUID': '97000000-0000-0000-0000-000000000006',
+          name: { baseName: [{ '@xml:lang': 'en', '#text': 'Test process' }] },
+        },
+      },
+    },
+  },
   flow: {
     flowDataSet: {
       flowInformation: {
@@ -73,20 +90,34 @@ const FIXTURES: Record<SupportedDatasetEntityKind, unknown> = {
       units: { unit: { '@dataSetInternalID': '1', name: 'm', meanValue: 1 } },
     },
   },
+  lifecyclemodel: {
+    lifeCycleModelDataSet: {
+      lifeCycleModelInformation: {
+        dataSetInformation: {
+          'common:UUID': '97000000-0000-0000-0000-000000000007',
+          name: { baseName: [{ '@xml:lang': 'en', '#text': 'Test lifecycle model' }] },
+        },
+      },
+    },
+  },
 };
 
-const TABLE_BY_KIND: Record<SupportedDatasetEntityKind, string> = {
+const TABLE_BY_KIND: Partial<Record<SupportedDatasetEntityKind, string>> = {
+  process: 'processes',
   flow: 'flows',
   contact: 'contacts',
   flowproperty: 'flowproperties',
   source: 'sources',
   unitgroup: 'unitgroups',
+  lifecyclemodel: 'lifecyclemodels',
 };
 
 class FakeSupabase {
   rows: Record<string, JsonRecord[]> = {};
   claimedJobs: JsonRecord[] = [];
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
+  selectCounts: Record<string, number> = {};
+  updatePayloads: Array<{ table: string; values: JsonRecord }> = [];
 
   rpc(fn: string, args: unknown) {
     this.rpcCalls.push({ fn, args: structuredClone(args) });
@@ -99,9 +130,22 @@ class FakeSupabase {
     return Promise.resolve({ data: { ok: true }, error: null });
   }
 
+  schema(schema: string): this {
+    assertEquals(schema, 'public');
+    return this;
+  }
+
   from(table: string): FakeDatasetQuery {
     this.rows[table] ??= [];
-    return new FakeDatasetQuery(this.rows[table]);
+    return new FakeDatasetQuery(
+      this.rows[table],
+      () => {
+        this.selectCounts[table] = (this.selectCounts[table] ?? 0) + 1;
+      },
+      (values) => {
+        this.updatePayloads.push({ table, values });
+      },
+    );
   }
 }
 
@@ -110,16 +154,22 @@ class FakeDatasetQuery implements PromiseLike<{ data: unknown; error: unknown }>
   private mode: 'select' | 'update' | null = null;
   private updateValues: JsonRecord = {};
 
-  constructor(private readonly rows: JsonRecord[]) {}
+  constructor(
+    private readonly rows: JsonRecord[],
+    private readonly onSelect: () => void,
+    private readonly onUpdate: (values: JsonRecord) => void,
+  ) {}
 
   select(_columns: string): this {
     this.mode = 'select';
+    this.onSelect();
     return this;
   }
 
   update(values: JsonRecord): this {
     this.mode = 'update';
     this.updateValues = structuredClone(values);
+    this.onUpdate(structuredClone(values));
     return this;
   }
 
@@ -187,10 +237,9 @@ Deno.test('processDatasetExtractionJobs writes and ACKs all four foundation data
   kinds.forEach((kind, index) => {
     const msgId = index + 1;
     const id = `97000000-0000-0000-0000-${String(msgId).padStart(12, '0')}`;
-    supabase.rows[TABLE_BY_KIND[kind]] = [
-      { id, version: '01.00.000', json_ordered: FIXTURES[kind] },
-    ];
-    supabase.claimedJobs.push(buildJob(msgId, kind, TABLE_BY_KIND[kind], id));
+    const table = TABLE_BY_KIND[kind]!;
+    supabase.rows[table] = [{ id, version: '01.00.000', json_ordered: FIXTURES[kind]! }];
+    supabase.claimedJobs.push(buildJob(msgId, kind, table, id));
   });
 
   const result = await processDatasetExtractionJobs({
@@ -210,11 +259,87 @@ Deno.test('processDatasetExtractionJobs writes and ACKs all four foundation data
   );
   assertStringIncludes(String(supabase.rows.sources[0].extracted_md), '**Entity:** Source');
   assertStringIncludes(String(supabase.rows.unitgroups[0].extracted_md), '**Entity:** Unit Group');
+  assertEquals(
+    searchTextFragments(supabase.rows.contacts[0].search_text).includes('Alice Example'),
+    true,
+  );
+  assertEquals(
+    searchTextFragments(supabase.rows.flowproperties[0].search_text).includes('Mass'),
+    true,
+  );
+  assertEquals(
+    searchTextFragments(supabase.rows.sources[0].search_text).includes('Reference source'),
+    true,
+  );
+  assertEquals(
+    searchTextFragments(supabase.rows.unitgroups[0].search_text).includes('Units of length'),
+    true,
+  );
   assertEquals(supabase.rpcCalls.at(-1), {
     fn: 'cmd_dataset_extraction_ack',
     args: { p_msg_ids: [1, 2, 3, 4] },
   });
 });
+
+Deno.test(
+  'normal process and lifecyclemodel jobs atomically dual-write both projections',
+  async () => {
+    const supabase = new FakeSupabase();
+    const jobs: Array<{
+      msgId: number;
+      kind: SupportedDatasetEntityKind;
+      markdown: string;
+    }> = [
+      { msgId: 8, kind: 'process', markdown: '# process markdown' },
+      { msgId: 9, kind: 'lifecyclemodel', markdown: '# lifecycle model markdown' },
+    ];
+
+    for (const job of jobs) {
+      const id = `97000000-0000-0000-0000-${String(job.msgId).padStart(12, '0')}`;
+      const table = TABLE_BY_KIND[job.kind]!;
+      supabase.rows[table] = [{ id, version: '01.00.000', json_ordered: FIXTURES[job.kind] }];
+      supabase.claimedJobs.push(buildJob(job.msgId, job.kind, table, id));
+    }
+
+    const result = await processDatasetExtractionJobs({
+      supabase: supabase as unknown as SupabaseClient,
+      markdownGenerators: {
+        process: () => jobs[0].markdown,
+        lifecyclemodel: () => jobs[1].markdown,
+      },
+    });
+
+    assertEquals(
+      result.results.map((item) => item.status),
+      ['success', 'success'],
+    );
+    assertEquals(supabase.rows.processes[0].extracted_md, jobs[0].markdown);
+    assertEquals(
+      searchTextFragments(supabase.rows.processes[0].search_text).includes('Test process'),
+      true,
+    );
+    assertEquals(supabase.rows.lifecyclemodels[0].extracted_md, jobs[1].markdown);
+    assertEquals(
+      searchTextFragments(supabase.rows.lifecyclemodels[0].search_text).includes(
+        'Test lifecycle model',
+      ),
+      true,
+    );
+    assertEquals(supabase.selectCounts.processes, 1);
+    assertEquals(supabase.selectCounts.lifecyclemodels, 1);
+    assertEquals(
+      supabase.updatePayloads.map(({ values }) => Object.keys(values).sort()),
+      [
+        ['extracted_md', 'search_text'],
+        ['extracted_md', 'search_text'],
+      ],
+    );
+    assertEquals(
+      supabase.updatePayloads.map(({ values }) => Array.isArray(values.search_text)),
+      [true, true],
+    );
+  },
+);
 
 Deno.test('dataset extraction updates only the exact id and version', async () => {
   const supabase = new FakeSupabase();
@@ -229,6 +354,44 @@ Deno.test('dataset extraction updates only the exact id and version', async () =
 
   assertEquals(supabase.rows.sources[0].extracted_md, undefined);
   assertStringIncludes(String(supabase.rows.sources[1].extracted_md), '# Reference source');
+});
+
+Deno.test('search_text replay writes only search_text and keeps extracted_md bytes', async () => {
+  const supabase = new FakeSupabase();
+  const id = '97000000-0000-0000-0000-000000000011';
+  const markdownSnapshot = '# existing markdown bytes';
+  supabase.rows.flows = [
+    {
+      id,
+      version: '01.00.000',
+      json_ordered: FIXTURES.flow,
+      extracted_md: markdownSnapshot,
+      modified_at: 'before-replay',
+    },
+  ];
+  supabase.claimedJobs = [buildJob(11, 'flow', 'flows', id, '01.00.000', 'search_text')];
+
+  const result = await processDatasetExtractionJobs({
+    supabase: supabase as unknown as SupabaseClient,
+  });
+
+  assertEquals(result.results[0].status, 'success');
+  assertEquals(supabase.rows.flows[0].extracted_md, markdownSnapshot);
+  const searchText = searchTextFragments(supabase.rows.flows[0].search_text);
+  assertEquals(searchText.includes('Test flow'), true);
+  assertEquals(supabase.rows.flows[0].modified_at, 'before-replay');
+  assertEquals(supabase.selectCounts.flows, 1);
+  assertEquals(supabase.updatePayloads, [{ table: 'flows', values: { search_text: searchText } }]);
+  assertEquals(
+    supabase.rpcCalls.some(
+      (call) =>
+        call.fn === 'cmd_dataset_extraction_record_failure' ||
+        call.fn.includes('embedding') ||
+        (call.fn === 'cmd_dataset_extraction_ack' &&
+          JSON.stringify(call.args).includes('extracted_md')),
+    ),
+    false,
+  );
 });
 
 Deno.test('missing or expired dataset identities are ACKed as stale no-ops', async () => {
@@ -315,26 +478,33 @@ Deno.test('max-read generator failures are recorded and removed', async () => {
   assertEquals(supabase.rpcCalls.at(-1)?.fn, 'cmd_dataset_extraction_record_failure');
 });
 
-Deno.test('unsupported extraction kind and process jobs fail deterministically', async () => {
-  const supabase = new FakeSupabase();
-  supabase.claimedJobs = [
-    buildJob(60, 'flow', 'flows', undefined, '01.00.000', 'legacy_kind'),
-    buildJob(61, 'process', 'processes'),
-  ];
+Deno.test(
+  'unsupported extraction kinds fail; Process extracted_md jobs require an injected Markdown generator',
+  async () => {
+    const supabase = new FakeSupabase();
+    supabase.claimedJobs = [
+      buildJob(60, 'flow', 'flows', undefined, '01.00.000', 'legacy_kind'),
+      buildJob(61, 'process', 'processes'),
+    ];
 
-  const result = await processDatasetExtractionJobs({
-    supabase: supabase as unknown as SupabaseClient,
-  });
+    const result = await processDatasetExtractionJobs({
+      supabase: supabase as unknown as SupabaseClient,
+    });
 
-  assertEquals(
-    result.results.map((item) => item.status),
-    ['unsupported', 'unsupported'],
-  );
-  assertEquals(
-    result.results.map((item) => item.error_code),
-    ['UNSUPPORTED_EXTRACTION_KIND', 'UNSUPPORTED_ENTITY_KIND'],
-  );
-});
+    assertEquals(
+      result.results.map((item) => item.status),
+      ['unsupported', 'unsupported'],
+    );
+    assertEquals(
+      result.results.map((item) => item.error_code),
+      ['UNSUPPORTED_EXTRACTION_KIND', 'UNSUPPORTED_ENTITY_KIND'],
+    );
+    assertEquals(
+      result.results[1].error_message,
+      'No extracted_md generator registered for process',
+    );
+  },
+);
 
 Deno.test('flow extraction helpers retain string json_ordered compatibility', () => {
   const parsed = normalizeJsonOrdered(JSON.stringify(FIXTURES.flow));

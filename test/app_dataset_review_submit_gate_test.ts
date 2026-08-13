@@ -88,6 +88,11 @@ class FakeRevisionQuery {
 class FakeRevisionSupabase {
   constructor(private readonly rowsByTable: Record<string, RevisionRow[]>) {}
 
+  schema(schema: string) {
+    assertEquals(schema, 'public');
+    return this;
+  }
+
   from(table: string) {
     return new FakeRevisionQuery(this.rowsByTable[table] ?? []);
   }

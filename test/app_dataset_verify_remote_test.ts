@@ -81,6 +81,11 @@ class FakeSupabase {
 
   constructor(private rowsByTable: Record<string, Row[]>) {}
 
+  schema(schema: string) {
+    assertEquals(schema, 'public');
+    return this;
+  }
+
   from(table: string) {
     return new FakeQuery(this.rowsByTable[table] ?? [], this.errors.get(table) ?? null);
   }
