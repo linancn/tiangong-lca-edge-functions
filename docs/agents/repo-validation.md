@@ -30,8 +30,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-13
-lastReviewedCommit: f54afcf18548a21cae08d93a01a4ae78040bf367
-lastReviewedNote: 'Validation now proves Gate-free stable review submission, legacy request compatibility, Review Admin-only diagnostic start/read behavior, server-derived scope, and non-blocking report outcomes.'
+lastReviewedCommit: 6737f71611ba34689dffe7f6a735a33f2adbda29
+lastReviewedNote: 'Validation proves Gate-free stable review submission, Review Admin-only non-blocking diagnostics, actor-owned collaborative draft scope, legacy compatibility, multilingual search projection, and semantic calculation-download contracts.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

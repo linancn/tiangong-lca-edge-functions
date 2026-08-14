@@ -43,8 +43,14 @@ Deno.test(
     assertEquals(result.calculation_contract.data_scope, 'public_plus_owner_draft');
     assertEquals(result.calculation_contract.process_filter.process_states, [100]);
     assertEquals(result.calculation_contract.process_filter.include_user_state_codes, [0]);
-    assertEquals(result.calculation_contract.process_filter.include_user_unassigned_only, true);
-    assertEquals(result.calculation_contract.process_filter.include_user_review_free_only, true);
+    assertEquals(
+      result.calculation_contract.process_filter.include_user_unassigned_only,
+      undefined,
+    );
+    assertEquals(
+      result.calculation_contract.process_filter.include_user_review_free_only,
+      undefined,
+    );
     assertEquals(result.calculation_contract.process_filter.selection_mode, 'filtered_library');
     assertEquals(result.calculation_contract.process_filter.request_roots, []);
     assertMatch(result.calculation_contract.scope_manifest_sha256 ?? '', /^[0-9a-f]{64}$/);
@@ -66,8 +72,8 @@ Deno.test(
     assertEquals(payload.process_states, '100');
     assertEquals(payload.include_user_id, 'user-1');
     assertEquals(payload.include_user_state_codes, '0');
-    assertEquals(payload.include_user_unassigned_only, true);
-    assertEquals(payload.include_user_review_free_only, true);
+    assertEquals('include_user_unassigned_only' in payload, false);
+    assertEquals('include_user_review_free_only' in payload, false);
     assertEquals('request_roots' in payload, false);
     assertEquals(payload.scope_manifest, result.calculation_contract.scope_manifest);
     assertEquals(payload.scope_manifest_sha256, result.calculation_contract.scope_manifest_sha256);

@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-13'
-lastReviewedCommit: '4cdb19ec2c2d00bae3dd133866bd80b0df1cc77d'
-lastReviewedNote: 'Edge submits reviews through stable cmd_review_submit without Gate authority, exposes one manual server-scoped Review Admin diagnostic, and preserves multilingual search and semantic calculation-download contracts.'
+lastReviewedCommit: '6737f71611ba34689dffe7f6a735a33f2adbda29'
+lastReviewedNote: 'Edge submits reviews without Gate authority, exposes one manual server-scoped Review Admin diagnostic, includes actor-owned collaborative drafts in LCA scope, and preserves multilingual search and semantic calculation-download contracts.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

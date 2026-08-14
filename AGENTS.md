@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-13
-lastReviewedCommit: 4cdb19ec2c2d00bae3dd133866bd80b0df1cc77d
-lastReviewedNote: 'Edge submits reviews through the stable database command, exposes a manual non-blocking Review Admin diagnostic, retains old Gate endpoints only for compatibility, and preserves current search and calculation-download boundaries.'
+lastReviewedCommit: 6737f71611ba34689dffe7f6a735a33f2adbda29
+lastReviewedNote: 'Edge submits reviews through the stable database command, exposes a manual non-blocking Review Admin diagnostic, includes actor-owned collaborative drafts in LCA scope, retains old Gate endpoints only for compatibility, and preserves current search and calculation-download boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
