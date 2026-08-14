@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-13'
-lastReviewedCommit: '4cdb19ec2c2d00bae3dd133866bd80b0df1cc77d'
-lastReviewedNote: 'Edge search uses seven explicit multilingual search_text projectors, atomically dual-writes extracted_md and search_text during normal extraction, isolates search-only replay to search_text, and calls formal hybrid_search_* RPCs.'
+lastReviewedCommit: '6737f71611ba34689dffe7f6a735a33f2adbda29'
+lastReviewedNote: 'Edge submits reviews without Gate authority, exposes one manual server-scoped Review Admin diagnostic, includes actor-owned collaborative drafts in LCA scope, and preserves multilingual search and semantic calculation-download contracts.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -137,8 +137,15 @@ routing:
         - docs/agents/repo-architecture.md
         - docs/agents/repo-validation.md
         - test.example.http
-    review-submit-gate:
+    review-quality-diagnostic:
       paths:
+        - supabase/functions/admin_review_quality_diagnostic/**
+        - supabase/functions/_shared/commands/review/quality_diagnostic.ts
+        - supabase/functions/_shared/commands/review/types.ts
+        - supabase/functions/_shared/commands/review/validation.ts
+        - supabase/functions/_shared/commands/review/repository.ts
+        - supabase/functions/_shared/db_rpc/review_commands.ts
+        - test/admin_review_quality_diagnostic_test.ts
         - supabase/functions/app_dataset_review_submit_gate/**
         - supabase/functions/app_dataset_review_submit_jobs/**
         - supabase/functions/app_dataset_submit_review/**
@@ -328,10 +335,24 @@ rules:
       - path: docs/agents/repo-architecture.md
         mode: review_or_update
     reason: Runtime changes can alter repo boundaries, routing, validation scope, and hotspot ownership.
-  - id: edge-functions-review-submit-gate-contract
+  - id: edge-functions-review-quality-diagnostic-contract
     scope: repo
     repo: edge-functions
     triggers:
+      - path: supabase/functions/admin_review_quality_diagnostic/**
+        kind: runtime-code
+      - path: supabase/functions/_shared/commands/review/quality_diagnostic.ts
+        kind: runtime-code
+      - path: supabase/functions/_shared/commands/review/types.ts
+        kind: runtime-code
+      - path: supabase/functions/_shared/commands/review/validation.ts
+        kind: runtime-code
+      - path: supabase/functions/_shared/commands/review/repository.ts
+        kind: runtime-code
+      - path: supabase/functions/_shared/db_rpc/review_commands.ts
+        kind: runtime-code
+      - path: test/admin_review_quality_diagnostic_test.ts
+        kind: runtime-test
       - path: supabase/functions/app_dataset_review_submit_gate/**
         kind: runtime-code
       - path: supabase/functions/app_dataset_review_submit_jobs/**
@@ -381,7 +402,7 @@ rules:
         mode: review_or_update
       - path: test.example.http
         mode: must_exist
-    reason: Review-submit gate API and submit-review assertion metadata define the edge contract consumed by Next and backed by database-engine RPC truth.
+    reason: Direct review submission and the Review Admin-only manual quality diagnostic must preserve server-derived scope, informational outcomes, stable database RPCs, and the temporary legacy Gate/coordinator compatibility boundary.
   - id: edge-functions-lca-release-runtime-contract
     scope: repo
     repo: edge-functions

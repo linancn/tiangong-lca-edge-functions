@@ -44,15 +44,32 @@ Deno.test('submitReviewRequestSchema rejects unexpected payload fields', () => {
   assertEquals(parsed.success, false);
 });
 
-Deno.test('submitReviewRequestSchema requires process gate metadata', () => {
+Deno.test('submitReviewRequestSchema accepts Process submission without Gate metadata', () => {
   const parsed = submitReviewRequestSchema.safeParse({
     table: 'processes',
     id: '11111111-1111-4111-8111-111111111111',
     version: '01.00.000',
   });
 
-  assertEquals(parsed.success, false);
+  assertEquals(parsed.success, true);
 });
+
+Deno.test(
+  'submitReviewRequestSchema accepts legacy Process Gate metadata for compatibility',
+  () => {
+    const parsed = submitReviewRequestSchema.safeParse({
+      table: 'processes',
+      id: '11111111-1111-4111-8111-111111111111',
+      version: '01.00.000',
+      reviewSubmitGateRunId: '44444444-4444-4444-8444-444444444444',
+      revisionChecksum: 'a'.repeat(64),
+      reviewSubmitPolicyProfile: 'review_submit_fast.v1',
+      reviewSubmitReportSchemaVersion: 'review_submit_gate_report.v1',
+    });
+
+    assertEquals(parsed.success, true);
+  },
+);
 
 Deno.test(
   'reviewSubmitGateRequestSchema defaults action and review-submit gate contract versions',
@@ -202,8 +219,6 @@ const submitReviewRequest = {
   table: 'processes' as const,
   id: '11111111-1111-4111-8111-111111111111',
   version: '01.00.000',
-  reviewSubmitGateRunId: '44444444-4444-4444-8444-444444444444',
-  revisionChecksum: 'a'.repeat(64),
 };
 
 const reviewSubmitGateRequest = {
@@ -400,22 +415,34 @@ Deno.test(
 Deno.test(
   'callDatasetSubmitReviewRpc unwraps success envelopes returned by cmd_review_submit',
   async () => {
-    const result = (await callDatasetSubmitReviewRpc(
-      new FakeRpcSupabase({
+    const supabase = new FakeRpcSupabase({
+      data: {
+        ok: true,
         data: {
-          ok: true,
-          data: {
-            review: {
-              id: '33333333-3333-4333-8333-333333333333',
-            },
+          review: {
+            id: '33333333-3333-4333-8333-333333333333',
           },
         },
-        error: null,
-      }) as never,
+      },
+      error: null,
+    });
+    const result = (await callDatasetSubmitReviewRpc(
+      supabase as never,
       submitReviewRequest,
       auditPayload,
     )) as DatasetRpcResult;
 
+    assertEquals(supabase.calls, [
+      {
+        fn: 'cmd_review_submit',
+        args: {
+          p_target_table: submitReviewRequest.table,
+          p_target_id: submitReviewRequest.id,
+          p_target_version: submitReviewRequest.version,
+          p_audit: auditPayload,
+        },
+      },
+    ]);
     assertEquals(result, {
       ok: true,
       data: {
@@ -426,6 +453,38 @@ Deno.test(
     });
   },
 );
+
+Deno.test('callDatasetSubmitReviewRpc never forwards legacy Gate context', async () => {
+  const supabase = new FakeRpcSupabase({
+    data: {
+      ok: true,
+      data: {},
+    },
+    error: null,
+  });
+  const result = (await callDatasetSubmitReviewRpc(
+    supabase as never,
+    {
+      ...submitReviewRequest,
+      reviewSubmitGateRunId: '44444444-4444-4444-8444-444444444444',
+      revisionChecksum: 'a'.repeat(64),
+    },
+    auditPayload,
+  )) as DatasetRpcResult;
+
+  assertEquals(result.ok, true);
+  assertEquals(supabase.calls, [
+    {
+      fn: 'cmd_review_submit',
+      args: {
+        p_target_table: submitReviewRequest.table,
+        p_target_id: submitReviewRequest.id,
+        p_target_version: submitReviewRequest.version,
+        p_audit: auditPayload,
+      },
+    },
+  ]);
+});
 
 Deno.test(
   'callDatasetSubmitReviewRpc treats command failure envelopes as command failures',

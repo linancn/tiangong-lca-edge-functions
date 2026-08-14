@@ -33,8 +33,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-13
-lastReviewedCommit: 4cdb19ec2c2d00bae3dd133866bd80b0df1cc77d
-lastReviewedNote: 'Edge runtime owns seven explicit multilingual search_text projectors, atomic extracted_md/search_text dual-write, the embedding_ft allowlist of seven dataset tables and nine unique schema-qualified function targets, search-only replay, and formal hybrid_search_* callers while preserving existing auth, validation, deployment, and cross-repo boundaries.'
+lastReviewedCommit: 6737f71611ba34689dffe7f6a735a33f2adbda29
+lastReviewedNote: 'Edge submits reviews through the stable database command, exposes a manual non-blocking Review Admin diagnostic, includes actor-owned collaborative drafts in LCA scope, retains old Gate endpoints only for compatibility, and preserves current search and calculation-download boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -79,7 +79,7 @@ Do not start from repo landing prose or raw function inventories when the core c
 - human setup and request-example guidance stay in `README.md`
 - `test.example.http` is a supporting request collection for concrete payloads, not a governed source doc
 - repo-local documentation maintenance is enforced locally by the pre-push docpact gate; `.github/workflows/ai-doc-lint.yml` is manual-dispatch fallback
-- the main routing intents are `function-runtime`, `auth-runtime`, `command-runtime`, `data-product-runtime`, `review-submit-gate`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
+- the main routing intents are `function-runtime`, `auth-runtime`, `command-runtime`, `data-product-runtime`, `review-quality-diagnostic`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
 
 ## Minimal Execution Facts
 
@@ -107,7 +107,7 @@ At a human-readable level, this repo owns:
 
 - `supabase/functions/**` for Edge Function entrypoints, handlers, and runtime request or response behavior
 - `supabase/functions/_shared/**` for auth, command runtime, DB-RPC wrappers, OpenAI, Redis, Supabase client helpers, and shared domain utilities
-- review-submit Edge orchestration, including API projection, service-worker polling, and DB-RPC wrapper calls for database-owned `worker_jobs`
+- direct review submission through the stable database command, the Review Admin-only manual quality-diagnostic projection, and compatibility-only handling for already deployed review-submit Gate/coordinator clients
 - `test/**` for repo-level Deno tests
 - `scripts/**` for deno-check inventory, deploy contract, auth probes, and smoke helpers
 - `package.json`, `supabase/config.toml`, and `supabase/.env.example` for repo runtime/deploy/operator configuration

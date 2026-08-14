@@ -93,23 +93,6 @@ export const submitReviewRequestSchema = datasetBaseRequestSchema
           message: 'review-submit Gate fields are only accepted for processes',
         });
       }
-      return;
-    }
-
-    if (!value.reviewSubmitGateRunId) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['reviewSubmitGateRunId'],
-        message: 'reviewSubmitGateRunId is required for process submit-review',
-      });
-    }
-
-    if (!value.revisionChecksum) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['revisionChecksum'],
-        message: 'revisionChecksum is required for process submit-review',
-      });
     }
   });
 

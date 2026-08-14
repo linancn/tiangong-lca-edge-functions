@@ -7,6 +7,7 @@ import {
   type AssignReviewersRequest,
   type RejectReviewRequest,
   type ReviewBatchDecisionRequest,
+  type ReviewQualityDiagnosticRequest,
   type RevokeReviewerRequest,
   type SaveAssignmentDraftRequest,
   type SaveCommentDraftRequest,
@@ -117,6 +118,20 @@ export const reviewBatchDecisionRequestSchema = z
     ...(value.reason?.trim() ? { reason: value.reason.trim() } : {}),
   }));
 
+export const reviewQualityDiagnosticRequestSchema = z.discriminatedUnion('action', [
+  z
+    .object({
+      action: z.literal('start'),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal('read'),
+      runId: uuidSchema.optional(),
+    })
+    .strict(),
+]);
+
 function invalidPayload<T>(message: string, error: z.ZodError): CommandParseResult<T> {
   return {
     ok: false,
@@ -213,6 +228,17 @@ export function parseReviewBatchDecisionRequest(
   const parsed = reviewBatchDecisionRequestSchema.safeParse(body);
   if (!parsed.success) {
     return invalidPayload('Invalid review batch decision payload', parsed.error);
+  }
+
+  return { ok: true, value: parsed.data };
+}
+
+export function parseReviewQualityDiagnosticRequest(
+  body: unknown,
+): CommandParseResult<ReviewQualityDiagnosticRequest> {
+  const parsed = reviewQualityDiagnosticRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return invalidPayload('Invalid review quality diagnostic payload', parsed.error);
   }
 
   return { ok: true, value: parsed.data };

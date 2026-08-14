@@ -8,6 +8,7 @@ import type {
   ReviewCommandFailure,
   ReviewerDecisionRequest,
   ReviewIdRequest,
+  ReviewQualityDiagnosticRequest,
   RevokeReviewerRequest,
   SaveAssignmentDraftRequest,
   SaveCommentDraftRequest,
@@ -333,4 +334,17 @@ export function callReviewerDecisionRpc(
     'cmd_reviewer_submit_decision',
     buildReviewerDecisionRpcArgs(request, audit),
   );
+}
+
+export function callReviewQualityDiagnosticStartRpc(supabase: RpcClient) {
+  return callReviewRpc(supabase, 'cmd_review_quality_diagnostic_start', {});
+}
+
+export function callReviewQualityDiagnosticReadRpc(
+  supabase: RpcClient,
+  request: Extract<ReviewQualityDiagnosticRequest, { action: 'read' }>,
+) {
+  return callReviewRpc(supabase, 'qry_review_quality_diagnostic', {
+    p_run_id: request.runId ?? null,
+  });
 }

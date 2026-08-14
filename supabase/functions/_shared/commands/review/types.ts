@@ -78,6 +78,15 @@ export type ReviewerDecisionRequest = ReviewIdRequest & {
   reason?: string;
 };
 
+export type ReviewQualityDiagnosticRequest =
+  | {
+      action: 'start';
+    }
+  | {
+      action: 'read';
+      runId?: string;
+    };
+
 export type ReviewResponsibility = {
   reviewId: string;
   reviewKind: ReviewKind;

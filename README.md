@@ -18,8 +18,9 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-07
-lastReviewedCommit: 02e1aeb99aa7b336ef9009947655d9e69c85ffbc
+lastReviewedAt: 2026-08-13
+lastReviewedCommit: f54afcf18548a21cae08d93a01a4ae78040bf367
+lastReviewedNote: 'Documented direct Gate-free review submission and the Review Admin-only manual quality diagnostic start/read API.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -224,8 +225,8 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 - `source_hybrid_search`
 - `unitgroup_hybrid_search`
 - `app_dataset_verify_remote`
-- `app_dataset_review_submit_gate`
-- `app_dataset_review_submit_jobs`
+- `app_dataset_submit_review`
+- `admin_review_quality_diagnostic`
 - `app_worker_jobs`
 - `ai_suggest`
 - `lca_solve` / `lca_jobs` / `lca_results`
@@ -336,57 +337,52 @@ deno check --config supabase/functions/deno.json <changed-file>
 
 ## Worker Jobs RPC Prerequisite
 
-LCA solve/snapshot/contribution path, TIDAS package import/export, and review-submit orchestration use database-owned `worker_jobs` RPCs for canonical task lifecycle state. The target database must include the `database-engine` worker job contract migrations before these Edge Functions are deployed:
+LCA solve/snapshot/contribution path, TIDAS package import/export, the Review Admin quality diagnostic, and compatibility-only review-submit orchestration use database-owned `worker_jobs` for canonical task lifecycle state. The target database must include the `database-engine` worker job contract migrations before these Edge Functions are deployed:
 
 - `public.worker_enqueue_job(...)`
 - `public.worker_read_job(...)`
 - `public.worker_list_jobs(...)`
 - `public.worker_cancel_job(...)`
 
+Review submission and the dedicated administrator projection additionally require:
+
+- `api.cmd_review_submit(...)`
+- `api.cmd_review_quality_diagnostic_start()`
+- `api.qry_review_quality_diagnostic(...)`
+
 Retained domain tables such as `lca_jobs`, `lca_result_cache`, `lca_package_jobs`, `lca_package_artifacts`, and `dataset_review_submit_jobs` still carry result/cache/artifact/history metadata, but Edge no longer accesses them directly. New LCA solve/snapshot/contribution and TIDAS package import/export submissions use service-only capability RPCs that atomically manage canonical `worker_jobs` and compatibility state. Legacy `lca_enqueue_job` / `lca_package_enqueue_job` must not be used as enqueue fallback. If `LCA_WORKER_JOBS_ENABLED=false`, `TIDAS_PACKAGE_WORKER_JOBS_ENABLED=false`, or `WORKER_JOBS_CUTOVER_ENABLED=false`, new worker-owned submissions fail closed with `legacy_queue_disabled` / `LEGACY_QUEUE_DISABLED` instead of writing to the legacy queue path.
 
-## Review-submit Gate Function Call Pattern
+## Review Submission And Review Admin Quality Diagnostic
 
-`app_dataset_review_submit_gate` is the Edge API boundary for worker-owned review-submit numerical stability reports. It accepts authenticated `POST` requests, derives the authoritative revision checksum from the persisted `json_ordered` row, and returns normalized gate states for Next:
-
-- `queued` / `running`: HTTP `202`, not submit-ready.
-- `passed`: HTTP `200`, submit-ready for the exact dataset revision checksum and policy.
-- `blocked` / `stale`: HTTP `409`, not submit-ready; render returned `blockingReasons`.
-- `error`: HTTP `502`, worker runtime or backend gate failure.
-
-Request shape:
+`app_dataset_submit_review` is the current authenticated review-submission endpoint. It calls stable database RPC `cmd_review_submit` directly:
 
 ```json
 {
   "table": "processes",
   "id": "<dataset uuid>",
-  "version": "01.00.000",
-  "action": "ensure",
-  "policyProfile": "review_submit_fast.v1",
-  "reportSchemaVersion": "review_submit_gate_report.v1"
+  "version": "01.00.000"
 }
 ```
 
-Legacy clients may still send `revisionChecksum`, but the function treats it as diagnostic input only. The value passed to `cmd_dataset_review_submit_gate` is always computed server-side from the authorized persisted row.
+Process submission does not start or wait for a Worker job. Database authorization, current-version checks, conflicting active Review checks, Root/Reference Review creation, state transitions, concurrency, and audit remain server-side blockers. During the compatibility window, old Process clients may still include `reviewSubmitGateRunId`, `revisionChecksum`, `reviewSubmitPolicyProfile`, and `reviewSubmitReportSchemaVersion`; Edge ignores those fields and never forwards them as Review authority. Non-Process submissions still reject those compatibility fields.
 
-The function calls database-owned RPC `cmd_dataset_review_submit_gate`; database-engine owns persisted gate run schema, idempotent reuse, stale detection, and final submit-review assertion. Edge and Next must not duplicate worker-owned blocker heuristics. Legacy protocol field names such as `calculatorReport` remain payload contract terms, not repository identity.
+`admin_review_quality_diagnostic` is a separate Review Admin-only, manual, informational endpoint. It accepts exactly two actions:
 
-`app_dataset_review_submit_jobs` is the user-facing orchestration API for reliable final review submission. It accepts authenticated `POST` requests and returns DB-owned coordinator state. New jobs are linked to `tiangong-lca-worker` `worker_jobs` gate records via `gateWorkerJobId` / `gateWorkerJob`; legacy `gateRunId` remains a compatibility field while the old gate-run path is retired.
+```json
+{ "action": "start" }
+```
 
-- `enqueue`: derives the authoritative revision checksum from persisted `json_ordered`, creates or reuses a DB-owned submit job, and returns the persisted job state.
-- `read`: reads a known `reviewSubmitJobId`.
-- `read_latest`: derives the current authoritative checksum and reads the latest matching job for the dataset revision.
+```json
+{ "action": "read", "runId": "<optional diagnostic run uuid>" }
+```
 
-Job response states map to HTTP status as follows:
+Omitting `runId` reads the latest run. `start` creates or reuses the one active pending-review diagnostic and returns HTTP `202`; `read` returns HTTP `200` for any found run, including `completed`, `failed`, `findings`, or `not_evaluable` states. The browser cannot send Review IDs, Process IDs, states, or a custom scope. Database RPCs derive the pending-review scope and enforce Review Admin membership; a Review Member receives `REVIEW_ADMIN_REQUIRED` with HTTP `403`.
 
-- `queued` / `waiting_gate` / `submitting`: HTTP `202`, work is still in progress.
-- `submitted`: HTTP `200`, DB final submit completed.
-- `blocked` / `stale` / `cancelled`: HTTP `409`, not submit-ready or no longer active.
-- `error`: HTTP `502`, backend worker or DB orchestration failed.
+Diagnostic reports are never Review workflow authority. `informationalOnly=true`, `affectsReviewState=false`, and finding `workflowBlocking=false` mean that no diagnostic state may disable assignment, approval, or rejection.
 
-`process_dataset_review_submit_jobs` is a service-key-only worker endpoint. It uses service-only submit-job claim/result and submit façades, records `waiting_gate` when the worker gate is not ready, and maps terminal blocked/cancelled/failed gate worker states back to the coordinator. Recurring invocation should be enabled only after the matching database façade migration and this Edge Function are both deployed.
+`app_dataset_review_submit_gate`, `app_dataset_review_submit_jobs`, and `process_dataset_review_submit_jobs` remain deployed only for already released clients and in-flight jobs during the compatibility window. New Next code must not call them. Their physical removal is a later cleanup after traffic and active-job checks.
 
-`app_worker_jobs` is the authenticated task-center API for user-visible `worker_jobs`. It supports `list`, `read`, and `cancel`, calls service-role DB RPCs from Edge, and enforces requester ownership before returning or cancelling a job. It does not expose generic user enqueue; job-specific APIs such as `app_dataset_review_submit_jobs` own enqueue semantics and payload validation.
+`app_worker_jobs` remains the authenticated task-center API for user-visible `worker_jobs`. The Review Admin diagnostic uses its dedicated projection because its job visibility is operator-only.
 
 ## LCA Function Call Patterns
 
