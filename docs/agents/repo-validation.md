@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-13
-lastReviewedCommit: 6737f71611ba34689dffe7f6a735a33f2adbda29
-lastReviewedNote: 'Validation proves Gate-free stable review submission, Review Admin-only non-blocking diagnostics, actor-owned collaborative draft scope, legacy compatibility, multilingual search projection, and semantic calculation-download contracts.'
+lastReviewedAt: 2026-08-17
+lastReviewedCommit: 23c63f8e37eaf04f989de915f3f03b8e6ef16db3
+lastReviewedNote: 'Validation covers strict ResultSet request/response projections, V3 Closure routing when resultSetId is present, V2 legacy compatibility, formatting, full Deno type checks, and HTTP command boundaries.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

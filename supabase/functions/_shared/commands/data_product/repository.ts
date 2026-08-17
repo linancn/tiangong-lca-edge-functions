@@ -7,6 +7,9 @@ import {
   callDataProductPackageUnpublishRpc,
   callLciaResultBuildRequestRpc,
   callLciaResultPackagePublishRpc,
+  callLciaResultSetCreateRpc,
+  callLciaResultSetListRpc,
+  callLciaResultSetReadRpc,
   callLciaScopeClosureCheckReadRpc,
   callLciaScopeClosureCheckRequestRpc,
   callLciaScopeClosureIssuesRpc,
@@ -38,6 +41,9 @@ import type {
   DataProductPackagePublishRequest,
   DataProductPackageUnpublishRequest,
   DataProductPublicationListRequest,
+  DataProductResultSetCreateRequest,
+  DataProductResultSetListRequest,
+  DataProductResultSetReadRequest,
   DataProductTaskFeedRequest,
 } from './types.ts';
 
@@ -106,6 +112,9 @@ export type DataProductPreviewMetadataResult =
     };
 
 export type DataProductCommandRepository = {
+  createResultSet: (request: DataProductResultSetCreateRequest) => Promise<DataProductRpcResult>;
+  listResultSets: (request: DataProductResultSetListRequest) => Promise<DataProductRpcResult>;
+  getResultSet: (request: DataProductResultSetReadRequest) => Promise<DataProductRpcResult>;
   createBuild: (
     request: DataProductBuildCreateRequest,
     audit: CommandAuditPayload,
@@ -170,6 +179,12 @@ export function createDataProductCommandRepository(
   const now = options.now ?? Date.now;
 
   return {
+    createResultSet: async (request) =>
+      decodeResultSetRpcResult(await callLciaResultSetCreateRpc(actorClient, request)),
+    listResultSets: async (request) =>
+      decodeResultSetListRpcResult(await callLciaResultSetListRpc(actorClient, request)),
+    getResultSet: async (request) =>
+      decodeResultSetRpcResult(await callLciaResultSetReadRpc(actorClient, request)),
     createBuild: (request, audit) => callLciaResultBuildRequestRpc(actorClient, request, audit),
     createClosureCheck: (request, audit) =>
       callLciaScopeClosureCheckRequestRpc(actorClient, request, audit),
@@ -296,6 +311,68 @@ export function createDataProductCommandRepository(
       callDataProductPackageUnpublishRpc(actorClient, request, audit),
     listPublications: (request) => listLciaResultPublications(actorClient, request),
   };
+}
+
+const RESULT_SET_KEYS = ['schemaVersion', 'resultSetId', 'name', 'createdAt'];
+
+function decodeResultSet(value: unknown): Record<string, unknown> | null {
+  if (!isRecord(value) || !hasExactKeys(value, RESULT_SET_KEYS)) {
+    return null;
+  }
+  const schemaVersion = strictString(value.schemaVersion);
+  const resultSetId = strictString(value.resultSetId);
+  const name = strictString(value.name);
+  const createdAt = strictString(value.createdAt);
+  if (
+    schemaVersion !== 'lcia.result-set.v1' ||
+    !resultSetId ||
+    !UUID_PATTERN.test(resultSetId) ||
+    !name ||
+    !createdAt ||
+    !RFC3339_PATTERN.test(createdAt) ||
+    !Number.isFinite(Date.parse(createdAt))
+  ) {
+    return null;
+  }
+  return { schemaVersion, resultSetId, name, createdAt };
+}
+
+function invalidResultSetProjection(): DataProductCommandFailure {
+  return {
+    ok: false,
+    code: 'result_set_projection_invalid',
+    status: 502,
+    message: 'Result set projection is invalid',
+  };
+}
+
+function decodeResultSetRpcResult(result: DataProductRpcResult): DataProductRpcResult {
+  if (!result.ok) {
+    return result;
+  }
+  const decoded = decodeResultSet(result.data);
+  return decoded ? { ok: true, data: decoded } : invalidResultSetProjection();
+}
+
+function decodeResultSetListRpcResult(result: DataProductRpcResult): DataProductRpcResult {
+  if (!result.ok) {
+    return result;
+  }
+  if (!isRecord(result.data) || !hasExactKeys(result.data, ['items'])) {
+    return invalidResultSetProjection();
+  }
+  if (!Array.isArray(result.data.items)) {
+    return invalidResultSetProjection();
+  }
+  const items: Record<string, unknown>[] = [];
+  for (const item of result.data.items) {
+    const decoded = decodeResultSet(item);
+    if (!decoded) {
+      return invalidResultSetProjection();
+    }
+    items.push(decoded);
+  }
+  return { ok: true, data: { items } };
 }
 
 function normalizeClosureArtifactDownloadFailure(
