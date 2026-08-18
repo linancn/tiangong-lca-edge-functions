@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-13
-lastReviewedCommit: f54afcf18548a21cae08d93a01a4ae78040bf367
-lastReviewedNote: 'Review submission now uses stable cmd_review_submit directly; Review Admin diagnostics use a dedicated manual start/read route, and legacy Gate/coordinator routes are compatibility-only.'
+lastReviewedAt: 2026-08-17
+lastReviewedCommit: 23c63f8e37eaf04f989de915f3f03b8e6ef16db3
+lastReviewedNote: 'The shared Data Product command facade remains the correct boundary for minimal ResultSet commands and backward-compatible resultSet-aware Closure requests; no new Edge service or state machine is needed.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

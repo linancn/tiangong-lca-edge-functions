@@ -120,8 +120,30 @@ const createBuildSchema = z
 const createClosureCheckSchema = z
   .object({
     action: z.literal('create_closure_check'),
+    resultSetId: uuidSchema.optional(),
     requestedScope: closureRequestedScopeSchema,
     requestIdempotencyToken: z.string().trim().min(1).max(200),
+  })
+  .strict();
+
+const createResultSetSchema = z
+  .object({
+    action: z.literal('create_result_set'),
+    name: nonEmptyTextSchema,
+  })
+  .strict();
+
+const listResultSetsSchema = z
+  .object({
+    action: z.literal('list_result_sets'),
+    limit: z.number().int().min(1).max(200).optional(),
+  })
+  .strict();
+
+const getResultSetSchema = z
+  .object({
+    action: z.literal('get_result_set'),
+    resultSetId: uuidSchema,
   })
   .strict();
 
@@ -205,6 +227,9 @@ const listPublicationsSchema = z
 
 export const dataProductCommandRequestSchema = z.discriminatedUnion('action', [
   createBuildSchema,
+  createResultSetSchema,
+  listResultSetsSchema,
+  getResultSetSchema,
   createClosureCheckSchema,
   getClosureCheckSchema,
   listClosureIssuesSchema,
@@ -561,11 +586,16 @@ function auditFor(request: DataProductCommandRequest, actor: ActorContext) {
         targetId: 'pending',
         targetVersion: '',
         payload: {
+          resultSetId: request.resultSetId ?? null,
           coverageMode: request.requestedScope.coverageMode,
           processCount: request.requestedScope.processes?.length ?? 0,
           lciaMethodCount: request.requestedScope.lciaMethods.length,
         },
       });
+    case 'create_result_set':
+    case 'list_result_sets':
+    case 'get_result_set':
+      return null;
     case 'publish_package':
       return buildCommandAuditPayload({
         command: 'lcia_result_package_publish',
@@ -704,6 +734,45 @@ export async function executeDataProductCommand(
   repository: DataProductCommandRepository = createDataProductCommandRepository(actor.supabase),
 ): Promise<DataProductCommandExecutionResult> {
   switch (request.action) {
+    case 'create_result_set': {
+      const result = await repository.createResultSet(request);
+      return result.ok
+        ? {
+            ok: true,
+            body: {
+              ok: true,
+              command: 'lcia_result_set_create',
+              data: result.data,
+            },
+          }
+        : result;
+    }
+    case 'list_result_sets': {
+      const result = await repository.listResultSets(request);
+      return result.ok
+        ? {
+            ok: true,
+            body: {
+              ok: true,
+              command: 'lcia_result_sets_list',
+              data: result.data,
+            },
+          }
+        : result;
+    }
+    case 'get_result_set': {
+      const result = await repository.getResultSet(request);
+      return result.ok
+        ? {
+            ok: true,
+            body: {
+              ok: true,
+              command: 'lcia_result_set_get',
+              data: result.data,
+            },
+          }
+        : result;
+    }
     case 'create_closure_check': {
       const result = await repository.createClosureCheck(request, auditFor(request, actor)!);
       return result.ok
