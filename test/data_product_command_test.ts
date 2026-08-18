@@ -15,10 +15,14 @@ import type { DataProductCommandRequest } from '../supabase/functions/_shared/co
 import {
   buildLciaResultBuildRequestRpcArgs,
   buildLciaResultPackagePublishRpcArgs,
+  buildLciaResultSetCreateRpcArgs,
+  buildLciaResultSetListRpcArgs,
+  buildLciaResultSetReadRpcArgs,
   buildLciaScopeClosureCheckRequestRpcArgs,
   buildLciaScopeClosureReportDownloadRpcArgs,
   buildTaskSummaryV2FeedRpcArgs,
   callLciaResultPackagePublishRpc,
+  callLciaScopeClosureCheckRequestRpc,
   type DataProductRpcResult,
 } from '../supabase/functions/_shared/db_rpc/data_product_commands.ts';
 
@@ -26,6 +30,7 @@ const TEST_USER_ID = '22222222-2222-4222-8222-222222222222';
 const TEST_BUILD_ID = '33333333-3333-4333-8333-333333333333';
 const TEST_WORKER_JOB_ID = '44444444-4444-4444-8444-444444444444';
 const TEST_CLOSURE_CHECK_ID = '45454545-4545-4454-8454-454545454545';
+const TEST_RESULT_SET_ID = '47474747-4747-4474-8474-474747474747';
 const TEST_PACKAGE_ID = '55555555-5555-4555-8555-555555555555';
 const TEST_PUBLICATION_ID = '66666666-6666-4666-8666-666666666666';
 
@@ -65,6 +70,9 @@ const unusedPreviewProjectionDeps = {
 };
 
 const unusedClosureCommandDeps = {
+  createResultSet: () => Promise.reject(new Error('not used')),
+  listResultSets: () => Promise.reject(new Error('not used')),
+  getResultSet: () => Promise.reject(new Error('not used')),
   createClosureCheck: () => Promise.reject(new Error('not used')),
   getClosureCheck: () => Promise.reject(new Error('not used')),
   listClosureIssues: () => Promise.reject(new Error('not used')),
@@ -133,6 +141,143 @@ Deno.test(
     assertEquals(parsed.success, true);
   },
 );
+
+Deno.test('ResultSet commands accept only the bounded persistent-container fields', () => {
+  assertEquals(
+    dataProductCommandRequestSchema.safeParse({
+      action: 'create_result_set',
+      name: 'August calculation set',
+    }).success,
+    true,
+  );
+  assertEquals(
+    dataProductCommandRequestSchema.safeParse({
+      action: 'list_result_sets',
+      limit: 50,
+    }).success,
+    true,
+  );
+  assertEquals(
+    dataProductCommandRequestSchema.safeParse({
+      action: 'get_result_set',
+      resultSetId: TEST_RESULT_SET_ID,
+    }).success,
+    true,
+  );
+  assertEquals(
+    dataProductCommandRequestSchema.safeParse({
+      action: 'create_result_set',
+      name: 'bad',
+      coverageMode: 'subset',
+    }).success,
+    false,
+  );
+  assertEquals(
+    dataProductCommandRequestSchema.safeParse({
+      action: 'get_result_set',
+      resultSetId: 'not-a-uuid',
+    }).success,
+    false,
+  );
+});
+
+Deno.test('ResultSet-aware closure intent preserves legacy compatibility', () => {
+  const withResultSet = dataProductCommandRequestSchema.safeParse({
+    action: 'create_closure_check',
+    resultSetId: TEST_RESULT_SET_ID,
+    requestedScope: {
+      coverageMode: 'global_eligible',
+      lciaMethods: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          version: '01.00.000',
+        },
+      ],
+    },
+    requestIdempotencyToken: 'result-set-check',
+  });
+  assertEquals(withResultSet.success, true);
+
+  const legacy = dataProductCommandRequestSchema.safeParse({
+    action: 'create_closure_check',
+    requestedScope: {
+      coverageMode: 'global_eligible',
+      lciaMethods: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          version: '01.00.000',
+        },
+      ],
+    },
+    requestIdempotencyToken: 'legacy-check',
+  });
+  assertEquals(legacy.success, true);
+});
+
+Deno.test('ResultSet RPC args expose only the minimal database contract', () => {
+  assertEquals(
+    buildLciaResultSetCreateRpcArgs({
+      action: 'create_result_set',
+      name: 'August calculation set',
+    }),
+    { p_name: 'August calculation set' },
+  );
+  assertEquals(buildLciaResultSetListRpcArgs({ action: 'list_result_sets' }), { p_limit: 100 });
+  assertEquals(
+    buildLciaResultSetReadRpcArgs({
+      action: 'get_result_set',
+      resultSetId: TEST_RESULT_SET_ID,
+    }),
+    { p_result_set_id: TEST_RESULT_SET_ID },
+  );
+});
+
+Deno.test('closure RPC selects V3 only when a ResultSet is supplied', async () => {
+  const client = new FakeRpcSupabase({
+    data: { ok: true, data: { closureCheckId: TEST_CLOSURE_CHECK_ID } },
+    error: null,
+  });
+  const baseRequest = {
+    action: 'create_closure_check' as const,
+    requestedScope: {
+      coverageMode: 'global_eligible' as const,
+      lciaMethods: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          version: '01.00.000',
+        },
+      ],
+    },
+    requestIdempotencyToken: 'check-token',
+  };
+
+  await callLciaScopeClosureCheckRequestRpc(
+    client as never,
+    { ...baseRequest, resultSetId: TEST_RESULT_SET_ID },
+    auditPayload,
+  );
+  await callLciaScopeClosureCheckRequestRpc(client as never, baseRequest, auditPayload);
+
+  assertEquals(client.calls, [
+    {
+      fn: 'cmd_lcia_scope_closure_check_request_v3',
+      args: {
+        p_result_set_id: TEST_RESULT_SET_ID,
+        p_requested_scope: baseRequest.requestedScope,
+        p_request_idempotency_token: 'check-token',
+        p_audit: auditPayload,
+      },
+    },
+    {
+      fn: 'cmd_lcia_scope_closure_check_request_v2',
+      args: {
+        p_requested_scope: baseRequest.requestedScope,
+        p_request_idempotency_token: 'check-token',
+        p_audit: auditPayload,
+      },
+    },
+  ]);
+});
 
 Deno.test('closure download schema requires one of the two public artifact roles', () => {
   for (const artifactRole of ['closure_report_xlsx', 'closure_issue_manifest']) {
@@ -387,6 +532,68 @@ Deno.test('createDataProductCommandRepository requires an explicit actor Supabas
     () => createDataProductCommandRepository(undefined as never, {} as never),
     Error,
     'Data product command repository requires an explicit actor Supabase client',
+  );
+});
+
+Deno.test('ResultSet repository exposes only the versioned safe DTO', async () => {
+  const resultSet = {
+    schemaVersion: 'lcia.result-set.v1',
+    resultSetId: TEST_RESULT_SET_ID,
+    name: 'August calculation set',
+    createdAt: '2026-08-17T12:00:00.000Z',
+  };
+  const createClient = new FakeRpcSupabase({
+    data: { ok: true, data: resultSet },
+    error: null,
+  });
+  const createRepository = createDataProductCommandRepository(createClient as never, {} as never);
+  assertEquals(
+    await createRepository.createResultSet({
+      action: 'create_result_set',
+      name: resultSet.name,
+    }),
+    { ok: true, data: resultSet },
+  );
+  assertEquals(createClient.calls, [
+    {
+      fn: 'cmd_lcia_result_set_create',
+      args: { p_name: resultSet.name },
+    },
+  ]);
+
+  const listRepository = createDataProductCommandRepository(
+    new FakeRpcSupabase({
+      data: { ok: true, data: { items: [resultSet] } },
+      error: null,
+    }) as never,
+    {} as never,
+  );
+  assertEquals(await listRepository.listResultSets({ action: 'list_result_sets' }), {
+    ok: true,
+    data: { items: [resultSet] },
+  });
+
+  const invalidRepository = createDataProductCommandRepository(
+    new FakeRpcSupabase({
+      data: {
+        ok: true,
+        data: { ...resultSet, ownerId: TEST_USER_ID },
+      },
+      error: null,
+    }) as never,
+    {} as never,
+  );
+  assertEquals(
+    await invalidRepository.getResultSet({
+      action: 'get_result_set',
+      resultSetId: TEST_RESULT_SET_ID,
+    }),
+    {
+      ok: false,
+      code: 'result_set_projection_invalid',
+      status: 502,
+      message: 'Result set projection is invalid',
+    },
   );
 });
 
