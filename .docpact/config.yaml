@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-17'
-lastReviewedCommit: '23c63f8e37eaf04f989de915f3f03b8e6ef16db3'
+lastReviewedAt: "2026-08-19"
+lastReviewedCommit: "b4aa321e0cd2c8618bb7b7098e8e8bfd96d006fe"
 lastReviewedNote: 'Edge preserves existing command and authorization boundaries while exposing additive ResultSet create/list/get actions and a backward-compatible resultSet-aware Closure request.'
 
 # Keep deterministic governance facts here.

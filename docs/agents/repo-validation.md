@@ -29,8 +29,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-17
-lastReviewedCommit: 23c63f8e37eaf04f989de915f3f03b8e6ef16db3
+lastReviewedAt: 2026-08-19
+lastReviewedCommit: b4aa321e0cd2c8618bb7b7098e8e8bfd96d006fe
 lastReviewedNote: 'Validation covers strict ResultSet request/response projections, V3 Closure routing when resultSetId is present, V2 legacy compatibility, formatting, full Deno type checks, and HTTP command boundaries.'
 related:
   - ../../AGENTS.md

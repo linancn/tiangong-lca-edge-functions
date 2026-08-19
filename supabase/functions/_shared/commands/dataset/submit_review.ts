@@ -27,13 +27,7 @@ export async function executeSubmitReviewCommand(
     targetTable: request.table,
     targetId: request.id,
     targetVersion: request.version,
-    payload: {
-      legacyGateContextIgnored:
-        request.reviewSubmitGateRunId !== undefined ||
-        request.revisionChecksum !== undefined ||
-        request.reviewSubmitPolicyProfile !== undefined ||
-        request.reviewSubmitReportSchemaVersion !== undefined,
-    },
+    payload: {},
   });
 
   const result = await repository.submitReview(request, audit);
