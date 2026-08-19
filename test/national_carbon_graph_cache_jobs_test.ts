@@ -259,7 +259,7 @@ Deno.test('executeNationalCarbonGraphCacheJobCommand reads only graph cache jobs
         ok: true,
         data: {
           id: TEST_JOB_ID,
-          jobKind: 'review_submit.gate',
+          jobKind: 'lca.solve_one',
           subjectType: 'processes',
           status: 'completed',
         },

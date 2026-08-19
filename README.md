@@ -364,7 +364,7 @@ Retained domain tables such as `lca_jobs`, `lca_result_cache`, `lca_package_jobs
 }
 ```
 
-Process submission does not start or wait for a Worker job. Database authorization, current-version checks, conflicting active Review checks, Root/Reference Review creation, state transitions, concurrency, and audit remain server-side blockers. During the compatibility window, old Process clients may still include `reviewSubmitGateRunId`, `revisionChecksum`, `reviewSubmitPolicyProfile`, and `reviewSubmitReportSchemaVersion`; Edge ignores those fields and never forwards them as Review authority. Non-Process submissions still reject those compatibility fields.
+Process submission does not start or wait for a Worker job. Database authorization, current-version checks, conflicting active Review checks, Root/Reference Review creation, state transitions, concurrency, and audit remain server-side blockers. Retired Gate metadata is rejected as an unexpected request field.
 
 `admin_review_quality_diagnostic` is a separate Review Admin-only, manual, informational endpoint. It accepts exactly two actions:
 
@@ -380,7 +380,7 @@ Omitting `runId` reads the latest run. `start` creates or reuses the one active 
 
 Diagnostic reports are never Review workflow authority. `informationalOnly=true`, `affectsReviewState=false`, and finding `workflowBlocking=false` mean that no diagnostic state may disable assignment, approval, or rejection.
 
-`app_dataset_review_submit_gate`, `app_dataset_review_submit_jobs`, and `process_dataset_review_submit_jobs` remain deployed only for already released clients and in-flight jobs during the compatibility window. New Next code must not call them. Their physical removal is a later cleanup after traffic and active-job checks.
+The retired review-submit Gate, coordinator, and job endpoints are no longer deployed. Historical request and worker-job rows remain database audit records; new submissions use `app_dataset_submit_review` directly.
 
 `app_worker_jobs` remains the authenticated task-center API for user-visible `worker_jobs`. The Review Admin diagnostic uses its dedicated projection because its job visibility is operator-only.
 

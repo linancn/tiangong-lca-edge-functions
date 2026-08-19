@@ -35,7 +35,7 @@ Deno.test('callWorkerJobEnqueueRpc forwards worker enqueue args', async () => {
   });
 
   const result = await callWorkerJobEnqueueRpc(supabase as never, {
-    jobKind: 'review_submit.gate',
+    jobKind: 'lca.solve_one',
     payload: {
       datasetRevision: {
         table: 'processes',
@@ -43,14 +43,14 @@ Deno.test('callWorkerJobEnqueueRpc forwards worker enqueue args', async () => {
         version: '01.00.000',
       },
     },
-    payloadSchemaVersion: 'review_submit.gate.request.v1',
+    payloadSchemaVersion: 'lca.solve_one.request.v1',
     subjectType: 'processes',
     subjectId: TEST_DATASET_ID,
     subjectVersion: '01.00.000',
     requestedBy: TEST_USER_ID,
     requesterType: 'user',
-    idempotencyKey: 'review_submit.gate:processes:test',
-    concurrencyKey: 'review_submit.gate:processes:test',
+    idempotencyKey: 'lca.solve_one:processes:test',
+    concurrencyKey: 'lca.solve_one:processes:test',
     priority: 100,
     visibility: 'user',
     maxAttempts: 3,
@@ -67,7 +67,7 @@ Deno.test('callWorkerJobEnqueueRpc forwards worker enqueue args', async () => {
     {
       fn: 'svc_worker_enqueue_job',
       args: {
-        p_job_kind: 'review_submit.gate',
+        p_job_kind: 'lca.solve_one',
         p_payload_json: {
           datasetRevision: {
             table: 'processes',
@@ -75,16 +75,16 @@ Deno.test('callWorkerJobEnqueueRpc forwards worker enqueue args', async () => {
             version: '01.00.000',
           },
         },
-        p_payload_schema_version: 'review_submit.gate.request.v1',
+        p_payload_schema_version: 'lca.solve_one.request.v1',
         p_subject_type: 'processes',
         p_subject_id: TEST_DATASET_ID,
         p_subject_version: '01.00.000',
         p_requested_by: TEST_USER_ID,
         p_requester_type: 'user',
         p_team_id: null,
-        p_idempotency_key: 'review_submit.gate:processes:test',
+        p_idempotency_key: 'lca.solve_one:processes:test',
         p_request_hash: null,
-        p_concurrency_key: 'review_submit.gate:processes:test',
+        p_concurrency_key: 'lca.solve_one:processes:test',
         p_priority: 100,
         p_queue_key: null,
         p_run_after: null,
