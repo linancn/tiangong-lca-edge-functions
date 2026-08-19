@@ -8,7 +8,6 @@ import {
 
 const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
 const TEST_DATASET_ID = '22222222-2222-4222-8222-222222222222';
-const TEST_GATE_RUN_ID = '44444444-4444-4444-8444-444444444444';
 const TEST_REVISION_CHECKSUM = 'a'.repeat(64);
 
 class FakeRpcSupabase {
@@ -73,9 +72,7 @@ Deno.test(
             targetTable: 'processes',
             targetId: TEST_DATASET_ID,
             targetVersion: '01.00.000',
-            payload: {
-              legacyGateContextIgnored: false,
-            },
+            payload: {},
           },
         },
       },
@@ -93,48 +90,9 @@ Deno.test('parseSubmitReviewCommand accepts Process submission without Gate meta
   assertEquals(result.ok, true);
 });
 
-Deno.test(
-  'legacy Process Gate metadata is accepted but ignored during compatibility window',
-  async () => {
-    const supabase = new FakeRpcSupabase();
-    const result = await executeSubmitReviewCommand(
-      {
-        table: 'processes',
-        id: TEST_DATASET_ID,
-        version: '01.00.000',
-        reviewSubmitGateRunId: TEST_GATE_RUN_ID,
-        revisionChecksum: TEST_REVISION_CHECKSUM,
-        reviewSubmitPolicyProfile: 'review_submit_fast.v1',
-        reviewSubmitReportSchemaVersion: 'review_submit_gate_report.v1',
-      },
-      buildActor(supabase),
-    );
-
-    assertEquals(result.ok, true);
-    assertEquals(supabase.rpcCalls[0], {
-      fn: 'cmd_review_submit',
-      args: {
-        p_target_table: 'processes',
-        p_target_id: TEST_DATASET_ID,
-        p_target_version: '01.00.000',
-        p_audit: {
-          command: 'dataset_submit_review',
-          actorUserId: TEST_USER_ID,
-          targetTable: 'processes',
-          targetId: TEST_DATASET_ID,
-          targetVersion: '01.00.000',
-          payload: {
-            legacyGateContextIgnored: true,
-          },
-        },
-      },
-    });
-  },
-);
-
-Deno.test('parseSubmitReviewCommand rejects gate metadata for non-Process datasets', () => {
+Deno.test('parseSubmitReviewCommand rejects retired Gate metadata', () => {
   const result = parseSubmitReviewCommand({
-    table: 'flows',
+    table: 'processes',
     id: TEST_DATASET_ID,
     version: '01.00.000',
     revisionChecksum: TEST_REVISION_CHECKSUM,

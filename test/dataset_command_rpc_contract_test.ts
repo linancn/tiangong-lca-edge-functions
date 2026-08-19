@@ -5,17 +5,12 @@ import { createRequestSchema } from '../supabase/functions/_shared/commands/data
 import { createVersionRequestSchema } from '../supabase/functions/_shared/commands/dataset/create_version.ts';
 import { deleteRequestSchema } from '../supabase/functions/_shared/commands/dataset/delete.ts';
 import { createDatasetCommandRepository } from '../supabase/functions/_shared/commands/dataset/repository.ts';
-import { reviewSubmitGateRequestSchema } from '../supabase/functions/_shared/commands/dataset/review_submit_gate.ts';
-import { reviewSubmitJobRequestSchema } from '../supabase/functions/_shared/commands/dataset/review_submit_jobs.ts';
 import { saveDraftRequestSchema } from '../supabase/functions/_shared/commands/dataset/save_draft.ts';
 import { submitReviewRequestSchema } from '../supabase/functions/_shared/commands/dataset/submit_review.ts';
 import {
   callDatasetCreateRpc,
   callDatasetCreateVersionRpc,
   callDatasetDeleteRpc,
-  callDatasetReviewSubmitGateRpc,
-  callDatasetReviewSubmitJobEnqueueRpc,
-  callDatasetReviewSubmitJobReadRpc,
   callDatasetSaveDraftRpc,
   callDatasetSubmitReviewRpc,
   type DatasetRpcResult,
@@ -54,59 +49,16 @@ Deno.test('submitReviewRequestSchema accepts Process submission without Gate met
   assertEquals(parsed.success, true);
 });
 
-Deno.test(
-  'submitReviewRequestSchema accepts legacy Process Gate metadata for compatibility',
-  () => {
-    const parsed = submitReviewRequestSchema.safeParse({
-      table: 'processes',
-      id: '11111111-1111-4111-8111-111111111111',
-      version: '01.00.000',
-      reviewSubmitGateRunId: '44444444-4444-4444-8444-444444444444',
-      revisionChecksum: 'a'.repeat(64),
-      reviewSubmitPolicyProfile: 'review_submit_fast.v1',
-      reviewSubmitReportSchemaVersion: 'review_submit_gate_report.v1',
-    });
+Deno.test('submitReviewRequestSchema rejects retired Gate metadata', () => {
+  const parsed = submitReviewRequestSchema.safeParse({
+    table: 'processes',
+    id: '11111111-1111-4111-8111-111111111111',
+    version: '01.00.000',
+    revisionChecksum: 'a'.repeat(64),
+  });
 
-    assertEquals(parsed.success, true);
-  },
-);
-
-Deno.test(
-  'reviewSubmitGateRequestSchema defaults action and review-submit gate contract versions',
-  () => {
-    const parsed = reviewSubmitGateRequestSchema.safeParse({
-      table: 'processes',
-      id: '11111111-1111-4111-8111-111111111111',
-      version: '01.00.000',
-      revisionChecksum: 'a'.repeat(64),
-    });
-
-    assertEquals(parsed.success, true);
-    if (parsed.success) {
-      assertEquals(parsed.data.action, 'ensure');
-      assertEquals(parsed.data.policyProfile, 'review_submit_fast.v1');
-      assertEquals(parsed.data.reportSchemaVersion, 'review_submit_gate_report.v1');
-    }
-  },
-);
-
-Deno.test(
-  'reviewSubmitJobRequestSchema defaults enqueue action and review-submit gate contract versions',
-  () => {
-    const parsed = reviewSubmitJobRequestSchema.safeParse({
-      table: 'processes',
-      id: '11111111-1111-4111-8111-111111111111',
-      version: '01.00.000',
-    });
-
-    assertEquals(parsed.success, true);
-    if (parsed.success && parsed.data.action === 'enqueue') {
-      assertEquals(parsed.data.action, 'enqueue');
-      assertEquals(parsed.data.policyProfile, 'review_submit_fast.v1');
-      assertEquals(parsed.data.reportSchemaVersion, 'review_submit_gate_report.v1');
-    }
-  },
-);
+  assertEquals(parsed.success, false);
+});
 
 Deno.test('createRequestSchema rejects create payloads with version fields', () => {
   const parsed = createRequestSchema.safeParse({
@@ -219,31 +171,6 @@ const submitReviewRequest = {
   table: 'processes' as const,
   id: '11111111-1111-4111-8111-111111111111',
   version: '01.00.000',
-};
-
-const reviewSubmitGateRequest = {
-  table: 'processes' as const,
-  id: '11111111-1111-4111-8111-111111111111',
-  version: '01.00.000',
-  revisionChecksum: 'a'.repeat(64),
-  action: 'ensure' as const,
-  policyProfile: 'review_submit_fast.v1' as const,
-  reportSchemaVersion: 'review_submit_gate_report.v1' as const,
-};
-
-const reviewSubmitJobEnqueueRequest = {
-  action: 'enqueue' as const,
-  table: 'processes' as const,
-  id: '11111111-1111-4111-8111-111111111111',
-  version: '01.00.000',
-  revisionChecksum: 'a'.repeat(64),
-  policyProfile: 'review_submit_fast.v1' as const,
-  reportSchemaVersion: 'review_submit_gate_report.v1' as const,
-};
-
-const reviewSubmitJobReadRequest = {
-  action: 'read' as const,
-  reviewSubmitJobId: '55555555-5555-4555-8555-555555555555',
 };
 
 const auditPayload = buildCommandAuditPayload({
@@ -454,38 +381,6 @@ Deno.test(
   },
 );
 
-Deno.test('callDatasetSubmitReviewRpc never forwards legacy Gate context', async () => {
-  const supabase = new FakeRpcSupabase({
-    data: {
-      ok: true,
-      data: {},
-    },
-    error: null,
-  });
-  const result = (await callDatasetSubmitReviewRpc(
-    supabase as never,
-    {
-      ...submitReviewRequest,
-      reviewSubmitGateRunId: '44444444-4444-4444-8444-444444444444',
-      revisionChecksum: 'a'.repeat(64),
-    },
-    auditPayload,
-  )) as DatasetRpcResult;
-
-  assertEquals(result.ok, true);
-  assertEquals(supabase.calls, [
-    {
-      fn: 'cmd_review_submit',
-      args: {
-        p_target_table: submitReviewRequest.table,
-        p_target_id: submitReviewRequest.id,
-        p_target_version: submitReviewRequest.version,
-        p_audit: auditPayload,
-      },
-    },
-  ]);
-});
-
 Deno.test(
   'callDatasetSubmitReviewRpc treats command failure envelopes as command failures',
   async () => {
@@ -521,101 +416,3 @@ Deno.test(
     });
   },
 );
-
-Deno.test('callDatasetReviewSubmitGateRpc unwraps review-submit gate run envelopes', async () => {
-  const result = (await callDatasetReviewSubmitGateRpc(
-    new FakeRpcSupabase({
-      data: {
-        ok: true,
-        data: {
-          status: 'queued',
-          gateRunId: '44444444-4444-4444-8444-444444444444',
-        },
-      },
-      error: null,
-    }) as never,
-    reviewSubmitGateRequest,
-    auditPayload,
-  )) as DatasetRpcResult;
-
-  assertEquals(result, {
-    ok: true,
-    data: {
-      status: 'queued',
-      gateRunId: '44444444-4444-4444-8444-444444444444',
-    },
-  });
-});
-
-Deno.test('callDatasetReviewSubmitJobEnqueueRpc forwards enqueue job RPC args', async () => {
-  const supabase = new FakeRpcSupabase({
-    data: {
-      ok: true,
-      data: {
-        status: 'waiting_gate',
-        reviewSubmitJobId: reviewSubmitJobReadRequest.reviewSubmitJobId,
-      },
-    },
-    error: null,
-  });
-  const result = (await callDatasetReviewSubmitJobEnqueueRpc(
-    supabase as never,
-    reviewSubmitJobEnqueueRequest,
-    auditPayload,
-  )) as DatasetRpcResult;
-
-  assertEquals(result, {
-    ok: true,
-    data: {
-      status: 'waiting_gate',
-      reviewSubmitJobId: reviewSubmitJobReadRequest.reviewSubmitJobId,
-    },
-  });
-  assertEquals(supabase.calls, [
-    {
-      fn: 'cmd_dataset_review_submit_job_enqueue',
-      args: {
-        p_table: 'processes',
-        p_id: reviewSubmitJobEnqueueRequest.id,
-        p_version: reviewSubmitJobEnqueueRequest.version,
-        p_revision_checksum: reviewSubmitJobEnqueueRequest.revisionChecksum,
-        p_policy_profile: 'review_submit_fast.v1',
-        p_report_schema_version: 'review_submit_gate_report.v1',
-        p_audit: auditPayload,
-      },
-    },
-  ]);
-});
-
-Deno.test('callDatasetReviewSubmitJobReadRpc unwraps review-submit job envelopes', async () => {
-  const supabase = new FakeRpcSupabase({
-    data: {
-      ok: true,
-      data: {
-        status: 'submitted',
-        reviewSubmitJobId: reviewSubmitJobReadRequest.reviewSubmitJobId,
-      },
-    },
-    error: null,
-  });
-  const result = (await callDatasetReviewSubmitJobReadRpc(
-    supabase as never,
-    reviewSubmitJobReadRequest,
-  )) as DatasetRpcResult;
-
-  assertEquals(result, {
-    ok: true,
-    data: {
-      status: 'submitted',
-      reviewSubmitJobId: reviewSubmitJobReadRequest.reviewSubmitJobId,
-    },
-  });
-  assertEquals(supabase.calls, [
-    {
-      fn: 'cmd_dataset_review_submit_job_read',
-      args: {
-        p_job_id: reviewSubmitJobReadRequest.reviewSubmitJobId,
-      },
-    },
-  ]);
-});

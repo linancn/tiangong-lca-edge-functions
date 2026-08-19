@@ -102,7 +102,7 @@ Deno.test('mergeDataProductWorkerJobMetadata exposes safe result-set fields only
       },
       {
         id: TEST_DATASET_ID,
-        jobKind: 'review_submit.gate',
+        jobKind: 'lca.solve_one',
         subjectType: 'processes',
         status: 'running',
       },
@@ -149,7 +149,7 @@ Deno.test('mergeDataProductWorkerJobMetadata exposes safe result-set fields only
     },
     {
       id: TEST_DATASET_ID,
-      jobKind: 'review_submit.gate',
+      jobKind: 'lca.solve_one',
       subjectType: 'processes',
       status: 'running',
     },
