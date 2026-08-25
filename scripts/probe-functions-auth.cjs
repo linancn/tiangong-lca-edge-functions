@@ -181,7 +181,7 @@ function splitPatterns(rawValue) {
 }
 
 function printHelp() {
-  console.log(`Usage: npm run probe:auth -- [options]
+  console.log(`Usage: pnpm probe:auth [options]
 
 Options:
   --remote                  Use REMOTE_ENDPOINT as the base URL.

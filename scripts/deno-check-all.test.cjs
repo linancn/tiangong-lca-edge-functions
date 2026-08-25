@@ -11,17 +11,17 @@ test('checks the exact inventory through one bounded shared graph', () => {
   const source = fs.readFileSync(scriptPath, 'utf8');
   assert.match(source, /module\.exports\s*=/u);
 
-  const {
-    MAX_ROOTS_PER_BATCH,
-    buildCheckBatches,
-    discoverTargets,
-    runDenoChecks,
-  } = require(scriptPath);
+  const { MAX_ROOTS_PER_BATCH, buildCheckBatches, discoverTargets, runDenoChecks } = require(
+    scriptPath,
+  );
   const targets = discoverTargets();
 
   assert.equal(targets.length, 139);
   assert.deepEqual(targets, [...new Set(targets)].sort());
-  assert.equal(targets.some((target) => target.includes('/antchain_')), false);
+  assert.equal(
+    targets.some((target) => target.includes('/antchain_')),
+    false,
+  );
   assert.equal(targets.filter((target) => target.startsWith('test/')).length, 65);
 
   const batches = buildCheckBatches(targets);

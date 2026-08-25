@@ -81,7 +81,11 @@ test('uses pnpm only across active repository automation', () => {
 
   for (const [relativePath, source] of activeSources) {
     assert.doesNotMatch(source, /(^|[\s"'`:])npx(?=$|[\s"'])/mu, relativePath);
-    assert.doesNotMatch(source, /(^|[\s"'`:])npm\s+(?:exec|install|pack|publish|rebuild|run|test)(?=$|\s)/mu, relativePath);
+    assert.doesNotMatch(
+      source,
+      /(^|[\s"'`:])npm\s+(?:exec|install|pack|publish|rebuild|run|test)(?=$|\s)/mu,
+      relativePath,
+    );
   }
 });
 
@@ -103,8 +107,14 @@ test('pins every external action to a reviewed executable commit', () => {
   }
 
   assert.deepEqual(observedActions, expectedActions);
-  assert.equal(workflowSources.some(({ source }) => source.includes('actions/setup-node')), false);
-  assert.equal(workflowSources.some(({ source }) => source.includes('pnpm/action-setup')), false);
+  assert.equal(
+    workflowSources.some(({ source }) => source.includes('actions/setup-node')),
+    false,
+  );
+  assert.equal(
+    workflowSources.some(({ source }) => source.includes('pnpm/action-setup')),
+    false,
+  );
 });
 
 test('binds CI to exact Deno and auxiliary Node runtimes', () => {
