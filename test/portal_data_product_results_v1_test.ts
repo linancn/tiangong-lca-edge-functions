@@ -29,6 +29,17 @@ const PROCESS_ID = '11111111-1111-4111-8111-111111111111';
 const METHOD_ID = '22222222-2222-4222-8222-222222222222';
 const PUBLICATION_ID = '33333333-3333-4333-8333-333333333333';
 const PACKAGE_ID = '44444444-4444-4444-8444-444444444444';
+const TRUSTED_PUBLISHABLE_KEY = 'sb_publishable_test';
+
+function credentialJwt(role: string): string {
+  return [
+    encodeBase64Url(new TextEncoder().encode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))),
+    encodeBase64Url(new TextEncoder().encode(JSON.stringify({ role }))),
+    encodeBase64Url(new Uint8Array([1, 2, 3, 4])),
+  ].join('.');
+}
+
+const LEGACY_ANON_KEY = credentialJwt('anon');
 const DEFAULT_REQUEST = {
   mode: 'process_all_impacts',
   processRefs: [{ id: PROCESS_ID, version: '01.00.000' }],
@@ -100,6 +111,9 @@ async function signedRequest(
     rawBody?: string;
     nonceSeed?: number;
     badSignature?: boolean;
+    path?: string;
+    apiKey?: string | null;
+    authorization?: string | null;
   } = {},
 ): Promise<Request> {
   const rawBody =
@@ -118,18 +132,25 @@ async function signedRequest(
     functionPath: PORTAL_LCIA_FUNCTION_PATH,
     bodyHash,
   });
-  return new Request(`https://example.supabase.co${PORTAL_LCIA_FUNCTION_PATH}`, {
+  const headers = new Headers({
+    'content-type': 'application/json',
+    'x-portal-key-id': KEYRING.current.keyId,
+    'x-portal-timestamp': String(NOW_SECONDS),
+    'x-portal-nonce': nonce,
+    'x-portal-body-sha256': bodyHash,
+    'x-portal-signature': options.badSignature
+      ? encodeBase64Url(new Uint8Array(32))
+      : await signature(SECRET, canonical),
+  });
+  if (options.apiKey !== null) {
+    headers.set('apikey', options.apiKey ?? TRUSTED_PUBLISHABLE_KEY);
+  }
+  if (options.authorization !== null && options.authorization !== undefined) {
+    headers.set('authorization', options.authorization);
+  }
+  return new Request(`https://example.supabase.co${options.path ?? PORTAL_LCIA_FUNCTION_PATH}`, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-portal-key-id': KEYRING.current.keyId,
-      'x-portal-timestamp': String(NOW_SECONDS),
-      'x-portal-nonce': nonce,
-      'x-portal-body-sha256': bodyHash,
-      'x-portal-signature': options.badSignature
-        ? encodeBase64Url(new Uint8Array(32))
-        : await signature(SECRET, canonical),
-    },
+    headers,
     body: rawBody,
   });
 }
@@ -199,6 +220,8 @@ function handlerOptions(redis: HandlerRedis, database: PortalPublishedLciaReposi
     nowSeconds: () => NOW_SECONDS,
     nowMillis: () => NOW_SECONDS * 1000,
     upstreamTimeoutMs: 500,
+    trustedPublishableKey: TRUSTED_PUBLISHABLE_KEY,
+    trustedLegacyAnonKey: LEGACY_ANON_KEY,
   };
 }
 
@@ -216,6 +239,101 @@ Deno.test('signed Portal LCIA request returns the exact locator-free database DT
   assertEquals(redis.calls, ['nonce', 'guard', 'cache-get', 'cache-set', 'release']);
   assertEquals(JSON.stringify(page()).includes('bucket'), false);
   assertEquals(JSON.stringify(page()).includes('locator'), false);
+});
+
+Deno.test(
+  'Supabase stripped path and exact pinned-CLI legacy anon transport are accepted',
+  async () => {
+    const redis = new HandlerRedis();
+    const handler = createPortalDataProductResultsHandler(
+      handlerOptions(redis, repository(page())),
+    );
+    const response = await handler(
+      await signedRequest({
+        path: '/portal_data_product_results_v1',
+        authorization: `Bearer ${LEGACY_ANON_KEY}`,
+        nonceSeed: 20,
+      }),
+    );
+    assertEquals(response.status, 200);
+  },
+);
+
+Deno.test('HMAC rejection precedes inbound transport validation', async () => {
+  const redis = new HandlerRedis();
+  const databaseCalls: string[] = [];
+  const handler = createPortalDataProductResultsHandler(
+    handlerOptions(redis, repository(page(), databaseCalls)),
+  );
+  const response = await handler(
+    await signedRequest({
+      badSignature: true,
+      apiKey: 'sb_secret_not-public',
+      authorization: 'Bearer user-token',
+      nonceSeed: 21,
+    }),
+  );
+  assertEquals(response.status, 401);
+  assertEquals(redis.calls, []);
+  assertEquals(databaseCalls, []);
+});
+
+Deno.test('inbound apikey must be strict public and exact before Redis or database', async () => {
+  const invalidApiKeys: Array<string | null> = [
+    null,
+    'sb_publishable_mismatch',
+    'sb_secret_test',
+    credentialJwt('authenticated'),
+    credentialJwt('service_role'),
+  ];
+  for (const [index, apiKey] of invalidApiKeys.entries()) {
+    const redis = new HandlerRedis();
+    const databaseCalls: string[] = [];
+    const handler = createPortalDataProductResultsHandler(
+      handlerOptions(redis, repository(page(), databaseCalls)),
+    );
+    const response = await handler(await signedRequest({ apiKey, nonceSeed: 30 + index }));
+    assertEquals(response.status, 401);
+    assertEquals((await response.json()).code, 'portal_auth_failed');
+    assertEquals(redis.calls, []);
+    assertEquals(databaseCalls, []);
+  }
+});
+
+Deno.test(
+  'only the exact configured legacy anon Authorization transport is tolerated',
+  async () => {
+    for (const [index, authorization] of [
+      `Bearer ${credentialJwt('authenticated')}`,
+      `Bearer ${credentialJwt('service_role')}`,
+      'Bearer other-token',
+      `bearer ${LEGACY_ANON_KEY}`,
+    ].entries()) {
+      const redis = new HandlerRedis();
+      const databaseCalls: string[] = [];
+      const handler = createPortalDataProductResultsHandler(
+        handlerOptions(redis, repository(page(), databaseCalls)),
+      );
+      const response = await handler(await signedRequest({ authorization, nonceSeed: 40 + index }));
+      assertEquals(response.status, 401);
+      assertEquals(redis.calls, []);
+      assertEquals(databaseCalls, []);
+    }
+  },
+);
+
+Deno.test('invalid trusted transport configuration fails closed before Redis', async () => {
+  const redis = new HandlerRedis();
+  const databaseCalls: string[] = [];
+  const handler = createPortalDataProductResultsHandler({
+    ...handlerOptions(redis, repository(page(), databaseCalls)),
+    trustedPublishableKey: 'sb_secret_misconfigured',
+  });
+  const response = await handler(await signedRequest({ nonceSeed: 50 }));
+  assertEquals(response.status, 503);
+  assertEquals((await response.json()).code, 'portal_auth_unavailable');
+  assertEquals(redis.calls, []);
+  assertEquals(databaseCalls, []);
 });
 
 Deno.test('missing or bad HMAC is rejected before Redis, JSON, or database work', async () => {

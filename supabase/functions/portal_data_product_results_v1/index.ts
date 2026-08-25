@@ -3,6 +3,7 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { z } from 'zod';
 
 import {
+  constantTimeEqual,
   decodeCanonicalBase64Url,
   loadPortalHmacKeyring,
   PortalHmacError,
@@ -216,6 +217,87 @@ export function validatePortalPublishableCredential(value: string): string {
   throw new PortalPublishedLciaUpstreamError();
 }
 
+export type PortalTransportErrorCode =
+  | 'portal_transport_config_invalid'
+  | 'portal_apikey_missing'
+  | 'portal_apikey_invalid'
+  | 'portal_apikey_mismatch'
+  | 'portal_authorization_invalid';
+
+export class PortalTransportError extends Error {
+  constructor(readonly code: PortalTransportErrorCode) {
+    super(code);
+    this.name = 'PortalTransportError';
+  }
+}
+
+function validatePortalLegacyAnonCredential(value: string): string {
+  const credential = value.trim();
+  if (credential.startsWith('sb_publishable_')) {
+    throw new PortalPublishedLciaUpstreamError();
+  }
+  return validatePortalPublishableCredential(value);
+}
+
+function constantTimeStringEqual(left: string, right: string): boolean {
+  return constantTimeEqual(new TextEncoder().encode(left), new TextEncoder().encode(right));
+}
+
+export function readPortalLegacyAnonCredential(
+  env: Pick<typeof Deno.env, 'get'> = Deno.env,
+): string | null {
+  const configured =
+    env.get('REMOTE_SUPABASE_ANON_KEY')?.trim() || env.get('SUPABASE_ANON_KEY')?.trim();
+  if (!configured) return null;
+  try {
+    return validatePortalLegacyAnonCredential(configured);
+  } catch (_error) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+}
+
+export function validatePortalInboundTransport(input: {
+  request: Request;
+  trustedPublishableKey: string;
+  trustedLegacyAnonKey?: string | null;
+}): void {
+  let trustedPublishableKey: string;
+  try {
+    trustedPublishableKey = validatePortalPublishableCredential(input.trustedPublishableKey);
+  } catch (_error) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+
+  const inboundApiKey = input.request.headers.get('apikey');
+  if (inboundApiKey === null || inboundApiKey.length === 0) {
+    throw new PortalTransportError('portal_apikey_missing');
+  }
+  let validatedInboundApiKey: string;
+  try {
+    validatedInboundApiKey = validatePortalPublishableCredential(inboundApiKey);
+  } catch (_error) {
+    throw new PortalTransportError('portal_apikey_invalid');
+  }
+  if (!constantTimeStringEqual(validatedInboundApiKey, trustedPublishableKey)) {
+    throw new PortalTransportError('portal_apikey_mismatch');
+  }
+
+  const authorization = input.request.headers.get('authorization');
+  if (authorization === null) return;
+  if (!input.trustedLegacyAnonKey) {
+    throw new PortalTransportError('portal_authorization_invalid');
+  }
+  let trustedLegacyAnonKey: string;
+  try {
+    trustedLegacyAnonKey = validatePortalLegacyAnonCredential(input.trustedLegacyAnonKey);
+  } catch (_error) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+  if (!constantTimeStringEqual(authorization, `Bearer ${trustedLegacyAnonKey}`)) {
+    throw new PortalTransportError('portal_authorization_invalid');
+  }
+}
+
 async function readBoundedStream(
   stream: ReadableStream<Uint8Array> | null,
   maximumBytes: number,
@@ -349,6 +431,8 @@ type PortalDataProductResultsHandlerOptions = {
   nowSeconds?: () => number;
   nowMillis?: () => number;
   upstreamTimeoutMs?: number;
+  trustedPublishableKey?: string;
+  trustedLegacyAnonKey?: string | null;
 };
 
 function jsonResponse(status: number, payload: unknown, extraHeaders?: HeadersInit): Response {
@@ -404,6 +488,29 @@ export function createPortalDataProductResultsHandler(
       });
     } catch (error) {
       return authFailure(error);
+    }
+
+    try {
+      validatePortalInboundTransport({
+        request,
+        trustedPublishableKey: options.trustedPublishableKey ?? getSupabasePublishableKey(),
+        trustedLegacyAnonKey:
+          options.trustedLegacyAnonKey === undefined
+            ? readPortalLegacyAnonCredential()
+            : options.trustedLegacyAnonKey,
+      });
+    } catch (error) {
+      if (
+        error instanceof PortalTransportError &&
+        error.code === 'portal_transport_config_invalid'
+      ) {
+        return errorResponse(
+          503,
+          'portal_auth_unavailable',
+          'Portal request authentication unavailable',
+        );
+      }
+      return errorResponse(401, 'portal_auth_failed', 'Portal request authentication failed');
     }
 
     let redis: PortalRedisAdapter;
