@@ -33,9 +33,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-25
-lastReviewedCommit: e79caf0e8aa53024b705c4fa22786026256e8298
-lastReviewedNote: 'Reviewed for Issue #304: Deno 2.9.5 with bundled TypeScript 6.0.3 owns runtime compilation; exact pnpm/Node tooling only orchestrates Supabase CLI, formatting, graph checks, and tests.'
+lastReviewedAt: 2026-08-26
+lastReviewedCommit: 8950a1095cc5121ca68a825f6df49b145953dbc1
+lastReviewedNote: 'Reviewed for Issue #307: the Portal HMAC, Redis admission, and publishable LCIA route join the stable shared/runtime map without changing existing endpoint behavior.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -58,6 +58,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 | `supabase/functions/<name>/index.ts` | stable | default Edge Function entrypoint; baseline `pnpm check` includes every enabled `index.ts` root in one bounded shared Deno graph |
 | `supabase/functions/<name>/handler.ts` | stable | larger routes sometimes split real logic here while `index.ts` stays thin |
 | `supabase/functions/_shared/auth.ts` | stable | central runtime auth and credential-selection logic |
+| `supabase/functions/_shared/portal_hmac.ts` and `portal_redis_guard.ts` | stable | Portal-only raw-body request verification, replay protection, atomic route budget, concurrency lease, and hash-key cache behavior |
 | `supabase/functions/_shared/command_runtime/**` | stable | request parsing, actor context, audit payload, and command-handler skeleton |
 | `supabase/functions/_shared/commands/**` | stable | dataset, review, membership, notification, and profile command logic |
 | `supabase/functions/_shared/db_rpc/**` | stable | thin wrappers over database RPC calls; SQL truth still lives in `database-engine` |
@@ -86,7 +87,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 139 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 367 Deno behavior tests with env/read/loopback-net permissions.
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 144 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 404 Deno behavior tests with env/read/loopback-net permissions.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
@@ -108,6 +109,7 @@ Supported runtime auth modes currently include:
 - `JWT`
 - `USER_API_KEY`
 - `SERVICE_API_KEY`
+- Portal-only `portal-hmac-v1`, which is not a user identity or a substitute for route budgets
 
 `scripts/probe-functions-auth.cjs` exists because gateway rejection and runtime-auth rejection are different operational failures.
 
@@ -136,6 +138,14 @@ The shared layers that matter most are:
 The retired review-submit Gate, coordinator, and job endpoints are not part of the deployed Edge surface. `app_worker_jobs` remains the authenticated task-center API for user-visible jobs; the operator-visible Review Admin diagnostic is read through its dedicated route rather than through generic task-center access.
 
 `app_data_product_commands` is the JWT-only command boundary for Data Product scope-closure checks and result-build requests. It forwards only user scope intent to actor-bound database RPCs; the database derives snapshot, policy, certificate, and artifact-lifecycle bindings. The shared data-product repository preserves the database-owned versioned check/issues/feed projections while explicitly allowlisting the closure-check public DTO, decoding its fixed-order artifact summaries, and recursively rejecting private locator or credential fields. For downloads, the strict public request requires exactly `closure_report_xlsx` or `closure_issue_manifest`, forwards that selector to the database's two-argument actor RPC, and signs only a matching ready, unexpired descriptor. Partition selectors are not part of this public endpoint. Signed URLs are capped at 900 seconds, reserve a clock-skew/signing safety budget before artifact expiry, and use the database-provided semantic filename. Owner-visible expiry maps to a stable `410`, while unavailable, unauthorized, deleted, unready, and integrity-invalid artifacts remain one opaque `404`. Unexpected RPC/PostgREST failures and every Storage signing throw, rejection, malformed result, or SDK error collapse to fixed locator-free `502` responses. The service client may see the private bucket/path solely for the signing step and never returns either field or source error details to the browser. Task feed visibility is database-owned ACL, not a consequence of task-center category or presenter metadata.
+
+### Portal signed public LCIA route
+
+`portal_data_product_results_v1` is an additive server-to-server route for the anonymous Portal BFF. It accepts exactly one raw JSON serialization over `POST /functions/v1/portal_data_product_results_v1`; the raw bytes, body hash, timestamp, 128-bit nonce, method, and function path are bound by `portal-hmac-v1`. The verifier has one current key and an optional previous key only during rotation. Preview/dev and Production/main use separate keys, Redis databases, tokens, and `portal:<environment>:v1` namespaces.
+
+After HMAC succeeds, Redis atomically registers the nonce for 120 seconds and runs one Lua admission operation for minute/day budgets plus a TTL-backed concurrency lease. Missing configuration, timeout, malformed response, or provider outage fails closed before JSON, cache, or database work. The lease is released in `finally`; its TTL recovers an interrupted isolate. Public-result cache keys contain only the request body hash and expire within five minutes.
+
+The route then calls only `api.portal_get_published_lcia_values_v1` with explicit `Content-Profile: api` and a strictly validated publishable/legacy-anon credential. It rejects `sb_secret_*`, non-anon JWT roles including `service_role`, credential-bearing/non-HTTPS remote URLs, user Authorization, service clients, artifacts, and locators. A successful response is the exact bounded `portal.published-lcia-page.v1` DTO. A missing publication is unavailable, never numeric zero.
 
 ### Search, embedding, and AI-backed routes
 
