@@ -18,9 +18,9 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-13
-lastReviewedCommit: f54afcf18548a21cae08d93a01a4ae78040bf367
-lastReviewedNote: 'Documented direct Gate-free review submission and the Review Admin-only manual quality diagnostic start/read API.'
+lastReviewedAt: 2026-08-25
+lastReviewedCommit: 3b66b34db01f9467993036be4adaea5f0480737e
+lastReviewedNote: 'Documented the asynchronous AI suggestion API over the generic Rust ai-worker and removed LangGraph runtime configuration.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -90,7 +90,7 @@ Core entries:
 - `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` for user API key auth caching.
 - `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`, and optional `OPENAI_BASE_URL`.
 - `SAGEMAKER_ENDPOINT_NAME` plus AWS credentials for hybrid search and embedding.
-- Feature-specific entries such as Cognito, LangGraph, TIDAS storage, national-carbon cache, and `embedding_ft` timeout knobs are grouped in `supabase/.env.example`.
+- Feature-specific entries such as Cognito, TIDAS storage, national-carbon cache, and `embedding_ft` timeout knobs are grouped in `supabase/.env.example`.
 
 Credential contract:
 
@@ -293,6 +293,27 @@ npm run probe:auth -- --remote --json-out ./tmp/edge-probe-report.json
 npm run probe:auth -- --dry-run
 ```
 
+## AI Suggestion Worker API
+
+`ai_suggest` authenticates a user and hands versioned work to the generic Rust `ai-worker`; Edge does not call LangGraph or an AI provider directly. Enqueue with the legacy-compatible payload (the `options` object is accepted but ignored):
+
+```json
+{
+  "action": "enqueue",
+  "tidasData": "{\"processDataSet\":{}}",
+  "dataType": "process",
+  "options": {}
+}
+```
+
+The response is HTTP `202` with `data.jobId`. Poll through the same function:
+
+```json
+{ "action": "read", "jobId": "<worker job uuid>" }
+```
+
+Queued and running jobs return public progress. A completed job includes `data.result` with schema `ai.tidas_suggestion.result.v1`; `complete` and `partial` are both advisory results that the user may inspect and accept field by field. Requests require a JWT or User API key, `tidasData` is capped at 2 MiB, and Process/Flow root shape is checked before enqueue. The response never includes the queued payload, lease, internal diagnostics, or provider details.
+
 ## OpenAI Integration Baseline
 
 - No LangChain dependency in active path.
@@ -343,6 +364,8 @@ LCA solve/snapshot/contribution path, TIDAS package import/export, the Review Ad
 - `public.worker_read_job(...)`
 - `public.worker_list_jobs(...)`
 - `public.worker_cancel_job(...)`
+- `api.svc_ai_tidas_suggestion_enqueue(...)`
+- `api.svc_ai_tidas_suggestion_read(...)`
 
 Review submission and the dedicated administrator projection additionally require:
 
