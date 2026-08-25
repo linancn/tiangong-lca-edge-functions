@@ -15,12 +15,16 @@ checkPaths:
   - .env.example
   - README.md
   - package.json
+  - pnpm-lock.yaml
+  - pnpm-workspace.yaml
+  - .nvmrc
+  - deno.json
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-25
-lastReviewedCommit: 3b66b34db01f9467993036be4adaea5f0480737e
-lastReviewedNote: 'Documented the asynchronous AI suggestion API over the generic Rust ai-worker and removed LangGraph runtime configuration.'
+lastReviewedCommit: e79caf0e8aa53024b705c4fa22786026256e8298
+lastReviewedNote: 'Reviewed for Issue #304: local setup, serve, deploy, probe, formatting, graph checks, and behavior tests now use exact Deno 2.9.5 plus pnpm 11.23.0/Node 24.19.0 without npm fallbacks.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -29,9 +33,9 @@ lastReviewedNote: 'Documented the asynchronous AI suggestion API over the generi
 
 Supabase Edge Functions for LCA search, embedding, TIDAS package orchestration, and solving workflows.
 
-- Runtime: Supabase Edge Runtime (Deno 2.1.x)
+- Runtime/compiler: Deno 2.9.5 with bundled TypeScript 6.0.3
 - Functions root: `supabase/functions`
-- Local serve command: `npm start`
+- Local serve command: `pnpm start`
 
 Database clients default RPC calls to the exposed `api` schema. Direct table access always selects `public` explicitly and is restricted to the nine core entity tables; internal worker, identity, review, LCA, TIDAS, and Data Product state is available only through database-engine capability façades.
 
@@ -59,14 +63,15 @@ These files are the low-token entry path for repo ownership, branch and deploy r
 
 ## Prerequisites
 
-- Node.js 22
+- Deno 2.9.5; `deno --version` must report bundled TypeScript 6.0.3
+- Node.js 24.19.0 and pnpm 11.23.0 for auxiliary Supabase CLI, formatting, and validation wrappers
 - Docker Engine (required if you run local Supabase stack)
 - Supabase CLI 2.106.0, installed through this repository's `supabase` dev dependency
 
 Initialize/refresh Node dependencies:
 
 ```bash
-npm install --package-lock=false
+pnpm install --frozen-lockfile
 ```
 
 ## Environment Setup
@@ -124,10 +129,10 @@ Do not put `REMOTE_SUPABASE_SECRET_KEY`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, Open
 
 ### Start the local test environment
 
-Start the local Supabase stack first. This provides the local gateway at `LOCAL_ENDPOINT` and is required before `npm start` can serve functions:
+Start the local Supabase stack first. This provides the local gateway at `LOCAL_ENDPOINT` and is required before `pnpm start` can serve functions:
 
 ```bash
-./node_modules/.bin/supabase start
+pnpm exec supabase start
 ```
 
 Typical local endpoints:
@@ -140,13 +145,13 @@ Typical local endpoints:
 Serve Edge Functions in another terminal:
 
 ```bash
-npm start
+pnpm start
 ```
 
-`npm start` is equivalent to:
+`pnpm start` is equivalent to:
 
 ```bash
-./node_modules/.bin/supabase functions serve \
+pnpm exec supabase functions serve \
   --env-file ./supabase/.env.local \
   --no-verify-jwt
 ```
@@ -154,7 +159,7 @@ npm start
 Stop the local stack when finished:
 
 ```bash
-./node_modules/.bin/supabase stop
+pnpm exec supabase stop
 ```
 
 The repository serves with `--no-verify-jwt` by design. Gateway JWT verification is disabled for both local and remote deploys; each function must still run its own `authenticateRequest` authorization path.
@@ -164,26 +169,26 @@ The repository serves with `--no-verify-jwt` by design. Gateway JWT verification
 Authenticate the Supabase CLI when needed:
 
 ```bash
-./node_modules/.bin/supabase login
+pnpm exec supabase login
 ```
 
 Deploy to the persistent `dev` project (`submidrhbtknjxfympna`) from the Git `dev` line or a reviewed PR branch:
 
 ```bash
-npm run deploy:dev -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
+pnpm deploy:dev flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
 ```
 
 Deploy to the production `main` project (`qgzvkongdjqiiamzbbts`) only as part of the `dev -> main` promote flow:
 
 ```bash
-npm run deploy:main -- flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
+pnpm deploy:main flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
 ```
 
 The deploy script pins the Supabase CLI version from `package.json`, sets the target `--project-ref`, disables gateway JWT verification with `--no-verify-jwt`, and passes `supabase/functions/deno.json` as the import map so server-side bundling resolves shared npm/jsr imports.
 
 Recommended deploy workflow:
 
-1. Validate locally with `npm run lint`, `npm run check`, and targeted smoke requests.
+1. Validate locally with `pnpm lint`, `pnpm check`, and targeted smoke requests.
 2. Confirm the target project already has the required runtime secrets.
 3. Deploy named functions only. Avoid omitting function names or using `--prune` unless the intention is to deploy/delete the whole remote function set.
 4. Smoke the deployed endpoint through `test.example.http` or equivalent curl requests.
@@ -192,8 +197,8 @@ Recommended deploy workflow:
 Do not patch remote secrets as part of normal function deployment. With this repository's pinned Supabase CLI, remote function secrets are managed separately through the Supabase Dashboard or explicit `supabase secrets` operations such as:
 
 ```bash
-./node_modules/.bin/supabase secrets list --project-ref <project-ref>
-./node_modules/.bin/supabase secrets set KEY=value --project-ref <project-ref>
+pnpm exec supabase secrets list --project-ref <project-ref>
+pnpm exec supabase secrets set KEY=value --project-ref <project-ref>
 ```
 
 Treat `supabase secrets set --env-file ...` as a credential operation, not as a deploy shortcut. It can write many values at once, so use it only with an explicitly reviewed secret file and target project.
@@ -249,7 +254,7 @@ Clients should treat `expired`, `deleted`, and `object_missing` as terminal down
 当你怀疑远端出现“函数通了，但 auth 行为漂移”这类问题时，优先跑仓库内的统一探测脚本：
 
 ```bash
-npm run probe:auth -- --remote
+pnpm probe:auth --remote
 ```
 
 脚本会自动读取：
@@ -264,7 +269,7 @@ npm run probe:auth -- --remote
 ```bash
 EDGE_BASE_URL="https://<project-ref>.supabase.co/functions/v1" \
 USER_JWT="<your-user-jwt>" \
-npm run probe:auth -- --base-url "$EDGE_BASE_URL"
+pnpm probe:auth --base-url "$EDGE_BASE_URL"
 ```
 
 默认行为：
@@ -281,16 +286,16 @@ npm run probe:auth -- --base-url "$EDGE_BASE_URL"
 
 ```bash
 # 只看 lca_* 这组
-npm run probe:auth -- --remote --only lca_
+pnpm probe:auth --remote --only lca_
 
 # 把默认跳过的 disabled / local-only 入口也带上
-npm run probe:auth -- --remote --include-disabled --include-local-only
+pnpm probe:auth --remote --include-disabled --include-local-only
 
 # 输出 JSON 报告，方便留存对比
-npm run probe:auth -- --remote --json-out ./tmp/edge-probe-report.json
+pnpm probe:auth --remote --json-out ./tmp/edge-probe-report.json
 
 # 不发请求，只看当前脚本会如何分类和选择鉴权方式
-npm run probe:auth -- --dry-run
+pnpm probe:auth --dry-run
 ```
 
 ## AI Suggestion Worker API
@@ -331,18 +336,18 @@ After any code or document update:
 1. Run the non-mutating formatting check:
 
 ```bash
-npm run lint
+pnpm lint
 ```
 
-Use `npm run format` only when you intend to rewrite files with Prettier.
+Use `pnpm format` only when you intend to rewrite files with Prettier.
 
 2. Run the repo baseline Deno checks:
 
 ```bash
-npm run check
+pnpm check
 ```
 
-This baseline intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 139-root Deno graph, 15 Node contracts, and all 367 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

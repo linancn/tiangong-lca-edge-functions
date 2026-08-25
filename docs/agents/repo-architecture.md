@@ -18,6 +18,10 @@ checkPaths:
   - docs/agents/repo-architecture.md
   - .docpact/config.yaml
   - package.json
+  - pnpm-lock.yaml
+  - pnpm-workspace.yaml
+  - .nvmrc
+  - deno.json
   - supabase/config.toml
   - supabase/functions/**
   - test/**
@@ -30,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-25
-lastReviewedCommit: 3b66b34db01f9467993036be4adaea5f0480737e
-lastReviewedNote: 'Documented ai_suggest as an authenticated async adapter over database-owned worker_jobs and the generic Rust ai-worker.'
+lastReviewedCommit: e79caf0e8aa53024b705c4fa22786026256e8298
+lastReviewedNote: 'Reviewed for Issue #304: Deno 2.9.5 with bundled TypeScript 6.0.3 owns runtime compilation; exact pnpm/Node tooling only orchestrates Supabase CLI, formatting, graph checks, and tests.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -51,7 +55,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 
 | Path group | Stability | Why it matters |
 | --- | --- | --- |
-| `supabase/functions/<name>/index.ts` | stable | default Edge Function entrypoint; baseline `npm run check` walks enabled `index.ts` files |
+| `supabase/functions/<name>/index.ts` | stable | default Edge Function entrypoint; baseline `pnpm check` includes every enabled `index.ts` root in one bounded shared Deno graph |
 | `supabase/functions/<name>/handler.ts` | stable | larger routes sometimes split real logic here while `index.ts` stays thin |
 | `supabase/functions/_shared/auth.ts` | stable | central runtime auth and credential-selection logic |
 | `supabase/functions/_shared/command_runtime/**` | stable | request parsing, actor context, audit payload, and command-handler skeleton |
@@ -62,7 +66,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 | `supabase/functions/_shared/lca_*.ts` | stable | scope and snapshot helpers for LCA endpoints |
 | `supabase/functions/_shared/tidas_package.ts` | stable | import, export, and diagnostics shaping for TIDAS package flows |
 | `test/**` | stable | repo-level Deno tests for functions and shared modules |
-| `scripts/**` | stable | deno-check inventory, deploy contract, auth probe, and LCA smoke helper |
+| `scripts/**` | stable | exact environment contract, bounded Deno graph inventory, Node contracts, deploy contract, auth probe, and LCA smoke helper |
 | `supabase/config.toml` | stable | local serve and remote edge deploy config; not database schema truth |
 | `supabase/functions/deno.json` | stable | Deno config and import map used by local checks and scripted remote deploy bundling |
 | `test.example.http` | stable | checked-in smoke request collection for local and remote routes |
@@ -82,10 +86,12 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 139 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 367 Deno behavior tests with env/read/loopback-net permissions.
+
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
-- local serve: `npm start`
-- scripted remote deploys: `npm run deploy:dev`, `npm run deploy:main`
+- local serve: `pnpm start`
+- scripted remote deploys: `pnpm deploy:dev`, `pnpm deploy:main`
 
 Both paths use `--no-verify-jwt`.
 
@@ -253,4 +259,4 @@ If one of those changes, assume more than one function family is affected.
 
 ## Local Docpact Push Gate
 
-This repository has a versioned local `pre-push` hook under `.githooks/pre-push` that delegates to `scripts/docpact-gate.sh` and then runs non-mutating `npm run lint` plus `npm run check`. The hook aborts if the lint step changes the working tree, so generated formatting changes must be reviewed and committed before push. The gate resolves the CLI through `scripts/docpact`, so local agent shells do not need bare `docpact` on `PATH`. The hook is the local guard for docpact config validation, enforced doc-governance linting, and Edge Function checks; the GitHub `CI` workflow is manual-dispatch only.
+This repository has a versioned local `pre-push` hook under `.githooks/pre-push` that delegates to `scripts/docpact-gate.sh` and then runs non-mutating `pnpm lint` plus canonical `pnpm check`. The hook aborts if the lint step changes the working tree, so generated formatting changes must be reviewed and committed before push. The gate resolves the CLI through `scripts/docpact`, so local agent shells do not need bare `docpact` on `PATH`. The hook is the local guard for docpact config validation, enforced doc-governance linting, and the complete Edge Function type/behavior gate; the GitHub `CI` workflow is manual-dispatch only.

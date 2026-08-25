@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-25'
-lastReviewedCommit: '3b66b34db01f9467993036be4adaea5f0480737e'
-lastReviewedNote: 'Added explicit routing for the AI worker enqueue/read adapter and its contract test; existing Edge ownership and proof rules remain authoritative.'
+lastReviewedCommit: 'e79caf0e8aa53024b705c4fa22786026256e8298'
+lastReviewedNote: 'Reviewed for Issue #304: exact Deno/Node/pnpm, formatter, lock, and CI inputs now join the existing deploy-and-ops contract; the proof rule already covers graph and behavior tests.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -31,6 +31,12 @@ ownership:
           - test/**
           - scripts/**
           - package.json
+          - .nvmrc
+          - .prettierignore
+          - .prettierrc.js
+          - deno.json
+          - pnpm-lock.yaml
+          - pnpm-workspace.yaml
           - supabase/config.toml
           - supabase/.env.example
           - test.example.http
@@ -71,6 +77,12 @@ coverage:
     - .github/workflows/ai-doc-lint.yml
     - .github/workflows/ci.yml
     - package.json
+    - .nvmrc
+    - .prettierignore
+    - .prettierrc.js
+    - deno.json
+    - pnpm-lock.yaml
+    - pnpm-workspace.yaml
     - supabase/config.toml
     - supabase/.env.example
     - supabase/functions/**
@@ -214,6 +226,12 @@ routing:
     deploy-auth-drift:
       paths:
         - package.json
+        - .nvmrc
+        - .prettierignore
+        - .prettierrc.js
+        - deno.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
         - supabase/config.toml
         - supabase/.env.example
         - scripts/deploy-function.cjs
@@ -463,6 +481,18 @@ rules:
     triggers:
       - path: package.json
         kind: runtime-config
+      - path: .nvmrc
+        kind: runtime-config
+      - path: .prettierignore
+        kind: format-config
+      - path: .prettierrc.js
+        kind: format-config
+      - path: deno.json
+        kind: runtime-config
+      - path: pnpm-lock.yaml
+        kind: dependency-lock
+      - path: pnpm-workspace.yaml
+        kind: package-manager-config
       - path: supabase/config.toml
         kind: deploy-config
       - path: supabase/.env.example
