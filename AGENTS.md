@@ -20,6 +20,11 @@ checkPaths:
   - .docpact/**/*.yaml
   - docs/agents/**
   - package.json
+  - pnpm-lock.yaml
+  - pnpm-workspace.yaml
+  - .nvmrc
+  - deno.json
+  - .prettierrc.js
   - supabase/config.toml
   - supabase/functions/**
   - test/**
@@ -33,8 +38,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-25
-lastReviewedCommit: 3b66b34db01f9467993036be4adaea5f0480737e
-lastReviewedNote: 'Reviewed for Issue #301: the generic AI worker cutover preserves Edge ownership of authentication and request shaping while Database and Worker own durable jobs and execution.'
+lastReviewedCommit: e79caf0e8aa53024b705c4fa22786026256e8298
+lastReviewedNote: 'Reviewed for Issue #304: Deno 2.9.5 and its bundled TypeScript 6.0.3 are authoritative, while exact Node 24.19.0 and pnpm 11.23.0 own only Supabase CLI, formatting, and validation orchestration.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -85,16 +90,17 @@ Do not start from repo landing prose or raw function inventories when the core c
 
 Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/repo-validation.md` for the full setup and proof details.
 
-- package manager: `npm`
-- Node baseline: `22`
-- local serve command: `npm start`
-- baseline local validation: non-mutating `npm run lint` and `npm run check`
+- authoritative runtime/compiler: Deno `2.9.5` with its actual bundled TypeScript `6.0.3`; this repository does not install or claim TypeScript 7
+- auxiliary package manager/runtime: pnpm `11.23.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
+- local serve command: `pnpm start`
+- baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
+- `pnpm check` validates exact runtime versions, checks all 139 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all Deno behavior tests with only env/read/loopback-net permissions
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
-- formatting fix command: `npm run format`
+- formatting fix command: `pnpm format`
 - remote deploy entrypoints:
-  - `npm run deploy:dev -- <function-name> [more-function-names...]`
-  - `npm run deploy:main -- <function-name> [more-function-names...]`
-- auth and connectivity drift probe: `npm run probe:auth -- --remote` or `npm run probe:auth -- --local`
+  - `pnpm deploy:dev <function-name> [more-function-names...]`
+  - `pnpm deploy:main <function-name> [more-function-names...]`
+- auth and connectivity drift probe: `pnpm probe:auth --remote` or `pnpm probe:auth --local`
 - local serve and scripted remote deploys both use `--no-verify-jwt`
 - scripted remote deploys pass `supabase/functions/deno.json` as the Supabase CLI import map so remote bundling resolves shared npm/jsr imports consistently
 - gateway JWT verification being off does not make runtime auth optional; functions must still authenticate and authorize requests explicitly
@@ -173,4 +179,4 @@ Install the versioned local hook once per checkout:
 ./scripts/install-git-hooks.sh
 ```
 
-The `pre-push` hook runs `scripts/docpact-gate.sh`, which delegates CLI lookup to `scripts/docpact` and performs strict config validation plus enforced lint before the push leaves the machine. It then runs non-mutating `npm run lint` and `npm run check` as the local test gate, and aborts if the lint step changes the working tree. The wrapper checks `DOCPACT_BIN`, Cargo install locations, Homebrew install locations, and then `PATH`, so local agent shells should not fail only because bare `docpact` is unavailable. The default comparison base is `origin/dev` for routine branches and `origin/main` for promote or hotfix branches. Override it for unusual stacks with `DOCPACT_BASE_REF=<ref>` or `scripts/docpact-gate.sh --base <ref>`. The gate writes its detailed report to a temporary file so normal pushes do not create `.docpact/runs/` artifacts. The GitHub `CI` workflow is manual-dispatch only.
+The `pre-push` hook runs `scripts/docpact-gate.sh`, which delegates CLI lookup to `scripts/docpact` and performs strict config validation plus enforced lint before the push leaves the machine. It then runs non-mutating `pnpm lint` and canonical `pnpm check` as the local test gate, and aborts if the lint step changes the working tree. The wrapper checks `DOCPACT_BIN`, Cargo install locations, Homebrew install locations, and then `PATH`, so local agent shells should not fail only because bare `docpact` is unavailable. The default comparison base is `origin/dev` for routine branches and `origin/main` for promote or hotfix branches. Override it for unusual stacks with `DOCPACT_BASE_REF=<ref>` or `scripts/docpact-gate.sh --base <ref>`. The gate writes its detailed report to a temporary file so normal pushes do not create `.docpact/runs/` artifacts. The GitHub `CI` workflow is manual-dispatch only.

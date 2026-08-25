@@ -399,8 +399,8 @@ async function processJob(job: Job): Promise<JobOutcome> {
 async function updateEmbeddingWithTimeouts(job: Job, embedding: number[]) {
   const { id, version, schema, table, embeddingColumn } = job;
 
-  return await sql.begin(async (transaction) => {
-    const tx = transaction as unknown as typeof sql;
+  return await sql.begin(async (transaction: typeof sql) => {
+    const tx = transaction;
 
     await tx`
       select set_config('lock_timeout', ${DB_UPDATE_LOCK_TIMEOUT}, true)

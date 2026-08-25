@@ -489,7 +489,7 @@ async function fetchVerifiedQueryArtifact(
       detail: `expected_bytes=${descriptor.artifactByteSize} actual_bytes=${fetched.data.byteLength}`,
     };
   }
-  const digest = await crypto.subtle.digest('SHA-256', fetched.data);
+  const digest = await crypto.subtle.digest('SHA-256', new Uint8Array(fetched.data));
   const observedSha256 = [...new Uint8Array(digest)]
     .map((value) => value.toString(16).padStart(2, '0'))
     .join('');
