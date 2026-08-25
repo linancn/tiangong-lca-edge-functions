@@ -180,6 +180,9 @@ export async function verifyPortalHmacRequest(input: {
   if (new URL(input.request.url).pathname !== input.expectedFunctionPath) {
     throw new PortalHmacError('portal_hmac_path_invalid');
   }
+  if (input.request.headers.has('authorization')) {
+    throw new PortalHmacError('portal_hmac_headers_invalid');
+  }
 
   const keyId = requiredHeader(input.request.headers, 'x-portal-key-id');
   const timestampText = requiredHeader(input.request.headers, 'x-portal-timestamp');

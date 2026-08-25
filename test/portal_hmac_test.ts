@@ -157,6 +157,27 @@ Deno.test('portal HMAC rejects missing headers', async () => {
   );
 });
 
+Deno.test('portal HMAC rejects user or service Authorization context', async () => {
+  const fixture = await signedRequest();
+  const headers = new Headers(fixture.request.headers);
+  headers.set('Authorization', 'Bearer user-or-service-token');
+  const bodyCopy = new Uint8Array(fixture.rawBody.byteLength);
+  bodyCopy.set(fixture.rawBody);
+  await expectPortalHmacError('portal_hmac_headers_invalid', () =>
+    verifyPortalHmacRequest({
+      request: new Request(fixture.request.url, {
+        method: 'POST',
+        headers,
+        body: bodyCopy.buffer,
+      }),
+      rawBody: fixture.rawBody,
+      expectedFunctionPath: FUNCTION_PATH,
+      keyring: KEYRING,
+      nowSeconds: NOW_SECONDS,
+    }),
+  );
+});
+
 Deno.test('portal HMAC rejects an unknown key id even with a well-formed MAC', async () => {
   const fixture = await signedRequest({ headerKeyId: 'portal-main-unknown' });
   await expectPortalHmacError('portal_hmac_key_unknown', () =>
