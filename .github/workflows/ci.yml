@@ -12,24 +12,26 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Setup pnpm and Node.js
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2 # v2.0.2
         with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
+          version: 11.23.0
+          runtime: node@24.19.0
+          cache: true
+          install: false
 
       - name: Setup Deno
-        uses: denoland/setup-deno@v2
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
-          deno-version: 2.1.x
+          deno-version: 2.9.5
 
       - name: Install dependencies
-        run: npm install --no-package-lock
+        run: pnpm install --frozen-lockfile
 
       - name: Lint docs and config
-        run: npm run lint
+        run: pnpm lint
 
-      - name: Deno check baseline
-        run: npm run check
+      - name: Full Deno validation
+        run: pnpm check
