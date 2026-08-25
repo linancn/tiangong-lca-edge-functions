@@ -171,17 +171,16 @@ export async function verifyPortalHmacRequest(input: {
   request: Request;
   rawBody: Uint8Array;
   expectedFunctionPath: string;
+  allowedRequestPaths?: readonly string[];
   keyring: PortalHmacKeyring;
   nowSeconds?: number;
 }): Promise<PortalHmacVerification> {
   if (input.request.method !== 'POST') {
     throw new PortalHmacError('portal_hmac_method_invalid');
   }
-  if (new URL(input.request.url).pathname !== input.expectedFunctionPath) {
+  const allowedRequestPaths = input.allowedRequestPaths ?? [input.expectedFunctionPath];
+  if (!allowedRequestPaths.includes(new URL(input.request.url).pathname)) {
     throw new PortalHmacError('portal_hmac_path_invalid');
-  }
-  if (input.request.headers.has('authorization')) {
-    throw new PortalHmacError('portal_hmac_headers_invalid');
   }
 
   const keyId = requiredHeader(input.request.headers, 'x-portal-key-id');

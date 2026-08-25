@@ -27,6 +27,7 @@ import { getSupabasePublishableKey, getSupabaseUrl } from '../_shared/supabase_c
 
 export const PORTAL_LCIA_FUNCTION_NAME = 'portal_data_product_results_v1';
 export const PORTAL_LCIA_FUNCTION_PATH = `/functions/v1/${PORTAL_LCIA_FUNCTION_NAME}`;
+export const PORTAL_LCIA_RUNTIME_PATH = `/${PORTAL_LCIA_FUNCTION_NAME}`;
 export const PORTAL_LCIA_MAX_REQUEST_BYTES = 32 * 1024;
 export const PORTAL_LCIA_MAX_RESPONSE_BYTES = 512 * 1024;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 8_000;
@@ -397,6 +398,7 @@ export function createPortalDataProductResultsHandler(
         request,
         rawBody,
         expectedFunctionPath: PORTAL_LCIA_FUNCTION_PATH,
+        allowedRequestPaths: [PORTAL_LCIA_FUNCTION_PATH, PORTAL_LCIA_RUNTIME_PATH],
         keyring: options.keyring ?? loadPortalHmacKeyring(),
         nowSeconds: options.nowSeconds?.(),
       });

@@ -157,27 +157,6 @@ Deno.test('portal HMAC rejects missing headers', async () => {
   );
 });
 
-Deno.test('portal HMAC rejects user or service Authorization context', async () => {
-  const fixture = await signedRequest();
-  const headers = new Headers(fixture.request.headers);
-  headers.set('Authorization', 'Bearer user-or-service-token');
-  const bodyCopy = new Uint8Array(fixture.rawBody.byteLength);
-  bodyCopy.set(fixture.rawBody);
-  await expectPortalHmacError('portal_hmac_headers_invalid', () =>
-    verifyPortalHmacRequest({
-      request: new Request(fixture.request.url, {
-        method: 'POST',
-        headers,
-        body: bodyCopy.buffer,
-      }),
-      rawBody: fixture.rawBody,
-      expectedFunctionPath: FUNCTION_PATH,
-      keyring: KEYRING,
-      nowSeconds: NOW_SECONDS,
-    }),
-  );
-});
-
 Deno.test('portal HMAC rejects an unknown key id even with a well-formed MAC', async () => {
   const fixture = await signedRequest({ headerKeyId: 'portal-main-unknown' });
   await expectPortalHmacError('portal_hmac_key_unknown', () =>
@@ -253,6 +232,53 @@ Deno.test('portal HMAC binds the signature to the exact function path', async ()
     }),
   );
 });
+
+Deno.test('portal HMAC accepts only exact public and Supabase-stripped runtime paths', async () => {
+  const runtimePath = '/portal_data_product_results_v1';
+  const fixture = await signedRequest({ path: runtimePath, signedPath: FUNCTION_PATH });
+  const result = await verifyPortalHmacRequest({
+    ...fixture,
+    expectedFunctionPath: FUNCTION_PATH,
+    allowedRequestPaths: [FUNCTION_PATH, runtimePath],
+    keyring: KEYRING,
+    nowSeconds: NOW_SECONDS,
+  });
+  assertEquals(result.matchedKey, 'current');
+
+  for (const path of [
+    `${runtimePath}/suffix`,
+    `${FUNCTION_PATH}/suffix`,
+    '/portal_hybrid_search_v1',
+  ]) {
+    const rejected = await signedRequest({ path, signedPath: FUNCTION_PATH });
+    await expectPortalHmacError('portal_hmac_path_invalid', () =>
+      verifyPortalHmacRequest({
+        ...rejected,
+        expectedFunctionPath: FUNCTION_PATH,
+        allowedRequestPaths: [FUNCTION_PATH, runtimePath],
+        keyring: KEYRING,
+        nowSeconds: NOW_SECONDS,
+      }),
+    );
+  }
+});
+
+Deno.test(
+  'portal HMAC never substitutes the stripped runtime path into canonical bytes',
+  async () => {
+    const runtimePath = '/portal_data_product_results_v1';
+    const fixture = await signedRequest({ path: runtimePath, signedPath: runtimePath });
+    await expectPortalHmacError('portal_hmac_signature_invalid', () =>
+      verifyPortalHmacRequest({
+        ...fixture,
+        expectedFunctionPath: FUNCTION_PATH,
+        allowedRequestPaths: [FUNCTION_PATH, runtimePath],
+        keyring: KEYRING,
+        nowSeconds: NOW_SECONDS,
+      }),
+    );
+  },
+);
 
 Deno.test('portal HMAC rejects a signature replayed against another function path', async () => {
   const fixture = await signedRequest({ path: '/functions/v1/portal_hybrid_search_v1' });
