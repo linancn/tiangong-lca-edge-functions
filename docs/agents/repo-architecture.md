@@ -29,9 +29,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-17
-lastReviewedCommit: 23c63f8e37eaf04f989de915f3f03b8e6ef16db3
-lastReviewedNote: 'The shared Data Product command facade remains the correct boundary for minimal ResultSet commands and backward-compatible resultSet-aware Closure requests; no new Edge service or state machine is needed.'
+lastReviewedAt: 2026-08-25
+lastReviewedCommit: 3b66b34db01f9467993036be4adaea5f0480737e
+lastReviewedNote: 'Documented ai_suggest as an authenticated async adapter over database-owned worker_jobs and the generic Rust ai-worker.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -58,6 +58,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 | `supabase/functions/_shared/commands/**` | stable | dataset, review, membership, notification, and profile command logic |
 | `supabase/functions/_shared/db_rpc/**` | stable | thin wrappers over database RPC calls; SQL truth still lives in `database-engine` |
 | `supabase/functions/_shared/openai_*.ts` and `hybrid_query_utils.ts` | stable | shared OpenAI and query-rewrite helpers used by AI-backed routes |
+| `supabase/functions/_shared/ai_worker.ts` | stable | service-role adapter for versioned AI worker enqueue/read database façades |
 | `supabase/functions/_shared/lca_*.ts` | stable | scope and snapshot helpers for LCA endpoints |
 | `supabase/functions/_shared/tidas_package.ts` | stable | import, export, and diagnostics shaping for TIDAS package flows |
 | `test/**` | stable | repo-level Deno tests for functions and shared modules |
@@ -148,6 +149,7 @@ These routes cluster around:
 
 Important shared helpers:
 
+- `supabase/functions/_shared/ai_worker.ts`
 - `supabase/functions/_shared/openai_chat.ts`
 - `supabase/functions/_shared/openai_structured.ts`
 - `supabase/functions/_shared/hybrid_query_utils.ts`
@@ -163,6 +165,8 @@ All seven Hybrid endpoints are thin route configurations over one shared handler
 Each `embedding_ft` Edge isolate processes one request batch sequentially, so its Postgres.js client is intentionally capped at one connection, closes after 20 idle seconds, and has a 300-second maximum lifetime. The `embedding-ft-edge` application name makes aggregate connection evidence auditable without exposing row identities. A wider default pool or an unbounded idle lifetime can multiply retained connections across isolates and must not be used to accelerate database-owned queue backfill.
 
 The three legacy OpenAI summary webhooks and the generic non-FT embedding worker are retired from the source inventory. The deterministic `webhook_*_embedding_ft` and `embedding_ft` routes remain active and covered by the default validation baseline.
+
+`ai_suggest` is an authenticated asynchronous adapter, not a model runtime. It accepts legacy Process/Flow TIDAS JSON requests, enforces the 2 MiB Edge limit and matching dataset root, and calls the service-only `svc_ai_tidas_suggestion_enqueue/read` database façades. Its public projection contains only requester-scoped job state and the versioned result; queue payloads, lease fields, diagnostics, and provider errors stay private. The database owns durable `worker_jobs`, while the generic Rust `ai-worker` owns rule loading and OpenAI-compatible provider calls. LangGraph is not on this path.
 
 ### LCA async job and result routes
 

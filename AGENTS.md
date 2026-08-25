@@ -32,9 +32,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-19
-lastReviewedCommit: b4aa321e0cd2c8618bb7b7098e8e8bfd96d006fe
-lastReviewedNote: 'Edge preserves the stable command boundary while adding minimal ResultSet commands and an additive resultSetId on Closure creation; Database Engine remains authoritative for scope and persisted workflow state.'
+lastReviewedAt: 2026-08-25
+lastReviewedCommit: 3b66b34db01f9467993036be4adaea5f0480737e
+lastReviewedNote: 'Reviewed for Issue #301: the generic AI worker cutover preserves Edge ownership of authentication and request shaping while Database and Worker own durable jobs and execution.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
