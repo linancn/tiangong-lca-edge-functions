@@ -176,6 +176,14 @@ export function readPortalPublishableCredential(
   return publishableKey;
 }
 
+export function readPortalSupabaseUrl(env: PortalTransportEnvironment = Deno.env): string {
+  try {
+    return validatePortalSupabaseUrl(readExactEnvironmentValue(env, 'SUPABASE_URL'));
+  } catch (_error) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+}
+
 export function readPortalLegacyAnonCredential(
   env: Pick<typeof Deno.env, 'get'> = Deno.env,
 ): string | null {

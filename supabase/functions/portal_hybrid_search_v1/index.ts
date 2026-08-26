@@ -410,6 +410,20 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         );
       }
 
+      let repository: PortalHybridRepository;
+      try {
+        repository =
+          options.repository ??
+          options.repositoryFactory?.(trustedPublishableKey) ??
+          createPortalHybridRepository({ publishableKey: trustedPublishableKey });
+      } catch (_error) {
+        return errorResponse(
+          503,
+          'hybrid_upstream_unavailable',
+          'Portal Hybrid search unavailable',
+        );
+      }
+
       let guardLimits: PortalRouteGuardLimits;
       let circuitLimits: PortalHybridCircuitLimits;
       try {
@@ -658,10 +672,6 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         let databasePage;
         try {
           if (deadline.isExpired()) return timeoutResponse();
-          const repository =
-            options.repository ??
-            options.repositoryFactory?.(trustedPublishableKey) ??
-            createPortalHybridRepository({ publishableKey: trustedPublishableKey });
           event.database = 'called';
           databasePage = await deadline.run(() =>
             repository.query(hybridRequest, queryTerms, modelCache.queryEmbedding, deadline.signal),

@@ -15,6 +15,7 @@ import {
   readPortalLegacyAnonCredential,
   readPortalPublishableCredential,
   readPortalRawBody,
+  readPortalSupabaseUrl,
   validatePortalInboundTransport,
   validatePortalPublishableCredential,
   validatePortalSupabaseUrl,
@@ -50,7 +51,6 @@ import {
   type PortalSecurityMode,
   type PortalSecurityTransportOutcome,
 } from '../_shared/portal_security_event.ts';
-import { getSupabaseUrl } from '../_shared/supabase_client.ts';
 
 export {
   PortalPublishedLciaUpstreamError,
@@ -58,6 +58,7 @@ export {
   readPortalLegacyAnonCredential,
   readPortalPublishableCredential,
   readPortalRawBody,
+  readPortalSupabaseUrl,
   validatePortalInboundTransport,
   validatePortalPublishableCredential,
   validatePortalSupabaseUrl,
@@ -224,7 +225,7 @@ export function createPortalPublishedLciaRepository(
     fetchImpl?: typeof fetch;
   } = {},
 ): PortalPublishedLciaRepository {
-  const supabaseUrl = validatePortalSupabaseUrl(options.supabaseUrl ?? getSupabaseUrl());
+  const supabaseUrl = validatePortalSupabaseUrl(options.supabaseUrl ?? readPortalSupabaseUrl());
   const publishableKey = validatePortalPublishableCredential(
     options.publishableKey ?? readPortalPublishableCredential(),
   );

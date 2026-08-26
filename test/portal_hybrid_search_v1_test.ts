@@ -713,7 +713,7 @@ Deno.test('Portal Hybrid provider configuration is strict and has no generic fal
 });
 
 Deno.test(
-  'Portal Hybrid invalid provider config fails before Redis, model, or database',
+  'Portal Hybrid invalid provider or database config fails before Redis or cost',
   async () => {
     const redis = new FakePortalRedis();
     let modelCalls = 0;
@@ -743,6 +743,29 @@ Deno.test(
     assertEquals(response.status, 503);
     assertEquals(await responseCode(response), 'hybrid_upstream_unavailable');
     assertEquals(redis.calls, []);
+    assertEquals(modelCalls, 0);
+    assertEquals(databaseCalls, 0);
+
+    const repositoryConfigRedis = new FakePortalRedis();
+    const repositoryConfigResponse = await createPortalHybridSearchHandler(
+      handlerOptions(
+        repositoryConfigRedis,
+        { query: () => Promise.resolve(databasePage()) },
+        {
+          repository: undefined,
+          repositoryFactory: () => {
+            throw new Error('cross-project database configuration');
+          },
+          rewriteQuery: async () => {
+            modelCalls += 1;
+            return REWRITE;
+          },
+        },
+      ),
+    )(await signedRequest());
+    assertEquals(repositoryConfigResponse.status, 503);
+    assertEquals(await responseCode(repositoryConfigResponse), 'hybrid_upstream_unavailable');
+    assertEquals(repositoryConfigRedis.calls, []);
     assertEquals(modelCalls, 0);
     assertEquals(databaseCalls, 0);
   },

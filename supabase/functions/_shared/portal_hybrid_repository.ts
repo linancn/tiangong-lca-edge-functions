@@ -8,10 +8,10 @@ import {
 import {
   readPortalPublishableCredential,
   readPortalBoundedStream,
+  readPortalSupabaseUrl,
   validatePortalPublishableCredential,
   validatePortalSupabaseUrl,
 } from './portal_public_transport.ts';
-import { getSupabaseUrl } from './supabase_client.ts';
 
 export const PORTAL_HYBRID_MAX_RESPONSE_BYTES = 512 * 1024;
 
@@ -75,7 +75,7 @@ export function createPortalHybridRepository(
   let supabaseUrl: string;
   let publishableKey: string;
   try {
-    supabaseUrl = validatePortalSupabaseUrl(options.supabaseUrl ?? getSupabaseUrl());
+    supabaseUrl = validatePortalSupabaseUrl(options.supabaseUrl ?? readPortalSupabaseUrl());
     publishableKey = validatePortalPublishableCredential(
       options.publishableKey ?? readPortalPublishableCredential(),
     );

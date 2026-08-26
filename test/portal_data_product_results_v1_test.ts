@@ -20,6 +20,7 @@ import {
   type PortalPublishedLciaRepository,
   PortalTransportError,
   readPortalPublishableCredential,
+  readPortalSupabaseUrl,
   transportSecurityOutcome,
   validatePortalPublishableCredential,
   validatePortalSupabaseUrl,
@@ -656,6 +657,24 @@ Deno.test('Portal publishable credential is dedicated and bound to the current p
       'portal_transport_config_invalid',
     );
   }
+
+  assertEquals(
+    readPortalSupabaseUrl(
+      environment({
+        SUPABASE_URL: 'https://current-project.supabase.co',
+        REMOTE_SUPABASE_URL: 'https://wrong-project.supabase.co',
+      }),
+    ),
+    'https://current-project.supabase.co',
+  );
+  assertThrows(
+    () =>
+      readPortalSupabaseUrl(
+        environment({ REMOTE_SUPABASE_URL: 'https://wrong-project.supabase.co' }),
+      ),
+    PortalTransportError,
+    'portal_transport_config_invalid',
+  );
 });
 
 Deno.test('Portal LCIA and Hybrid deployment provenance read only their own exact SHA', () => {

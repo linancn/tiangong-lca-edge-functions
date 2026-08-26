@@ -41,6 +41,7 @@ Deno.test(
     for (const forbidden of [
       "'REMOTE_SUPABASE_PUBLISHABLE_KEY'",
       "'REMOTE_SUPABASE_ANON_KEY'",
+      "'REMOTE_SUPABASE_URL'",
       "Deno.env.get('PORTAL_DEPLOYMENT_SHA')",
     ]) {
       assertEquals(source.includes(forbidden), false, `forbidden Portal fallback: ${forbidden}`);
@@ -117,6 +118,7 @@ Deno.test(
     for (const forbidden of [
       "'REMOTE_SUPABASE_PUBLISHABLE_KEY'",
       "'REMOTE_SUPABASE_ANON_KEY'",
+      "'REMOTE_SUPABASE_URL'",
       "'OPENAI_API_KEY'",
       "'OPENAI_CHAT_MODEL'",
       "'OPENAI_BASE_URL'",
