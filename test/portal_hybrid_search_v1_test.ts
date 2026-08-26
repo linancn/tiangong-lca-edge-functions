@@ -448,6 +448,46 @@ Deno.test(
   },
 );
 
+Deno.test(
+  'Portal Hybrid method, size, transport, and guard configuration statuses are fixed',
+  async () => {
+    const repository: PortalHybridRepository = { query: () => Promise.resolve(databasePage()) };
+    const methodRedis = new FakePortalRedis();
+    const methodResponse = await createPortalHybridSearchHandler(
+      handlerOptions(methodRedis, repository),
+    )(await signedRequest({ method: 'GET' }));
+    assertEquals(methodResponse.status, 405);
+    assertEquals(await responseCode(methodResponse), 'method_not_allowed');
+    assertEquals(methodRedis.calls, []);
+
+    const sizeRedis = new FakePortalRedis();
+    const oversized = await signedRequest();
+    oversized.headers.set('content-length', String(32 * 1024 + 1));
+    const sizeResponse = await createPortalHybridSearchHandler(
+      handlerOptions(sizeRedis, repository),
+    )(oversized);
+    assertEquals(sizeResponse.status, 413);
+    assertEquals(await responseCode(sizeResponse), 'request_too_large');
+    assertEquals(sizeRedis.calls, []);
+
+    const transportRedis = new FakePortalRedis();
+    const transportResponse = await createPortalHybridSearchHandler(
+      handlerOptions(transportRedis, repository),
+    )(await signedRequest({ apiKey: null }));
+    assertEquals(transportResponse.status, 401);
+    assertEquals(await responseCode(transportResponse), 'portal_auth_failed');
+    assertEquals(transportRedis.calls, []);
+
+    const configRedis = new FakePortalRedis();
+    const configResponse = await createPortalHybridSearchHandler(
+      handlerOptions(configRedis, repository, { timeoutMs: 8_001 }),
+    )(await signedRequest());
+    assertEquals(configResponse.status, 503);
+    assertEquals(await responseCode(configResponse), 'guard_unavailable');
+    assertEquals(configRedis.calls, []);
+  },
+);
+
 Deno.test('Portal Hybrid accepts only exact public and CLI-stripped runtime paths', async () => {
   for (const actualPath of [PORTAL_HYBRID_FUNCTION_PATH, PORTAL_HYBRID_RUNTIME_PATH]) {
     const redis = new FakePortalRedis();

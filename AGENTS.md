@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 90101ec3f649645ab1f0aef5c373ca3ba7a0768c
-lastReviewedNote: 'Reviewed for PR #308 acceptance remediation: pinned CLI transport, exact public credentials, lease/cache safety, correlation, and safe security events are part of the Portal repo contract.'
+lastReviewedCommit: 1101463915b1d757f56f13ca742855fcf2b1c3e2
+lastReviewedNote: 'Reviewed for Issue #310: the separate R2 signed Hybrid route, default-off cost boundary, public-only database façade, and unchanged login Hybrid surface are part of the Portal repo contract.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -94,7 +94,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.23.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 144 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 422 Deno behavior tests with only env/read/loopback-net permissions
+- `pnpm check` validates exact runtime versions, checks all 147 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 447 Deno behavior tests with only env/read/loopback-net permissions
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -113,7 +113,7 @@ At a human-readable level, this repo owns:
 
 - `supabase/functions/**` for Edge Function entrypoints, handlers, and runtime request or response behavior
 - `supabase/functions/_shared/**` for auth, command runtime, DB-RPC wrappers, OpenAI, Redis, Supabase client helpers, and shared domain utilities
-- `portal_data_product_results_v1` plus `_shared/portal_*` for raw-body Portal HMAC verification, replay/admission control, and the publishable-only public LCIA projection
+- `portal_data_product_results_v1`, `portal_hybrid_search_v1`, and `_shared/portal_*` for raw-body Portal HMAC verification, replay/admission control, the publishable-only public LCIA projection, and the separately budgeted/default-off R2 Hybrid projection
 - direct review submission through the stable database command, the Review Admin-only manual quality-diagnostic projection, and compatibility-only handling for already deployed review-submit Gate/coordinator clients
 - `test/**` for repo-level Deno tests
 - `scripts/**` for deno-check inventory, deploy contract, auth probes, and smoke helpers
@@ -158,7 +158,8 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 
 - do not invent schema truth or migration history in this repo
 - do not interpret `--no-verify-jwt` as permission for anonymous business logic
-- do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; the signed Portal LCIA route may call only its reviewed public `api` RPC with the same once-resolved publishable/anon credential that matched inbound `apikey`. Authorization is absent in normal Portal traffic; only the exact legacy anon Bearer injected by pinned CLI `2.106.0` local routing is tolerated after HMAC
+- do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes may call only their reviewed public `api` RPC with the same once-resolved publishable/anon credential that matched inbound `apikey`. Authorization is absent in normal Portal traffic; only the exact legacy anon Bearer injected by pinned CLI `2.106.0` local routing is tolerated after HMAC
+- do not route `portal_hybrid_search_v1` through legacy `hybrid_search_processes`/`hybrid_search_flows`, a service client, or an Edge-side field projection; it remains default-off until the exact Database façade exists, and every guard/circuit/timeout failure returns a fixed signal for the Portal BFF to handle through its separate lexical façade
 - do not move repo-level tests into `supabase/functions/**`; this repo keeps Deno tests in `test/**`
 - do not treat GitHub default branch `main` as the daily trunk
 - do not mark delivery complete if root workspace integration is still pending

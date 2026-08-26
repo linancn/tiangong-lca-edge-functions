@@ -77,6 +77,22 @@ Deno.test(
     assertStringIncludes(source, "env.get('PORTAL_HYBRID_ENABLED') === 'true'");
     assertStringIncludes(source, 'abortSignal: signal');
     assertStringIncludes(source, '{ signal: request.signal }');
+
+    const environmentTemplate = await Deno.readTextFile('./supabase/.env.example');
+    for (const expected of [
+      'PORTAL_HYBRID_ENABLED=false',
+      'PORTAL_HYBRID_MINUTE_BUDGET=60',
+      'PORTAL_HYBRID_DAILY_BUDGET=5000',
+      'PORTAL_HYBRID_MAX_CONCURRENCY=4',
+      'PORTAL_HYBRID_LEASE_TTL_SECONDS=30',
+      'PORTAL_HYBRID_CACHE_TTL_SECONDS=60',
+      'PORTAL_HYBRID_TIMEOUT_MS=8000',
+      'PORTAL_HYBRID_CIRCUIT_FAILURE_THRESHOLD=5',
+      'PORTAL_HYBRID_CIRCUIT_WINDOW_SECONDS=60',
+      'PORTAL_HYBRID_CIRCUIT_OPEN_SECONDS=60',
+    ]) {
+      assertStringIncludes(environmentTemplate, expected);
+    }
   },
 );
 
