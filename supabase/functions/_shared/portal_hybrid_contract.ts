@@ -31,7 +31,9 @@ export const portalHybridQuerySchema = boundedText({
   maximumCodePoints: 512,
   maximumBytes: 2_048,
 });
-const filterTextSchema = boundedText({ maximumCodePoints: 256, maximumBytes: 1_024 });
+const filterTextSchema = boundedText({ maximumCodePoints: 128, maximumBytes: 1_024 }).transform(
+  (value) => value.toLowerCase(),
+);
 const yearSchema = z.number().int().min(0).max(9_999);
 
 export const portalHybridFiltersSchema = z
@@ -57,6 +59,12 @@ export const portalHybridFiltersSchema = z
         path: ['referenceYearFrom'],
       });
     }
+    if (utf8Encoder.encode(JSON.stringify(value)).byteLength > 4_096) {
+      context.addIssue({
+        code: 'custom',
+        message: 'serialized filters exceed UTF-8 byte limit',
+      });
+    }
   });
 
 export const portalHybridSearchRequestSchema = z
@@ -67,7 +75,16 @@ export const portalHybridSearchRequestSchema = z
     filters: portalHybridFiltersSchema,
     limit: z.number().int().min(1).max(20),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (value.kind === 'flow' && value.filters.processSubtype !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        message: 'processSubtype is not valid for Flow search',
+        path: ['filters', 'processSubtype'],
+      });
+    }
+  });
 
 export type PortalHybridSearchRequest = z.infer<typeof portalHybridSearchRequestSchema>;
 
@@ -115,7 +132,11 @@ const hybridEvidenceSchema = z
   .object({
     lexicalRank: z.number().int().min(1).nullable(),
     semanticRank: z.number().int().min(1).nullable(),
-    semanticDistance: z.string().regex(CANONICAL_DECIMAL_PATTERN).nullable(),
+    semanticDistance: z
+      .string()
+      .regex(CANONICAL_DECIMAL_PATTERN)
+      .refine((value) => !value.startsWith('-'), 'semantic distance must be non-negative')
+      .nullable(),
   })
   .strict()
   .refine(
@@ -181,6 +202,16 @@ export const portalPublicHybridCandidatePageSchema = z
   })
   .strict()
   .superRefine((value, context) => {
+    const candidateKeys = value.items.map(
+      (item) => `${item.key.kind}:${item.key.id}@${item.key.version}`,
+    );
+    if (new Set(candidateKeys).size !== candidateKeys.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'candidate identities must be unique',
+        path: ['items'],
+      });
+    }
     value.items.forEach((item, index) => {
       if (item.key.kind !== value.kind) {
         context.addIssue({
@@ -210,7 +241,7 @@ export const portalHybridInterpretationSchema = z
           .strict(),
       )
       .min(1)
-      .max(20)
+      .max(12)
       .refine(
         (values) =>
           new Set(values.map((value) => `${value.language}\u0000${value.value}`)).size ===
@@ -232,6 +263,16 @@ export const portalHybridSearchPageSchema = z
   })
   .strict()
   .superRefine((value, context) => {
+    const candidateKeys = value.items.map(
+      (item) => `${item.key.kind}:${item.key.id}@${item.key.version}`,
+    );
+    if (new Set(candidateKeys).size !== candidateKeys.length) {
+      context.addIssue({
+        code: 'custom',
+        message: 'candidate identities must be unique',
+        path: ['items'],
+      });
+    }
     value.items.forEach((item, index) => {
       if (item.key.kind !== value.kind) {
         context.addIssue({
@@ -252,7 +293,7 @@ export const portalHybridModelCacheSchema = z
     queryTerms: z
       .array(interpretationTextSchema)
       .min(1)
-      .max(20)
+      .max(12)
       .refine((values) => new Set(values).size === values.length, 'query terms must be unique'),
     queryEmbedding: z.array(z.number().finite()).length(1_024),
   })

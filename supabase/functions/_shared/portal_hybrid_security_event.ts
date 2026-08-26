@@ -41,7 +41,8 @@ export type PortalHybridSecurityEvent = {
     | 'budget_exhausted'
     | 'concurrency_exhausted'
     | 'unavailable';
-  circuit: 'not_checked' | 'closed' | 'open' | 'failure_recorded' | 'reset_failed';
+  circuit:
+    'not_checked' | 'closed' | 'open' | 'failure_recorded' | 'record_failed' | 'reset_failed';
   model: 'not_called' | 'cache_hit' | 'called' | 'failed' | 'aborted';
   database: 'not_called' | 'called' | 'failed' | 'contract_failed';
   latencyMs: number;
@@ -117,6 +118,7 @@ const CIRCUIT_OUTCOMES = new Set<PortalHybridSecurityEvent['circuit']>([
   'closed',
   'open',
   'failure_recorded',
+  'record_failed',
   'reset_failed',
 ]);
 const MODEL_OUTCOMES = new Set<PortalHybridSecurityEvent['model']>([

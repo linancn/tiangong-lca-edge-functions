@@ -37,6 +37,49 @@ Deno.test(
   },
 );
 
+Deno.test(
+  'Portal Hybrid runtime is publishable-only, abortable, HMAC-first, and never falls back to legacy RPCs',
+  async () => {
+    const files = [
+      './supabase/functions/_shared/hybrid_search_kernel.ts',
+      './supabase/functions/_shared/openai_structured.ts',
+      './supabase/functions/_shared/portal_hmac.ts',
+      './supabase/functions/_shared/portal_hybrid_contract.ts',
+      './supabase/functions/_shared/portal_hybrid_repository.ts',
+      './supabase/functions/_shared/portal_hybrid_security_event.ts',
+      './supabase/functions/_shared/portal_redis_guard.ts',
+      './supabase/functions/portal_hybrid_search_v1/index.ts',
+    ];
+    const source = (await Promise.all(files.map((file) => Deno.readTextFile(file)))).join('\n');
+    for (const forbidden of [
+      'createSupabaseServiceClient',
+      'supabaseServiceClient',
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'SUPABASE_SECRET_KEY',
+      'REMOTE_SERVICE_API_KEY',
+      'createHybridSearchRpcClient',
+      'hybrid_search_processes',
+      'hybrid_search_flows',
+      'Access-Control-Allow-Origin',
+      'corsHeaders',
+    ]) {
+      assertEquals(
+        source.includes(forbidden),
+        false,
+        `forbidden Portal Hybrid dependency: ${forbidden}`,
+      );
+    }
+    assertStringIncludes(source, '/rest/v1/rpc/portal_hybrid_search_v1');
+    assertStringIncludes(source, "'Content-Profile': 'api'");
+    assertStringIncludes(source, 'getSupabasePublishableKey');
+    assertStringIncludes(source, 'verifyPortalHmacRequest');
+    assertStringIncludes(source, 'isPortalHybridEnabled');
+    assertStringIncludes(source, "env.get('PORTAL_HYBRID_ENABLED') === 'true'");
+    assertStringIncludes(source, 'abortSignal: signal');
+    assertStringIncludes(source, '{ signal: request.signal }');
+  },
+);
+
 Deno.test('Portal transport is pinned to reviewed Supabase CLI source evidence', async () => {
   const packageJson = JSON.parse(await Deno.readTextFile('./package.json')) as {
     config: { supabaseCliVersion: string };
@@ -98,4 +141,13 @@ Deno.test('Portal transport is pinned to reviewed Supabase CLI source evidence',
     'allowedRequestPaths: [PORTAL_LCIA_FUNCTION_PATH, PORTAL_LCIA_RUNTIME_PATH]',
   );
   assertStringIncludes(runtime, 'readPortalLegacyAnonCredential');
+
+  const hybridRuntime = await Deno.readTextFile(
+    './supabase/functions/portal_hybrid_search_v1/index.ts',
+  );
+  assertStringIncludes(
+    hybridRuntime,
+    'allowedRequestPaths: [PORTAL_HYBRID_FUNCTION_PATH, PORTAL_HYBRID_RUNTIME_PATH]',
+  );
+  assertStringIncludes(hybridRuntime, 'readPortalLegacyAnonCredential');
 });

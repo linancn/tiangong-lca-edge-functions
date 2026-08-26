@@ -71,7 +71,7 @@ Deno.test('Portal Hybrid request accepts only the bounded R2 public shape', () =
   assertEquals(parsed.success, true);
   if (parsed.success) {
     assertEquals(parsed.data.query, 'low-carbon steel');
-    assertEquals(parsed.data.filters.geography, 'CN');
+    assertEquals(parsed.data.filters.geography, 'cn');
   }
 
   for (const forbidden of [
@@ -134,6 +134,39 @@ Deno.test(
       }).success,
       false,
     );
+    assertEquals(
+      portalHybridSearchRequestSchema.safeParse({
+        ...base,
+        query: 'flow',
+        filters: { processSubtype: 'unit process' },
+      }).success,
+      false,
+    );
+    assertEquals(
+      portalHybridSearchRequestSchema.safeParse({
+        schemaVersion: 'portal.hybrid-search-request.v1',
+        kind: 'process',
+        query: 'process',
+        filters: {
+          geography: 'CN',
+          classification: 'Metals',
+          processSubtype: 'Unit Process',
+          source: 'Database Source',
+        },
+        limit: 1,
+      }).success,
+      true,
+    );
+    assertEquals(
+      portalHybridSearchRequestSchema.safeParse({
+        schemaVersion: 'portal.hybrid-search-request.v1',
+        kind: 'process',
+        query: 'process',
+        filters: { geography: 'a'.repeat(129) },
+        limit: 1,
+      }).success,
+      false,
+    );
   },
 );
 
@@ -149,6 +182,10 @@ Deno.test('Portal public Hybrid page strictly binds R1 cards to real ranking evi
   semanticMismatch.items[0].match.evidence.semanticDistance = null as unknown as string;
   assertEquals(portalPublicHybridCandidatePageSchema.safeParse(semanticMismatch).success, false);
 
+  const negativeDistance = structuredClone(page);
+  negativeDistance.items[0].match.evidence.semanticDistance = '-0.125';
+  assertEquals(portalPublicHybridCandidatePageSchema.safeParse(negativeDistance).success, false);
+
   const privateField = structuredClone(page) as Record<string, unknown>;
   (privateField.items as Array<Record<string, unknown>>)[0].team_id = 'private-team';
   assertEquals(portalPublicHybridCandidatePageSchema.safeParse(privateField).success, false);
@@ -156,6 +193,10 @@ Deno.test('Portal public Hybrid page strictly binds R1 cards to real ranking evi
   const wrongKind = structuredClone(page);
   wrongKind.items[0].key.kind = 'flow';
   assertEquals(portalPublicHybridCandidatePageSchema.safeParse(wrongKind).success, false);
+
+  const duplicate = structuredClone(page);
+  duplicate.items.push(structuredClone(duplicate.items[0]));
+  assertEquals(portalPublicHybridCandidatePageSchema.safeParse(duplicate).success, false);
 });
 
 Deno.test(
@@ -182,6 +223,19 @@ Deno.test(
       portalHybridSearchPageSchema.safeParse({
         ...edgePage,
         interpretation: { ...edgePage.interpretation, advisory: false },
+      }).success,
+      false,
+    );
+    assertEquals(
+      portalHybridSearchPageSchema.safeParse({
+        ...edgePage,
+        interpretation: {
+          ...edgePage.interpretation,
+          terms: Array.from({ length: 13 }, (_value, index) => ({
+            language: 'en',
+            value: `term-${index}`,
+          })),
+        },
       }).success,
       false,
     );
