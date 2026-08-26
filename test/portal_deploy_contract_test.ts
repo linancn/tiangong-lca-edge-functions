@@ -37,6 +37,83 @@ Deno.test(
   },
 );
 
+Deno.test(
+  'Portal Hybrid runtime is publishable-only, abortable, HMAC-first, and never falls back to legacy RPCs',
+  async () => {
+    const files = [
+      './supabase/functions/_shared/hybrid_search_kernel.ts',
+      './supabase/functions/_shared/openai_structured.ts',
+      './supabase/functions/_shared/portal_hmac.ts',
+      './supabase/functions/_shared/portal_hybrid_contract.ts',
+      './supabase/functions/_shared/portal_hybrid_deadline.ts',
+      './supabase/functions/_shared/portal_hybrid_repository.ts',
+      './supabase/functions/_shared/portal_hybrid_security_event.ts',
+      './supabase/functions/_shared/portal_redis_guard.ts',
+      './supabase/functions/portal_hybrid_search_v1/index.ts',
+    ];
+    const source = (await Promise.all(files.map((file) => Deno.readTextFile(file)))).join('\n');
+    for (const forbidden of [
+      'createSupabaseServiceClient',
+      'supabaseServiceClient',
+      'SUPABASE_SERVICE_ROLE_KEY',
+      'SUPABASE_SECRET_KEY',
+      'REMOTE_SERVICE_API_KEY',
+      'createHybridSearchRpcClient',
+      'hybrid_search_processes',
+      'hybrid_search_flows',
+      'Access-Control-Allow-Origin',
+      'corsHeaders',
+    ]) {
+      assertEquals(
+        source.includes(forbidden),
+        false,
+        `forbidden Portal Hybrid dependency: ${forbidden}`,
+      );
+    }
+    assertStringIncludes(source, '/rest/v1/rpc/portal_hybrid_search_v1');
+    assertStringIncludes(source, "'Content-Profile': 'api'");
+    assertStringIncludes(source, 'getSupabasePublishableKey');
+    assertStringIncludes(source, 'verifyPortalHmacRequest');
+    assertStringIncludes(source, 'isPortalHybridEnabled');
+    assertStringIncludes(source, "env.get('PORTAL_HYBRID_ENABLED') === 'true'");
+    assertStringIncludes(source, 'abortSignal: signal');
+    assertStringIncludes(source, '{ signal: request.signal }');
+    assertStringIncludes(source, 'new PortalHybridDeadline(timeoutMs, monotonicNow, startedAt)');
+    assertStringIncludes(source, 'await deadline.run');
+    assertStringIncludes(source, 'deadline.detach');
+    assertStringIncludes(
+      source,
+      'Task: Transform description of ${config.entityPlural} into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.',
+    );
+    assertStringIncludes(source, 'options: { model: OPENAI_CHAT_MODEL, temperature: 0 }');
+    assertStringIncludes(source, 'Body: JSON.stringify({ inputs: text })');
+
+    const loginHybridHandler = await Deno.readTextFile(
+      './supabase/functions/_shared/hybrid_search_handler.ts',
+    );
+    assertStringIncludes(loginHybridHandler, 'rewriteQuery: rewriteHybridSearchQuery');
+    assertStringIncludes(loginHybridHandler, 'generateEmbedding: generateHybridSearchEmbedding');
+    assertStringIncludes(loginHybridHandler, '? jsonResponse({ data }, 200)');
+    assertStringIncludes(loginHybridHandler, ': jsonResponse([], 200)');
+
+    const environmentTemplate = await Deno.readTextFile('./supabase/.env.example');
+    for (const expected of [
+      'PORTAL_HYBRID_ENABLED=false',
+      'PORTAL_HYBRID_MINUTE_BUDGET=60',
+      'PORTAL_HYBRID_DAILY_BUDGET=5000',
+      'PORTAL_HYBRID_MAX_CONCURRENCY=4',
+      'PORTAL_HYBRID_LEASE_TTL_SECONDS=30',
+      'PORTAL_HYBRID_CACHE_TTL_SECONDS=60',
+      'PORTAL_HYBRID_TIMEOUT_MS=8000',
+      'PORTAL_HYBRID_CIRCUIT_FAILURE_THRESHOLD=5',
+      'PORTAL_HYBRID_CIRCUIT_WINDOW_SECONDS=60',
+      'PORTAL_HYBRID_CIRCUIT_OPEN_SECONDS=60',
+    ]) {
+      assertStringIncludes(environmentTemplate, expected);
+    }
+  },
+);
+
 Deno.test('Portal transport is pinned to reviewed Supabase CLI source evidence', async () => {
   const packageJson = JSON.parse(await Deno.readTextFile('./package.json')) as {
     config: { supabaseCliVersion: string };
@@ -98,4 +175,13 @@ Deno.test('Portal transport is pinned to reviewed Supabase CLI source evidence',
     'allowedRequestPaths: [PORTAL_LCIA_FUNCTION_PATH, PORTAL_LCIA_RUNTIME_PATH]',
   );
   assertStringIncludes(runtime, 'readPortalLegacyAnonCredential');
+
+  const hybridRuntime = await Deno.readTextFile(
+    './supabase/functions/portal_hybrid_search_v1/index.ts',
+  );
+  assertStringIncludes(
+    hybridRuntime,
+    'allowedRequestPaths: [PORTAL_HYBRID_FUNCTION_PATH, PORTAL_HYBRID_RUNTIME_PATH]',
+  );
+  assertStringIncludes(hybridRuntime, 'readPortalLegacyAnonCredential');
 });

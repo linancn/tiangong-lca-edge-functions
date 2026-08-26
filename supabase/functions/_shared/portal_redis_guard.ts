@@ -17,6 +17,11 @@ const MINIMUM_LEASE_TTL_SECONDS = 20;
 const DEFAULT_LEASE_TTL_SECONDS = 30;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 8_000;
 const PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS = 60;
+const PORTAL_HYBRID_CACHE_TTL_SECONDS = 60;
+const PORTAL_HYBRID_TOTAL_TIMEOUT_MS = 8_000;
+const DEFAULT_HYBRID_CIRCUIT_FAILURE_THRESHOLD = 5;
+const DEFAULT_HYBRID_CIRCUIT_WINDOW_SECONDS = 60;
+const DEFAULT_HYBRID_CIRCUIT_OPEN_SECONDS = 60;
 
 export const PORTAL_ATOMIC_GUARD_LUA = `
 local now_ms = tonumber(ARGV[1])
@@ -56,6 +61,37 @@ const PORTAL_RELEASE_LEASE_LUA = `
 return redis.call('ZREM', KEYS[1], ARGV[1])
 `;
 
+export const PORTAL_HYBRID_CIRCUIT_CHECK_LUA = `
+local now_ms = tonumber(ARGV[1])
+local open_until_ms = tonumber(redis.call('GET', KEYS[1]) or '0')
+if open_until_ms > now_ms then
+  return {1, open_until_ms}
+end
+if open_until_ms > 0 then redis.call('DEL', KEYS[1]) end
+return {0, 0}
+`;
+
+export const PORTAL_HYBRID_CIRCUIT_FAILURE_LUA = `
+local threshold = tonumber(ARGV[1])
+local window_seconds = tonumber(ARGV[2])
+local open_seconds = tonumber(ARGV[3])
+local now_ms = tonumber(ARGV[4])
+
+local failures = tonumber(redis.call('INCR', KEYS[1]))
+if failures == 1 then redis.call('EXPIRE', KEYS[1], window_seconds) end
+if failures >= threshold then
+  local open_until_ms = now_ms + (open_seconds * 1000)
+  redis.call('SET', KEYS[2], tostring(open_until_ms), 'EX', open_seconds)
+  redis.call('DEL', KEYS[1])
+  return {1, failures, open_until_ms}
+end
+return {0, failures, 0}
+`;
+
+export const PORTAL_HYBRID_CIRCUIT_SUCCESS_LUA = `
+return redis.call('DEL', KEYS[1])
+`;
+
 export type PortalRouteGuardLimits = {
   minuteBudget: number;
   dailyBudget: number;
@@ -67,6 +103,21 @@ export type PortalRouteGuardLimits = {
 export type PortalGuardTiming = {
   redisTimeoutMs: number;
   upstreamTimeoutMs: number;
+};
+
+export type PortalHybridCircuitLimits = {
+  failureThreshold: number;
+  failureWindowSeconds: number;
+  openSeconds: number;
+};
+
+export type PortalHybridCircuitState =
+  { status: 'closed'; retryAfterSeconds: 0 } | { status: 'open'; retryAfterSeconds: number };
+
+export type PortalHybridCircuitFailure = {
+  opened: boolean;
+  failureCount: number;
+  retryAfterSeconds: number;
 };
 
 export type PortalGuardAdmission =
@@ -154,6 +205,82 @@ export function readPortalLciaGuardLimits(
   );
 }
 
+export function readPortalHybridTotalTimeoutMs(env: PortalRedisEnvironment = Deno.env): number {
+  return boundedEnvironmentInteger(
+    env,
+    'PORTAL_HYBRID_TIMEOUT_MS',
+    PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
+    100,
+    PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
+  );
+}
+
+export function readPortalHybridGuardLimits(
+  env: PortalRedisEnvironment = Deno.env,
+  timing: Partial<PortalGuardTiming> = {},
+): PortalRouteGuardLimits {
+  const resolvedTiming = {
+    redisTimeoutMs: timing.redisTimeoutMs ?? readPortalRedisTimeoutMs(env),
+    upstreamTimeoutMs: timing.upstreamTimeoutMs ?? readPortalHybridTotalTimeoutMs(env),
+  };
+  return validatePortalHybridGuardLimits(
+    {
+      minuteBudget: boundedEnvironmentInteger(env, 'PORTAL_HYBRID_MINUTE_BUDGET', 60, 1, 1_000_000),
+      dailyBudget: boundedEnvironmentInteger(
+        env,
+        'PORTAL_HYBRID_DAILY_BUDGET',
+        5_000,
+        1,
+        100_000_000,
+      ),
+      maxConcurrency: boundedEnvironmentInteger(env, 'PORTAL_HYBRID_MAX_CONCURRENCY', 4, 1, 10_000),
+      leaseTtlSeconds: boundedEnvironmentInteger(
+        env,
+        'PORTAL_HYBRID_LEASE_TTL_SECONDS',
+        DEFAULT_LEASE_TTL_SECONDS,
+        MINIMUM_LEASE_TTL_SECONDS,
+        300,
+      ),
+      cacheTtlSeconds: boundedEnvironmentInteger(
+        env,
+        'PORTAL_HYBRID_CACHE_TTL_SECONDS',
+        PORTAL_HYBRID_CACHE_TTL_SECONDS,
+        1,
+        PORTAL_HYBRID_CACHE_TTL_SECONDS,
+      ),
+    },
+    resolvedTiming,
+  );
+}
+
+export function readPortalHybridCircuitLimits(
+  env: PortalRedisEnvironment = Deno.env,
+): PortalHybridCircuitLimits {
+  return {
+    failureThreshold: boundedEnvironmentInteger(
+      env,
+      'PORTAL_HYBRID_CIRCUIT_FAILURE_THRESHOLD',
+      DEFAULT_HYBRID_CIRCUIT_FAILURE_THRESHOLD,
+      1,
+      100,
+    ),
+    failureWindowSeconds: boundedEnvironmentInteger(
+      env,
+      'PORTAL_HYBRID_CIRCUIT_WINDOW_SECONDS',
+      DEFAULT_HYBRID_CIRCUIT_WINDOW_SECONDS,
+      1,
+      3_600,
+    ),
+    openSeconds: boundedEnvironmentInteger(
+      env,
+      'PORTAL_HYBRID_CIRCUIT_OPEN_SECONDS',
+      DEFAULT_HYBRID_CIRCUIT_OPEN_SECONDS,
+      1,
+      3_600,
+    ),
+  };
+}
+
 export function minimumPortalLeaseTtlSeconds(timing: PortalGuardTiming): number {
   if (
     !Number.isSafeInteger(timing.redisTimeoutMs) ||
@@ -181,6 +308,25 @@ export function validatePortalLciaGuardLimits(
     !integerWithin(limits.maxConcurrency, 1, 10_000) ||
     !integerWithin(limits.leaseTtlSeconds, MINIMUM_LEASE_TTL_SECONDS, 300) ||
     !integerWithin(limits.cacheTtlSeconds, 1, PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS) ||
+    limits.leaseTtlSeconds < minimumPortalLeaseTtlSeconds(timing)
+  ) {
+    throw new PortalRedisError();
+  }
+  return limits;
+}
+
+export function validatePortalHybridGuardLimits(
+  limits: PortalRouteGuardLimits,
+  timing: PortalGuardTiming,
+): PortalRouteGuardLimits {
+  const integerWithin = (value: number, minimum: number, maximum: number) =>
+    Number.isSafeInteger(value) && value >= minimum && value <= maximum;
+  if (
+    !integerWithin(limits.minuteBudget, 1, 1_000_000) ||
+    !integerWithin(limits.dailyBudget, 1, 100_000_000) ||
+    !integerWithin(limits.maxConcurrency, 1, 10_000) ||
+    !integerWithin(limits.leaseTtlSeconds, MINIMUM_LEASE_TTL_SECONDS, 300) ||
+    !integerWithin(limits.cacheTtlSeconds, 1, PORTAL_HYBRID_CACHE_TTL_SECONDS) ||
     limits.leaseTtlSeconds < minimumPortalLeaseTtlSeconds(timing)
   ) {
     throw new PortalRedisError();
@@ -324,6 +470,112 @@ export async function releasePortalConcurrencyLease(
   });
 }
 
+function portalHybridCircuitKeys(adapter: PortalRedisAdapter, route: string) {
+  if (!ROUTE_PATTERN.test(route)) throw new PortalRedisError();
+  return {
+    failures: `${adapter.namespace}:circuit:${route}:failures`,
+    openUntil: `${adapter.namespace}:circuit:${route}:open_until`,
+  };
+}
+
+export async function checkPortalHybridCircuit(
+  input: { route: string; nowMillis?: number },
+  adapter?: PortalRedisAdapter,
+): Promise<PortalHybridCircuitState> {
+  const nowMillis = input.nowMillis ?? Date.now();
+  if (!Number.isSafeInteger(nowMillis) || nowMillis < 0) throw new PortalRedisError();
+  return await usePortalRedisAdapter(adapter, async (resolved) => {
+    const keys = portalHybridCircuitKeys(resolved, input.route);
+    const result = await resolved.eval(
+      PORTAL_HYBRID_CIRCUIT_CHECK_LUA,
+      [keys.openUntil],
+      [String(nowMillis)],
+    );
+    if (!Array.isArray(result) || result.length !== 2) throw new PortalRedisError();
+    const code = finiteInteger(result[0]);
+    const openUntilMillis = finiteInteger(result[1]);
+    if (code === null || openUntilMillis === null) throw new PortalRedisError();
+    if (code === 0 && openUntilMillis === 0) return { status: 'closed', retryAfterSeconds: 0 };
+    if (code === 1 && openUntilMillis > nowMillis) {
+      return {
+        status: 'open',
+        retryAfterSeconds: Math.max(1, Math.ceil((openUntilMillis - nowMillis) / 1000)),
+      };
+    }
+    throw new PortalRedisError();
+  });
+}
+
+export async function recordPortalHybridCircuitFailure(
+  input: {
+    route: string;
+    limits: PortalHybridCircuitLimits;
+    nowMillis?: number;
+  },
+  adapter?: PortalRedisAdapter,
+): Promise<PortalHybridCircuitFailure> {
+  const nowMillis = input.nowMillis ?? Date.now();
+  if (
+    !Number.isSafeInteger(nowMillis) ||
+    nowMillis < 0 ||
+    !Number.isSafeInteger(input.limits.failureThreshold) ||
+    input.limits.failureThreshold < 1 ||
+    input.limits.failureThreshold > 100 ||
+    !Number.isSafeInteger(input.limits.failureWindowSeconds) ||
+    input.limits.failureWindowSeconds < 1 ||
+    input.limits.failureWindowSeconds > 3_600 ||
+    !Number.isSafeInteger(input.limits.openSeconds) ||
+    input.limits.openSeconds < 1 ||
+    input.limits.openSeconds > 3_600
+  ) {
+    throw new PortalRedisError();
+  }
+  return await usePortalRedisAdapter(adapter, async (resolved) => {
+    const keys = portalHybridCircuitKeys(resolved, input.route);
+    const result = await resolved.eval(
+      PORTAL_HYBRID_CIRCUIT_FAILURE_LUA,
+      [keys.failures, keys.openUntil],
+      [
+        String(input.limits.failureThreshold),
+        String(input.limits.failureWindowSeconds),
+        String(input.limits.openSeconds),
+        String(nowMillis),
+      ],
+    );
+    if (!Array.isArray(result) || result.length !== 3) throw new PortalRedisError();
+    const code = finiteInteger(result[0]);
+    const failureCount = finiteInteger(result[1]);
+    const openUntilMillis = finiteInteger(result[2]);
+    if (code === null || failureCount === null || failureCount < 1 || openUntilMillis === null) {
+      throw new PortalRedisError();
+    }
+    if (code === 0 && openUntilMillis === 0) {
+      return { opened: false, failureCount, retryAfterSeconds: 0 };
+    }
+    if (code === 1 && openUntilMillis > nowMillis) {
+      return {
+        opened: true,
+        failureCount,
+        retryAfterSeconds: Math.max(1, Math.ceil((openUntilMillis - nowMillis) / 1000)),
+      };
+    }
+    throw new PortalRedisError();
+  });
+}
+
+export async function recordPortalHybridCircuitSuccess(
+  input: { route: string },
+  adapter?: PortalRedisAdapter,
+): Promise<void> {
+  await usePortalRedisAdapter(adapter, async (resolved) => {
+    const keys = portalHybridCircuitKeys(resolved, input.route);
+    const result = finiteInteger(
+      await resolved.eval(PORTAL_HYBRID_CIRCUIT_SUCCESS_LUA, [keys.failures], []),
+    );
+    if (result === null || result < 0) throw new PortalRedisError();
+  });
+}
+
 function portalCacheKey(adapter: PortalRedisAdapter, route: string, bodyHash: string): string {
   if (!ROUTE_PATTERN.test(route) || !BODY_HASH_PATTERN.test(bodyHash)) {
     throw new PortalRedisError();
@@ -354,8 +606,13 @@ export async function writePortalResponseCache(
 }
 
 export {
+  DEFAULT_HYBRID_CIRCUIT_FAILURE_THRESHOLD,
+  DEFAULT_HYBRID_CIRCUIT_OPEN_SECONDS,
+  DEFAULT_HYBRID_CIRCUIT_WINDOW_SECONDS,
   DEFAULT_LEASE_TTL_SECONDS,
   MINIMUM_LEASE_TTL_SECONDS,
+  PORTAL_HYBRID_CACHE_TTL_SECONDS,
+  PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
   PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS,
   REPLAY_TTL_SECONDS,
 };

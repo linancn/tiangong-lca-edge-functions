@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-26'
-lastReviewedCommit: '90101ec3f649645ab1f0aef5c373ca3ba7a0768c'
-lastReviewedNote: 'Reviewed for PR #308 acceptance remediation: pinned CLI transport evidence, exact credentials, lease/cache safety, correlation, and safe security events are routed with the Portal runtime.'
+lastReviewedCommit: 'e2fb4a1fa37e73af5a1faa02ae30e91442703946'
+lastReviewedNote: 'Reviewed after Issue #310 deadline remediation: R2 final-response event parity and bounded waitUntil/macrotask delivery are routed with the Portal runtime.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -121,13 +121,23 @@ routing:
     portal-public-runtime:
       paths:
         - supabase/functions/portal_data_product_results_v1/**
+        - supabase/functions/portal_hybrid_search_v1/**
         - supabase/functions/_shared/portal_hmac.ts
+        - supabase/functions/_shared/portal_public_transport.ts
         - supabase/functions/_shared/portal_redis_guard.ts
         - supabase/functions/_shared/portal_security_event.ts
+        - supabase/functions/_shared/portal_hybrid_contract.ts
+        - supabase/functions/_shared/portal_hybrid_deadline.ts
+        - supabase/functions/_shared/portal_hybrid_repository.ts
+        - supabase/functions/_shared/portal_hybrid_security_event.ts
+        - supabase/functions/_shared/hybrid_search_kernel.ts
+        - supabase/functions/_shared/openai_structured.ts
         - supabase/functions/_shared/redis_client.ts
         - test/portal_hmac_test.ts
         - test/portal_redis_guard_test.ts
         - test/portal_data_product_results_v1_test.ts
+        - test/portal_hybrid_contract_test.ts
+        - test/portal_hybrid_search_v1_test.ts
         - test/portal_deploy_contract_test.ts
         - test/fixtures/supabase-cli-v2.106.0-functions-transport.json
         - supabase/.env.example
@@ -217,6 +227,7 @@ routing:
         - supabase/functions/_shared/flow_extraction.ts
         - supabase/functions/_shared/foundation_dataset_extraction.ts
         - supabase/functions/_shared/hybrid_search_handler.ts
+        - supabase/functions/_shared/hybrid_search_kernel.ts
         - supabase/functions/_shared/hybrid_search_request.ts
         - supabase/functions/_shared/hybrid_search_rpc_context.ts
         - supabase/functions/_shared/openai_*.ts
@@ -377,12 +388,28 @@ rules:
     triggers:
       - path: supabase/functions/portal_data_product_results_v1/**
         kind: runtime-code
+      - path: supabase/functions/portal_hybrid_search_v1/**
+        kind: runtime-code
       - path: supabase/functions/_shared/portal_hmac.ts
+        kind: auth-runtime
+      - path: supabase/functions/_shared/portal_public_transport.ts
         kind: auth-runtime
       - path: supabase/functions/_shared/portal_redis_guard.ts
         kind: guard-runtime
       - path: supabase/functions/_shared/portal_security_event.ts
         kind: observability-runtime
+      - path: supabase/functions/_shared/portal_hybrid_contract.ts
+        kind: runtime-contract
+      - path: supabase/functions/_shared/portal_hybrid_deadline.ts
+        kind: runtime-guard
+      - path: supabase/functions/_shared/portal_hybrid_repository.ts
+        kind: runtime-code
+      - path: supabase/functions/_shared/portal_hybrid_security_event.ts
+        kind: observability-runtime
+      - path: supabase/functions/_shared/hybrid_search_kernel.ts
+        kind: model-runtime
+      - path: supabase/functions/_shared/openai_structured.ts
+        kind: model-runtime
       - path: supabase/functions/_shared/redis_client.ts
         kind: shared-runtime
       - path: test/portal_*_test.ts
@@ -400,7 +427,7 @@ rules:
         mode: review_or_update
       - path: README.md
         mode: review_or_update
-    reason: The Portal server identity, replay/admission boundary, publishable-only database projection, and operator isolation requirements must remain aligned.
+    reason: The Portal server identity, replay/admission boundary, R1 LCIA and R2 Hybrid publishable-only projections, cost controls, model kernel, and operator isolation requirements must remain aligned.
   - id: edge-functions-review-quality-diagnostic-contract
     scope: repo
     repo: edge-functions
