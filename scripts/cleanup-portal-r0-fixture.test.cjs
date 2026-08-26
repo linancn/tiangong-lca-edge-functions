@@ -58,6 +58,7 @@ test('builds one fixed remote function deletion and no generic delete surface', 
     'portal_r0_hmac_verify_v1',
     '--project-ref',
     PREVIEW_REF,
+    '--yes',
   ]);
 });
 

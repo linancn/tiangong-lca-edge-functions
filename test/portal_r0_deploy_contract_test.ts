@@ -53,6 +53,7 @@ Deno.test('R0 deploy requires the dedicated disposable Preview/test guard', asyn
   assertStringIncludes(cleanup, 'validatePortalR0Deploy({');
   assertStringIncludes(cleanup, "'delete'");
   assertStringIncludes(cleanup, 'FUNCTION_NAME');
+  assertStringIncludes(cleanup, "'--yes'");
   assertStringIncludes(cleanup, 'PORTAL_R0_CLEANUP_DRY_RUN');
   assertStringIncludes(cleanup, 'delete the dedicated R0 Redis database/resource');
 });

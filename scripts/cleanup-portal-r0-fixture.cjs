@@ -14,7 +14,16 @@ const EXTERNAL_CLEANUP_CHECKLIST = Object.freeze([
 ]);
 
 function buildPortalR0CleanupArgs(projectRef) {
-  return ['exec', 'supabase', 'functions', 'delete', FUNCTION_NAME, '--project-ref', projectRef];
+  return [
+    'exec',
+    'supabase',
+    'functions',
+    'delete',
+    FUNCTION_NAME,
+    '--project-ref',
+    projectRef,
+    '--yes',
+  ];
 }
 
 function main(options = {}) {
