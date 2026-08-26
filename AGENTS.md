@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 0a62fe0a81a98eda95b1d257637b8f65a8dd2f15
-lastReviewedNote: 'Reviewed after Issue #310 independent review: the R2 route has one absolute deadline through final response, TTL-backed non-blocking cleanup, normalized filter bounds, and unchanged login Hybrid behavior.'
+lastReviewedCommit: e2fb4a1fa37e73af5a1faa02ae30e91442703946
+lastReviewedNote: 'Reviewed after Issue #310 deadline remediation: the R2 route performs its final deadline decision after event sanitization and schedules bounded security logging outside the handler promise without changing R1.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -161,6 +161,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes may call only their reviewed public `api` RPC with the same once-resolved publishable/anon credential that matched inbound `apikey`. Authorization is absent in normal Portal traffic; only the exact legacy anon Bearer injected by pinned CLI `2.106.0` local routing is tolerated after HMAC
 - do not route `portal_hybrid_search_v1` through legacy `hybrid_search_processes`/`hybrid_search_flows`, a service client, or an Edge-side field projection; it remains default-off until the exact Database façade exists, and every guard/circuit/timeout failure returns a fixed signal for the Portal BFF to handle through its separate lexical façade
 - do not return a successful Portal Hybrid response after its absolute application deadline; every awaited guard/cache/model/database/finalization step consumes the same remaining budget, while lease release is detached and bounded so Redis TTL remains the interrupted-cleanup recovery authority
+- sanitize the final Portal Hybrid event before the last deadline decision, then schedule its allowlisted logger outside the handler promise; use `EdgeRuntime.waitUntil` when available and a handled macrotask fallback locally, so observability cannot delay or change the final response
 - do not move repo-level tests into `supabase/functions/**`; this repo keeps Deno tests in `test/**`
 - do not treat GitHub default branch `main` as the daily trunk
 - do not mark delivery complete if root workspace integration is still pending

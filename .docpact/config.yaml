@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-26'
-lastReviewedCommit: '0a62fe0a81a98eda95b1d257637b8f65a8dd2f15'
-lastReviewedNote: 'Reviewed after Issue #310 independent review: the absolute Portal Hybrid deadline, bounded detached cleanup, normalized-filter limits, and expanded proof surface are routed with the Portal runtime.'
+lastReviewedCommit: 'e2fb4a1fa37e73af5a1faa02ae30e91442703946'
+lastReviewedNote: 'Reviewed after Issue #310 deadline remediation: R2 final-response event parity and bounded waitUntil/macrotask delivery are routed with the Portal runtime.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

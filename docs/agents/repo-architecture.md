@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 0a62fe0a81a98eda95b1d257637b8f65a8dd2f15
-lastReviewedNote: 'Reviewed after Issue #310 independent review: the signed Hybrid route uses one absolute deadline, deadline-bounded operations, detached lease cleanup, and post-normalization filter bounds.'
+lastReviewedCommit: e2fb4a1fa37e73af5a1faa02ae30e91442703946
+lastReviewedNote: 'Reviewed after Issue #310 deadline remediation: the signed Hybrid route finalizes its response decision before bounded background security-event delivery through EdgeRuntime waitUntil or the local macrotask fallback.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -60,7 +60,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 | `supabase/functions/_shared/auth.ts` | stable | central runtime auth and credential-selection logic |
 | `supabase/functions/_shared/portal_hmac.ts` and `portal_redis_guard.ts` | stable | Portal-only raw-body request verification, replay protection, atomic route budget, concurrency lease, and hash-key cache behavior |
 | `supabase/functions/_shared/portal_public_transport.ts` | stable | exact publishable/legacy-anon transport, Cookie rejection, safe Supabase URL, and bounded raw-byte reader shared by signed Portal routes |
-| `supabase/functions/_shared/portal_security_event.ts` and `portal_hybrid_security_event.ts` | stable | route-specific allowlisted exactly-once Portal events, correlation IDs, safe outcome enums, and non-blocking logger boundaries |
+| `supabase/functions/_shared/portal_security_event.ts` and `portal_hybrid_security_event.ts` | stable | route-specific allowlisted exactly-once Portal events, correlation IDs, safe outcome enums, and the R2 bounded background logger boundary |
 | `supabase/functions/_shared/portal_hybrid_contract.ts` and `portal_hybrid_repository.ts` | stable | strict R2 request/public candidate/Edge response DTOs and the publishable-only `api.portal_hybrid_search_v1` transport |
 | `supabase/functions/_shared/portal_hybrid_deadline.ts` | stable | one absolute handler-entry deadline, shared model/database AbortSignal, remaining-time operation caps, and non-blocking bounded cleanup |
 | `supabase/functions/_shared/command_runtime/**` | stable | request parsing, actor context, audit payload, and command-handler skeleton |
@@ -163,7 +163,7 @@ The strict signed request contains only schema version, Process/Flow kind, a 512
 
 The shared model cache is keyed only by the signed body hash, expires in at most 60 seconds, and contains only bounded model-generated interpretation terms plus the 1024-dimensional embedding. It does not contain the raw user query or any database candidates, so every successful request still calls only `api.portal_hybrid_search_v1` with explicit `Content-Profile: api` and the once-resolved publishable credential. The database owns unioned public scope, stable ranking, public-card hydration, fingerprint, and evidence. Edge validates the exact public DTO, adds only `source=model_generated`/`advisory=true` interpretation, and rejects raw/private fields, negative distance, evidence drift, duplicate candidates, or more than 20 items.
 
-One absolute deadline starts at handler entry and caps raw-body/HMAC work plus every awaited Redis, OpenAI, SageMaker, public PostgREST, cache-write, circuit-record/reset, and final-response step to its remaining budget. OpenAI, SageMaker, and PostgREST share the deadline's AbortSignal. No operation that resolves after expiry can start downstream model/database work or turn a timed-out request into HTTP 200. Lease release and owned-client close run as bounded detached cleanup and never delay the response; an uncompleted release is recovered by the existing lease TTL. The route emits exactly one allowlisted `portal.hybrid-security-event.v1` with no query, terms, embedding, identifiers, credentials, Redis data, or locators, returns the same correlation UUID in its response, and exposes no wildcard CORS header. Live database integration stays deferred until the matching database-engine façade is present in the selected non-production environment.
+One absolute deadline starts at handler entry and caps raw-body/HMAC work plus every awaited Redis, OpenAI, SageMaker, public PostgREST, cache-write, circuit-record/reset, and final-response step to its remaining budget. OpenAI, SageMaker, and PostgREST share the deadline's AbortSignal. No operation that resolves after expiry can start downstream model/database work or turn a timed-out request into HTTP 200. Lease release and owned-client close run as bounded detached cleanup and never delay the response; an uncompleted release is recovered by the existing lease TTL. The route sanitizes its final allowlisted `portal.hybrid-security-event.v1`, performs the last deadline decision, and only then schedules exactly one logger invocation in a later macrotask. Supabase receives the bounded delivery promise through `EdgeRuntime.waitUntil`; local and test runtimes use the same handled macrotask without joining it to the handler promise. Logger throws, rejections, and never-settling promises are absorbed within a fixed delivery window, while the emitted status and error code always describe the actual final response. The event has no query, terms, embedding, identifiers, credentials, Redis data, or locators. The route returns the same correlation UUID in its response and exposes no wildcard CORS header. Live database integration stays deferred until the matching database-engine façade is present in the selected non-production environment.
 
 ### Search, embedding, and AI-backed routes
 
