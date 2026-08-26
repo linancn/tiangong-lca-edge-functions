@@ -1,5 +1,4 @@
 import { constantTimeEqual } from './portal_hmac.ts';
-import { validatePortalPublishableCredential } from './portal_public_transport.ts';
 import type { PortalR0Environment } from './portal_r0_hmac.ts';
 
 const R0_PUBLISHABLE_KEY_ENV = 'PORTAL_R0_SUPABASE_PUBLISHABLE_KEY';
@@ -34,17 +33,21 @@ function constantTimeStringEqual(left: string, right: string): boolean {
   return constantTimeEqual(new TextEncoder().encode(left), new TextEncoder().encode(right));
 }
 
+function validatePortalR0PublishableCredential(value: string): string {
+  if (
+    value.length < 20 ||
+    value.length > 4096 ||
+    !value.startsWith('sb_publishable_') ||
+    /[\u0000-\u001f\u007f-\u009f]/u.test(value)
+  ) {
+    throw new PortalR0TransportError('config');
+  }
+  return value;
+}
+
 export function readPortalR0PublishableCredential(env: PortalR0Environment = Deno.env): string {
   const configured = readExactEnvironmentValue(env, R0_PUBLISHABLE_KEY_ENV);
-  let publishableKey: string;
-  try {
-    publishableKey = validatePortalPublishableCredential(configured);
-  } catch (_error) {
-    throw new PortalR0TransportError('config');
-  }
-  if (!publishableKey.startsWith('sb_publishable_') || publishableKey.length < 20) {
-    throw new PortalR0TransportError('config');
-  }
+  const publishableKey = validatePortalR0PublishableCredential(configured);
 
   let registry: unknown;
   try {
