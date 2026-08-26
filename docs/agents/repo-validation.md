@@ -54,7 +54,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.9.5` / bundled TypeScript `6.0.3` plus Node `24.19.0` / pnpm `11.23.0`. It then checks all 153 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 53 Node contract tests, and executes all 492 Deno behavior tests with only env, read, and loopback-network permissions. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.9.5` / bundled TypeScript `6.0.3` plus Node `24.19.0` / pnpm `11.23.0`. It then checks all 153 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 61 Node contract tests, and executes all 492 Deno behavior tests with only env, read, and loopback-network permissions. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 The current baseline intentionally skips:
 
