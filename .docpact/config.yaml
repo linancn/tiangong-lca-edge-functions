@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-26'
-lastReviewedCommit: '3130ece2dc9a1f2eb8576f67642db80e054734b4'
-lastReviewedNote: 'Reviewed after Issue #312 isolated signed Portal Redis credentials while retaining the existing generic Redis env template; routing and ownership are unchanged.'
+lastReviewedCommit: 'cdccee827c91cd90a09ec44041cfc78e42b9510c'
+lastReviewedNote: 'Reviewed after Issue #313 added Portal-only public/provider credential resolution and route-specific deployment provenance; the existing routing intent now includes the provider resolver.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -128,6 +128,7 @@ routing:
         - supabase/functions/_shared/portal_security_event.ts
         - supabase/functions/_shared/portal_hybrid_contract.ts
         - supabase/functions/_shared/portal_hybrid_deadline.ts
+        - supabase/functions/_shared/portal_hybrid_provider.ts
         - supabase/functions/_shared/portal_hybrid_repository.ts
         - supabase/functions/_shared/portal_hybrid_security_event.ts
         - supabase/functions/_shared/hybrid_search_kernel.ts
@@ -402,6 +403,8 @@ rules:
         kind: runtime-contract
       - path: supabase/functions/_shared/portal_hybrid_deadline.ts
         kind: runtime-guard
+      - path: supabase/functions/_shared/portal_hybrid_provider.ts
+        kind: provider-runtime
       - path: supabase/functions/_shared/portal_hybrid_repository.ts
         kind: runtime-code
       - path: supabase/functions/_shared/portal_hybrid_security_event.ts
@@ -427,7 +430,7 @@ rules:
         mode: review_or_update
       - path: README.md
         mode: review_or_update
-    reason: The Portal server identity, replay/admission boundary, R1 LCIA and R2 Hybrid publishable-only projections, cost controls, model kernel, and operator isolation requirements must remain aligned.
+    reason: The Portal server identity, dedicated current-project public key, replay/admission boundary, R1 LCIA and R2 Hybrid publishable-only projections, Portal-only provider injection, route provenance, cost controls, model kernel, and operator isolation requirements must remain aligned.
   - id: edge-functions-review-quality-diagnostic-contract
     scope: repo
     repo: edge-functions
