@@ -1,6 +1,7 @@
 import { assert, assertEquals, assertRejects, assertStringIncludes } from 'jsr:@std/assert';
 
 import type { HybridSearchQuery } from '../supabase/functions/_shared/hybrid_query_utils.ts';
+import type { HybridSearchKernelProviderConfig } from '../supabase/functions/_shared/hybrid_search_kernel.ts';
 import {
   type PortalHybridModelCache,
   type PortalHybridSearchRequest,
@@ -25,6 +26,10 @@ import {
   PORTAL_HYBRID_CIRCUIT_SUCCESS_LUA,
 } from '../supabase/functions/_shared/portal_redis_guard.ts';
 import type { PortalRedisAdapter } from '../supabase/functions/_shared/redis_client.ts';
+import {
+  PortalHybridProviderError,
+  readPortalHybridProviderConfig,
+} from '../supabase/functions/_shared/portal_hybrid_provider.ts';
 import {
   createPortalHybridSearchHandler,
   isPortalHybridEnabled,
@@ -65,6 +70,24 @@ const REWRITE: HybridSearchQuery = {
   fulltext_query_en: ['steel production'],
   fulltext_query_zh: ['钢铁生产'],
 };
+const PROVIDER_CONFIG: Readonly<HybridSearchKernelProviderConfig> = {
+  openAi: {
+    apiKey: 'sk-portal-test-provider',
+    model: 'portal-chat-model-v1',
+    baseUrl: 'https://openai.example/v1',
+  },
+  sageMaker: {
+    endpointName: 'portal-embedding-v1',
+    region: 'us-east-1',
+    accessKeyId: 'AKIAPORTALTEST1234',
+    secretAccessKey: 'portal-secret-access-key-1234567890',
+    sessionToken: 'portal-session-token-1234',
+  },
+};
+
+function environment(values: Record<string, string | undefined>) {
+  return { get: (name: string) => values[name] };
+}
 
 function databasePage(): PortalPublicHybridCandidatePage {
   return {
@@ -278,6 +301,7 @@ function handlerOptions(
     redisTimeoutMs: 100,
     trustedPublishableKey: TRUSTED_PUBLISHABLE_KEY,
     trustedLegacyAnonKey: null,
+    providerConfig: PROVIDER_CONFIG,
     logger: () => undefined,
     ...overrides,
   };
@@ -311,14 +335,27 @@ Deno.test(
     };
     let rewriteSignal: AbortSignal | undefined;
     let embeddingSignal: AbortSignal | undefined;
+    let rewriteProvider: Readonly<HybridSearchKernelProviderConfig> | undefined;
+    let embeddingProvider: Readonly<HybridSearchKernelProviderConfig> | undefined;
     const handler = createPortalHybridSearchHandler(
       handlerOptions(redis, repository, {
-        rewriteQuery: async (_config: unknown, _query: string, signal: AbortSignal) => {
+        rewriteQuery: async (
+          _config: unknown,
+          _query: string,
+          signal: AbortSignal,
+          provider?: Readonly<HybridSearchKernelProviderConfig>,
+        ) => {
           rewriteSignal = signal;
+          rewriteProvider = provider;
           return REWRITE;
         },
-        generateEmbedding: async (_query: string, signal: AbortSignal) => {
+        generateEmbedding: async (
+          _query: string,
+          signal: AbortSignal,
+          provider?: Readonly<HybridSearchKernelProviderConfig>,
+        ) => {
           embeddingSignal = signal;
+          embeddingProvider = provider;
           return VECTOR;
         },
         logger: (event: PortalHybridSecurityEvent) => events.push(event),
@@ -348,6 +385,8 @@ Deno.test(
     assertEquals(repositoryCalls[0].signal, rewriteSignal);
     assertEquals(repositoryCalls[0].signal, embeddingSignal);
     assertEquals(repositoryCalls[0].signal.aborted, false);
+    assertEquals(rewriteProvider, PROVIDER_CONFIG);
+    assertEquals(embeddingProvider, PROVIDER_CONFIG);
     await flushPortalHybridSecurityEvent();
     assertEquals(events.length, 1);
     assertEquals(events[0].correlationId, CORRELATION_ID);
@@ -569,6 +608,7 @@ Deno.test(
     const redis = new FakePortalRedis();
     let modelCalls = 0;
     let databaseCalls = 0;
+    let providerConfigReads = 0;
     const handler = createPortalHybridSearchHandler(
       handlerOptions(
         redis,
@@ -580,6 +620,11 @@ Deno.test(
         },
         {
           enabled: false,
+          providerConfig: undefined,
+          providerConfigFactory: () => {
+            providerConfigReads += 1;
+            throw new Error('must not read provider configuration');
+          },
           rewriteQuery: async () => {
             modelCalls += 1;
             return REWRITE;
@@ -590,6 +635,113 @@ Deno.test(
     const response = await handler(await signedRequest());
     assertEquals(response.status, 503);
     assertEquals(await responseCode(response), 'hybrid_disabled');
+    assertEquals(redis.calls, []);
+    assertEquals(providerConfigReads, 0);
+    assertEquals(modelCalls, 0);
+    assertEquals(databaseCalls, 0);
+  },
+);
+
+Deno.test('Portal Hybrid provider configuration is strict and has no generic fallback', () => {
+  const portalValues = {
+    PORTAL_OPENAI_API_KEY: 'sk-portal-test-provider',
+    PORTAL_OPENAI_CHAT_MODEL: 'portal-chat-model-v1',
+    PORTAL_OPENAI_BASE_URL: 'https://openai.example/v1',
+    PORTAL_SAGEMAKER_ENDPOINT_NAME: 'portal-embedding-v1',
+    PORTAL_AWS_ACCESS_KEY_ID: 'AKIAPORTALTEST1234',
+    PORTAL_AWS_SECRET_ACCESS_KEY: 'portal-secret-access-key-1234567890',
+    PORTAL_AWS_SESSION_TOKEN: 'portal-session-token-1234',
+    OPENAI_API_KEY: 'sk-generic-must-not-win',
+    OPENAI_CHAT_MODEL: 'generic-model',
+    OPENAI_BASE_URL: 'https://generic.example/v1',
+    SAGEMAKER_ENDPOINT_NAME: 'generic-endpoint',
+    AWS_ACCESS_KEY_ID: 'AKIAGENERICTEST123',
+    AWS_SECRET_ACCESS_KEY: 'generic-secret-access-key-123456789',
+    AWS_SESSION_TOKEN: 'generic-session-token-1234',
+  };
+  assertEquals(readPortalHybridProviderConfig(environment(portalValues)), PROVIDER_CONFIG);
+
+  const requiredPortalNames = [
+    'PORTAL_OPENAI_API_KEY',
+    'PORTAL_OPENAI_CHAT_MODEL',
+    'PORTAL_SAGEMAKER_ENDPOINT_NAME',
+    'PORTAL_AWS_ACCESS_KEY_ID',
+    'PORTAL_AWS_SECRET_ACCESS_KEY',
+  ];
+  for (const missing of requiredPortalNames) {
+    assertRejects(
+      () =>
+        Promise.resolve().then(() =>
+          readPortalHybridProviderConfig(environment({ ...portalValues, [missing]: undefined })),
+        ),
+      PortalHybridProviderError,
+      'portal_hybrid_provider_config_invalid',
+    );
+  }
+  for (const invalid of [
+    { ...portalValues, PORTAL_OPENAI_API_KEY: 'sb_secret_not_openai' },
+    { ...portalValues, PORTAL_OPENAI_CHAT_MODEL: ' bad-model' },
+    { ...portalValues, PORTAL_OPENAI_BASE_URL: 'http://provider.example/v1' },
+    { ...portalValues, PORTAL_SAGEMAKER_ENDPOINT_NAME: '-invalid-endpoint' },
+    { ...portalValues, PORTAL_AWS_ACCESS_KEY_ID: 'short' },
+    { ...portalValues, PORTAL_AWS_SECRET_ACCESS_KEY: 'contains whitespace secret' },
+    { ...portalValues, PORTAL_AWS_SESSION_TOKEN: 'short' },
+  ]) {
+    assertRejects(
+      () => Promise.resolve().then(() => readPortalHybridProviderConfig(environment(invalid))),
+      PortalHybridProviderError,
+      'portal_hybrid_provider_config_invalid',
+    );
+  }
+
+  assertRejects(
+    () =>
+      Promise.resolve().then(() =>
+        readPortalHybridProviderConfig(
+          environment({
+            OPENAI_API_KEY: portalValues.PORTAL_OPENAI_API_KEY,
+            OPENAI_CHAT_MODEL: portalValues.PORTAL_OPENAI_CHAT_MODEL,
+            SAGEMAKER_ENDPOINT_NAME: portalValues.PORTAL_SAGEMAKER_ENDPOINT_NAME,
+            AWS_ACCESS_KEY_ID: portalValues.PORTAL_AWS_ACCESS_KEY_ID,
+            AWS_SECRET_ACCESS_KEY: portalValues.PORTAL_AWS_SECRET_ACCESS_KEY,
+          }),
+        ),
+      ),
+    PortalHybridProviderError,
+    'portal_hybrid_provider_config_invalid',
+  );
+});
+
+Deno.test(
+  'Portal Hybrid invalid provider config fails before Redis, model, or database',
+  async () => {
+    const redis = new FakePortalRedis();
+    let modelCalls = 0;
+    let databaseCalls = 0;
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query() {
+            databaseCalls += 1;
+            return Promise.resolve(databasePage());
+          },
+        },
+        {
+          providerConfig: undefined,
+          providerConfigFactory: () => {
+            throw new PortalHybridProviderError();
+          },
+          rewriteQuery: async () => {
+            modelCalls += 1;
+            return REWRITE;
+          },
+        },
+      ),
+    );
+    const response = await handler(await signedRequest());
+    assertEquals(response.status, 503);
+    assertEquals(await responseCode(response), 'hybrid_upstream_unavailable');
     assertEquals(redis.calls, []);
     assertEquals(modelCalls, 0);
     assertEquals(databaseCalls, 0);

@@ -6,11 +6,12 @@ import {
   type PortalPublicHybridCandidatePage,
 } from './portal_hybrid_contract.ts';
 import {
+  readPortalPublishableCredential,
   readPortalBoundedStream,
   validatePortalPublishableCredential,
   validatePortalSupabaseUrl,
 } from './portal_public_transport.ts';
-import { getSupabasePublishableKey, getSupabaseUrl } from './supabase_client.ts';
+import { getSupabaseUrl } from './supabase_client.ts';
 
 export const PORTAL_HYBRID_MAX_RESPONSE_BYTES = 512 * 1024;
 
@@ -76,7 +77,7 @@ export function createPortalHybridRepository(
   try {
     supabaseUrl = validatePortalSupabaseUrl(options.supabaseUrl ?? getSupabaseUrl());
     publishableKey = validatePortalPublishableCredential(
-      options.publishableKey ?? getSupabasePublishableKey(),
+      options.publishableKey ?? readPortalPublishableCredential(),
     );
   } catch (_error) {
     throw new PortalHybridRepositoryError('hybrid_upstream_unavailable');

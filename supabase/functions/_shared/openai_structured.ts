@@ -2,8 +2,8 @@ import OpenAI from '@openai/openai';
 
 const _clients = new Map<string, OpenAI>();
 
-function getClient(baseUrl?: string): OpenAI {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
+function getClient(baseUrl?: string, explicitApiKey?: string): OpenAI {
+  const apiKey = explicitApiKey ?? Deno.env.get('OPENAI_API_KEY');
   if (!apiKey) {
     throw new Error('Missing OPENAI_API_KEY environment variable');
   }
@@ -122,21 +122,39 @@ export interface OpenAIStructuredOptions {
   baseUrl?: string;
 }
 
+export interface OpenAIStructuredProviderConfig {
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+}
+
 export interface OpenAIStructuredRequest {
   schemaName: string;
   schema: Record<string, unknown>;
   systemPrompt: string;
   userPrompt: string;
   options?: OpenAIStructuredOptions;
+  provider?: Readonly<OpenAIStructuredProviderConfig>;
   signal?: AbortSignal;
 }
 
 export async function openaiStructuredOutput<T>(request: OpenAIStructuredRequest): Promise<T> {
-  const baseUrl = request.options?.baseUrl || Deno.env.get('OPENAI_BASE_URL') || undefined;
-  const model = request.options?.model || Deno.env.get('OPENAI_CHAT_MODEL') || 'gpt-4.1-mini';
+  const provider = request.provider;
+  if (
+    provider &&
+    (!provider.apiKey || !provider.model || provider.apiKey !== provider.apiKey.trim())
+  ) {
+    throw new Error('Invalid explicit OpenAI provider configuration');
+  }
+  const baseUrl = provider
+    ? provider.baseUrl
+    : request.options?.baseUrl || Deno.env.get('OPENAI_BASE_URL') || undefined;
+  const model = provider
+    ? provider.model
+    : request.options?.model || Deno.env.get('OPENAI_CHAT_MODEL') || 'gpt-4.1-mini';
   const temperature = request.options?.temperature ?? 0;
 
-  const client = getClient(baseUrl);
+  const client = getClient(baseUrl, provider?.apiKey);
   const clientAny = client as unknown as {
     responses?: {
       create?: (args: unknown, options?: { signal?: AbortSignal }) => Promise<unknown>;

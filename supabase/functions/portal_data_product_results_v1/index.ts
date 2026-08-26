@@ -13,6 +13,7 @@ import {
   PortalTransportError,
   readPortalBoundedStream,
   readPortalLegacyAnonCredential,
+  readPortalPublishableCredential,
   readPortalRawBody,
   validatePortalInboundTransport,
   validatePortalPublishableCredential,
@@ -40,6 +41,7 @@ import {
   emitPortalSecurityEvent,
   normalizePortalSecurityErrorCode,
   resolvePortalCorrelationId,
+  readPortalDeploymentSha,
   type PortalSecurityBackend,
   type PortalSecurityCacheStatus,
   type PortalSecurityErrorCode,
@@ -48,12 +50,13 @@ import {
   type PortalSecurityMode,
   type PortalSecurityTransportOutcome,
 } from '../_shared/portal_security_event.ts';
-import { getSupabasePublishableKey, getSupabaseUrl } from '../_shared/supabase_client.ts';
+import { getSupabaseUrl } from '../_shared/supabase_client.ts';
 
 export {
   PortalPublishedLciaUpstreamError,
   PortalTransportError,
   readPortalLegacyAnonCredential,
+  readPortalPublishableCredential,
   readPortalRawBody,
   validatePortalInboundTransport,
   validatePortalPublishableCredential,
@@ -223,7 +226,7 @@ export function createPortalPublishedLciaRepository(
 ): PortalPublishedLciaRepository {
   const supabaseUrl = validatePortalSupabaseUrl(options.supabaseUrl ?? getSupabaseUrl());
   const publishableKey = validatePortalPublishableCredential(
-    options.publishableKey ?? getSupabasePublishableKey(),
+    options.publishableKey ?? readPortalPublishableCredential(),
   );
   const fetchImpl = options.fetchImpl ?? fetch;
 
@@ -416,13 +419,15 @@ export function createPortalDataProductResultsHandler(
 
       let trustedPublishableKey: string;
       try {
-        trustedPublishableKey = options.trustedPublishableKey ?? getSupabasePublishableKey();
+        trustedPublishableKey = options.trustedPublishableKey ?? readPortalPublishableCredential();
         validatePortalInboundTransport({
           request,
           trustedPublishableKey,
           trustedLegacyAnonKey:
             options.trustedLegacyAnonKey === undefined
-              ? readPortalLegacyAnonCredential()
+              ? request.headers.has('authorization')
+                ? readPortalLegacyAnonCredential()
+                : null
               : options.trustedLegacyAnonKey,
         });
         eventTransportOutcome = 'accepted';
@@ -644,7 +649,7 @@ export function createPortalDataProductResultsHandler(
       errorCode,
       matchedKey: eventMatchedKey,
       recoveredLeaseCount: eventRecoveredLeaseCount,
-      deploymentSha: options.deploymentSha ?? Deno.env.get('PORTAL_DEPLOYMENT_SHA') ?? 'unknown',
+      deploymentSha: options.deploymentSha ?? readPortalDeploymentSha('PORTAL_LCIA_DEPLOYMENT_SHA'),
     });
     return response;
   };

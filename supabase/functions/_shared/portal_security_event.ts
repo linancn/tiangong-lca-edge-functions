@@ -133,6 +133,17 @@ export function normalizePortalDeploymentSha(value: string | undefined): string 
   return normalized && /^[0-9a-f]{40,64}$/u.test(normalized) ? normalized : 'unknown';
 }
 
+export function readPortalDeploymentSha(
+  name: 'PORTAL_LCIA_DEPLOYMENT_SHA' | 'PORTAL_HYBRID_DEPLOYMENT_SHA',
+  env: Pick<typeof Deno.env, 'get'> = Deno.env,
+): string {
+  try {
+    return normalizePortalDeploymentSha(env.get(name));
+  } catch (_error) {
+    return 'unknown';
+  }
+}
+
 const CORRELATION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 export function resolvePortalCorrelationId(headers: Headers): string {
