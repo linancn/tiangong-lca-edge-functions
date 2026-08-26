@@ -23,8 +23,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 55f7cb5985da3e2f7c800ed695e2f64df91a5838
-lastReviewedNote: 'Reviewed after Issue #313 added exact pinned-CLI kong transport, local-only legacy anon compatibility, and indirect generic-fallback proof while retaining generic behavior.'
+lastReviewedCommit: 219a5389f390add95ba9b6eae4bc00cad0baf8c2
+lastReviewedNote: 'Reviewed after Issue #316 added the R0 verifier, optional-secret normalization, Main-parent identity/readiness separation, and status-independent cleanup.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -93,6 +93,7 @@ Core entries:
 - `REMOTE_SUPABASE_SECRET_KEY` for privileged RPC / database execution.
 - `REMOTE_SERVICE_API_KEY` for routes that allow `AuthMethod.SERVICE_API_KEY`.
 - `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` for user API key auth caching.
+- `PORTAL_R0_*` is the complete, disposable R0 verifier surface: current/optional-previous HMAC, current-project publishable key, explicit `preview`/`test` runtime target, dedicated Standard/Upstash Redis credentials, `portal:r0:<fixture>:v1` namespace, and small admission limits. It never falls back to the long-lived Portal or generic variables below.
 - `PORTAL_HMAC_KEY_ID_CURRENT` / `PORTAL_HMAC_SECRET_CURRENT` and the optional previous pair for Portal-only request verification.
 - `PORTAL_SUPABASE_PUBLISHABLE_KEY` for both signed Portal routes. It must be a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` JSON registry and is paired only with platform-injected `SUPABASE_URL`; there is no generic or `REMOTE_*` key/URL fallback.
 - `PORTAL_REDIS_CLIENT_TYPE`, `PORTAL_REDIS_NAMESPACE`, `PORTAL_REDIS_TIMEOUT_MS`, and the bounded `PORTAL_LCIA_*` guard/cache/timeout settings for the signed public LCIA route. Hosted projects use the Portal-only `PORTAL_UPSTASH_REDIS_URL` / `PORTAL_UPSTASH_REDIS_TOKEN`; local/CI may use `PORTAL_REDIS_URL` plus optional `PORTAL_REDIS_PASSWORD`. Portal routes never fall back to the generic Redis variables used by existing Functions. The concurrency lease defaults to 30 seconds, never drops below 20 seconds, and must cover Redis plus upstream timeouts with a five-second recovery margin. The R1 LCIA response cache defaults to and is capped at 60 seconds.
@@ -110,6 +111,7 @@ Credential contract:
 - Supabase secret keys are reserved for privileged Supabase execution paths and must never be exposed to browser clients.
 - Keep `REMOTE_SUPABASE_URL`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, and `REMOTE_SUPABASE_SECRET_KEY` from the same Supabase project. A mismatched or stale secret key causes local RPC calls to fail with `Invalid API key` after request authentication succeeds.
 - The Portal HMAC secret is independent of `REMOTE_SERVICE_API_KEY`, Supabase JWT secrets, and every Supabase client key. Keep dev/Preview and main/Production keyrings, Upstash databases, tokens, and `portal:<environment>:v1` namespaces distinct. Only the verifier holds an optional previous HMAC key during rotation.
+- The R0 HMAC, publishable key, Redis database/token, and namespace are one-time Preview/local-test fixtures. Current and previous require different key IDs and constant-time-distinct secrets. Both empty optional previous values mean absent; one empty side fails closed. An empty optional Standard Redis password means absent. These values are not the long-lived Portal verifier configuration and must be removed together with `portal_r0_hmac_verify_v1` after evidence capture.
 - `PORTAL_SUPABASE_PUBLISHABLE_KEY` is matched in constant time against the inbound `apikey`, checked against the current project's `SUPABASE_PUBLISHABLE_KEYS` registry, paired only with platform-injected `SUPABASE_URL`, and reused unchanged for the downstream public RPC. Remote runtime requires HTTPS; the only non-loopback HTTP origin is exact pinned CLI `http://kong:8000`. `REMOTE_SUPABASE_URL`, generic keys, legacy anon keys, secret/service-role keys, and user credentials cannot replace the Portal key. `SUPABASE_ANON_KEY` is consulted only when Authorization is present and the validated URL is that exact local CLI origin; hosted Authorization is rejected.
 - Portal Redis provider and credential variables are independent of the generic `REDIS_CLIENT_TYPE`, `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN`, `REDIS_URL`, and `REDIS_PASSWORD` surface. Missing Portal-only values fail closed; provisioning Portal must not change Redis behavior for any existing Function.
 - Portal Hybrid provider variables are likewise independent of generic OpenAI, SageMaker, and AWS values. Missing, partial, whitespace-bearing, malformed, or unsafe Portal provider configuration fails before Redis, model, AWS, or database calls; an exact-false/unset kill switch returns before that provider configuration is read.
@@ -197,6 +199,32 @@ pnpm deploy:main portal_data_product_results_v1 portal_hybrid_search_v1 flow_hyb
 
 The deploy script pins the Supabase CLI version from `package.json`, sets the target `--project-ref`, disables gateway JWT verification with `--no-verify-jwt`, and passes `supabase/functions/deno.json` as the import map so server-side bundling resolves shared npm/jsr imports.
 
+The disposable R0 function is deliberately excluded from both commands above. The authenticated CLI account must read the configured Main parent's Preview branches. The guard reruns `supabase branches list --project-ref qgzvkongdjqiiamzbbts --output-format json` and accepts only exactly one target whose parent is Main, `is_default=false`, `persistent=false`, `with_data=false`, `status=FUNCTIONS_DEPLOYED`, and `preview_project_status=ACTIVE_HEALTHY`, with exact branch name/Git branch and optional PR-number binding. A 403, malformed response, or empty list fails closed. From a clean exact commit, export the verified branch identity, matching SHA/expiry, and deploy acknowledgement:
+
+```bash
+PORTAL_R0_PROJECT_REF=<isolated-preview-project-ref> \
+PORTAL_R0_RUNTIME_TARGET=preview \
+PORTAL_R0_SUPABASE_BRANCH_NAME=<exact-supabase-branch-name> \
+PORTAL_R0_SUPABASE_GIT_BRANCH=<exact-git-branch> \
+PORTAL_R0_DEPLOYMENT_SHA="$(git rev-parse HEAD)" \
+PORTAL_R0_DEPLOY_EXPIRES_AT=<ISO-8601-within-24-hours> \
+PORTAL_R0_DISPOSABLE_ACK=delete-after-evidence \
+pnpm deploy:portal-r0 preview
+```
+
+When the Preview is PR-bound, also export `PORTAL_R0_SUPABASE_PR_NUMBER=<exact-pr-number>`; if supplied, it must exactly match the live branch row.
+
+The guard fixes the slug to `portal_r0_hmac_verify_v1`, rejects the persistent Dev/Main refs, rejects dirty or mismatched SHAs, and rejects `main`, `production`, or an expiry beyond 24 hours. Provision its one-time `PORTAL_R0_*` secrets separately, collect the immutable EdgeOne/Supabase/Redis evidence, then delete the remote function, secrets, and Redis resource.
+
+Using the same guarded environment and exact deployed checkout, delete only the remote function with:
+
+```bash
+PORTAL_R0_CLEANUP_ACK=delete-function-and-confirm-external-resources \
+pnpm cleanup:portal-r0 preview
+```
+
+Set `PORTAL_R0_CLEANUP_DRY_RUN=true` to validate the command without remote mutation. Cleanup repeats the live branch query and separate acknowledgement but does not require future expiry, `FUNCTIONS_DEPLOYED`, or `ACTIVE_HEALTHY`. A paused, unhealthy, or failed branch with the exact immutable identity still receives the fixed function-delete attempt; a real delete failure blocks cleanup. If the branch is absent from a valid nonempty Main-parent response, cleanup reports a verified terminal and skips deletion. Successful delete, terminal, and dry-run paths print only the external Redis/credential evidence checklist, never branch metadata or credential values.
+
 Recommended deploy workflow:
 
 1. Validate locally with `pnpm lint`, `pnpm check`, and targeted smoke requests.
@@ -250,7 +278,15 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 - `lca_contribution_path` / `lca_contribution_path_result`
 - `import_tidas_package` / `tidas_package_jobs`
 
-`portal_data_product_results_v1` and `portal_hybrid_search_v1` are intentionally not represented by reusable static signatures in the request collection. Their caller must generate a fresh timestamp and 128-bit nonce, hash and sign the exact raw body bytes, and send those same bytes once.
+`portal_r0_hmac_verify_v1`, `portal_data_product_results_v1`, and `portal_hybrid_search_v1` are intentionally not represented by reusable static signatures in the request collection. Their caller must generate a fresh timestamp and 128-bit nonce, hash and sign the exact raw body bytes, and send those same bytes once.
+
+### Disposable Portal R0 HMAC/Redis contract
+
+`portal_r0_hmac_verify_v1` exists only to prove EdgeOne Web Crypto signer interoperability against Supabase Deno and isolated Redis. Its sole valid raw JSON body is `{"schemaVersion":"portal.r0-hmac-verify-request.v1"}`. HMAC canonical bytes bind the fixed public path `/functions/v1/portal_r0_hmac_verify_v1`; the exact stripped `/portal_r0_hmac_verify_v1` runtime path is accepted only while retaining that public canonical path.
+
+After raw-byte HMAC, the handler constant-time matches the dedicated current-project `PORTAL_R0_SUPABASE_PUBLISHABLE_KEY`, rejects Authorization and Cookie, registers nonce with `SET NX EX 120`, and invokes the reviewed atomic Lua budget/concurrency primitive under `portal:r0:<fixture>:v1`. Only then does it parse the one-field request. Success returns only `{"schemaVersion":"portal.r0-hmac-redis-receipt.v1","ok":true}`. Failures return the same schema with a fixed code and no secret, nonce, body, Redis key/value, credential, locator, or internal error.
+
+The endpoint has no database, RPC, model, provider, repository, storage, cache, business payload, or logging path. Generic-only or retained Portal configuration, replay, Redis outage/timeout/malformed reply, budget/concurrency contention, and lease-cleanup failure all fail closed. Current+previous rotation is allowed only for the short fixture window. Delete the endpoint and all one-time resources after the recorded Preview proof.
 
 ### Portal signed public LCIA contract
 
@@ -417,7 +453,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 147-root Deno graph, 15 Node contracts, and all 461 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 153-root Deno graph, 62 Node contract tests, and all 492 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

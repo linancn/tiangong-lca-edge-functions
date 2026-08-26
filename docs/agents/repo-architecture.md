@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 55f7cb5985da3e2f7c800ed695e2f64df91a5838
-lastReviewedNote: 'Reviewed after Issue #313 added exact pinned-CLI kong/local-anon compatibility and indirect generic-fallback proof while retaining hosted current-project binding and generic defaults.'
+lastReviewedCommit: 219a5389f390add95ba9b6eae4bc00cad0baf8c2
+lastReviewedNote: 'Reviewed after Issue #316 separated R0 branch identity from deploy readiness and made cleanup status-independent.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -57,6 +57,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 | --- | --- | --- |
 | `supabase/functions/<name>/index.ts` | stable | default Edge Function entrypoint; baseline `pnpm check` includes every enabled `index.ts` root in one bounded shared Deno graph |
 | `supabase/functions/<name>/handler.ts` | stable | larger routes sometimes split real logic here while `index.ts` stays thin |
+| `supabase/functions/portal_r0_hmac_verify_v1/**` and `_shared/portal_r0_*` | disposable | non-business EdgeOne Web Crypto/Supabase Deno interoperability fixture with R0-only HMAC, publishable-key, Redis, namespace, receipt, local-test, and live Preview deployment contracts |
 | `supabase/functions/_shared/auth.ts` | stable | central runtime auth and credential-selection logic |
 | `supabase/functions/_shared/portal_hmac.ts`, `portal_redis_guard.ts`, and the Portal adapter in `redis_client.ts` | stable | Portal-only raw-body request verification, explicitly isolated provider credentials, replay protection, atomic route budget, concurrency lease, and hash-key cache behavior without generic Redis fallback |
 | `supabase/functions/_shared/portal_public_transport.ts` | stable | dedicated current-project publishable-key resolution, platform-only current-project URL, exact inbound/legacy-anon transport, Cookie rejection, and bounded raw-byte reader shared by signed Portal routes |
@@ -92,7 +93,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 147 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 461 Deno behavior tests with env/read/loopback-net permissions.
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 153 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 62 Node contract tests and 492 Deno behavior tests with env/read/loopback-net permissions.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
@@ -143,6 +144,14 @@ The shared layers that matter most are:
 The retired review-submit Gate, coordinator, and job endpoints are not part of the deployed Edge surface. `app_worker_jobs` remains the authenticated task-center API for user-visible jobs; the operator-visible Review Admin diagnostic is read through its dedicated route rather than through generic task-center access.
 
 `app_data_product_commands` is the JWT-only command boundary for Data Product scope-closure checks and result-build requests. It forwards only user scope intent to actor-bound database RPCs; the database derives snapshot, policy, certificate, and artifact-lifecycle bindings. The shared data-product repository preserves the database-owned versioned check/issues/feed projections while explicitly allowlisting the closure-check public DTO, decoding its fixed-order artifact summaries, and recursively rejecting private locator or credential fields. For downloads, the strict public request requires exactly `closure_report_xlsx` or `closure_issue_manifest`, forwards that selector to the database's two-argument actor RPC, and signs only a matching ready, unexpired descriptor. Partition selectors are not part of this public endpoint. Signed URLs are capped at 900 seconds, reserve a clock-skew/signing safety budget before artifact expiry, and use the database-provided semantic filename. Owner-visible expiry maps to a stable `410`, while unavailable, unauthorized, deleted, unready, and integrity-invalid artifacts remain one opaque `404`. Unexpected RPC/PostgREST failures and every Storage signing throw, rejection, malformed result, or SDK error collapse to fixed locator-free `502` responses. The service client may see the private bucket/path solely for the signing step and never returns either field or source error details to the browser. Task feed visibility is database-owned ACL, not a consequence of task-center category or presenter metadata.
+
+### Disposable Portal R0 interoperability route
+
+`portal_r0_hmac_verify_v1` is a non-business, removable proof endpoint for one EdgeOne Preview signer. It accepts the public canonical path `/functions/v1/portal_r0_hmac_verify_v1` and the exact pinned-CLI stripped runtime path while always signing the public path. Raw request bytes, timestamp, 128-bit nonce, method, body hash, key ID, and current/previous HMAC key are verified before its dedicated publishable-key transport, Redis, or JSON. The sole valid body is `{"schemaVersion":"portal.r0-hmac-verify-request.v1"}` and success is the bounded `portal.r0-hmac-redis-receipt.v1` receipt.
+
+The route reads only `PORTAL_R0_*` configuration plus the platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry. Its namespace is `portal:r0:<fixture>:v1`; it cannot name Dev/Main/Production, and R0 never falls back to retained Portal or generic HMAC, publishable, Redis, provider, Supabase, or service variables. Nonce registration is exact `SET NX EX 120`, followed by the reviewed atomic budget/concurrency Lua primitive and synchronous lease cleanup. It has no cache, database, RPC, model, provider, repository, storage, business DTO, event, or logger surface. Every failure is a fixed locator-free receipt.
+
+The generic deploy scripts reject R0. Both dedicated commands verify Main parent, project ref, nondefault/nonpersistent/no-data flags, branch name, Git branch, optional PR, and clean SHA from live CLI JSON. Deploy then requires `FUNCTIONS_DEPLOYED`, `ACTIVE_HEALTHY`, deploy acknowledgement, and future expiry within 24 hours. Cleanup uses its separate acknowledgement and intentionally ignores status, health, and past expiry after identity succeeds, so paused/unhealthy/failed branches still receive the fixed function-delete attempt; delete failure blocks. An absent target in a valid nonempty response is terminal. Fixed messages never include metadata or tokens.
 
 ### Portal signed public LCIA route
 
