@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 133723f931320a0560ff68e27e519ea8710c2517
-lastReviewedNote: 'Reviewed after Issue #312 added fail-closed Portal-only Redis provider credentials and an explicit no-generic-fallback regression.'
+lastReviewedCommit: 3130ece2dc9a1f2eb8576f67642db80e054734b4
+lastReviewedNote: 'Reviewed after Issue #312 added fail-closed Portal-only Redis credentials, a no-fallback regression, and retained generic Redis operator coverage.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

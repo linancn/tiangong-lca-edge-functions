@@ -23,8 +23,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 133723f931320a0560ff68e27e519ea8710c2517
-lastReviewedNote: 'Reviewed after Issue #312 isolated both signed Portal routes onto Portal-only Redis provider credentials with no generic fallback.'
+lastReviewedCommit: 3130ece2dc9a1f2eb8576f67642db80e054734b4
+lastReviewedNote: 'Reviewed after Issue #312 isolated both signed Portal routes without removing the existing generic Redis operator surface.'
 ---
 
 # TianGong-LCA-Edge-Functions

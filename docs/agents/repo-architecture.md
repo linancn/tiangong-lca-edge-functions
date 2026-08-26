@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 133723f931320a0560ff68e27e519ea8710c2517
-lastReviewedNote: 'Reviewed after Issue #312 separated signed Portal Redis provider credentials from the generic adapter surface consumed by existing Functions.'
+lastReviewedCommit: 3130ece2dc9a1f2eb8576f67642db80e054734b4
+lastReviewedNote: 'Reviewed after Issue #312 separated signed Portal Redis credentials while preserving the generic adapter and configuration surface consumed by existing Functions.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
