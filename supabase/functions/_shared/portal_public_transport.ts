@@ -1,6 +1,8 @@
 import { constantTimeEqual, decodeCanonicalBase64Url } from './portal_hmac.ts';
 
 const DEFAULT_MAX_REQUEST_BYTES = 32 * 1024;
+const PORTAL_PUBLISHABLE_KEY_ENV = 'PORTAL_SUPABASE_PUBLISHABLE_KEY';
+const SUPABASE_PROJECT_PUBLISHABLE_KEYS_ENV = 'SUPABASE_PUBLISHABLE_KEYS';
 
 export class PortalPublishedLciaUpstreamError extends Error {
   constructor() {
@@ -23,8 +25,10 @@ export function validatePortalSupabaseUrl(value: string): string {
   const secureRemote = url.protocol === 'https:';
   const loopback =
     isLoopbackHostname(url.hostname) && (url.protocol === 'http:' || url.protocol === 'https:');
+  const pinnedCliInternal =
+    url.protocol === 'http:' && url.hostname === 'kong' && url.port === '8000';
   if (
-    (!secureRemote && !loopback) ||
+    (!secureRemote && !loopback && !pinnedCliInternal) ||
     url.username !== '' ||
     url.password !== '' ||
     url.search !== '' ||
@@ -99,11 +103,94 @@ function constantTimeStringEqual(left: string, right: string): boolean {
   return constantTimeEqual(new TextEncoder().encode(left), new TextEncoder().encode(right));
 }
 
+type PortalTransportEnvironment = Pick<typeof Deno.env, 'get'>;
+
+function readExactEnvironmentValue(env: PortalTransportEnvironment, name: string): string {
+  let value: string | undefined;
+  try {
+    value = env.get(name);
+  } catch (_error) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+  if (
+    value === undefined ||
+    value.length === 0 ||
+    value !== value.trim() ||
+    /[\u0000-\u001f\u007f-\u009f]/u.test(value)
+  ) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+  return value;
+}
+
+function readCurrentProjectPublishableKeys(env: PortalTransportEnvironment): string[] {
+  const raw = readExactEnvironmentValue(env, SUPABASE_PROJECT_PUBLISHABLE_KEYS_ENV);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (_error) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+  const entries = Object.entries(parsed as Record<string, unknown>);
+  if (
+    entries.length === 0 ||
+    entries.some(
+      ([name, value]) =>
+        name.length === 0 ||
+        typeof value !== 'string' ||
+        value.length === 0 ||
+        value !== value.trim(),
+    )
+  ) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+  return entries.map(([, value]) => value as string);
+}
+
+/**
+ * Resolve the dedicated Portal key and prove it belongs to the current Supabase project.
+ * `SUPABASE_PUBLISHABLE_KEYS` is the platform-owned project key registry, never a fallback key.
+ */
+export function readPortalPublishableCredential(
+  env: PortalTransportEnvironment = Deno.env,
+): string {
+  const configured = readExactEnvironmentValue(env, PORTAL_PUBLISHABLE_KEY_ENV);
+  let publishableKey: string;
+  try {
+    publishableKey = validatePortalPublishableCredential(configured);
+  } catch (_error) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+  if (!publishableKey.startsWith('sb_publishable_') || publishableKey.length < 20) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+
+  const belongsToCurrentProject = readCurrentProjectPublishableKeys(env).reduce(
+    (matched, candidate) => constantTimeStringEqual(publishableKey, candidate) || matched,
+    false,
+  );
+  if (!belongsToCurrentProject) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+  return publishableKey;
+}
+
+export function readPortalSupabaseUrl(env: PortalTransportEnvironment = Deno.env): string {
+  try {
+    return validatePortalSupabaseUrl(readExactEnvironmentValue(env, 'SUPABASE_URL'));
+  } catch (_error) {
+    throw new PortalTransportError('portal_transport_config_invalid');
+  }
+}
+
 export function readPortalLegacyAnonCredential(
   env: Pick<typeof Deno.env, 'get'> = Deno.env,
 ): string | null {
-  const configured =
-    env.get('REMOTE_SUPABASE_ANON_KEY')?.trim() || env.get('SUPABASE_ANON_KEY')?.trim();
+  if (readPortalSupabaseUrl(env) !== 'http://kong:8000') return null;
+  const configured = env.get('SUPABASE_ANON_KEY')?.trim();
   if (!configured) return null;
   try {
     return validatePortalLegacyAnonCredential(configured);

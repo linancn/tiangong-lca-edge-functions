@@ -19,6 +19,7 @@ Deno.test(
   async () => {
     const files = [
       './supabase/functions/_shared/portal_hmac.ts',
+      './supabase/functions/_shared/portal_public_transport.ts',
       './supabase/functions/_shared/portal_redis_guard.ts',
       './supabase/functions/_shared/portal_security_event.ts',
       './supabase/functions/portal_data_product_results_v1/index.ts',
@@ -33,7 +34,22 @@ Deno.test(
       assertEquals(source.includes(forbidden), false, `forbidden Portal dependency: ${forbidden}`);
     }
     assertStringIncludes(source, "'Content-Profile': 'api'");
-    assertStringIncludes(source, 'getSupabasePublishableKey');
+    assertStringIncludes(source, 'readPortalPublishableCredential');
+    assertStringIncludes(source, 'PORTAL_SUPABASE_PUBLISHABLE_KEY');
+    assertStringIncludes(source, 'SUPABASE_PUBLISHABLE_KEYS');
+    assertStringIncludes(source, "readPortalDeploymentSha('PORTAL_LCIA_DEPLOYMENT_SHA')");
+    for (const forbidden of [
+      "'REMOTE_SUPABASE_PUBLISHABLE_KEY'",
+      "'REMOTE_SUPABASE_ANON_KEY'",
+      "'REMOTE_SUPABASE_URL'",
+      "Deno.env.get('PORTAL_DEPLOYMENT_SHA')",
+      "from './supabase_client.ts'",
+      "from '../_shared/supabase_client.ts'",
+      'getSupabasePublishableKey(',
+      'getSupabaseUrl(',
+    ]) {
+      assertEquals(source.includes(forbidden), false, `forbidden Portal fallback: ${forbidden}`);
+    }
   },
 );
 
@@ -46,9 +62,12 @@ Deno.test(
       './supabase/functions/_shared/portal_hmac.ts',
       './supabase/functions/_shared/portal_hybrid_contract.ts',
       './supabase/functions/_shared/portal_hybrid_deadline.ts',
+      './supabase/functions/_shared/portal_hybrid_kernel.ts',
+      './supabase/functions/_shared/portal_hybrid_provider.ts',
       './supabase/functions/_shared/portal_hybrid_repository.ts',
       './supabase/functions/_shared/portal_hybrid_security_event.ts',
       './supabase/functions/_shared/portal_redis_guard.ts',
+      './supabase/functions/_shared/portal_openai_structured.ts',
       './supabase/functions/portal_hybrid_search_v1/index.ts',
     ];
     const source = (await Promise.all(files.map((file) => Deno.readTextFile(file)))).join('\n');
@@ -72,7 +91,7 @@ Deno.test(
     }
     assertStringIncludes(source, '/rest/v1/rpc/portal_hybrid_search_v1');
     assertStringIncludes(source, "'Content-Profile': 'api'");
-    assertStringIncludes(source, 'getSupabasePublishableKey');
+    assertStringIncludes(source, 'readPortalPublishableCredential');
     assertStringIncludes(source, 'verifyPortalHmacRequest');
     assertStringIncludes(source, 'isPortalHybridEnabled');
     assertStringIncludes(source, "env.get('PORTAL_HYBRID_ENABLED') === 'true'");
@@ -85,11 +104,79 @@ Deno.test(
       source,
       'Task: Transform description of ${config.entityPlural} into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.',
     );
-    assertStringIncludes(source, 'options: { model: OPENAI_CHAT_MODEL, temperature: 0 }');
+    assertStringIncludes(source, 'provider.openAi');
     assertStringIncludes(source, 'Body: JSON.stringify({ inputs: text })');
+    assertStringIncludes(source, "readPortalDeploymentSha('PORTAL_HYBRID_DEPLOYMENT_SHA')");
+
+    const portalOnlyFiles = [
+      './supabase/functions/_shared/portal_hybrid_kernel.ts',
+      './supabase/functions/_shared/portal_hybrid_provider.ts',
+      './supabase/functions/_shared/portal_hybrid_repository.ts',
+      './supabase/functions/_shared/portal_openai_structured.ts',
+      './supabase/functions/_shared/portal_public_transport.ts',
+      './supabase/functions/portal_hybrid_search_v1/index.ts',
+    ];
+    const portalOnlySource = (
+      await Promise.all(portalOnlyFiles.map((file) => Deno.readTextFile(file)))
+    ).join('\n');
+    for (const forbidden of [
+      "'REMOTE_SUPABASE_PUBLISHABLE_KEY'",
+      "'REMOTE_SUPABASE_ANON_KEY'",
+      "'REMOTE_SUPABASE_URL'",
+      "'OPENAI_API_KEY'",
+      "'OPENAI_CHAT_MODEL'",
+      "'OPENAI_BASE_URL'",
+      "'SAGEMAKER_ENDPOINT_NAME'",
+      "'AWS_ACCESS_KEY_ID'",
+      "'AWS_SECRET_ACCESS_KEY'",
+      "'AWS_SESSION_TOKEN'",
+      "Deno.env.get('PORTAL_DEPLOYMENT_SHA')",
+      "from './supabase_client.ts'",
+      "from '../_shared/supabase_client.ts'",
+      "from './hybrid_search_kernel.ts'",
+      "from '../_shared/hybrid_search_kernel.ts'",
+      "from './openai_structured.ts'",
+      "from '../_shared/openai_structured.ts'",
+      'getSupabasePublishableKey(',
+      'getSupabaseUrl(',
+      'rewriteHybridSearchQuery(',
+      'generateHybridSearchEmbedding(',
+    ]) {
+      assertEquals(
+        portalOnlySource.includes(forbidden),
+        false,
+        `forbidden Portal Hybrid fallback: ${forbidden}`,
+      );
+    }
+    for (const required of [
+      "'PORTAL_OPENAI_API_KEY'",
+      "'PORTAL_OPENAI_CHAT_MODEL'",
+      "'PORTAL_OPENAI_BASE_URL'",
+      "'PORTAL_SAGEMAKER_ENDPOINT_NAME'",
+      "'PORTAL_AWS_ACCESS_KEY_ID'",
+      "'PORTAL_AWS_SECRET_ACCESS_KEY'",
+      "'PORTAL_AWS_SESSION_TOKEN'",
+    ]) {
+      assertStringIncludes(portalOnlySource, required);
+    }
 
     const loginHybridHandler = await Deno.readTextFile(
       './supabase/functions/_shared/hybrid_search_handler.ts',
+    );
+    const genericHybridKernel = await Deno.readTextFile(
+      './supabase/functions/_shared/hybrid_search_kernel.ts',
+    );
+    assertStringIncludes(
+      genericHybridKernel,
+      "const OPENAI_CHAT_MODEL = Deno.env.get('OPENAI_CHAT_MODEL') ?? 'gpt-4.1-mini';",
+    );
+    assertStringIncludes(
+      genericHybridKernel,
+      "const SAGEMAKER_ENDPOINT_NAME = Deno.env.get('SAGEMAKER_ENDPOINT_NAME');",
+    );
+    assertStringIncludes(
+      genericHybridKernel,
+      'options: { model: OPENAI_CHAT_MODEL, temperature: 0 }',
     );
     assertStringIncludes(loginHybridHandler, 'rewriteQuery: rewriteHybridSearchQuery');
     assertStringIncludes(loginHybridHandler, 'generateEmbedding: generateHybridSearchEmbedding');
@@ -108,9 +195,31 @@ Deno.test(
       'PORTAL_HYBRID_CIRCUIT_FAILURE_THRESHOLD=5',
       'PORTAL_HYBRID_CIRCUIT_WINDOW_SECONDS=60',
       'PORTAL_HYBRID_CIRCUIT_OPEN_SECONDS=60',
+      'PORTAL_SUPABASE_PUBLISHABLE_KEY=',
+      'PORTAL_OPENAI_API_KEY=',
+      'PORTAL_OPENAI_CHAT_MODEL=',
+      'PORTAL_OPENAI_BASE_URL=',
+      'PORTAL_SAGEMAKER_ENDPOINT_NAME=',
+      'PORTAL_AWS_ACCESS_KEY_ID=',
+      'PORTAL_AWS_SECRET_ACCESS_KEY=',
+      'PORTAL_AWS_SESSION_TOKEN=',
+      'PORTAL_LCIA_DEPLOYMENT_SHA=',
+      'PORTAL_HYBRID_DEPLOYMENT_SHA=',
     ]) {
       assertStringIncludes(environmentTemplate, expected);
     }
+    for (const retainedGeneric of [
+      'OPENAI_API_KEY=',
+      'OPENAI_CHAT_MODEL=gpt-4.1-mini',
+      'OPENAI_BASE_URL=',
+      'SAGEMAKER_ENDPOINT_NAME=',
+      'AWS_ACCESS_KEY_ID=',
+      'AWS_SECRET_ACCESS_KEY=',
+      'AWS_SESSION_TOKEN=',
+    ]) {
+      assertStringIncludes(environmentTemplate, retainedGeneric);
+    }
+    assertEquals(environmentTemplate.includes('\nPORTAL_DEPLOYMENT_SHA='), false);
   },
 );
 
@@ -140,6 +249,8 @@ Deno.test('Portal transport is pinned to reviewed Supabase CLI source evidence',
     kongStripPath: true,
     trustedApikeyMatchInjectsAuthorization: 'Bearer <legacy-anon-key>',
     serveExportsLegacyAnonAs: 'SUPABASE_ANON_KEY',
+    serveExportsSupabaseUrlAs: 'http://kong:8000',
+    workerExportsPublishableRegistryAs: 'SUPABASE_PUBLISHABLE_KEYS.default',
     canonicalPathSource: 'publicPathTemplate',
   });
   assertEquals(

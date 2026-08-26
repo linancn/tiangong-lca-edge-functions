@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 3130ece2dc9a1f2eb8576f67642db80e054734b4
-lastReviewedNote: 'Reviewed after Issue #312 added fail-closed Portal-only Redis credentials, a no-fallback regression, and retained generic Redis operator coverage.'
+lastReviewedCommit: 55f7cb5985da3e2f7c800ed695e2f64df91a5838
+lastReviewedNote: 'Reviewed after Issue #313 added exact pinned-CLI kong/local-anon coverage plus direct and indirect generic-fallback denial while retaining generic runtime behavior.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -54,7 +54,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.9.5` / bundled TypeScript `6.0.3` plus Node `24.19.0` / pnpm `11.23.0`. It then checks all 147 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs Node contract tests, and executes all 456 Deno behavior tests with only env, read, and loopback-network permissions. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.9.5` / bundled TypeScript `6.0.3` plus Node `24.19.0` / pnpm `11.23.0`. It then checks all 147 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs Node contract tests, and executes all 461 Deno behavior tests with only env, read, and loopback-network permissions. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 The current baseline intentionally skips:
 
@@ -84,6 +84,18 @@ If you reactivate or rely on that route family, update the inventory and validat
 | Auth probe tooling | `pnpm lint`; `node scripts/probe-functions-auth.cjs --help`; `pnpm probe:auth --dry-run` | run `pnpm probe:auth --remote` or `--local` when the task explicitly includes live probe validation | Dry-run is the safe default when you only changed classification or selection logic. |
 | Repo tests only | `pnpm lint`; `pnpm check`; targeted `deno check --config supabase/functions/deno.json <changed-test-file>` | run neighboring tests that cover the same shared module or function family | This repo keeps Deno tests in `test/**`, not under each function folder. |
 | Repo docs or docpact config only | `scripts/docpact validate-config --root . --strict`; `scripts/docpact lint --root . --worktree --mode enforce` | perform scenario-based route checks for the affected intent surface | Refresh review metadata when governed docs change without code changes. |
+
+### Portal provider and provenance isolation proof
+
+Changes to `portal_public_transport.ts`, `portal_hybrid_provider.ts`, `portal_hybrid_kernel.ts`, or `portal_openai_structured.ts` must additionally prove all of the following in the existing Portal test files and static deploy contract:
+
+- `PORTAL_SUPABASE_PUBLISHABLE_KEY` is a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry, is paired only with platform-injected `SUPABASE_URL`, matches inbound `apikey` exactly, and is reused unchanged downstream; hosted requires HTTPS and rejects Authorization, while exact pinned CLI `http://kong:8000` alone may use its injected anon Bearer. Generic/direct-or-helper `REMOTE_*`, legacy-anon fallback, secret/service-role, user, missing, malformed, and cross-project key/URL configurations fail before Redis, model, or database work
+- exact false or unset `PORTAL_HYBRID_ENABLED` returns before Portal Redis, JSON, OpenAI, SageMaker/AWS, or database configuration is read
+- enabled R2 requires the complete strict `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` surface and passes that exact object into both shared model kernels; generic-only, partial, malformed, whitespace-bearing, credential-bearing URL, and insecure remote URL configurations fail before provider or database calls
+- `hybrid_search_kernel.ts` and `openai_structured.ts` remain byte-for-byte equal to the `dev` baseline, while existing login Hybrid, embedding, auth, and shared-kernel tests pass unchanged, proving their generic environment precedence and responses were not replaced by Portal values
+- LCIA reads only `PORTAL_LCIA_DEPLOYMENT_SHA`, Hybrid reads only `PORTAL_HYBRID_DEPLOYMENT_SHA`, and a missing/invalid/other-route SHA yields `unknown` rather than a cross-route or retired shared fallback
+
+The minimum targeted command remains the union of the two Portal rows above plus `test/hybrid_search_handler_test.ts`, `test/hybrid_query_utils_test.ts`, `test/auth_test.ts`, `test/supabase_client_test.ts`, `test/embedding_vector_test.ts`, and targeted `deno check` for both Portal entrypoints and the three Portal-only provider/kernel modules. Live provider calls, secret mutation, Function deployment, and enabling Hybrid are separate controlled gates and are not implied by local proof.
 
 ## Auth And Probe Notes
 

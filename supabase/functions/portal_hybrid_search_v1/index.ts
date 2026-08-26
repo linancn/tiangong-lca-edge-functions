@@ -2,11 +2,6 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { extractEmbeddingVector } from '../_shared/embedding_vector.ts';
 import {
-  generateHybridSearchEmbedding,
-  rewriteHybridSearchQuery,
-  type HybridSearchKernelConfig,
-} from '../_shared/hybrid_search_kernel.ts';
-import {
   buildHybridFulltextQueryTerms,
   sanitizeHybridQueryOutput,
   type HybridSearchQuery,
@@ -26,6 +21,12 @@ import {
   PortalHybridDeadlineError,
 } from '../_shared/portal_hybrid_deadline.ts';
 import {
+  generatePortalHybridSearchEmbedding,
+  rewritePortalHybridSearchQuery,
+  type PortalHybridKernelConfig,
+  type PortalHybridKernelProviderConfig,
+} from '../_shared/portal_hybrid_kernel.ts';
+import {
   defaultPortalHybridSecurityLogger,
   normalizePortalHybridErrorCode,
   portalHybridHmacOutcome,
@@ -43,6 +44,7 @@ import {
   PORTAL_HYBRID_MAX_RESPONSE_BYTES,
   type PortalHybridRepository,
 } from '../_shared/portal_hybrid_repository.ts';
+import { readPortalHybridProviderConfig } from '../_shared/portal_hybrid_provider.ts';
 import {
   loadPortalHmacKeyring,
   PortalHmacError,
@@ -70,6 +72,7 @@ import {
 import {
   PortalTransportError,
   readPortalLegacyAnonCredential,
+  readPortalPublishableCredential,
   readPortalRawBody,
   validatePortalInboundTransport,
   validatePortalPublishableCredential,
@@ -80,7 +83,7 @@ import {
   PortalRedisError,
   readPortalRedisTimeoutMs,
 } from '../_shared/redis_client.ts';
-import { getSupabasePublishableKey } from '../_shared/supabase_client.ts';
+import { readPortalDeploymentSha } from '../_shared/portal_security_event.ts';
 
 export const PORTAL_HYBRID_FUNCTION_NAME = 'portal_hybrid_search_v1';
 export const PORTAL_HYBRID_FUNCTION_PATH = `/functions/v1/${PORTAL_HYBRID_FUNCTION_NAME}`;
@@ -96,11 +99,18 @@ type PortalHybridHandlerOptions = {
   repository?: PortalHybridRepository;
   repositoryFactory?: (trustedPublishableKey: string) => PortalHybridRepository;
   rewriteQuery?: (
-    config: HybridSearchKernelConfig,
+    config: PortalHybridKernelConfig,
     query: string,
     signal: AbortSignal,
+    provider?: Readonly<PortalHybridKernelProviderConfig>,
   ) => Promise<HybridSearchQuery>;
-  generateEmbedding?: (semanticQuery: string, signal: AbortSignal) => Promise<number[]>;
+  generateEmbedding?: (
+    semanticQuery: string,
+    signal: AbortSignal,
+    provider?: Readonly<PortalHybridKernelProviderConfig>,
+  ) => Promise<number[]>;
+  providerConfig?: Readonly<PortalHybridKernelProviderConfig>;
+  providerConfigFactory?: () => Readonly<PortalHybridKernelProviderConfig>;
   enabled?: boolean;
   nowSeconds?: () => number;
   nowMillis?: () => number;
@@ -175,7 +185,7 @@ function validateCircuitLimits(limits: PortalHybridCircuitLimits): PortalHybridC
   return limits;
 }
 
-function buildKernelConfig(kind: PortalHybridSearchRequest['kind']): HybridSearchKernelConfig {
+function buildKernelConfig(kind: PortalHybridSearchRequest['kind']): PortalHybridKernelConfig {
   return {
     functionName: PORTAL_HYBRID_FUNCTION_NAME,
     entityLabel: kind === 'process' ? 'Process' : 'Flow',
@@ -354,14 +364,16 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
       let trustedPublishableKey: string;
       try {
         trustedPublishableKey = validatePortalPublishableCredential(
-          options.trustedPublishableKey ?? getSupabasePublishableKey(),
+          options.trustedPublishableKey ?? readPortalPublishableCredential(),
         );
         validatePortalInboundTransport({
           request,
           trustedPublishableKey,
           trustedLegacyAnonKey:
             options.trustedLegacyAnonKey === undefined
-              ? readPortalLegacyAnonCredential()
+              ? request.headers.has('authorization')
+                ? readPortalLegacyAnonCredential()
+                : null
               : options.trustedLegacyAnonKey,
         });
         event.transportOutcome = 'accepted';
@@ -382,6 +394,34 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
 
       if (!(options.enabled ?? isPortalHybridEnabled())) {
         return errorResponse(503, 'hybrid_disabled', 'Portal Hybrid search is disabled');
+      }
+
+      let providerConfig: Readonly<PortalHybridKernelProviderConfig>;
+      try {
+        providerConfig =
+          options.providerConfig ??
+          options.providerConfigFactory?.() ??
+          readPortalHybridProviderConfig();
+      } catch (_error) {
+        return errorResponse(
+          503,
+          'hybrid_upstream_unavailable',
+          'Portal Hybrid search unavailable',
+        );
+      }
+
+      let repository: PortalHybridRepository;
+      try {
+        repository =
+          options.repository ??
+          options.repositoryFactory?.(trustedPublishableKey) ??
+          createPortalHybridRepository({ publishableKey: trustedPublishableKey });
+      } catch (_error) {
+        return errorResponse(
+          503,
+          'hybrid_upstream_unavailable',
+          'Portal Hybrid search unavailable',
+        );
       }
 
       let guardLimits: PortalRouteGuardLimits;
@@ -535,10 +575,11 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           event.model = 'called';
           try {
             rawRewrite = await deadline.run(() =>
-              (options.rewriteQuery ?? rewriteHybridSearchQuery)(
+              (options.rewriteQuery ?? rewritePortalHybridSearchQuery)(
                 buildKernelConfig(hybridRequest.kind),
                 hybridRequest.query,
                 deadline.signal,
+                providerConfig,
               ),
             );
           } catch (error) {
@@ -573,9 +614,10 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           try {
             if (deadline.isExpired()) return timeoutResponse();
             embedding = await deadline.run(() =>
-              (options.generateEmbedding ?? generateHybridSearchEmbedding)(
+              (options.generateEmbedding ?? generatePortalHybridSearchEmbedding)(
                 modelOnly.semantic_query_en,
                 deadline.signal,
+                providerConfig,
               ),
             );
             modelCache = buildModelCache(rawRewrite, hybridRequest, embedding);
@@ -630,10 +672,6 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         let databasePage;
         try {
           if (deadline.isExpired()) return timeoutResponse();
-          const repository =
-            options.repository ??
-            options.repositoryFactory?.(trustedPublishableKey) ??
-            createPortalHybridRepository({ publishableKey: trustedPublishableKey });
           event.database = 'called';
           databasePage = await deadline.run(() =>
             repository.query(hybridRequest, queryTerms, modelCache.queryEmbedding, deadline.signal),
@@ -739,7 +777,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
     let deploymentSha = options.deploymentSha ?? 'unknown';
     if (options.deploymentSha === undefined) {
       try {
-        deploymentSha = Deno.env.get('PORTAL_DEPLOYMENT_SHA') ?? 'unknown';
+        deploymentSha = readPortalDeploymentSha('PORTAL_HYBRID_DEPLOYMENT_SHA');
       } catch (_error) {
         // Observability configuration must not alter the response.
       }

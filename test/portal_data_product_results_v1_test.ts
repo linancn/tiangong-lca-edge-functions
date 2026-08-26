@@ -19,10 +19,14 @@ import {
   type PortalPublishedLciaPage,
   type PortalPublishedLciaRepository,
   PortalTransportError,
+  readPortalLegacyAnonCredential,
+  readPortalPublishableCredential,
+  readPortalSupabaseUrl,
   transportSecurityOutcome,
   validatePortalPublishableCredential,
   validatePortalSupabaseUrl,
 } from '../supabase/functions/portal_data_product_results_v1/index.ts';
+import { readPortalDeploymentSha } from '../supabase/functions/_shared/portal_security_event.ts';
 
 const NOW_SECONDS = 1_800_000_000;
 const SECRET = Uint8Array.from({ length: 32 }, (_value, index) => index + 11);
@@ -35,6 +39,10 @@ const PUBLICATION_ID = '33333333-3333-4333-8333-333333333333';
 const PACKAGE_ID = '44444444-4444-4444-8444-444444444444';
 const TRUSTED_PUBLISHABLE_KEY = 'sb_publishable_test';
 const CORRELATION_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+
+function environment(values: Record<string, string | undefined>) {
+  return { get: (name: string) => values[name] };
+}
 
 function credentialJwt(role: string): string {
   return [
@@ -607,6 +615,126 @@ Deno.test('default repository receives the same resolved trusted project key', a
   });
   assertEquals((await handler(await signedRequest({ nonceSeed: 53 }))).status, 200);
   assertEquals(resolvedKeys, [TRUSTED_PUBLISHABLE_KEY]);
+});
+
+Deno.test('Portal publishable credential is dedicated and bound to the current project', () => {
+  const portalKey = 'sb_publishable_portal_project_key';
+  assertEquals(
+    readPortalPublishableCredential(
+      environment({
+        PORTAL_SUPABASE_PUBLISHABLE_KEY: portalKey,
+        SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ portal: portalKey, web: 'sb_publishable_web' }),
+        SUPABASE_URL: 'https://current-project.supabase.co',
+        REMOTE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_forbidden_fallback',
+      }),
+    ),
+    portalKey,
+  );
+  assertEquals(
+    readPortalLegacyAnonCredential(
+      environment({ SUPABASE_ANON_KEY: LEGACY_ANON_KEY, SUPABASE_URL: 'http://kong:8000' }),
+    ),
+    LEGACY_ANON_KEY,
+  );
+  assertEquals(
+    readPortalLegacyAnonCredential(
+      environment({
+        SUPABASE_ANON_KEY: LEGACY_ANON_KEY,
+        SUPABASE_URL: 'https://current-project.supabase.co',
+      }),
+    ),
+    null,
+  );
+
+  for (const values of [
+    {
+      REMOTE_SUPABASE_PUBLISHABLE_KEY: portalKey,
+      SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ portal: portalKey }),
+      SUPABASE_URL: 'https://current-project.supabase.co',
+    },
+    {
+      PORTAL_SUPABASE_PUBLISHABLE_KEY: portalKey,
+      SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ otherProject: 'sb_publishable_other_project' }),
+      SUPABASE_URL: 'https://current-project.supabase.co',
+    },
+    {
+      PORTAL_SUPABASE_PUBLISHABLE_KEY: 'sb_secret_forbidden_portal',
+      SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ secret: 'sb_secret_forbidden_portal' }),
+      SUPABASE_URL: 'https://current-project.supabase.co',
+    },
+    {
+      PORTAL_SUPABASE_PUBLISHABLE_KEY: ` ${portalKey}`,
+      SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ portal: portalKey }),
+      SUPABASE_URL: 'https://current-project.supabase.co',
+    },
+    {
+      PORTAL_SUPABASE_PUBLISHABLE_KEY: portalKey,
+      SUPABASE_PUBLISHABLE_KEYS: '{bad-json',
+      SUPABASE_URL: 'https://current-project.supabase.co',
+    },
+  ]) {
+    assertThrows(
+      () => readPortalPublishableCredential(environment(values)),
+      PortalTransportError,
+      'portal_transport_config_invalid',
+    );
+  }
+
+  assertEquals(
+    readPortalSupabaseUrl(
+      environment({
+        SUPABASE_URL: 'https://current-project.supabase.co',
+        REMOTE_SUPABASE_URL: 'https://wrong-project.supabase.co',
+      }),
+    ),
+    'https://current-project.supabase.co',
+  );
+  assertEquals(
+    readPortalSupabaseUrl(environment({ SUPABASE_URL: 'http://kong:8000' })),
+    'http://kong:8000',
+  );
+  assertEquals(
+    readPortalPublishableCredential(
+      environment({
+        PORTAL_SUPABASE_PUBLISHABLE_KEY: portalKey,
+        SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: portalKey }),
+        SUPABASE_URL: 'http://kong:8000',
+      }),
+    ),
+    portalKey,
+  );
+  assertThrows(
+    () => readPortalSupabaseUrl(environment({ SUPABASE_URL: 'http://api.supabase.internal:8000' })),
+    PortalTransportError,
+    'portal_transport_config_invalid',
+  );
+  assertThrows(
+    () =>
+      readPortalSupabaseUrl(
+        environment({ REMOTE_SUPABASE_URL: 'https://wrong-project.supabase.co' }),
+      ),
+    PortalTransportError,
+    'portal_transport_config_invalid',
+  );
+});
+
+Deno.test('Portal LCIA and Hybrid deployment provenance read only their own exact SHA', () => {
+  const lciaSha = 'a'.repeat(40);
+  const hybridSha = 'b'.repeat(64);
+  const env = environment({
+    PORTAL_LCIA_DEPLOYMENT_SHA: lciaSha.toUpperCase(),
+    PORTAL_HYBRID_DEPLOYMENT_SHA: hybridSha,
+    PORTAL_DEPLOYMENT_SHA: 'c'.repeat(40),
+  });
+  assertEquals(readPortalDeploymentSha('PORTAL_LCIA_DEPLOYMENT_SHA', env), lciaSha);
+  assertEquals(readPortalDeploymentSha('PORTAL_HYBRID_DEPLOYMENT_SHA', env), hybridSha);
+  assertEquals(
+    readPortalDeploymentSha(
+      'PORTAL_HYBRID_DEPLOYMENT_SHA',
+      environment({ PORTAL_LCIA_DEPLOYMENT_SHA: lciaSha }),
+    ),
+    'unknown',
+  );
 });
 
 Deno.test('missing or bad HMAC is rejected before Redis, JSON, or database work', async () => {
