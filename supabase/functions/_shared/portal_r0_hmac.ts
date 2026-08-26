@@ -1,4 +1,5 @@
 import {
+  constantTimeEqual,
   decodeCanonicalBase64Url,
   type PortalHmacKey,
   type PortalHmacKeyring,
@@ -49,17 +50,19 @@ export function loadPortalR0HmacKeyring(env: PortalR0Environment = Deno.env): Po
   );
   const previousKeyId = env.get('PORTAL_R0_HMAC_KEY_ID_PREVIOUS');
   const previousSecret = env.get('PORTAL_R0_HMAC_SECRET_PREVIOUS');
-  if ((previousKeyId === undefined) !== (previousSecret === undefined)) {
+  const previousKeyIdAbsent = previousKeyId === undefined || previousKeyId === '';
+  const previousSecretAbsent = previousSecret === undefined || previousSecret === '';
+  if (previousKeyIdAbsent !== previousSecretAbsent) {
     throw new PortalHmacError('portal_hmac_config_invalid');
   }
-  if (previousKeyId === undefined || previousSecret === undefined) return { current };
+  if (previousKeyIdAbsent && previousSecretAbsent) return { current };
 
   const previous = readConfiguredKey(
     env,
     'PORTAL_R0_HMAC_KEY_ID_PREVIOUS',
     'PORTAL_R0_HMAC_SECRET_PREVIOUS',
   );
-  if (previous.keyId === current.keyId) {
+  if (previous.keyId === current.keyId || constantTimeEqual(previous.secret, current.secret)) {
     throw new PortalHmacError('portal_hmac_config_invalid');
   }
   return { current, previous };

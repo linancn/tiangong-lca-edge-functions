@@ -64,10 +64,43 @@ Deno.test('R0 HMAC keyring requires a complete, distinct rotation pair', () => {
       PORTAL_R0_HMAC_KEY_ID_CURRENT: 'current',
       PORTAL_R0_HMAC_SECRET_CURRENT: encodeBase64Url(new Uint8Array(31)),
     },
+    {
+      PORTAL_R0_HMAC_KEY_ID_CURRENT: 'current',
+      PORTAL_R0_HMAC_SECRET_CURRENT: currentSecret,
+      PORTAL_R0_HMAC_KEY_ID_PREVIOUS: 'previous',
+      PORTAL_R0_HMAC_SECRET_PREVIOUS: currentSecret,
+    },
   ]) {
     assertThrows(() => loadPortalR0HmacKeyring(environment(values)), Error);
   }
 });
+
+Deno.test(
+  'R0 optional previous pair treats both empty values as absent but rejects one empty side',
+  () => {
+    const keyring = loadPortalR0HmacKeyring(
+      environment({
+        PORTAL_R0_HMAC_KEY_ID_CURRENT: 'current',
+        PORTAL_R0_HMAC_SECRET_CURRENT: currentSecret,
+        PORTAL_R0_HMAC_KEY_ID_PREVIOUS: '',
+        PORTAL_R0_HMAC_SECRET_PREVIOUS: '',
+      }),
+    );
+    assertEquals(keyring.previous, undefined);
+    assertThrows(
+      () =>
+        loadPortalR0HmacKeyring(
+          environment({
+            PORTAL_R0_HMAC_KEY_ID_CURRENT: 'current',
+            PORTAL_R0_HMAC_SECRET_CURRENT: currentSecret,
+            PORTAL_R0_HMAC_KEY_ID_PREVIOUS: 'previous',
+            PORTAL_R0_HMAC_SECRET_PREVIOUS: '',
+          }),
+        ),
+      Error,
+    );
+  },
+);
 
 Deno.test('R0 publishable credential is dedicated and belongs to the current project', () => {
   const key = 'sb_publishable_r0_fixture_abcdefghijklmnopqrstuvwxyz';

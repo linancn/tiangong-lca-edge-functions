@@ -109,6 +109,18 @@ Deno.test('R0 Redis reads complete Standard and Upstash fixture configuration on
     ).provider,
     'upstash',
   );
+
+  assertEquals(
+    readPortalR0RedisConfig(
+      environment({
+        ...common,
+        PORTAL_R0_REDIS_CLIENT_TYPE: 'standard',
+        PORTAL_R0_REDIS_URL: 'redis://127.0.0.1:6380',
+        PORTAL_R0_REDIS_PASSWORD: '',
+      }),
+    ).redisPassword,
+    undefined,
+  );
 });
 
 Deno.test(

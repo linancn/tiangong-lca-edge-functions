@@ -38,7 +38,7 @@ function environmentValue(env: PortalR0Environment, name: string): string | unde
   } catch (_error) {
     throw new PortalRedisError();
   }
-  if (value === undefined) return undefined;
+  if (value === undefined || value === '') return undefined;
   if (value.length === 0 || value !== value.trim() || /[\u0000-\u001f\u007f-\u009f]/u.test(value)) {
     throw new PortalRedisError();
   }
