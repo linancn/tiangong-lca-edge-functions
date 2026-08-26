@@ -1,4 +1,6 @@
 import {
+  portalHybridQuerySchema,
+  portalHybridSearchRequestSchema,
   portalPublicHybridCandidatePageSchema,
   type PortalHybridSearchRequest,
   type PortalPublicHybridCandidatePage,
@@ -83,6 +85,19 @@ export function createPortalHybridRepository(
 
   return {
     async query(request, queryTerms, queryEmbedding, signal) {
+      const parsedRequest = portalHybridSearchRequestSchema.safeParse(request);
+      if (!parsedRequest.success || queryTerms.length < 1 || queryTerms.length > 12) {
+        throw new PortalHybridRepositoryError('contract_failure');
+      }
+      const parsedTerms = queryTerms.map((term) => portalHybridQuerySchema.safeParse(term));
+      if (
+        parsedTerms.some((term) => !term.success) ||
+        new Set(parsedTerms.map((term) => (term.success ? term.data : ''))).size !==
+          parsedTerms.length
+      ) {
+        throw new PortalHybridRepositoryError('contract_failure');
+      }
+      const normalizedTerms = parsedTerms.map((term) => (term.success ? term.data : ''));
       const response = await fetchImpl(`${supabaseUrl}/rest/v1/rpc/portal_hybrid_search_v1`, {
         method: 'POST',
         headers: {
@@ -92,11 +107,11 @@ export function createPortalHybridRepository(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          p_kind: request.kind,
-          p_query_terms: queryTerms,
+          p_kind: parsedRequest.data.kind,
+          p_query_terms: normalizedTerms,
           p_query_embedding: serializePortalHybridEmbedding(queryEmbedding),
-          p_filters: request.filters,
-          p_limit: request.limit,
+          p_filters: parsedRequest.data.filters,
+          p_limit: parsedRequest.data.limit,
         }),
         signal,
       }).catch(() => {
@@ -107,7 +122,7 @@ export function createPortalHybridRepository(
       }
       const value = await readRepositoryResponse(response);
       const parsed = portalPublicHybridCandidatePageSchema.safeParse(value);
-      if (!parsed.success || parsed.data.kind !== request.kind) {
+      if (!parsed.success || parsed.data.kind !== parsedRequest.data.kind) {
         throw new PortalHybridRepositoryError('contract_failure');
       }
       return parsed.data;

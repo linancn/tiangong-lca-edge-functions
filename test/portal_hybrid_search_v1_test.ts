@@ -403,6 +403,27 @@ Deno.test('Portal Hybrid repository rejects private or malformed database DTOs',
     repository.query(REQUEST, ['steel'], VECTOR, new AbortController().signal),
   );
   assertEquals((error as PortalHybridRepositoryError).code, 'contract_failure');
+
+  const validRepository = createPortalHybridRepository({
+    supabaseUrl: 'https://example.supabase.co',
+    publishableKey: TRUSTED_PUBLISHABLE_KEY,
+    fetchImpl: () => Promise.resolve(Response.json(databasePage())),
+  });
+  for (const [request, terms] of [
+    [{ ...REQUEST, data_source: 'tg' }, ['steel']],
+    [REQUEST, Array.from({ length: 13 }, (_value, index) => `term-${index}`)],
+    [REQUEST, ['duplicate', 'duplicate']],
+  ] as const) {
+    const boundaryError = await assertRejects(() =>
+      validRepository.query(
+        request as PortalHybridSearchRequest,
+        [...terms],
+        VECTOR,
+        new AbortController().signal,
+      ),
+    );
+    assertEquals((boundaryError as PortalHybridRepositoryError).code, 'contract_failure');
+  }
 });
 
 Deno.test(
