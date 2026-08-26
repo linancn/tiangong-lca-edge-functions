@@ -77,8 +77,12 @@ class MemoryPortalRedis implements PortalRedisAdapter {
     const minute = this.counter(keys[0], now);
     const daily = this.counter(keys[1], now);
     const leases = this.state.leases.get(keys[2]) ?? new Map<string, number>();
+    let recoveredLeaseCount = 0;
     for (const [member, expires] of leases) {
-      if (expires <= now) leases.delete(member);
+      if (expires <= now) {
+        leases.delete(member);
+        recoveredLeaseCount += 1;
+      }
     }
     this.state.leases.set(keys[2], leases);
     if (minute + cost > minuteLimit || daily + cost > dailyLimit) {
@@ -87,10 +91,11 @@ class MemoryPortalRedis implements PortalRedisAdapter {
         minuteLimit - minute,
         dailyLimit - daily,
         concurrencyLimit - leases.size,
+        recoveredLeaseCount,
       ]);
     }
     if (leases.size >= concurrencyLimit) {
-      return Promise.resolve([2, minuteLimit - minute, dailyLimit - daily, 0]);
+      return Promise.resolve([2, minuteLimit - minute, dailyLimit - daily, 0, recoveredLeaseCount]);
     }
     this.state.counters.set(keys[0], {
       value: String(minute + cost),
@@ -106,6 +111,7 @@ class MemoryPortalRedis implements PortalRedisAdapter {
       minuteLimit - minute - cost,
       dailyLimit - daily - cost,
       concurrencyLimit - leases.size,
+      recoveredLeaseCount,
     ]);
   }
 
@@ -300,6 +306,7 @@ Deno.test('Portal concurrency lease recovers after TTL without explicit release'
     redis,
   );
   assertEquals(recovered.status, 'admitted');
+  assertEquals(recovered.recoveredLeaseCount, 1);
 });
 
 Deno.test('Portal cache keys are hash-only, namespaced, and TTL bounded', async () => {

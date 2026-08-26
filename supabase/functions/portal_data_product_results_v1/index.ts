@@ -27,6 +27,15 @@ import {
   PortalRedisError,
   readPortalRedisTimeoutMs,
 } from '../_shared/redis_client.ts';
+import {
+  defaultPortalSecurityLogger,
+  emitPortalSecurityEvent,
+  normalizePortalSecurityErrorCode,
+  type PortalSecurityCacheStatus,
+  type PortalSecurityErrorCode,
+  type PortalSecurityLogger,
+  type PortalSecurityMode,
+} from '../_shared/portal_security_event.ts';
 import { getSupabasePublishableKey, getSupabaseUrl } from '../_shared/supabase_client.ts';
 
 export const PORTAL_LCIA_FUNCTION_NAME = 'portal_data_product_results_v1';
@@ -443,6 +452,9 @@ type PortalDataProductResultsHandlerOptions = {
   redisTimeoutMs?: number;
   trustedPublishableKey?: string;
   trustedLegacyAnonKey?: string | null;
+  deploymentSha?: string;
+  logger?: PortalSecurityLogger;
+  monotonicNow?: () => number;
 };
 
 function jsonResponse(status: number, payload: unknown, extraHeaders?: HeadersInit): Response {
@@ -475,217 +487,286 @@ function authFailure(error: unknown): Response {
   return errorResponse(401, 'portal_auth_failed', 'Portal request authentication failed');
 }
 
+async function responseSecurityErrorCode(
+  response: Response,
+): Promise<PortalSecurityErrorCode | null> {
+  if (response.status < 400) return null;
+  try {
+    const payload = await response.clone().json();
+    return normalizePortalSecurityErrorCode(
+      payload && typeof payload === 'object' ? (payload as Record<string, unknown>).code : null,
+    );
+  } catch (_error) {
+    return 'internal_error';
+  }
+}
+
 export function createPortalDataProductResultsHandler(
   options: PortalDataProductResultsHandlerOptions = {},
 ) {
   return async (request: Request): Promise<Response> => {
-    let rawBody: Uint8Array;
-    try {
-      rawBody = await readPortalRawBody(request);
-    } catch (_error) {
-      return errorResponse(413, 'request_too_large', 'Request body exceeds the allowed size');
-    }
-
-    let verification;
-    try {
-      verification = await verifyPortalHmacRequest({
-        request,
-        rawBody,
-        expectedFunctionPath: PORTAL_LCIA_FUNCTION_PATH,
-        allowedRequestPaths: [PORTAL_LCIA_FUNCTION_PATH, PORTAL_LCIA_RUNTIME_PATH],
-        keyring: options.keyring ?? loadPortalHmacKeyring(),
-        nowSeconds: options.nowSeconds?.(),
-      });
-    } catch (error) {
-      return authFailure(error);
-    }
-
-    let trustedPublishableKey: string;
-    try {
-      trustedPublishableKey = options.trustedPublishableKey ?? getSupabasePublishableKey();
-      validatePortalInboundTransport({
-        request,
-        trustedPublishableKey,
-        trustedLegacyAnonKey:
-          options.trustedLegacyAnonKey === undefined
-            ? readPortalLegacyAnonCredential()
-            : options.trustedLegacyAnonKey,
-      });
-    } catch (error) {
-      if (
-        !(error instanceof PortalTransportError) ||
-        error.code === 'portal_transport_config_invalid'
-      ) {
-        return errorResponse(
-          503,
-          'portal_auth_unavailable',
-          'Portal request authentication unavailable',
-        );
+    const readMonotonicTime = () => {
+      try {
+        const value = options.monotonicNow?.() ?? performance.now();
+        return Number.isFinite(value) ? value : 0;
+      } catch (_error) {
+        return 0;
       }
-      return errorResponse(401, 'portal_auth_failed', 'Portal request authentication failed');
-    }
+    };
+    const startedAt = readMonotonicTime();
+    let eventMode: PortalSecurityMode | null = null;
+    let eventCache: PortalSecurityCacheStatus = 'not_checked';
+    let eventRows: number | null = null;
+    let eventMatchedKey: 'current' | 'previous' | null = null;
+    let eventRecoveredLeaseCount = 0;
 
-    let guardLimits: PortalRouteGuardLimits;
-    let guardTiming: PortalGuardTiming;
-    try {
-      guardTiming = {
-        redisTimeoutMs: options.redisTimeoutMs ?? readPortalRedisTimeoutMs(),
-        upstreamTimeoutMs: options.upstreamTimeoutMs ?? upstreamTimeoutFromEnvironment(),
-      };
-      guardLimits = options.guardLimits
-        ? validatePortalLciaGuardLimits(options.guardLimits, guardTiming)
-        : readPortalLciaGuardLimits(Deno.env, guardTiming);
-    } catch (_error) {
-      return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
-    }
-
-    let redis: PortalRedisAdapter;
-    let ownsRedis = false;
-    try {
-      redis = options.redis ?? (await (options.redisFactory ?? createPortalRedisAdapter)());
-      ownsRedis = options.redis === undefined;
-    } catch (_error) {
-      return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
-    }
-
-    let leaseId: string | undefined;
-    try {
-      const nonceRegistered = await registerPortalNonce(
-        { keyId: verification.keyId, nonce: verification.nonce },
-        redis,
-      );
-      if (!nonceRegistered) {
-        return errorResponse(403, 'replay_rejected', 'Portal request replay rejected');
+    const execute = async (): Promise<Response> => {
+      let rawBody: Uint8Array;
+      try {
+        rawBody = await readPortalRawBody(request);
+      } catch (_error) {
+        return errorResponse(413, 'request_too_large', 'Request body exceeds the allowed size');
       }
 
-      const guard = await redisEvalAtomicGuard(
-        {
-          route: PORTAL_LCIA_FUNCTION_NAME,
-          limits: guardLimits,
-          nowMillis: options.nowMillis?.(),
-        },
-        redis,
-      );
-      if (guard.status === 'budget_exhausted') {
-        return errorResponse(429, 'budget_exhausted', 'Portal route budget exhausted');
+      let verification;
+      try {
+        verification = await verifyPortalHmacRequest({
+          request,
+          rawBody,
+          expectedFunctionPath: PORTAL_LCIA_FUNCTION_PATH,
+          allowedRequestPaths: [PORTAL_LCIA_FUNCTION_PATH, PORTAL_LCIA_RUNTIME_PATH],
+          keyring: options.keyring ?? loadPortalHmacKeyring(),
+          nowSeconds: options.nowSeconds?.(),
+        });
+        eventMatchedKey = verification.matchedKey;
+      } catch (error) {
+        return authFailure(error);
       }
-      if (guard.status === 'concurrency_exhausted') {
-        return errorResponse(429, 'concurrency_exhausted', 'Portal route concurrency exhausted');
+
+      let trustedPublishableKey: string;
+      try {
+        trustedPublishableKey = options.trustedPublishableKey ?? getSupabasePublishableKey();
+        validatePortalInboundTransport({
+          request,
+          trustedPublishableKey,
+          trustedLegacyAnonKey:
+            options.trustedLegacyAnonKey === undefined
+              ? readPortalLegacyAnonCredential()
+              : options.trustedLegacyAnonKey,
+        });
+      } catch (error) {
+        if (
+          !(error instanceof PortalTransportError) ||
+          error.code === 'portal_transport_config_invalid'
+        ) {
+          return errorResponse(
+            503,
+            'portal_auth_unavailable',
+            'Portal request authentication unavailable',
+          );
+        }
+        return errorResponse(401, 'portal_auth_failed', 'Portal request authentication failed');
       }
-      if (!('leaseId' in guard)) {
+
+      let guardLimits: PortalRouteGuardLimits;
+      let guardTiming: PortalGuardTiming;
+      try {
+        guardTiming = {
+          redisTimeoutMs: options.redisTimeoutMs ?? readPortalRedisTimeoutMs(),
+          upstreamTimeoutMs: options.upstreamTimeoutMs ?? upstreamTimeoutFromEnvironment(),
+        };
+        guardLimits = options.guardLimits
+          ? validatePortalLciaGuardLimits(options.guardLimits, guardTiming)
+          : readPortalLciaGuardLimits(Deno.env, guardTiming);
+      } catch (_error) {
         return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
       }
-      leaseId = guard.leaseId;
 
-      let requestPayload: unknown;
+      let redis: PortalRedisAdapter;
+      let ownsRedis = false;
       try {
-        requestPayload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(rawBody));
+        redis = options.redis ?? (await (options.redisFactory ?? createPortalRedisAdapter)());
+        ownsRedis = options.redis === undefined;
       } catch (_error) {
-        return errorResponse(400, 'invalid_request', 'Invalid Portal LCIA request');
-      }
-      const parsedRequest = portalPublishedLciaRequestSchema.safeParse(requestPayload);
-      if (!parsedRequest.success) {
-        return errorResponse(400, 'invalid_request', 'Invalid Portal LCIA request');
+        return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
       }
 
-      let cached: string | null;
+      let leaseId: string | undefined;
       try {
-        cached = await readPortalResponseCache(
-          { route: PORTAL_LCIA_FUNCTION_NAME, bodyHash: verification.bodyHash },
+        const nonceRegistered = await registerPortalNonce(
+          { keyId: verification.keyId, nonce: verification.nonce },
           redis,
         );
-      } catch (_error) {
-        return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
-      }
-      if (cached !== null) {
-        try {
-          const parsedCached = portalPublishedLciaPageSchema.safeParse(JSON.parse(cached));
-          if (parsedCached.success && parsedCached.data.mode === parsedRequest.data.mode) {
-            return jsonResponse(200, parsedCached.data, { 'X-Portal-Cache': 'hit' });
-          }
-        } catch (_error) {
-          // A malformed cache entry is treated as an unavailable security dependency below.
+        if (!nonceRegistered) {
+          return errorResponse(403, 'replay_rejected', 'Portal request replay rejected');
         }
-        return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
-      }
 
-      const timeoutMs = guardTiming.upstreamTimeoutMs;
-      if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 8_000) {
-        return errorResponse(
-          503,
-          'published_lcia_unavailable',
-          'Published LCIA results unavailable',
+        const guard = await redisEvalAtomicGuard(
+          {
+            route: PORTAL_LCIA_FUNCTION_NAME,
+            limits: guardLimits,
+            nowMillis: options.nowMillis?.(),
+          },
+          redis,
         );
-      }
-      const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
-      let page: PortalPublishedLciaPage | null;
-      try {
-        const repository =
-          options.repository ??
-          options.repositoryFactory?.(trustedPublishableKey) ??
-          createPortalPublishedLciaRepository({ publishableKey: trustedPublishableKey });
-        page = await repository.query(parsedRequest.data, abortController.signal);
-      } catch (_error) {
+        eventRecoveredLeaseCount = guard.recoveredLeaseCount;
+        if (guard.status === 'budget_exhausted') {
+          return errorResponse(429, 'budget_exhausted', 'Portal route budget exhausted');
+        }
+        if (guard.status === 'concurrency_exhausted') {
+          return errorResponse(429, 'concurrency_exhausted', 'Portal route concurrency exhausted');
+        }
+        if (!('leaseId' in guard)) {
+          return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
+        }
+        leaseId = guard.leaseId;
+
+        let requestPayload: unknown;
+        try {
+          requestPayload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(rawBody));
+        } catch (_error) {
+          return errorResponse(400, 'invalid_request', 'Invalid Portal LCIA request');
+        }
+        const parsedRequest = portalPublishedLciaRequestSchema.safeParse(requestPayload);
+        if (!parsedRequest.success) {
+          return errorResponse(400, 'invalid_request', 'Invalid Portal LCIA request');
+        }
+        eventMode = parsedRequest.data.mode;
+
+        let cached: string | null;
+        try {
+          cached = await readPortalResponseCache(
+            { route: PORTAL_LCIA_FUNCTION_NAME, bodyHash: verification.bodyHash },
+            redis,
+          );
+        } catch (_error) {
+          eventCache = 'invalid';
+          return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
+        }
+        if (cached !== null) {
+          try {
+            const parsedCached = portalPublishedLciaPageSchema.safeParse(JSON.parse(cached));
+            if (parsedCached.success && parsedCached.data.mode === parsedRequest.data.mode) {
+              eventCache = 'hit';
+              eventRows = parsedCached.data.rows.length;
+              return jsonResponse(200, parsedCached.data, { 'X-Portal-Cache': 'hit' });
+            }
+          } catch (_error) {
+            // A malformed cache entry is treated as an unavailable security dependency below.
+          }
+          eventCache = 'invalid';
+          return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
+        }
+        eventCache = 'miss';
+
+        const timeoutMs = guardTiming.upstreamTimeoutMs;
+        if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 8_000) {
+          return errorResponse(
+            503,
+            'published_lcia_unavailable',
+            'Published LCIA results unavailable',
+          );
+        }
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+        let page: PortalPublishedLciaPage | null;
+        try {
+          const repository =
+            options.repository ??
+            options.repositoryFactory?.(trustedPublishableKey) ??
+            createPortalPublishedLciaRepository({ publishableKey: trustedPublishableKey });
+          page = await repository.query(parsedRequest.data, abortController.signal);
+        } catch (_error) {
+          return errorResponse(
+            503,
+            'published_lcia_unavailable',
+            'Published LCIA results unavailable',
+          );
+        } finally {
+          clearTimeout(timeoutId);
+        }
+        if (page === null) {
+          return errorResponse(
+            404,
+            'published_lcia_unavailable',
+            'Published LCIA results unavailable',
+          );
+        }
+        const parsedPage = portalPublishedLciaPageSchema.safeParse(page);
+        if (!parsedPage.success || parsedPage.data.mode !== parsedRequest.data.mode) {
+          return errorResponse(
+            503,
+            'published_lcia_unavailable',
+            'Published LCIA results unavailable',
+          );
+        }
+        const serialized = JSON.stringify(parsedPage.data);
+        if (new TextEncoder().encode(serialized).byteLength > PORTAL_LCIA_MAX_RESPONSE_BYTES) {
+          return errorResponse(
+            503,
+            'published_lcia_unavailable',
+            'Published LCIA results unavailable',
+          );
+        }
+        try {
+          await writePortalResponseCache(
+            {
+              route: PORTAL_LCIA_FUNCTION_NAME,
+              bodyHash: verification.bodyHash,
+              value: serialized,
+              ttlSeconds: guardLimits.cacheTtlSeconds,
+            },
+            redis,
+          );
+        } catch (_error) {
+          eventCache = 'write_failed';
+          // Admission already succeeded. A best-effort cache write never widens database authority.
+        }
+        eventRows = parsedPage.data.rows.length;
+        return jsonResponse(200, parsedPage.data, { 'X-Portal-Cache': 'miss' });
+      } catch (error) {
+        if (error instanceof PortalRedisError) {
+          return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
+        }
         return errorResponse(
           503,
           'published_lcia_unavailable',
           'Published LCIA results unavailable',
         );
       } finally {
-        clearTimeout(timeoutId);
+        if (leaseId) {
+          await releasePortalConcurrencyLease(
+            { route: PORTAL_LCIA_FUNCTION_NAME, leaseId },
+            redis,
+          ).catch(() => undefined);
+        }
+        if (ownsRedis) await redis.close().catch(() => undefined);
       }
-      if (page === null) {
-        return errorResponse(
-          404,
-          'published_lcia_unavailable',
-          'Published LCIA results unavailable',
-        );
-      }
-      const parsedPage = portalPublishedLciaPageSchema.safeParse(page);
-      if (!parsedPage.success || parsedPage.data.mode !== parsedRequest.data.mode) {
-        return errorResponse(
-          503,
-          'published_lcia_unavailable',
-          'Published LCIA results unavailable',
-        );
-      }
-      const serialized = JSON.stringify(parsedPage.data);
-      if (new TextEncoder().encode(serialized).byteLength > PORTAL_LCIA_MAX_RESPONSE_BYTES) {
-        return errorResponse(
-          503,
-          'published_lcia_unavailable',
-          'Published LCIA results unavailable',
-        );
-      }
-      try {
-        await writePortalResponseCache(
-          {
-            route: PORTAL_LCIA_FUNCTION_NAME,
-            bodyHash: verification.bodyHash,
-            value: serialized,
-            ttlSeconds: guardLimits.cacheTtlSeconds,
-          },
-          redis,
-        );
-      } catch (_error) {
-        // Admission already succeeded. A best-effort cache write never widens database authority.
-      }
-      return jsonResponse(200, parsedPage.data, { 'X-Portal-Cache': 'miss' });
-    } catch (error) {
-      if (error instanceof PortalRedisError) {
-        return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
-      }
-      return errorResponse(503, 'published_lcia_unavailable', 'Published LCIA results unavailable');
-    } finally {
-      if (leaseId) {
-        await releasePortalConcurrencyLease(
-          { route: PORTAL_LCIA_FUNCTION_NAME, leaseId },
-          redis,
-        ).catch(() => undefined);
-      }
-      if (ownsRedis) await redis.close().catch(() => undefined);
+    };
+
+    let response: Response;
+    try {
+      response = await execute();
+    } catch (_error) {
+      response = errorResponse(
+        503,
+        'published_lcia_unavailable',
+        'Published LCIA results unavailable',
+      );
     }
+    const errorCode = await responseSecurityErrorCode(response);
+    await emitPortalSecurityEvent(options.logger ?? defaultPortalSecurityLogger, {
+      mode: eventMode,
+      cache: eventCache,
+      latencyMs: Math.max(0, Math.round(readMonotonicTime() - startedAt)),
+      rows: eventRows,
+      status: response.status,
+      errorCode,
+      matchedKey: eventMatchedKey,
+      recoveredLeaseCount: eventRecoveredLeaseCount,
+      deploymentSha: options.deploymentSha ?? Deno.env.get('PORTAL_DEPLOYMENT_SHA') ?? 'unknown',
+    });
+    return response;
   };
 }
 

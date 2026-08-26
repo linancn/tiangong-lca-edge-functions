@@ -29,16 +29,16 @@ local daily_ttl = tonumber(ARGV[8])
 local lease_set_ttl = tonumber(ARGV[9])
 local cost = tonumber(ARGV[10])
 
-redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', now_ms)
+local recovered_lease_count = tonumber(redis.call('ZREMRANGEBYSCORE', KEYS[3], '-inf', now_ms))
 local concurrency = tonumber(redis.call('ZCARD', KEYS[3]))
 local minute_current = tonumber(redis.call('GET', KEYS[1]) or '0')
 local daily_current = tonumber(redis.call('GET', KEYS[2]) or '0')
 
 if minute_current + cost > minute_limit or daily_current + cost > daily_limit then
-  return {1, minute_limit - minute_current, daily_limit - daily_current, concurrency_limit - concurrency}
+  return {1, minute_limit - minute_current, daily_limit - daily_current, concurrency_limit - concurrency, recovered_lease_count}
 end
 if concurrency >= concurrency_limit then
-  return {2, minute_limit - minute_current, daily_limit - daily_current, 0}
+  return {2, minute_limit - minute_current, daily_limit - daily_current, 0, recovered_lease_count}
 end
 
 local minute_after = tonumber(redis.call('INCRBY', KEYS[1], cost))
@@ -48,7 +48,7 @@ if daily_after == cost then redis.call('EXPIRE', KEYS[2], daily_ttl) end
 redis.call('ZADD', KEYS[3], lease_expires_ms, lease_id)
 redis.call('EXPIRE', KEYS[3], lease_set_ttl)
 
-return {0, minute_limit - minute_after, daily_limit - daily_after, concurrency_limit - concurrency - 1}
+return {0, minute_limit - minute_after, daily_limit - daily_after, concurrency_limit - concurrency - 1, recovered_lease_count}
 `;
 
 const PORTAL_RELEASE_LEASE_LUA = `
@@ -75,12 +75,14 @@ export type PortalGuardAdmission =
       remainingMinute: number;
       remainingDaily: number;
       remainingConcurrency: number;
+      recoveredLeaseCount: number;
     }
   | {
       status: 'budget_exhausted' | 'concurrency_exhausted';
       remainingMinute: number;
       remainingDaily: number;
       remainingConcurrency: number;
+      recoveredLeaseCount: number;
     };
 
 function environmentValue(env: PortalRedisEnvironment, name: string): string | undefined {
@@ -264,14 +266,17 @@ export async function redisEvalAtomicGuard(
         String(cost),
       ],
     );
-    if (!Array.isArray(result) || result.length !== 4) throw new PortalRedisError();
+    if (!Array.isArray(result) || result.length !== 5) throw new PortalRedisError();
     const values = result.map(finiteInteger);
     if (values.some((value) => value === null)) throw new PortalRedisError();
-    const [code, remainingMinute, remainingDaily, remainingConcurrency] = values as number[];
+    const [code, remainingMinute, remainingDaily, remainingConcurrency, recoveredLeaseCount] =
+      values as number[];
+    if (recoveredLeaseCount < 0) throw new PortalRedisError();
     const common = {
       remainingMinute: Math.max(0, remainingMinute),
       remainingDaily: Math.max(0, remainingDaily),
       remainingConcurrency: Math.max(0, remainingConcurrency),
+      recoveredLeaseCount,
     };
     if (code === 0) return { status: 'admitted', leaseId, ...common };
     if (code === 1) return { status: 'budget_exhausted', ...common };

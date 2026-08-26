@@ -164,7 +164,7 @@ class HandlerRedis implements PortalRedisAdapter {
   readonly calls: string[] = [];
   readonly nonces = new Set<string>();
   readonly cache = new Map<string, string>();
-  guardResult: unknown = [0, 9, 99, 1];
+  guardResult: unknown = [0, 9, 99, 1, 0];
   failSetNx = false;
   failGuard = false;
 
@@ -227,6 +227,8 @@ function handlerOptions(redis: HandlerRedis, database: PortalPublishedLciaReposi
     redisTimeoutMs: 500,
     trustedPublishableKey: TRUSTED_PUBLISHABLE_KEY,
     trustedLegacyAnonKey: LEGACY_ANON_KEY,
+    deploymentSha: 'd'.repeat(40),
+    logger: () => undefined,
   };
 }
 
@@ -245,6 +247,107 @@ Deno.test('signed Portal LCIA request returns the exact locator-free database DT
   assertEquals(JSON.stringify(page()).includes('bucket'), false);
   assertEquals(JSON.stringify(page()).includes('locator'), false);
 });
+
+Deno.test('Portal emits exactly one allowlisted structured event per request', async () => {
+  const redis = new HandlerRedis();
+  redis.guardResult = [0, 9, 99, 1, 3];
+  const events: Array<Record<string, unknown>> = [];
+  const times = [100, 125];
+  const handler = createPortalDataProductResultsHandler({
+    ...handlerOptions(redis, repository(page())),
+    deploymentSha: 'A'.repeat(40),
+    monotonicNow: () => times.shift() ?? 125,
+    logger: (event) => {
+      events.push({ ...event });
+    },
+  });
+  const response = await handler(await signedRequest({ nonceSeed: 60 }));
+  assertEquals(response.status, 200);
+  assertEquals(events, [
+    {
+      schemaVersion: 'portal.security-event.v1',
+      route: 'portal_data_product_results_v1',
+      mode: 'process_all_impacts',
+      cache: 'miss',
+      latencyMs: 25,
+      rows: 1,
+      status: 200,
+      errorCode: null,
+      matchedKey: 'current',
+      recoveredLeaseCount: 3,
+      deploymentSha: 'a'.repeat(40),
+    },
+  ]);
+  assertEquals(Object.keys(events[0]).sort(), [
+    'cache',
+    'deploymentSha',
+    'errorCode',
+    'latencyMs',
+    'matchedKey',
+    'mode',
+    'recoveredLeaseCount',
+    'route',
+    'rows',
+    'schemaVersion',
+    'status',
+  ]);
+  const serializedEvent = JSON.stringify(events[0]);
+  for (const forbidden of [
+    PROCESS_ID,
+    METHOD_ID,
+    PUBLICATION_ID,
+    PACKAGE_ID,
+    KEYRING.current.keyId,
+    TRUSTED_PUBLISHABLE_KEY,
+    LEGACY_ANON_KEY,
+    'climate-change',
+    'session=user-token',
+    'locator',
+  ]) {
+    assertEquals(serializedEvent.includes(forbidden), false);
+  }
+});
+
+Deno.test('security logger failure never changes or duplicates the response', async () => {
+  const redis = new HandlerRedis();
+  let loggerCalls = 0;
+  const handler = createPortalDataProductResultsHandler({
+    ...handlerOptions(redis, repository(page())),
+    logger: () => {
+      loggerCalls += 1;
+      throw new Error('logger backend unavailable with sensitive details');
+    },
+  });
+  const response = await handler(await signedRequest({ nonceSeed: 61 }));
+  assertEquals(response.status, 200);
+  assertEquals(loggerCalls, 1);
+});
+
+Deno.test(
+  'pre-auth rejection still emits one sanitized event and performs no Redis work',
+  async () => {
+    const redis = new HandlerRedis();
+    const events: Array<Record<string, unknown>> = [];
+    const handler = createPortalDataProductResultsHandler({
+      ...handlerOptions(redis, repository(page())),
+      logger: (event) => {
+        events.push({ ...event });
+      },
+    });
+    const response = await handler(
+      new Request(`https://example.supabase.co${PORTAL_LCIA_FUNCTION_PATH}`, {
+        method: 'POST',
+        body: 'private-query-and-cookie-value',
+      }),
+    );
+    assertEquals(response.status, 401);
+    assertEquals(redis.calls, []);
+    assertEquals(events.length, 1);
+    assertEquals(events[0].errorCode, 'portal_auth_failed');
+    assertEquals(events[0].matchedKey, null);
+    assertEquals(JSON.stringify(events[0]).includes('private-query-and-cookie-value'), false);
+  },
+);
 
 Deno.test(
   'Supabase stripped path and exact pinned-CLI legacy anon transport are accepted',
@@ -457,8 +560,8 @@ Deno.test('Redis nonce or admission outage fails closed before database', async 
 
 Deno.test('budget and concurrency rejection never call database', async () => {
   for (const [guardResult, code] of [
-    [[1, 0, 99, 1], 'budget_exhausted'],
-    [[2, 9, 99, 0], 'concurrency_exhausted'],
+    [[1, 0, 99, 1, 0], 'budget_exhausted'],
+    [[2, 9, 99, 0, 0], 'concurrency_exhausted'],
   ] as const) {
     const redis = new HandlerRedis();
     redis.guardResult = guardResult;
