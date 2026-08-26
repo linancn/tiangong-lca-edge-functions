@@ -7,6 +7,7 @@ const {
   DISPOSABLE_ACK,
   FUNCTION_NAME,
   buildPortalR0DeployArgs,
+  listSupabasePreviewBranches,
   validatePortalR0Deploy,
 } = require('./deploy-portal-r0-fixture.cjs');
 
@@ -15,6 +16,19 @@ const HEAD = 'a'.repeat(40);
 const PREVIEW_REF = 'abcdefghijklmnopqrst';
 const DEV_REF = 'submidrhbtknjxfympna';
 const MAIN_REF = 'qgzvkongdjqiiamzbbts';
+
+function readyBranch(overrides = {}) {
+  return {
+    id: 'branch-id-is-not-logged',
+    project_ref: PREVIEW_REF,
+    parent_project_ref: DEV_REF,
+    is_default: false,
+    persistent: false,
+    status: 'FUNCTIONS_DEPLOYED',
+    preview_project_status: 'ACTIVE_HEALTHY',
+    ...overrides,
+  };
+}
 
 function validInput() {
   return {
@@ -31,6 +45,7 @@ function validInput() {
     gitHead: HEAD,
     gitClean: true,
     nowMillis: NOW,
+    branches: [readyBranch()],
   };
 }
 
@@ -49,21 +64,45 @@ test('builds one fixed no-gateway-JWT R0 function deployment', () => {
   ]);
 });
 
-test('accepts only explicit short-lived Preview and test fixture targets', () => {
+test('accepts only an exact ready ephemeral branch returned by the Dev parent', () => {
   assert.deepEqual(validatePortalR0Deploy(validInput()), {
     projectRef: PREVIEW_REF,
     deploymentSha: HEAD,
     expiresAtText: '2026-08-27T07:59:59.000Z',
+    branchState: 'ready',
   });
-  const testInput = validInput();
-  testInput.target = 'test';
-  testInput.environment.PORTAL_R0_RUNTIME_TARGET = 'test';
-  assert.equal(validatePortalR0Deploy(testInput).projectRef, PREVIEW_REF);
+});
+
+test('live branch list runner executes one read-only exact parent query and parses JSON', () => {
+  const calls = [];
+  const branches = listSupabasePreviewBranches({
+    parentProjectRef: DEV_REF,
+    repoRoot: process.cwd(),
+    environment: { SUPABASE_ACCESS_TOKEN: 'must-not-be-logged' },
+    execFileSyncImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return JSON.stringify([readyBranch()]);
+    },
+  });
+  assert.equal(branches.length, 1);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, 'pnpm');
+  assert.deepEqual(calls[0].args, [
+    'exec',
+    'supabase',
+    'branches',
+    'list',
+    '--project-ref',
+    DEV_REF,
+    '--output',
+    'json',
+  ]);
+  assert.deepEqual(calls[0].options.stdio, ['ignore', 'pipe', 'pipe']);
 });
 
 for (const [name, mutate] of [
   ['production target', (input) => (input.target = 'production')],
-  ['main target', (input) => (input.target = 'main')],
+  ['local test target', (input) => (input.target = 'test')],
   ['persistent Dev ref', (input) => (input.environment.PORTAL_R0_PROJECT_REF = DEV_REF)],
   ['Production ref', (input) => (input.environment.PORTAL_R0_PROJECT_REF = MAIN_REF)],
   ['runtime target mismatch', (input) => (input.environment.PORTAL_R0_RUNTIME_TARGET = 'test')],
@@ -77,6 +116,13 @@ for (const [name, mutate] of [
   ],
   ['SHA mismatch', (input) => (input.environment.PORTAL_R0_DEPLOYMENT_SHA = 'b'.repeat(40))],
   ['dirty worktree', (input) => (input.gitClean = false)],
+  ['branch absent', (input) => (input.branches = [])],
+  ['duplicate matching branches', (input) => (input.branches = [readyBranch(), readyBranch()])],
+  ['wrong parent', (input) => (input.branches[0].parent_project_ref = MAIN_REF)],
+  ['default branch', (input) => (input.branches[0].is_default = true)],
+  ['persistent branch', (input) => (input.branches[0].persistent = true)],
+  ['not-ready branch status', (input) => (input.branches[0].status = 'MIGRATIONS_PASSED')],
+  ['unhealthy project status', (input) => (input.branches[0].preview_project_status = 'COMING_UP')],
   [
     'expired fixture',
     (input) => (input.environment.PORTAL_R0_DEPLOY_EXPIRES_AT = '2026-08-26T07:59:59.000Z'),
@@ -89,7 +135,22 @@ for (const [name, mutate] of [
   test(`rejects ${name}`, () => {
     const input = validInput();
     mutate(input);
-    assert.throws(() => validatePortalR0Deploy(input), /R0 deploy/u);
+    assert.throws(() => validatePortalR0Deploy(input), /R0 /u);
+  });
+}
+
+for (const output of ['not-json', '{}', 'null']) {
+  test(`live branch runner rejects malformed output ${output}`, () => {
+    assert.throws(
+      () =>
+        listSupabasePreviewBranches({
+          parentProjectRef: DEV_REF,
+          repoRoot: process.cwd(),
+          environment: {},
+          execFileSyncImpl: () => output,
+        }),
+      /live Preview branch verification failed/u,
+    );
   });
 }
 

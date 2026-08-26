@@ -5,7 +5,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 
-const { FUNCTION_NAME, validatePortalR0Deploy } = require('./deploy-portal-r0-fixture.cjs');
+const {
+  FUNCTION_NAME,
+  listSupabasePreviewBranches,
+  validatePortalR0Cleanup,
+} = require('./deploy-portal-r0-fixture.cjs');
 
 const EXTERNAL_CLEANUP_CHECKLIST = Object.freeze([
   'delete the dedicated R0 Redis database/resource',
@@ -41,7 +45,13 @@ function main(options = {}) {
       cwd: repoRoot,
       encoding: 'utf8',
     }).trim() === '';
-  const validated = validatePortalR0Deploy({
+  const branches = (options.branchListRunner ?? listSupabasePreviewBranches)({
+    parentProjectRef: packageJson.config?.supabaseProjectRefDev,
+    execFileSyncImpl: execFile,
+    repoRoot,
+    environment,
+  });
+  const validated = validatePortalR0Cleanup({
     target,
     environment,
     persistentDevProjectRef: packageJson.config?.supabaseProjectRefDev,
@@ -49,18 +59,21 @@ function main(options = {}) {
     gitHead,
     gitClean,
     nowMillis: options.nowMillis ?? Date.now(),
+    branches,
   });
   const args = buildPortalR0CleanupArgs(validated.projectRef);
 
-  if (environment.PORTAL_R0_CLEANUP_DRY_RUN !== 'true') {
+  if (environment.PORTAL_R0_CLEANUP_DRY_RUN !== 'true' && validated.branchState === 'ready') {
     const result = (options.spawnSyncImpl ?? spawnSync)('pnpm', args, {
       cwd: repoRoot,
       stdio: 'inherit',
       env: environment,
     });
     if (result.status !== 0) process.exit(result.status ?? 1);
-  } else {
+  } else if (environment.PORTAL_R0_CLEANUP_DRY_RUN === 'true') {
     console.log('[cleanup:portal-r0] dry-run guard passed');
+  } else {
+    console.log('[cleanup:portal-r0] verified terminal: Preview branch is absent');
   }
 
   for (const item of EXTERNAL_CLEANUP_CHECKLIST) {
@@ -72,6 +85,7 @@ function main(options = {}) {
     projectRef: validated.projectRef,
     deploymentSha: validated.deploymentSha,
     expiresAtText: validated.expiresAtText,
+    branchState: validated.branchState,
     externalCleanupChecklist: [...EXTERNAL_CLEANUP_CHECKLIST],
   };
 }

@@ -14,7 +14,7 @@ Deno.test('R0 gateway JWT is disabled only with handler-owned HMAC and exact pat
   assertStringIncludes(runtime, 'registerPortalR0Nonce(');
 });
 
-Deno.test('R0 deploy requires the dedicated disposable Preview/test guard', async () => {
+Deno.test('R0 deploy requires the dedicated live disposable Preview guard', async () => {
   const packageJson = JSON.parse(await Deno.readTextFile('./package.json')) as {
     scripts: Record<string, string>;
   };
@@ -29,7 +29,7 @@ Deno.test('R0 deploy requires the dedicated disposable Preview/test guard', asyn
 
   const guard = await Deno.readTextFile('./scripts/deploy-portal-r0-fixture.cjs');
   for (const required of [
-    "new Set(['preview', 'test'])",
+    "const REMOTE_TARGET = 'preview'",
     "const FUNCTION_NAME = 'portal_r0_hmac_verify_v1'",
     "'PORTAL_R0_PROJECT_REF'",
     "'PORTAL_R0_RUNTIME_TARGET'",
@@ -38,6 +38,13 @@ Deno.test('R0 deploy requires the dedicated disposable Preview/test guard', asyn
     "'PORTAL_R0_DISPOSABLE_ACK'",
     'projectRef === input.persistentDevProjectRef',
     'projectRef === input.productionProjectRef',
+    "'branches'",
+    "'list'",
+    'branch.parent_project_ref !== input.persistentDevProjectRef',
+    'branch.is_default !== false',
+    'branch.persistent !== false',
+    'branch.status !== READY_BRANCH_STATUS',
+    'branch.preview_project_status !== READY_PROJECT_STATUS',
     "'--no-verify-jwt'",
     "'--import-map'",
   ]) {
@@ -50,7 +57,8 @@ Deno.test('R0 deploy requires the dedicated disposable Preview/test guard', asyn
 
   const cleanup = await Deno.readTextFile('./scripts/cleanup-portal-r0-fixture.cjs');
   assertStringIncludes(cleanup, "require('./deploy-portal-r0-fixture.cjs')");
-  assertStringIncludes(cleanup, 'validatePortalR0Deploy({');
+  assertStringIncludes(cleanup, 'validatePortalR0Cleanup({');
+  assertStringIncludes(cleanup, 'listSupabasePreviewBranches');
   assertStringIncludes(cleanup, "'delete'");
   assertStringIncludes(cleanup, 'FUNCTION_NAME');
   assertStringIncludes(cleanup, "'--yes'");

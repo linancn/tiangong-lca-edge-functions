@@ -6,11 +6,14 @@ const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
 
 const FUNCTION_NAME = 'portal_r0_hmac_verify_v1';
-const ALLOWED_TARGETS = new Set(['preview', 'test']);
+const REMOTE_TARGET = 'preview';
 const DISPOSABLE_ACK = 'delete-after-evidence';
+const CLEANUP_ACK = 'delete-function-and-confirm-external-resources';
 const MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const PROJECT_REF_PATTERN = /^[a-z0-9]{20}$/u;
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
+const READY_BRANCH_STATUS = 'FUNCTIONS_DEPLOYED';
+const READY_PROJECT_STATUS = 'ACTIVE_HEALTHY';
 
 function requiredEnvironmentValue(environment, name) {
   const value = environment[name];
@@ -25,39 +28,114 @@ function requiredEnvironmentValue(environment, name) {
   return value;
 }
 
-function validatePortalR0Deploy(input) {
-  if (!ALLOWED_TARGETS.has(input.target)) {
-    throw new Error('R0 deploy target must be explicit Preview or test.');
+function listSupabasePreviewBranches(input) {
+  let output;
+  try {
+    output = input.execFileSyncImpl(
+      'pnpm',
+      [
+        'exec',
+        'supabase',
+        'branches',
+        'list',
+        '--project-ref',
+        input.parentProjectRef,
+        '--output',
+        'json',
+      ],
+      {
+        cwd: input.repoRoot,
+        encoding: 'utf8',
+        env: input.environment,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+  } catch {
+    throw new Error('R0 live Preview branch verification failed.');
+  }
+  try {
+    const parsed = JSON.parse(output);
+    if (!Array.isArray(parsed)) throw new Error('invalid branch list');
+    return parsed;
+  } catch {
+    throw new Error('R0 live Preview branch verification failed.');
+  }
+}
+
+function matchingBranchRows(input, projectRef) {
+  if (!Array.isArray(input.branches)) {
+    throw new Error('R0 live Preview branch verification failed.');
+  }
+  return input.branches.filter(
+    (candidate) =>
+      candidate &&
+      typeof candidate === 'object' &&
+      !Array.isArray(candidate) &&
+      candidate.project_ref === projectRef,
+  );
+}
+
+function validateReadyDisposableBranch(input, projectRef) {
+  const matches = matchingBranchRows(input, projectRef);
+  if (matches.length !== 1) {
+    throw new Error('R0 target is not one ready disposable Preview branch.');
+  }
+  const branch = matches[0];
+  if (
+    branch.parent_project_ref !== input.persistentDevProjectRef ||
+    branch.is_default !== false ||
+    branch.persistent !== false ||
+    branch.status !== READY_BRANCH_STATUS ||
+    branch.preview_project_status !== READY_PROJECT_STATUS
+  ) {
+    throw new Error('R0 target is not one ready disposable Preview branch.');
+  }
+  return { state: 'ready' };
+}
+
+function validatePortalR0Base(input, acknowledgementName, acknowledgementValue) {
+  if (input.target !== REMOTE_TARGET) {
+    throw new Error('R0 remote target must be explicit Preview.');
   }
   const projectRef = requiredEnvironmentValue(input.environment, 'PORTAL_R0_PROJECT_REF');
   const runtimeTarget = requiredEnvironmentValue(input.environment, 'PORTAL_R0_RUNTIME_TARGET');
   const deploymentSha = requiredEnvironmentValue(input.environment, 'PORTAL_R0_DEPLOYMENT_SHA');
   const expiresAtText = requiredEnvironmentValue(input.environment, 'PORTAL_R0_DEPLOY_EXPIRES_AT');
-  const disposableAck = requiredEnvironmentValue(input.environment, 'PORTAL_R0_DISPOSABLE_ACK');
+  const acknowledgement = requiredEnvironmentValue(input.environment, acknowledgementName);
 
   if (
     !PROJECT_REF_PATTERN.test(projectRef) ||
     projectRef === input.persistentDevProjectRef ||
     projectRef === input.productionProjectRef ||
-    runtimeTarget !== input.target ||
-    disposableAck !== DISPOSABLE_ACK ||
+    runtimeTarget !== REMOTE_TARGET ||
+    acknowledgement !== acknowledgementValue ||
     !SHA_PATTERN.test(deploymentSha) ||
     deploymentSha !== input.gitHead ||
-    !input.gitClean
+    !input.gitClean ||
+    !Number.isFinite(Date.parse(expiresAtText)) ||
+    new Date(Date.parse(expiresAtText)).toISOString() !== expiresAtText
   ) {
     throw new Error('R0 deploy configuration is invalid.');
   }
+  return { projectRef, deploymentSha, expiresAtText };
+}
 
-  const expiresAt = Date.parse(expiresAtText);
-  if (
-    !Number.isFinite(expiresAt) ||
-    expiresAt <= input.nowMillis ||
-    expiresAt - input.nowMillis > MAX_LIFETIME_MS
-  ) {
+function validatePortalR0Deploy(input) {
+  const validated = validatePortalR0Base(input, 'PORTAL_R0_DISPOSABLE_ACK', DISPOSABLE_ACK);
+  const expiresAt = Date.parse(validated.expiresAtText);
+  if (expiresAt <= input.nowMillis || expiresAt - input.nowMillis > MAX_LIFETIME_MS) {
     throw new Error('R0 deploy expiry must be within the next 24 hours.');
   }
+  validateReadyDisposableBranch(input, validated.projectRef);
+  return { ...validated, branchState: 'ready' };
+}
 
-  return { projectRef, deploymentSha, expiresAtText };
+function validatePortalR0Cleanup(input) {
+  const validated = validatePortalR0Base(input, 'PORTAL_R0_CLEANUP_ACK', CLEANUP_ACK);
+  const matches = matchingBranchRows(input, validated.projectRef);
+  if (matches.length === 0) return { ...validated, branchState: 'absent' };
+  validateReadyDisposableBranch(input, validated.projectRef);
+  return { ...validated, branchState: 'ready' };
 }
 
 function buildPortalR0DeployArgs(projectRef, importMapPath) {
@@ -80,16 +158,22 @@ function main(options = {}) {
   const environment = options.environment ?? process.env;
   const repoRoot = options.repoRoot ?? path.resolve(__dirname, '..');
   const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
-  const gitHead = (options.execFileSyncImpl ?? execFileSync)('git', ['rev-parse', 'HEAD'], {
+  const execFile = options.execFileSyncImpl ?? execFileSync;
+  const gitHead = execFile('git', ['rev-parse', 'HEAD'], {
     cwd: repoRoot,
     encoding: 'utf8',
   }).trim();
   const gitClean =
-    (options.execFileSyncImpl ?? execFileSync)('git', ['status', '--porcelain'], {
+    execFile('git', ['status', '--porcelain'], {
       cwd: repoRoot,
       encoding: 'utf8',
     }).trim() === '';
-
+  const branches = (options.branchListRunner ?? listSupabasePreviewBranches)({
+    parentProjectRef: packageJson.config?.supabaseProjectRefDev,
+    execFileSyncImpl: execFile,
+    repoRoot,
+    environment,
+  });
   const validated = validatePortalR0Deploy({
     target,
     environment,
@@ -98,6 +182,7 @@ function main(options = {}) {
     gitHead,
     gitClean,
     nowMillis: options.nowMillis ?? Date.now(),
+    branches,
   });
   const cliVersion = packageJson.config?.supabaseCliVersion;
   if (!cliVersion || packageJson.devDependencies?.supabase !== cliVersion) {
@@ -112,7 +197,6 @@ function main(options = {}) {
     console.log('[deploy:portal-r0] dry-run guard passed');
     return { command: 'pnpm', args, ...validated };
   }
-
   const result = (options.spawnSyncImpl ?? spawnSync)('pnpm', args, {
     cwd: repoRoot,
     stdio: 'inherit',
@@ -123,12 +207,17 @@ function main(options = {}) {
 }
 
 module.exports = {
-  ALLOWED_TARGETS,
+  CLEANUP_ACK,
   DISPOSABLE_ACK,
   FUNCTION_NAME,
   MAX_LIFETIME_MS,
+  READY_BRANCH_STATUS,
+  READY_PROJECT_STATUS,
+  REMOTE_TARGET,
   buildPortalR0DeployArgs,
+  listSupabasePreviewBranches,
   main,
+  validatePortalR0Cleanup,
   validatePortalR0Deploy,
 };
 
