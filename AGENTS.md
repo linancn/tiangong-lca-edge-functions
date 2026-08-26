@@ -37,9 +37,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-25
-lastReviewedCommit: e79caf0e8aa53024b705c4fa22786026256e8298
-lastReviewedNote: 'Reviewed for Issue #304: Deno 2.9.5 and its bundled TypeScript 6.0.3 are authoritative, while exact Node 24.19.0 and pnpm 11.23.0 own only Supabase CLI, formatting, and validation orchestration.'
+lastReviewedAt: 2026-08-26
+lastReviewedCommit: 90101ec3f649645ab1f0aef5c373ca3ba7a0768c
+lastReviewedNote: 'Reviewed for PR #308 acceptance remediation: pinned CLI transport, exact public credentials, lease/cache safety, correlation, and safe security events are part of the Portal repo contract.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -84,7 +84,7 @@ Do not start from repo landing prose or raw function inventories when the core c
 - human setup and request-example guidance stay in `README.md`
 - `test.example.http` is a supporting request collection for concrete payloads, not a governed source doc
 - repo-local documentation maintenance is enforced locally by the pre-push docpact gate; `.github/workflows/ai-doc-lint.yml` is manual-dispatch fallback
-- the main routing intents are `function-runtime`, `auth-runtime`, `command-runtime`, `data-product-runtime`, `review-quality-diagnostic`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
+- the main routing intents are `function-runtime`, `auth-runtime`, `portal-public-runtime`, `command-runtime`, `data-product-runtime`, `review-quality-diagnostic`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
 
 ## Minimal Execution Facts
 
@@ -94,7 +94,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.23.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 139 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all Deno behavior tests with only env/read/loopback-net permissions
+- `pnpm check` validates exact runtime versions, checks all 144 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 422 Deno behavior tests with only env/read/loopback-net permissions
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -113,6 +113,7 @@ At a human-readable level, this repo owns:
 
 - `supabase/functions/**` for Edge Function entrypoints, handlers, and runtime request or response behavior
 - `supabase/functions/_shared/**` for auth, command runtime, DB-RPC wrappers, OpenAI, Redis, Supabase client helpers, and shared domain utilities
+- `portal_data_product_results_v1` plus `_shared/portal_*` for raw-body Portal HMAC verification, replay/admission control, and the publishable-only public LCIA projection
 - direct review submission through the stable database command, the Review Admin-only manual quality-diagnostic projection, and compatibility-only handling for already deployed review-submit Gate/coordinator clients
 - `test/**` for repo-level Deno tests
 - `scripts/**` for deno-check inventory, deploy contract, auth probes, and smoke helpers
@@ -157,6 +158,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 
 - do not invent schema truth or migration history in this repo
 - do not interpret `--no-verify-jwt` as permission for anonymous business logic
+- do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; the signed Portal LCIA route may call only its reviewed public `api` RPC with the same once-resolved publishable/anon credential that matched inbound `apikey`. Authorization is absent in normal Portal traffic; only the exact legacy anon Bearer injected by pinned CLI `2.106.0` local routing is tolerated after HMAC
 - do not move repo-level tests into `supabase/functions/**`; this repo keeps Deno tests in `test/**`
 - do not treat GitHub default branch `main` as the daily trunk
 - do not mark delivery complete if root workspace integration is still pending

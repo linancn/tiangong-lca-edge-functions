@@ -22,16 +22,16 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-25
-lastReviewedCommit: e79caf0e8aa53024b705c4fa22786026256e8298
-lastReviewedNote: 'Reviewed for Issue #304: local setup, serve, deploy, probe, formatting, graph checks, and behavior tests now use exact Deno 2.9.5 plus pnpm 11.23.0/Node 24.19.0 without npm fallbacks.'
+lastReviewedAt: 2026-08-26
+lastReviewedCommit: 90101ec3f649645ab1f0aef5c373ca3ba7a0768c
+lastReviewedNote: 'Reviewed for PR #308 acceptance remediation: pinned CLI transport compatibility, exact apikey/Cookie isolation, lease safety, 60-second visibility cache, correlation, and security-event guidance are aligned.'
 ---
 
 # TianGong-LCA-Edge-Functions
 
 ## Overview
 
-Supabase Edge Functions for LCA search, embedding, TIDAS package orchestration, and solving workflows.
+Supabase Edge Functions for LCA search, embedding, TIDAS package orchestration, solving workflows, and the signed public Portal LCIA projection.
 
 - Runtime/compiler: Deno 2.9.5 with bundled TypeScript 6.0.3
 - Functions root: `supabase/functions`
@@ -93,6 +93,8 @@ Core entries:
 - `REMOTE_SUPABASE_SECRET_KEY` for privileged RPC / database execution.
 - `REMOTE_SERVICE_API_KEY` for routes that allow `AuthMethod.SERVICE_API_KEY`.
 - `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` for user API key auth caching.
+- `PORTAL_HMAC_KEY_ID_CURRENT` / `PORTAL_HMAC_SECRET_CURRENT` and the optional previous pair for Portal-only request verification.
+- `REDIS_CLIENT_TYPE`, `PORTAL_REDIS_NAMESPACE`, `PORTAL_REDIS_TIMEOUT_MS`, and the bounded `PORTAL_LCIA_*` guard/cache/timeout settings for the signed public LCIA route. Hosted projects use Upstash; local/CI may use `REDIS_URL` plus optional `REDIS_PASSWORD`. The concurrency lease defaults to 30 seconds, never drops below 20 seconds, and must cover Redis plus upstream timeouts with a five-second recovery margin. The R1 LCIA response cache defaults to and is capped at 60 seconds.
 - `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`, and optional `OPENAI_BASE_URL`.
 - `SAGEMAKER_ENDPOINT_NAME` plus AWS credentials for hybrid search and embedding.
 - Feature-specific entries such as Cognito, TIDAS storage, national-carbon cache, and `embedding_ft` timeout knobs are grouped in `supabase/.env.example`.
@@ -104,6 +106,8 @@ Credential contract:
 - JWT validation and user-api-key sign-in flows must use publishable keys.
 - Supabase secret keys are reserved for privileged Supabase execution paths and must never be exposed to browser clients.
 - Keep `REMOTE_SUPABASE_URL`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, and `REMOTE_SUPABASE_SECRET_KEY` from the same Supabase project. A mismatched or stale secret key causes local RPC calls to fail with `Invalid API key` after request authentication succeeds.
+- The Portal HMAC secret is independent of `REMOTE_SERVICE_API_KEY`, Supabase JWT secrets, and every Supabase client key. Keep dev/Preview and main/Production keyrings, Upstash databases, tokens, and `portal:<environment>:v1` namespaces distinct. Only the verifier holds an optional previous HMAC key during rotation.
+- `portal_data_product_results_v1` uses only the matching project publishable key for its downstream `api.portal_get_published_lcia_values_v1` call. It must never receive or construct a service-role/secret-key client.
 
 ### 2. HTTP test env (repo root `.env`)
 
@@ -162,7 +166,7 @@ Stop the local stack when finished:
 pnpm exec supabase stop
 ```
 
-The repository serves with `--no-verify-jwt` by design. Gateway JWT verification is disabled for both local and remote deploys; each function must still run its own `authenticateRequest` authorization path.
+The repository serves with `--no-verify-jwt` by design. Gateway JWT verification is disabled for both local and remote deploys; each function must still run its own runtime authentication path. The Portal route verifies `portal-hmac-v1` before nonce registration, admission, JSON parsing, cache access, or database work.
 
 ### Deploy Edge Functions
 
@@ -175,13 +179,13 @@ pnpm exec supabase login
 Deploy to the persistent `dev` project (`submidrhbtknjxfympna`) from the Git `dev` line or a reviewed PR branch:
 
 ```bash
-pnpm deploy:dev flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
+pnpm deploy:dev portal_data_product_results_v1 flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
 ```
 
 Deploy to the production `main` project (`qgzvkongdjqiiamzbbts`) only as part of the `dev -> main` promote flow:
 
 ```bash
-pnpm deploy:main flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
+pnpm deploy:main portal_data_product_results_v1 flow_hybrid_search process_hybrid_search lifecyclemodel_hybrid_search contact_hybrid_search flowproperty_hybrid_search source_hybrid_search unitgroup_hybrid_search process_dataset_extraction_jobs embedding_ft
 ```
 
 The deploy script pins the Supabase CLI version from `package.json`, sets the target `--project-ref`, disables gateway JWT verification with `--no-verify-jwt`, and passes `supabase/functions/deno.json` as the import map so server-side bundling resolves shared npm/jsr imports.
@@ -238,6 +242,32 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 - `lca_query_results`
 - `lca_contribution_path` / `lca_contribution_path_result`
 - `import_tidas_package` / `tidas_package_jobs`
+
+`portal_data_product_results_v1` is intentionally not represented by a reusable static signature in the request collection. Its caller must generate a fresh timestamp and 128-bit nonce, hash and sign the exact raw body bytes, and send those same bytes once.
+
+### Portal signed public LCIA contract
+
+`portal_data_product_results_v1` accepts the public `POST /functions/v1/portal_data_product_results_v1` path and the exact `/portal_data_product_results_v1` path produced after pinned Supabase CLI routing strips `/functions/v1`; no suffix or other function path is accepted. HMAC canonical bytes always contain the public path. The request requires the five `portal-hmac-v1` headers (`x-portal-key-id`, `x-portal-timestamp`, `x-portal-nonce`, `x-portal-body-sha256`, and `x-portal-signature`) plus the exact matching project `apikey`. `x-portal-correlation-id` accepts a canonical UUID; missing or invalid values are replaced, and every response returns the resolved `X-Portal-Correlation-Id`.
+
+The Portal BFF sends no `Authorization` or Cookie. For pinned CLI `2.106.0` local serving only, the handler tolerates the exact `Bearer <configured legacy anon JWT>` that Kong injects when the trusted publishable `apikey` matches; every user, service-role, other Bearer, or Cookie is rejected after HMAC and before Redis. `SERVICE_API_KEY`, Supabase secret/service-role keys, user context, and storage locators remain forbidden.
+
+The signed JSON body has one fixed shape:
+
+```json
+{
+  "mode": "process_all_impacts",
+  "processRefs": [{ "id": "<process uuid>", "version": "01.00.000" }],
+  "impactCategoryId": null,
+  "cursor": null,
+  "limit": 50
+}
+```
+
+`processes_one_impact` and `ranked_processes_one_impact` require a non-empty `impactCategoryId`; `process_all_impacts` requires exactly one Process reference, while the other modes accept 1–50 exact Process ID/version references. The request/response limits remain 32 KiB/512 KiB. A successful response is the exact top-level `portal.published-lcia-page.v1` DTO with `rows`, not an artifact-derived envelope. No current finalized publication returns a stable locator-free `404`; guard/upstream outage returns `503`; budget or concurrency exhaustion returns `429`. Missing or incomplete public evidence is unavailable and is never replaced with numeric zero.
+
+The function validates HMAC over the raw body before transport, Redis, or JSON work, then constant-time matches the inbound public `apikey`, registers nonce with `SET NX EX 120`, acquires an atomic budget/concurrency lease, and releases the lease in `finally`. Only then may it read the hash-key cache or invoke `api.portal_get_published_lcia_values_v1` with explicit `Content-Profile: api` and the same resolved publishable/legacy-anon credential. The LCIA cache is capped at 60 seconds so a revoked publication is rechecked within the visibility SLA; Redis is never a visibility or authorization fact source.
+
+Each request invokes exactly one non-blocking `portal.security-event.v1` logger with only correlation ID, route, mode, cache state, HMAC/transport outcome enums, backend class, bounded latency/row/status fields, current/previous key match, recovered-lease count, error code, and deployment SHA. Raw bodies, queries, dataset UUIDs, nonce, key ID, body hash, Redis keys, cache values, API keys, secrets, Cookies, and locators are not event fields. A throwing or never-resolving logger cannot alter or delay the response.
 
 ### TIDAS package artifact download contract
 
@@ -347,7 +377,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 139-root Deno graph, 15 Node contracts, and all 367 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 144-root Deno graph, 15 Node contracts, and all 422 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 
