@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-26'
-lastReviewedCommit: '69822d83a7d6a4dbae8bf265091db96403b4970b'
-lastReviewedNote: 'Reviewed after the Issue #313 canonical gate confirmed 147 roots, 15 Node contracts, and 460 Deno behavior tests for the isolated Portal credential runtime.'
+lastReviewedCommit: '7060f4b8a6f00bb3b6b099b58fe50187c3ba712f'
+lastReviewedNote: 'Reviewed after Issue #313 moved provider-explicit model calls into Portal-only shared modules and restored generic Hybrid/OpenAI kernels byte-for-byte to dev.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -128,9 +128,11 @@ routing:
         - supabase/functions/_shared/portal_security_event.ts
         - supabase/functions/_shared/portal_hybrid_contract.ts
         - supabase/functions/_shared/portal_hybrid_deadline.ts
+        - supabase/functions/_shared/portal_hybrid_kernel.ts
         - supabase/functions/_shared/portal_hybrid_provider.ts
         - supabase/functions/_shared/portal_hybrid_repository.ts
         - supabase/functions/_shared/portal_hybrid_security_event.ts
+        - supabase/functions/_shared/portal_openai_structured.ts
         - supabase/functions/_shared/hybrid_search_kernel.ts
         - supabase/functions/_shared/openai_structured.ts
         - supabase/functions/_shared/redis_client.ts
@@ -403,12 +405,16 @@ rules:
         kind: runtime-contract
       - path: supabase/functions/_shared/portal_hybrid_deadline.ts
         kind: runtime-guard
+      - path: supabase/functions/_shared/portal_hybrid_kernel.ts
+        kind: model-runtime
       - path: supabase/functions/_shared/portal_hybrid_provider.ts
         kind: provider-runtime
       - path: supabase/functions/_shared/portal_hybrid_repository.ts
         kind: runtime-code
       - path: supabase/functions/_shared/portal_hybrid_security_event.ts
         kind: observability-runtime
+      - path: supabase/functions/_shared/portal_openai_structured.ts
+        kind: model-runtime
       - path: supabase/functions/_shared/hybrid_search_kernel.ts
         kind: model-runtime
       - path: supabase/functions/_shared/openai_structured.ts

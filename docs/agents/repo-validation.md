@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 69822d83a7d6a4dbae8bf265091db96403b4970b
-lastReviewedNote: 'Reviewed after the Issue #313 canonical gate passed 147 roots, 15 Node contracts, and 460 Deno behavior tests including Portal isolation and generic-provider regressions.'
+lastReviewedCommit: 7060f4b8a6f00bb3b6b099b58fe50187c3ba712f
+lastReviewedNote: 'Reviewed after Issue #313 moved explicit providers into Portal-only adapters, restored generic kernels byte-for-byte, and retained the 460-test proof baseline.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -87,15 +87,15 @@ If you reactivate or rely on that route family, update the inventory and validat
 
 ### Portal provider and provenance isolation proof
 
-Changes to `portal_public_transport.ts`, `portal_hybrid_provider.ts`, `hybrid_search_kernel.ts`, or `openai_structured.ts` must additionally prove all of the following in the existing Portal test files and static deploy contract:
+Changes to `portal_public_transport.ts`, `portal_hybrid_provider.ts`, `portal_hybrid_kernel.ts`, or `portal_openai_structured.ts` must additionally prove all of the following in the existing Portal test files and static deploy contract:
 
 - `PORTAL_SUPABASE_PUBLISHABLE_KEY` is a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry, matches inbound `apikey` exactly, and is reused unchanged downstream; generic, `REMOTE_*`, legacy-anon, secret/service-role, user, missing, malformed, and cross-project credentials fail before Redis or database work
 - exact false or unset `PORTAL_HYBRID_ENABLED` returns before Portal Redis, JSON, OpenAI, SageMaker/AWS, or database configuration is read
 - enabled R2 requires the complete strict `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` surface and passes that exact object into both shared model kernels; generic-only, partial, malformed, whitespace-bearing, credential-bearing URL, and insecure remote URL configurations fail before provider or database calls
-- existing login Hybrid, embedding, auth, and shared-kernel tests pass unchanged, proving their generic environment precedence and responses were not replaced by Portal values
+- `hybrid_search_kernel.ts` and `openai_structured.ts` remain byte-for-byte equal to the `dev` baseline, while existing login Hybrid, embedding, auth, and shared-kernel tests pass unchanged, proving their generic environment precedence and responses were not replaced by Portal values
 - LCIA reads only `PORTAL_LCIA_DEPLOYMENT_SHA`, Hybrid reads only `PORTAL_HYBRID_DEPLOYMENT_SHA`, and a missing/invalid/other-route SHA yields `unknown` rather than a cross-route or retired shared fallback
 
-The minimum targeted command remains the union of the two Portal rows above plus `test/hybrid_search_handler_test.ts`, `test/hybrid_query_utils_test.ts`, `test/auth_test.ts`, `test/supabase_client_test.ts`, `test/embedding_vector_test.ts`, and targeted `deno check` for both Portal entrypoints and the three changed shared provider/kernel modules. Live provider calls, secret mutation, Function deployment, and enabling Hybrid are separate controlled gates and are not implied by local proof.
+The minimum targeted command remains the union of the two Portal rows above plus `test/hybrid_search_handler_test.ts`, `test/hybrid_query_utils_test.ts`, `test/auth_test.ts`, `test/supabase_client_test.ts`, `test/embedding_vector_test.ts`, and targeted `deno check` for both Portal entrypoints and the three Portal-only provider/kernel modules. Live provider calls, secret mutation, Function deployment, and enabling Hybrid are separate controlled gates and are not implied by local proof.
 
 ## Auth And Probe Notes
 

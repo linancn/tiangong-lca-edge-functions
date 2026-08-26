@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 69822d83a7d6a4dbae8bf265091db96403b4970b
-lastReviewedNote: 'Reviewed after the Issue #313 canonical gate confirmed Portal credential/provider/provenance isolation and the exact 460-test runtime shape.'
+lastReviewedCommit: 7060f4b8a6f00bb3b6b099b58fe50187c3ba712f
+lastReviewedNote: 'Reviewed after Issue #313 introduced Portal-only provider-explicit model adapters and restored generic Hybrid/OpenAI modules byte-for-byte to dev.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -63,7 +63,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 | `supabase/functions/_shared/portal_security_event.ts` and `portal_hybrid_security_event.ts` | stable | route-specific allowlisted exactly-once Portal events, correlation IDs, safe outcome enums, and the R2 bounded background logger boundary |
 | `supabase/functions/_shared/portal_hybrid_contract.ts` and `portal_hybrid_repository.ts` | stable | strict R2 request/public candidate/Edge response DTOs and the publishable-only `api.portal_hybrid_search_v1` transport |
 | `supabase/functions/_shared/portal_hybrid_deadline.ts` | stable | one absolute handler-entry deadline, shared model/database AbortSignal, remaining-time operation caps, and non-blocking bounded cleanup |
-| `supabase/functions/_shared/portal_hybrid_provider.ts` | stable | strict Portal-only OpenAI/SageMaker/AWS configuration resolved after the kill switch and injected into the shared kernels without generic fallback |
+| `supabase/functions/_shared/portal_hybrid_provider.ts`, `portal_hybrid_kernel.ts`, and `portal_openai_structured.ts` | stable | strict Portal-only OpenAI/SageMaker/AWS configuration resolved after the kill switch and passed through provider-explicit kernels with no generic environment reads; existing generic kernels remain byte-for-byte unchanged |
 | `supabase/functions/_shared/command_runtime/**` | stable | request parsing, actor context, audit payload, and command-handler skeleton |
 | `supabase/functions/_shared/commands/**` | stable | dataset, review, membership, notification, and profile command logic |
 | `supabase/functions/_shared/db_rpc/**` | stable | thin wrappers over database RPC calls; SQL truth still lives in `database-engine` |

@@ -23,8 +23,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 69822d83a7d6a4dbae8bf265091db96403b4970b
-lastReviewedNote: 'Reviewed after the Issue #313 canonical gate confirmed the dedicated project-bound public key, explicit model/AWS providers, independent provenance, and 460-test baseline.'
+lastReviewedCommit: 7060f4b8a6f00bb3b6b099b58fe50187c3ba712f
+lastReviewedNote: 'Reviewed after Issue #313 isolated provider-explicit model calls in Portal-only adapters and restored existing generic Hybrid/OpenAI kernels byte-for-byte.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -397,6 +397,7 @@ Queued and running jobs return public progress. A completed job includes `data.r
   - `supabase/functions/_shared/openai_structured.ts`
   - `supabase/functions/_shared/openai_chat.ts`
 - Default model fallback in code is `gpt-4.1-mini` when env/model option is not provided.
+- Signed Portal Hybrid uses separate provider-explicit `portal_hybrid_kernel.ts` and `portal_openai_structured.ts` adapters. They read no generic provider variable; the existing wrappers above remain unchanged for every non-Portal consumer.
 
 ## Required Development Workflow
 

@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 69822d83a7d6a4dbae8bf265091db96403b4970b
-lastReviewedNote: 'Reviewed after the Issue #313 canonical gate confirmed the isolated Portal public/provider contract and exact 460-test baseline without changing existing Function defaults.'
+lastReviewedCommit: 7060f4b8a6f00bb3b6b099b58fe50187c3ba712f
+lastReviewedNote: 'Reviewed after Issue #313 placed provider-explicit model calls in Portal-only shared modules while keeping every existing generic Hybrid/OpenAI kernel byte-for-byte unchanged.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
