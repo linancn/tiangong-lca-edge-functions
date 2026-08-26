@@ -675,7 +675,12 @@ Deno.test(
   async () => {
     for (const stage of ['circuit', 'cache'] as const) {
       const redis = new FakePortalRedis();
-      if (stage === 'circuit') redis.circuitCheckOperation = () => neverPromise();
+      if (stage === 'circuit') {
+        redis.circuitCheckOperation = () =>
+          new Promise((_resolve, reject) => {
+            setTimeout(() => reject(new Error('late private circuit rejection')), 150);
+          });
+      }
       if (stage === 'cache') redis.cacheGetOperation = () => neverPromise();
       let modelCalls = 0;
       let databaseCalls = 0;
@@ -703,6 +708,9 @@ Deno.test(
       assertEquals(modelCalls, 0, stage);
       assertEquals(databaseCalls, 0, stage);
       assert(redis.calls.includes(stage === 'circuit' ? 'circuit_check' : 'cache_get'));
+      if (stage === 'circuit') {
+        await new Promise((resolve) => setTimeout(resolve, 75));
+      }
     }
   },
 );
