@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-26'
-lastReviewedCommit: '7060f4b8a6f00bb3b6b099b58fe50187c3ba712f'
-lastReviewedNote: 'Reviewed after Issue #313 moved provider-explicit model calls into Portal-only shared modules and restored generic Hybrid/OpenAI kernels byte-for-byte to dev.'
+lastReviewedCommit: 'c32580416bf2dbc9366a5c2f7baaae8870cd529a'
+lastReviewedNote: 'Reviewed after Issue #313 bound signed Portal database transport to the platform-injected current-project URL before Redis/model work, without generic REMOTE_URL fallback.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 7060f4b8a6f00bb3b6b099b58fe50187c3ba712f
-lastReviewedNote: 'Reviewed after Issue #313 moved explicit providers into Portal-only adapters, restored generic kernels byte-for-byte, and retained the 460-test proof baseline.'
+lastReviewedCommit: c32580416bf2dbc9366a5c2f7baaae8870cd529a
+lastReviewedNote: 'Reviewed after Issue #313 bound Portal database transport to platform current-project URL before Redis/model work and retained generic runtime behavior.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -89,7 +89,7 @@ If you reactivate or rely on that route family, update the inventory and validat
 
 Changes to `portal_public_transport.ts`, `portal_hybrid_provider.ts`, `portal_hybrid_kernel.ts`, or `portal_openai_structured.ts` must additionally prove all of the following in the existing Portal test files and static deploy contract:
 
-- `PORTAL_SUPABASE_PUBLISHABLE_KEY` is a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry, matches inbound `apikey` exactly, and is reused unchanged downstream; generic, `REMOTE_*`, legacy-anon, secret/service-role, user, missing, malformed, and cross-project credentials fail before Redis or database work
+- `PORTAL_SUPABASE_PUBLISHABLE_KEY` is a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry, is paired only with platform-injected `SUPABASE_URL`, matches inbound `apikey` exactly, and is reused unchanged downstream; generic, `REMOTE_*`, legacy-anon, secret/service-role, user, missing, malformed, and cross-project key/URL configurations fail before Redis, model, or database work
 - exact false or unset `PORTAL_HYBRID_ENABLED` returns before Portal Redis, JSON, OpenAI, SageMaker/AWS, or database configuration is read
 - enabled R2 requires the complete strict `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` surface and passes that exact object into both shared model kernels; generic-only, partial, malformed, whitespace-bearing, credential-bearing URL, and insecure remote URL configurations fail before provider or database calls
 - `hybrid_search_kernel.ts` and `openai_structured.ts` remain byte-for-byte equal to the `dev` baseline, while existing login Hybrid, embedding, auth, and shared-kernel tests pass unchanged, proving their generic environment precedence and responses were not replaced by Portal values
