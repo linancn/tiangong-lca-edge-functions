@@ -11,6 +11,7 @@ import {
   minimumPortalLeaseTtlSeconds,
   MINIMUM_LEASE_TTL_SECONDS,
   PORTAL_ATOMIC_GUARD_LUA,
+  PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS,
   readPortalLciaGuardLimits,
   readPortalResponseCache,
   redisEvalAtomicGuard,
@@ -145,7 +146,7 @@ const LIMITS = {
   dailyBudget: 100,
   maxConcurrency: 2,
   leaseTtlSeconds: DEFAULT_LEASE_TTL_SECONDS,
-  cacheTtlSeconds: 300,
+  cacheTtlSeconds: PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS,
 };
 
 function environment(values: Record<string, string | undefined>) {
@@ -356,7 +357,7 @@ Deno.test(
       dailyBudget: 20_000,
       maxConcurrency: 20,
       leaseTtlSeconds: DEFAULT_LEASE_TTL_SECONDS,
-      cacheTtlSeconds: 300,
+      cacheTtlSeconds: PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS,
     });
     let code: string | undefined;
     try {
@@ -365,6 +366,15 @@ Deno.test(
       code = (error as PortalRedisError).code;
     }
     assertEquals(code, 'guard_unavailable');
+
+    assertEquals(
+      readPortalLciaGuardLimits(environment({ PORTAL_LCIA_CACHE_TTL_SECONDS: '60' }))
+        .cacheTtlSeconds,
+      60,
+    );
+    assertThrows(() =>
+      readPortalLciaGuardLimits(environment({ PORTAL_LCIA_CACHE_TTL_SECONDS: '61' })),
+    );
 
     for (const leaseTtlSeconds of [19, 20, 30]) {
       const values = {

@@ -16,6 +16,7 @@ const BODY_HASH_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const MINIMUM_LEASE_TTL_SECONDS = 20;
 const DEFAULT_LEASE_TTL_SECONDS = 30;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 8_000;
+const PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS = 60;
 
 export const PORTAL_ATOMIC_GUARD_LUA = `
 local now_ms = tonumber(ARGV[1])
@@ -141,7 +142,13 @@ export function readPortalLciaGuardLimits(
         MINIMUM_LEASE_TTL_SECONDS,
         300,
       ),
-      cacheTtlSeconds: boundedEnvironmentInteger(env, 'PORTAL_LCIA_CACHE_TTL_SECONDS', 300, 1, 300),
+      cacheTtlSeconds: boundedEnvironmentInteger(
+        env,
+        'PORTAL_LCIA_CACHE_TTL_SECONDS',
+        PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS,
+        1,
+        PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS,
+      ),
     },
     resolvedTiming,
   );
@@ -173,7 +180,7 @@ export function validatePortalLciaGuardLimits(
     !integerWithin(limits.dailyBudget, 1, 100_000_000) ||
     !integerWithin(limits.maxConcurrency, 1, 10_000) ||
     !integerWithin(limits.leaseTtlSeconds, MINIMUM_LEASE_TTL_SECONDS, 300) ||
-    !integerWithin(limits.cacheTtlSeconds, 1, 300) ||
+    !integerWithin(limits.cacheTtlSeconds, 1, PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS) ||
     limits.leaseTtlSeconds < minimumPortalLeaseTtlSeconds(timing)
   ) {
     throw new PortalRedisError();
@@ -346,4 +353,9 @@ export async function writePortalResponseCache(
   );
 }
 
-export { DEFAULT_LEASE_TTL_SECONDS, MINIMUM_LEASE_TTL_SECONDS, REPLAY_TTL_SECONDS };
+export {
+  DEFAULT_LEASE_TTL_SECONDS,
+  MINIMUM_LEASE_TTL_SECONDS,
+  PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS,
+  REPLAY_TTL_SECONDS,
+};

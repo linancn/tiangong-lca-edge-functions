@@ -57,7 +57,7 @@ const GUARD_LIMITS = {
   dailyBudget: 100,
   maxConcurrency: 2,
   leaseTtlSeconds: 30,
-  cacheTtlSeconds: 300,
+  cacheTtlSeconds: 60,
 };
 
 function page(): PortalPublishedLciaPage {
@@ -172,7 +172,8 @@ class HandlerRedis implements PortalRedisAdapter {
   readonly namespace = 'portal:test:v1';
   readonly calls: string[] = [];
   readonly nonces = new Set<string>();
-  readonly cache = new Map<string, string>();
+  readonly cache = new Map<string, { value: string; expiresAt: number }>();
+  nowMillis = 0;
   guardResult: unknown = [0, 9, 99, 1, 0];
   failSetNx = false;
   failGuard = false;
@@ -197,12 +198,16 @@ class HandlerRedis implements PortalRedisAdapter {
 
   get(key: string): Promise<string | null> {
     this.calls.push('cache-get');
-    return Promise.resolve(this.cache.get(key) ?? null);
+    const cached = this.cache.get(key);
+    return Promise.resolve(cached && cached.expiresAt > this.nowMillis ? cached.value : null);
   }
 
-  setEx(key: string, value: string): Promise<void> {
+  setEx(key: string, value: string, ttlSeconds: number): Promise<void> {
     this.calls.push('cache-set');
-    this.cache.set(key, value);
+    this.cache.set(key, {
+      value,
+      expiresAt: this.nowMillis + ttlSeconds * 1000,
+    });
     return Promise.resolve();
   }
 
@@ -730,6 +735,38 @@ Deno.test('successful LCIA response cache is validated and prevents a second DB 
   assertEquals(cached.status, 200);
   assertEquals(cached.headers.get('X-Portal-Cache'), 'hit');
   assertEquals(databaseCalls, ['database']);
+});
+
+Deno.test('revoked publication becomes unavailable at the 60-second cache boundary', async () => {
+  const redis = new HandlerRedis();
+  let clockMillis = 0;
+  let currentPublication: PortalPublishedLciaPage | null = page();
+  const databaseCalls: number[] = [];
+  const handler = createPortalDataProductResultsHandler({
+    ...handlerOptions(redis, {
+      query: () => {
+        databaseCalls.push(clockMillis);
+        return Promise.resolve(currentPublication);
+      },
+    }),
+    nowMillis: () => clockMillis,
+  });
+
+  assertEquals((await handler(await signedRequest({ nonceSeed: 70 }))).status, 200);
+  currentPublication = null;
+
+  clockMillis = 59_999;
+  redis.nowMillis = clockMillis;
+  const stillCached = await handler(await signedRequest({ nonceSeed: 71 }));
+  assertEquals(stillCached.status, 200);
+  assertEquals(stillCached.headers.get('X-Portal-Cache'), 'hit');
+
+  clockMillis = 60_000;
+  redis.nowMillis = clockMillis;
+  const revoked = await handler(await signedRequest({ nonceSeed: 72 }));
+  assertEquals(revoked.status, 404);
+  assertEquals((await revoked.json()).code, 'published_lcia_unavailable');
+  assertEquals(databaseCalls, [0, 60_000]);
 });
 
 Deno.test('request body limit is enforced without Redis or database work', async () => {
