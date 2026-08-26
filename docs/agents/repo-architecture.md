@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: e2fb4a1fa37e73af5a1faa02ae30e91442703946
-lastReviewedNote: 'Reviewed after Issue #310 deadline remediation: the signed Hybrid route finalizes its response decision before bounded background security-event delivery through EdgeRuntime waitUntil or the local macrotask fallback.'
+lastReviewedCommit: 133723f931320a0560ff68e27e519ea8710c2517
+lastReviewedNote: 'Reviewed after Issue #312 separated signed Portal Redis provider credentials from the generic adapter surface consumed by existing Functions.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -58,7 +58,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 | `supabase/functions/<name>/index.ts` | stable | default Edge Function entrypoint; baseline `pnpm check` includes every enabled `index.ts` root in one bounded shared Deno graph |
 | `supabase/functions/<name>/handler.ts` | stable | larger routes sometimes split real logic here while `index.ts` stays thin |
 | `supabase/functions/_shared/auth.ts` | stable | central runtime auth and credential-selection logic |
-| `supabase/functions/_shared/portal_hmac.ts` and `portal_redis_guard.ts` | stable | Portal-only raw-body request verification, replay protection, atomic route budget, concurrency lease, and hash-key cache behavior |
+| `supabase/functions/_shared/portal_hmac.ts`, `portal_redis_guard.ts`, and the Portal adapter in `redis_client.ts` | stable | Portal-only raw-body request verification, explicitly isolated provider credentials, replay protection, atomic route budget, concurrency lease, and hash-key cache behavior without generic Redis fallback |
 | `supabase/functions/_shared/portal_public_transport.ts` | stable | exact publishable/legacy-anon transport, Cookie rejection, safe Supabase URL, and bounded raw-byte reader shared by signed Portal routes |
 | `supabase/functions/_shared/portal_security_event.ts` and `portal_hybrid_security_event.ts` | stable | route-specific allowlisted exactly-once Portal events, correlation IDs, safe outcome enums, and the R2 bounded background logger boundary |
 | `supabase/functions/_shared/portal_hybrid_contract.ts` and `portal_hybrid_repository.ts` | stable | strict R2 request/public candidate/Edge response DTOs and the publishable-only `api.portal_hybrid_search_v1` transport |
@@ -91,7 +91,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 147 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 455 Deno behavior tests with env/read/loopback-net permissions.
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 147 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 456 Deno behavior tests with env/read/loopback-net permissions.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
@@ -149,7 +149,7 @@ The retired review-submit Gate, coordinator, and job endpoints are not part of t
 
 After HMAC succeeds, transport validation requires an exact strictly public `apikey`, rejects every Cookie, and normally requires Authorization to be absent. The only compatibility exception is the exact configured legacy anon Bearer injected by pinned local CLI Kong after a trusted publishable key match; user, service, and other Bearers fail before Redis. The same once-resolved trusted key is passed to the public repository.
 
-Redis atomically registers the nonce for 120 seconds and runs one Lua admission operation for minute/day budgets plus a TTL-backed concurrency lease. The lease defaults to 30 seconds, is at least 20 seconds, and must cover Redis plus upstream timeouts with five seconds of recovery margin. Missing configuration, timeout, malformed response, or provider outage fails closed before JSON, cache, or database work. The lease is released in `finally`; its TTL recovers an interrupted isolate and Lua reports only the recovered count. Public-result cache keys contain only the request body hash and expire in at most 60 seconds. This bound ensures direct same-origin BFF traffic rechecks a revoked publication within the visibility SLA; Redis does not decide visibility or authorization.
+Redis atomically registers the nonce for 120 seconds and runs one Lua admission operation for minute/day budgets plus a TTL-backed concurrency lease. The Portal adapter reads only `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` provider credentials and never falls back to the generic Redis surface consumed by existing Functions. The lease defaults to 30 seconds, is at least 20 seconds, and must cover Redis plus upstream timeouts with five seconds of recovery margin. Missing configuration, timeout, malformed response, or provider outage fails closed before JSON, cache, or database work. The lease is released in `finally`; its TTL recovers an interrupted isolate and Lua reports only the recovered count. Public-result cache keys contain only the request body hash and expire in at most 60 seconds. This bound ensures direct same-origin BFF traffic rechecks a revoked publication within the visibility SLA; Redis does not decide visibility or authorization.
 
 The route then calls only `api.portal_get_published_lcia_values_v1` with explicit `Content-Profile: api` and a strictly validated publishable/legacy-anon credential. It rejects `sb_secret_*`, non-anon JWT roles including `service_role`, credential-bearing/non-HTTPS remote URLs, user context, service clients, artifacts, and locators. A successful response is the exact bounded `portal.published-lcia-page.v1` DTO. A missing publication is unavailable with zero rows, never numeric zero.
 

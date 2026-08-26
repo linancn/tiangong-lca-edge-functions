@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-26'
-lastReviewedCommit: 'e2fb4a1fa37e73af5a1faa02ae30e91442703946'
-lastReviewedNote: 'Reviewed after Issue #310 deadline remediation: R2 final-response event parity and bounded waitUntil/macrotask delivery are routed with the Portal runtime.'
+lastReviewedCommit: '133723f931320a0560ff68e27e519ea8710c2517'
+lastReviewedNote: 'Reviewed after Issue #312 isolated signed Portal Redis provider credentials from the generic shared Redis surface; routing and ownership are unchanged.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
