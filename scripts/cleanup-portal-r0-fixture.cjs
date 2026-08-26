@@ -46,7 +46,7 @@ function main(options = {}) {
       encoding: 'utf8',
     }).trim() === '';
   const branches = (options.branchListRunner ?? listSupabasePreviewBranches)({
-    parentProjectRef: packageJson.config?.supabaseProjectRefDev,
+    parentProjectRef: packageJson.config?.supabaseProjectRefMain,
     execFileSyncImpl: execFile,
     repoRoot,
     environment,

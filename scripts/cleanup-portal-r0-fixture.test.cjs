@@ -13,14 +13,18 @@ const { CLEANUP_ACK } = require('./deploy-portal-r0-fixture.cjs');
 const NOW = Date.parse('2026-08-26T08:00:00.000Z');
 const HEAD = 'a'.repeat(40);
 const PREVIEW_REF = 'abcdefghijklmnopqrst';
-const DEV_REF = 'submidrhbtknjxfympna';
+const MAIN_REF = 'qgzvkongdjqiiamzbbts';
 
 function readyBranch(overrides = {}) {
   return {
     project_ref: PREVIEW_REF,
-    parent_project_ref: DEV_REF,
+    parent_project_ref: MAIN_REF,
     is_default: false,
     persistent: false,
+    with_data: false,
+    name: 'portal-r0-issue-316',
+    git_branch: 'feature/issue-316',
+    pr_number: 316,
     status: 'FUNCTIONS_DEPLOYED',
     preview_project_status: 'ACTIVE_HEALTHY',
     ...overrides,
@@ -33,6 +37,9 @@ function environment(overrides = {}) {
     PORTAL_R0_RUNTIME_TARGET: 'preview',
     PORTAL_R0_DEPLOYMENT_SHA: HEAD,
     PORTAL_R0_DEPLOY_EXPIRES_AT: '2026-08-27T07:59:59.000Z',
+    PORTAL_R0_SUPABASE_BRANCH_NAME: 'portal-r0-issue-316',
+    PORTAL_R0_SUPABASE_GIT_BRANCH: 'feature/issue-316',
+    PORTAL_R0_SUPABASE_PR_NUMBER: '316',
     PORTAL_R0_CLEANUP_ACK: CLEANUP_ACK,
     PORTAL_R0_CLEANUP_DRY_RUN: 'true',
     ...overrides,
@@ -140,7 +147,7 @@ test('absent branch is a verified terminal and never invokes function delete', (
   const calls = [];
   const { result, logs } = run({
     environment: environment({ PORTAL_R0_CLEANUP_DRY_RUN: 'false' }),
-    branchListRunner: () => [],
+    branchListRunner: () => [readyBranch({ project_ref: 'zzzzzzzzzzzzzzzzzzzz' })],
     spawnSyncImpl(...args) {
       calls.push(args);
       return { status: 0 };

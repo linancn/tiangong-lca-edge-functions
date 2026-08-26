@@ -21,9 +21,13 @@ function readyBranch(overrides = {}) {
   return {
     id: 'branch-id-is-not-logged',
     project_ref: PREVIEW_REF,
-    parent_project_ref: DEV_REF,
+    parent_project_ref: MAIN_REF,
     is_default: false,
     persistent: false,
+    with_data: false,
+    name: 'portal-r0-issue-316',
+    git_branch: 'feature/issue-316',
+    pr_number: 316,
     status: 'FUNCTIONS_DEPLOYED',
     preview_project_status: 'ACTIVE_HEALTHY',
     ...overrides,
@@ -38,6 +42,9 @@ function validInput() {
       PORTAL_R0_RUNTIME_TARGET: 'preview',
       PORTAL_R0_DEPLOYMENT_SHA: HEAD,
       PORTAL_R0_DEPLOY_EXPIRES_AT: '2026-08-27T07:59:59.000Z',
+      PORTAL_R0_SUPABASE_BRANCH_NAME: 'portal-r0-issue-316',
+      PORTAL_R0_SUPABASE_GIT_BRANCH: 'feature/issue-316',
+      PORTAL_R0_SUPABASE_PR_NUMBER: '316',
       PORTAL_R0_DISPOSABLE_ACK: DISPOSABLE_ACK,
     },
     persistentDevProjectRef: DEV_REF,
@@ -64,24 +71,27 @@ test('builds one fixed no-gateway-JWT R0 function deployment', () => {
   ]);
 });
 
-test('accepts only an exact ready ephemeral branch returned by the Dev parent', () => {
+test('accepts only an exact ready no-data ephemeral branch returned by the Main parent', () => {
   assert.deepEqual(validatePortalR0Deploy(validInput()), {
     projectRef: PREVIEW_REF,
     deploymentSha: HEAD,
     expiresAtText: '2026-08-27T07:59:59.000Z',
+    branchName: 'portal-r0-issue-316',
+    gitBranch: 'feature/issue-316',
+    prNumber: 316,
     branchState: 'ready',
   });
 });
 
-test('live branch list runner executes one read-only exact parent query and parses JSON', () => {
+test('live branch list runner executes one read-only exact Main-parent query and parses CLI JSON', () => {
   const calls = [];
   const branches = listSupabasePreviewBranches({
-    parentProjectRef: DEV_REF,
+    parentProjectRef: MAIN_REF,
     repoRoot: process.cwd(),
     environment: { SUPABASE_ACCESS_TOKEN: 'must-not-be-logged' },
     execFileSyncImpl(command, args, options) {
       calls.push({ command, args, options });
-      return JSON.stringify([readyBranch()]);
+      return JSON.stringify({ branches: [readyBranch()], message: '' });
     },
   });
   assert.equal(branches.length, 1);
@@ -93,8 +103,8 @@ test('live branch list runner executes one read-only exact parent query and pars
     'branches',
     'list',
     '--project-ref',
-    DEV_REF,
-    '--output',
+    MAIN_REF,
+    '--output-format',
     'json',
   ]);
   assert.deepEqual(calls[0].options.stdio, ['ignore', 'pipe', 'pipe']);
@@ -116,11 +126,25 @@ for (const [name, mutate] of [
   ],
   ['SHA mismatch', (input) => (input.environment.PORTAL_R0_DEPLOYMENT_SHA = 'b'.repeat(40))],
   ['dirty worktree', (input) => (input.gitClean = false)],
-  ['branch absent', (input) => (input.branches = [])],
+  [
+    'branch absent',
+    (input) => (input.branches = [readyBranch({ project_ref: 'zzzzzzzzzzzzzzzzzzzz' })]),
+  ],
   ['duplicate matching branches', (input) => (input.branches = [readyBranch(), readyBranch()])],
-  ['wrong parent', (input) => (input.branches[0].parent_project_ref = MAIN_REF)],
+  ['malformed branch row', (input) => (input.branches = [{}])],
+  ['wrong parent', (input) => (input.branches[0].parent_project_ref = DEV_REF)],
   ['default branch', (input) => (input.branches[0].is_default = true)],
   ['persistent branch', (input) => (input.branches[0].persistent = true)],
+  ['branch cloned data', (input) => (input.branches[0].with_data = true)],
+  [
+    'branch name mismatch',
+    (input) => (input.environment.PORTAL_R0_SUPABASE_BRANCH_NAME = 'another-branch'),
+  ],
+  [
+    'git branch mismatch',
+    (input) => (input.environment.PORTAL_R0_SUPABASE_GIT_BRANCH = 'feature/other'),
+  ],
+  ['PR number mismatch', (input) => (input.environment.PORTAL_R0_SUPABASE_PR_NUMBER = '317')],
   ['not-ready branch status', (input) => (input.branches[0].status = 'MIGRATIONS_PASSED')],
   ['unhealthy project status', (input) => (input.branches[0].preview_project_status = 'COMING_UP')],
   [
@@ -139,7 +163,14 @@ for (const [name, mutate] of [
   });
 }
 
-for (const output of ['not-json', '{}', 'null']) {
+for (const output of [
+  'not-json',
+  '{}',
+  'null',
+  '[]',
+  '{"branches":[],"message":""}',
+  '{"branches":[{}],"message":"unexpected"}',
+]) {
   test(`live branch runner rejects malformed output ${output}`, () => {
     assert.throws(
       () =>

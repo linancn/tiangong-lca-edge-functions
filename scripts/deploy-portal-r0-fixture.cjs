@@ -12,6 +12,8 @@ const CLEANUP_ACK = 'delete-function-and-confirm-external-resources';
 const MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const PROJECT_REF_PATTERN = /^[a-z0-9]{20}$/u;
 const SHA_PATTERN = /^[0-9a-f]{40}$/u;
+const BRANCH_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/u;
+const GIT_BRANCH_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/u;
 const READY_BRANCH_STATUS = 'FUNCTIONS_DEPLOYED';
 const READY_PROJECT_STATUS = 'ACTIVE_HEALTHY';
 
@@ -40,7 +42,7 @@ function listSupabasePreviewBranches(input) {
         'list',
         '--project-ref',
         input.parentProjectRef,
-        '--output',
+        '--output-format',
         'json',
       ],
       {
@@ -55,24 +57,38 @@ function listSupabasePreviewBranches(input) {
   }
   try {
     const parsed = JSON.parse(output);
-    if (!Array.isArray(parsed)) throw new Error('invalid branch list');
-    return parsed;
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed) ||
+      Object.keys(parsed).sort().join('\n') !== ['branches', 'message'].sort().join('\n') ||
+      parsed.message !== '' ||
+      !Array.isArray(parsed.branches) ||
+      parsed.branches.length === 0
+    ) {
+      throw new Error('invalid branch list');
+    }
+    return parsed.branches;
   } catch {
     throw new Error('R0 live Preview branch verification failed.');
   }
 }
 
 function matchingBranchRows(input, projectRef) {
-  if (!Array.isArray(input.branches)) {
+  if (
+    !Array.isArray(input.branches) ||
+    input.branches.length === 0 ||
+    input.branches.some(
+      (candidate) =>
+        !candidate ||
+        typeof candidate !== 'object' ||
+        Array.isArray(candidate) ||
+        !PROJECT_REF_PATTERN.test(candidate.project_ref),
+    )
+  ) {
     throw new Error('R0 live Preview branch verification failed.');
   }
-  return input.branches.filter(
-    (candidate) =>
-      candidate &&
-      typeof candidate === 'object' &&
-      !Array.isArray(candidate) &&
-      candidate.project_ref === projectRef,
-  );
+  return input.branches.filter((candidate) => candidate.project_ref === projectRef);
 }
 
 function validateReadyDisposableBranch(input, projectRef) {
@@ -82,11 +98,15 @@ function validateReadyDisposableBranch(input, projectRef) {
   }
   const branch = matches[0];
   if (
-    branch.parent_project_ref !== input.persistentDevProjectRef ||
+    branch.parent_project_ref !== input.productionProjectRef ||
     branch.is_default !== false ||
     branch.persistent !== false ||
     branch.status !== READY_BRANCH_STATUS ||
-    branch.preview_project_status !== READY_PROJECT_STATUS
+    branch.preview_project_status !== READY_PROJECT_STATUS ||
+    branch.with_data !== false ||
+    branch.name !== input.branchName ||
+    branch.git_branch !== input.gitBranch ||
+    (input.prNumber !== null && branch.pr_number !== input.prNumber)
   ) {
     throw new Error('R0 target is not one ready disposable Preview branch.');
   }
@@ -101,6 +121,17 @@ function validatePortalR0Base(input, acknowledgementName, acknowledgementValue) 
   const runtimeTarget = requiredEnvironmentValue(input.environment, 'PORTAL_R0_RUNTIME_TARGET');
   const deploymentSha = requiredEnvironmentValue(input.environment, 'PORTAL_R0_DEPLOYMENT_SHA');
   const expiresAtText = requiredEnvironmentValue(input.environment, 'PORTAL_R0_DEPLOY_EXPIRES_AT');
+  const branchName = requiredEnvironmentValue(input.environment, 'PORTAL_R0_SUPABASE_BRANCH_NAME');
+  const gitBranch = requiredEnvironmentValue(input.environment, 'PORTAL_R0_SUPABASE_GIT_BRANCH');
+  const prNumberText = input.environment.PORTAL_R0_SUPABASE_PR_NUMBER;
+  let prNumber = null;
+  if (prNumberText !== undefined && prNumberText !== '') {
+    if (!/^[1-9]\d{0,9}$/u.test(prNumberText)) {
+      throw new Error('R0 deploy configuration is invalid.');
+    }
+    prNumber = Number(prNumberText);
+    if (!Number.isSafeInteger(prNumber)) throw new Error('R0 deploy configuration is invalid.');
+  }
   const acknowledgement = requiredEnvironmentValue(input.environment, acknowledgementName);
 
   if (
@@ -108,6 +139,12 @@ function validatePortalR0Base(input, acknowledgementName, acknowledgementValue) 
     projectRef === input.persistentDevProjectRef ||
     projectRef === input.productionProjectRef ||
     runtimeTarget !== REMOTE_TARGET ||
+    !BRANCH_NAME_PATTERN.test(branchName) ||
+    !GIT_BRANCH_PATTERN.test(gitBranch) ||
+    branchName.includes('..') ||
+    gitBranch.includes('..') ||
+    gitBranch.includes('@{') ||
+    gitBranch.endsWith('.lock') ||
     acknowledgement !== acknowledgementValue ||
     !SHA_PATTERN.test(deploymentSha) ||
     deploymentSha !== input.gitHead ||
@@ -117,7 +154,7 @@ function validatePortalR0Base(input, acknowledgementName, acknowledgementValue) 
   ) {
     throw new Error('R0 deploy configuration is invalid.');
   }
-  return { projectRef, deploymentSha, expiresAtText };
+  return { projectRef, deploymentSha, expiresAtText, branchName, gitBranch, prNumber };
 }
 
 function validatePortalR0Deploy(input) {
@@ -126,7 +163,7 @@ function validatePortalR0Deploy(input) {
   if (expiresAt <= input.nowMillis || expiresAt - input.nowMillis > MAX_LIFETIME_MS) {
     throw new Error('R0 deploy expiry must be within the next 24 hours.');
   }
-  validateReadyDisposableBranch(input, validated.projectRef);
+  validateReadyDisposableBranch({ ...input, ...validated }, validated.projectRef);
   return { ...validated, branchState: 'ready' };
 }
 
@@ -134,7 +171,7 @@ function validatePortalR0Cleanup(input) {
   const validated = validatePortalR0Base(input, 'PORTAL_R0_CLEANUP_ACK', CLEANUP_ACK);
   const matches = matchingBranchRows(input, validated.projectRef);
   if (matches.length === 0) return { ...validated, branchState: 'absent' };
-  validateReadyDisposableBranch(input, validated.projectRef);
+  validateReadyDisposableBranch({ ...input, ...validated }, validated.projectRef);
   return { ...validated, branchState: 'ready' };
 }
 
@@ -169,7 +206,7 @@ function main(options = {}) {
       encoding: 'utf8',
     }).trim() === '';
   const branches = (options.branchListRunner ?? listSupabasePreviewBranches)({
-    parentProjectRef: packageJson.config?.supabaseProjectRefDev,
+    parentProjectRef: packageJson.config?.supabaseProjectRefMain,
     execFileSyncImpl: execFile,
     repoRoot,
     environment,
