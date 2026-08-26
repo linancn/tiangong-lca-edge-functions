@@ -1041,15 +1041,24 @@ Deno.test(
     const redis = new FakePortalRedis();
     redis.leaseReleaseOperation = () => neverPromise();
     const handler = createPortalHybridSearchHandler(
-      handlerOptions(redis, { query: () => Promise.resolve(databasePage()) }, { timeoutMs: 500 }),
+      handlerOptions(
+        redis,
+        { query: () => Promise.resolve(databasePage()) },
+        {
+          timeoutMs: 100,
+          redis: undefined,
+          redisFactory: async () => redis,
+        },
+      ),
     );
     const result = await Promise.race([
       handler(await signedRequest()).then((response) => response.status),
-      new Promise<number>((resolve) => setTimeout(() => resolve(599), 100)),
+      new Promise<number>((resolve) => setTimeout(() => resolve(599), 50)),
     ]);
-    await Promise.resolve();
     assertEquals(result, 200);
     assert(redis.calls.includes('lease_release'));
+    await new Promise((resolve) => setTimeout(resolve, 125));
+    assert(redis.calls.includes('close'));
   },
 );
 

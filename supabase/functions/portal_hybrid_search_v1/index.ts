@@ -676,20 +676,17 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         return errorResponse(503, 'internal_error', 'Portal Hybrid search unavailable');
       } finally {
         if (leaseId || ownsRedis) {
-          deadline.detach(async () => {
-            try {
+          deadline.detach(
+            async () => {
               if (leaseId) {
                 await releasePortalConcurrencyLease(
                   { route: PORTAL_HYBRID_FUNCTION_NAME, leaseId },
                   redis,
                 );
               }
-            } catch (_error) {
-              // The TTL is the authoritative interrupted-isolate recovery path.
-            } finally {
-              if (ownsRedis) await redis.close().catch(() => undefined);
-            }
-          });
+            },
+            ownsRedis ? () => redis.close() : undefined,
+          );
         }
       }
     };

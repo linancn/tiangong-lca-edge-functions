@@ -68,9 +68,16 @@ export class PortalHybridDeadline {
     }
   }
 
-  detach(operation: () => void | Promise<void>): void {
+  detach(operation: () => void | Promise<void>, finalize?: () => void | Promise<void>): void {
     const remainingMs = this.remainingMs();
-    if (remainingMs <= 0) return;
+    if (remainingMs <= 0) {
+      if (finalize) {
+        void Promise.resolve()
+          .then(finalize)
+          .catch(() => undefined);
+      }
+      return;
+    }
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const operationPromise = Promise.resolve()
       .then(operation)
@@ -83,6 +90,11 @@ export class PortalHybridDeadline {
     });
     void Promise.race([operationPromise, timeoutPromise]).finally(() => {
       if (timeoutId !== undefined) clearTimeout(timeoutId);
+      if (finalize) {
+        void Promise.resolve()
+          .then(finalize)
+          .catch(() => undefined);
+      }
     });
   }
 
