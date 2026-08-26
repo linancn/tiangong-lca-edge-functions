@@ -3,6 +3,7 @@ import {
   type PortalRedisAdapter,
   type PortalRedisEnvironment,
   PortalRedisError,
+  readPortalRedisTimeoutMs,
 } from './redis_client.ts';
 
 const REPLAY_TTL_SECONDS = 120;
@@ -12,6 +13,9 @@ const ROUTE_PATTERN = /^[a-z0-9][a-z0-9_]{0,63}$/;
 const KEY_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const NONCE_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 const BODY_HASH_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const MINIMUM_LEASE_TTL_SECONDS = 20;
+const DEFAULT_LEASE_TTL_SECONDS = 30;
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 8_000;
 
 export const PORTAL_ATOMIC_GUARD_LUA = `
 local now_ms = tonumber(ARGV[1])
@@ -59,6 +63,11 @@ export type PortalRouteGuardLimits = {
   cacheTtlSeconds: number;
 };
 
+export type PortalGuardTiming = {
+  redisTimeoutMs: number;
+  upstreamTimeoutMs: number;
+};
+
 export type PortalGuardAdmission =
   | {
       status: 'admitted';
@@ -98,14 +107,76 @@ function boundedEnvironmentInteger(
 
 export function readPortalLciaGuardLimits(
   env: PortalRedisEnvironment = Deno.env,
+  timing: Partial<PortalGuardTiming> = {},
 ): PortalRouteGuardLimits {
-  return {
-    minuteBudget: boundedEnvironmentInteger(env, 'PORTAL_LCIA_MINUTE_BUDGET', 120, 1, 1_000_000),
-    dailyBudget: boundedEnvironmentInteger(env, 'PORTAL_LCIA_DAILY_BUDGET', 20_000, 1, 100_000_000),
-    maxConcurrency: boundedEnvironmentInteger(env, 'PORTAL_LCIA_MAX_CONCURRENCY', 20, 1, 10_000),
-    leaseTtlSeconds: boundedEnvironmentInteger(env, 'PORTAL_LCIA_LEASE_TTL_SECONDS', 15, 9, 300),
-    cacheTtlSeconds: boundedEnvironmentInteger(env, 'PORTAL_LCIA_CACHE_TTL_SECONDS', 300, 1, 300),
+  const resolvedTiming = {
+    redisTimeoutMs: timing.redisTimeoutMs ?? readPortalRedisTimeoutMs(env),
+    upstreamTimeoutMs:
+      timing.upstreamTimeoutMs ??
+      boundedEnvironmentInteger(
+        env,
+        'PORTAL_LCIA_UPSTREAM_TIMEOUT_MS',
+        DEFAULT_UPSTREAM_TIMEOUT_MS,
+        100,
+        DEFAULT_UPSTREAM_TIMEOUT_MS,
+      ),
   };
+  return validatePortalLciaGuardLimits(
+    {
+      minuteBudget: boundedEnvironmentInteger(env, 'PORTAL_LCIA_MINUTE_BUDGET', 120, 1, 1_000_000),
+      dailyBudget: boundedEnvironmentInteger(
+        env,
+        'PORTAL_LCIA_DAILY_BUDGET',
+        20_000,
+        1,
+        100_000_000,
+      ),
+      maxConcurrency: boundedEnvironmentInteger(env, 'PORTAL_LCIA_MAX_CONCURRENCY', 20, 1, 10_000),
+      leaseTtlSeconds: boundedEnvironmentInteger(
+        env,
+        'PORTAL_LCIA_LEASE_TTL_SECONDS',
+        DEFAULT_LEASE_TTL_SECONDS,
+        MINIMUM_LEASE_TTL_SECONDS,
+        300,
+      ),
+      cacheTtlSeconds: boundedEnvironmentInteger(env, 'PORTAL_LCIA_CACHE_TTL_SECONDS', 300, 1, 300),
+    },
+    resolvedTiming,
+  );
+}
+
+export function minimumPortalLeaseTtlSeconds(timing: PortalGuardTiming): number {
+  if (
+    !Number.isSafeInteger(timing.redisTimeoutMs) ||
+    timing.redisTimeoutMs < 0 ||
+    !Number.isSafeInteger(timing.upstreamTimeoutMs) ||
+    timing.upstreamTimeoutMs < 0
+  ) {
+    throw new PortalRedisError();
+  }
+  return Math.max(
+    MINIMUM_LEASE_TTL_SECONDS,
+    Math.ceil((timing.redisTimeoutMs + timing.upstreamTimeoutMs) / 1000) + 5,
+  );
+}
+
+export function validatePortalLciaGuardLimits(
+  limits: PortalRouteGuardLimits,
+  timing: PortalGuardTiming,
+): PortalRouteGuardLimits {
+  const integerWithin = (value: number, minimum: number, maximum: number) =>
+    Number.isSafeInteger(value) && value >= minimum && value <= maximum;
+  if (
+    !integerWithin(limits.minuteBudget, 1, 1_000_000) ||
+    !integerWithin(limits.dailyBudget, 1, 100_000_000) ||
+    !integerWithin(limits.maxConcurrency, 1, 10_000) ||
+    !integerWithin(limits.leaseTtlSeconds, MINIMUM_LEASE_TTL_SECONDS, 300) ||
+    !integerWithin(limits.cacheTtlSeconds, 1, 300) ||
+    limits.leaseTtlSeconds < minimumPortalLeaseTtlSeconds(timing)
+  ) {
+    throw new PortalRedisError();
+  }
+  return limits;
 }
 
 async function usePortalRedisAdapter<T>(
@@ -270,4 +341,4 @@ export async function writePortalResponseCache(
   );
 }
 
-export { REPLAY_TTL_SECONDS };
+export { DEFAULT_LEASE_TTL_SECONDS, MINIMUM_LEASE_TTL_SECONDS, REPLAY_TTL_SECONDS };

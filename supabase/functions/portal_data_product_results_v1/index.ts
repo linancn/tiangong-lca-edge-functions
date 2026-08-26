@@ -16,13 +16,16 @@ import {
   redisEvalAtomicGuard,
   registerPortalNonce,
   releasePortalConcurrencyLease,
+  type PortalGuardTiming,
   type PortalRouteGuardLimits,
+  validatePortalLciaGuardLimits,
   writePortalResponseCache,
 } from '../_shared/portal_redis_guard.ts';
 import {
   createPortalRedisAdapter,
   type PortalRedisAdapter,
   PortalRedisError,
+  readPortalRedisTimeoutMs,
 } from '../_shared/redis_client.ts';
 import { getSupabasePublishableKey, getSupabaseUrl } from '../_shared/supabase_client.ts';
 
@@ -431,6 +434,7 @@ type PortalDataProductResultsHandlerOptions = {
   nowSeconds?: () => number;
   nowMillis?: () => number;
   upstreamTimeoutMs?: number;
+  redisTimeoutMs?: number;
   trustedPublishableKey?: string;
   trustedLegacyAnonKey?: string | null;
 };
@@ -513,6 +517,20 @@ export function createPortalDataProductResultsHandler(
       return errorResponse(401, 'portal_auth_failed', 'Portal request authentication failed');
     }
 
+    let guardLimits: PortalRouteGuardLimits;
+    let guardTiming: PortalGuardTiming;
+    try {
+      guardTiming = {
+        redisTimeoutMs: options.redisTimeoutMs ?? readPortalRedisTimeoutMs(),
+        upstreamTimeoutMs: options.upstreamTimeoutMs ?? upstreamTimeoutFromEnvironment(),
+      };
+      guardLimits = options.guardLimits
+        ? validatePortalLciaGuardLimits(options.guardLimits, guardTiming)
+        : readPortalLciaGuardLimits(Deno.env, guardTiming);
+    } catch (_error) {
+      return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
+    }
+
     let redis: PortalRedisAdapter;
     let ownsRedis = false;
     try {
@@ -535,7 +553,7 @@ export function createPortalDataProductResultsHandler(
       const guard = await redisEvalAtomicGuard(
         {
           route: PORTAL_LCIA_FUNCTION_NAME,
-          limits: options.guardLimits ?? readPortalLciaGuardLimits(),
+          limits: guardLimits,
           nowMillis: options.nowMillis?.(),
         },
         redis,
@@ -583,7 +601,7 @@ export function createPortalDataProductResultsHandler(
         return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
       }
 
-      const timeoutMs = options.upstreamTimeoutMs ?? upstreamTimeoutFromEnvironment();
+      const timeoutMs = guardTiming.upstreamTimeoutMs;
       if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 8_000) {
         return errorResponse(
           503,
@@ -637,7 +655,7 @@ export function createPortalDataProductResultsHandler(
             route: PORTAL_LCIA_FUNCTION_NAME,
             bodyHash: verification.bodyHash,
             value: serialized,
-            ttlSeconds: (options.guardLimits ?? readPortalLciaGuardLimits()).cacheTtlSeconds,
+            ttlSeconds: guardLimits.cacheTtlSeconds,
           },
           redis,
         );

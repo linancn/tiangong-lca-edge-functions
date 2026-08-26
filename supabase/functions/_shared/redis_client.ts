@@ -70,6 +70,10 @@ function portalRedisTimeout(value: string | undefined): number {
   return parsed;
 }
 
+export function readPortalRedisTimeoutMs(env: PortalRedisEnvironment = Deno.env): number {
+  return portalRedisTimeout(portalRedisEnvironmentValue(env, 'PORTAL_REDIS_TIMEOUT_MS'));
+}
+
 export function readPortalRedisRuntimeConfig(
   env: PortalRedisEnvironment = Deno.env,
 ): PortalRedisRuntimeConfig {
@@ -77,7 +81,7 @@ export function readPortalRedisRuntimeConfig(
   if (provider !== 'upstash' && provider !== 'standard') throw new PortalRedisError();
   const namespace = portalRedisRequiredEnvironmentValue(env, 'PORTAL_REDIS_NAMESPACE');
   if (!PORTAL_REDIS_NAMESPACE_PATTERN.test(namespace)) throw new PortalRedisError();
-  const timeoutMs = portalRedisTimeout(portalRedisEnvironmentValue(env, 'PORTAL_REDIS_TIMEOUT_MS'));
+  const timeoutMs = readPortalRedisTimeoutMs(env);
 
   if (provider === 'upstash') {
     const upstashUrl = portalRedisRequiredEnvironmentValue(env, 'UPSTASH_REDIS_URL');

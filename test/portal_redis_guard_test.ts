@@ -1,6 +1,15 @@
-import { assert, assertEquals, assertRejects, assertStringIncludes } from 'jsr:@std/assert';
+import {
+  assert,
+  assertEquals,
+  assertRejects,
+  assertStringIncludes,
+  assertThrows,
+} from 'jsr:@std/assert';
 
 import {
+  DEFAULT_LEASE_TTL_SECONDS,
+  minimumPortalLeaseTtlSeconds,
+  MINIMUM_LEASE_TTL_SECONDS,
   PORTAL_ATOMIC_GUARD_LUA,
   readPortalLciaGuardLimits,
   readPortalResponseCache,
@@ -8,6 +17,7 @@ import {
   registerPortalNonce,
   releasePortalConcurrencyLease,
   REPLAY_TTL_SECONDS,
+  validatePortalLciaGuardLimits,
   writePortalResponseCache,
 } from '../supabase/functions/_shared/portal_redis_guard.ts';
 import {
@@ -128,7 +138,7 @@ const LIMITS = {
   minuteBudget: 10,
   dailyBudget: 100,
   maxConcurrency: 2,
-  leaseTtlSeconds: 9,
+  leaseTtlSeconds: DEFAULT_LEASE_TTL_SECONDS,
   cacheTtlSeconds: 300,
 };
 
@@ -262,19 +272,31 @@ Deno.test('Portal route guard admits only one concurrent caller at limit one', a
 
 Deno.test('Portal concurrency lease recovers after TTL without explicit release', async () => {
   const redis = new MemoryPortalRedis('portal:test:v1');
-  const limits = { ...LIMITS, maxConcurrency: 1, leaseTtlSeconds: 9 };
+  const limits = {
+    ...LIMITS,
+    maxConcurrency: 1,
+    leaseTtlSeconds: MINIMUM_LEASE_TTL_SECONDS,
+  };
   const first = await redisEvalAtomicGuard(
     { route: 'portal_data_product_results_v1', limits, nowMillis: 0 },
     redis,
   );
   assertEquals(first.status, 'admitted');
   const blocked = await redisEvalAtomicGuard(
-    { route: 'portal_data_product_results_v1', limits, nowMillis: 8999 },
+    {
+      route: 'portal_data_product_results_v1',
+      limits,
+      nowMillis: MINIMUM_LEASE_TTL_SECONDS * 1000 - 1,
+    },
     redis,
   );
   assertEquals(blocked.status, 'concurrency_exhausted');
   const recovered = await redisEvalAtomicGuard(
-    { route: 'portal_data_product_results_v1', limits, nowMillis: 9000 },
+    {
+      route: 'portal_data_product_results_v1',
+      limits,
+      nowMillis: MINIMUM_LEASE_TTL_SECONDS * 1000,
+    },
     redis,
   );
   assertEquals(recovered.status, 'admitted');
@@ -326,7 +348,7 @@ Deno.test(
       minuteBudget: 120,
       dailyBudget: 20_000,
       maxConcurrency: 20,
-      leaseTtlSeconds: 15,
+      leaseTtlSeconds: DEFAULT_LEASE_TTL_SECONDS,
       cacheTtlSeconds: 300,
     });
     let code: string | undefined;
@@ -336,5 +358,45 @@ Deno.test(
       code = (error as PortalRedisError).code;
     }
     assertEquals(code, 'guard_unavailable');
+
+    for (const leaseTtlSeconds of [19, 20, 30]) {
+      const values = {
+        PORTAL_LCIA_LEASE_TTL_SECONDS: String(leaseTtlSeconds),
+        PORTAL_REDIS_TIMEOUT_MS: '5000',
+        PORTAL_LCIA_UPSTREAM_TIMEOUT_MS: '8000',
+      };
+      if (leaseTtlSeconds === 19) {
+        assertThrows(() => readPortalLciaGuardLimits(environment(values)));
+      } else {
+        assertEquals(
+          readPortalLciaGuardLimits(environment(values)).leaseTtlSeconds,
+          leaseTtlSeconds,
+        );
+      }
+    }
+  },
+);
+
+Deno.test(
+  'Portal lease covers Redis plus upstream timeout with five-second recovery margin',
+  () => {
+    const timing = { redisTimeoutMs: 5000, upstreamTimeoutMs: 8000 };
+    assertEquals(minimumPortalLeaseTtlSeconds(timing), 20);
+    assertThrows(() => validatePortalLciaGuardLimits({ ...LIMITS, leaseTtlSeconds: 19 }, timing));
+    assertEquals(
+      validatePortalLciaGuardLimits({ ...LIMITS, leaseTtlSeconds: 20 }, timing).leaseTtlSeconds,
+      20,
+    );
+
+    const longerTiming = { redisTimeoutMs: 15_000, upstreamTimeoutMs: 10_000 };
+    assertEquals(minimumPortalLeaseTtlSeconds(longerTiming), 30);
+    assertThrows(() =>
+      validatePortalLciaGuardLimits({ ...LIMITS, leaseTtlSeconds: 29 }, longerTiming),
+    );
+    assertEquals(
+      validatePortalLciaGuardLimits({ ...LIMITS, leaseTtlSeconds: 30 }, longerTiming)
+        .leaseTtlSeconds,
+      30,
+    );
   },
 );

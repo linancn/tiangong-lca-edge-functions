@@ -51,7 +51,7 @@ const GUARD_LIMITS = {
   minuteBudget: 10,
   dailyBudget: 100,
   maxConcurrency: 2,
-  leaseTtlSeconds: 9,
+  leaseTtlSeconds: 30,
   cacheTtlSeconds: 300,
 };
 
@@ -220,6 +220,7 @@ function handlerOptions(redis: HandlerRedis, database: PortalPublishedLciaReposi
     nowSeconds: () => NOW_SECONDS,
     nowMillis: () => NOW_SECONDS * 1000,
     upstreamTimeoutMs: 500,
+    redisTimeoutMs: 500,
     trustedPublishableKey: TRUSTED_PUBLISHABLE_KEY,
     trustedLegacyAnonKey: LEGACY_ANON_KEY,
   };
@@ -334,6 +335,27 @@ Deno.test('invalid trusted transport configuration fails closed before Redis', a
   assertEquals((await response.json()).code, 'portal_auth_unavailable');
   assertEquals(redis.calls, []);
   assertEquals(databaseCalls, []);
+});
+
+Deno.test('Portal handler rejects lease 19 and accepts the 20-second safety boundary', async () => {
+  const rejectedRedis = new HandlerRedis();
+  const rejectedDatabaseCalls: string[] = [];
+  const rejected = createPortalDataProductResultsHandler({
+    ...handlerOptions(rejectedRedis, repository(page(), rejectedDatabaseCalls)),
+    guardLimits: { ...GUARD_LIMITS, leaseTtlSeconds: 19 },
+  });
+  const rejectedResponse = await rejected(await signedRequest({ nonceSeed: 51 }));
+  assertEquals(rejectedResponse.status, 503);
+  assertEquals((await rejectedResponse.json()).code, 'guard_unavailable');
+  assertEquals(rejectedRedis.calls, []);
+  assertEquals(rejectedDatabaseCalls, []);
+
+  const acceptedRedis = new HandlerRedis();
+  const accepted = createPortalDataProductResultsHandler({
+    ...handlerOptions(acceptedRedis, repository(page())),
+    guardLimits: { ...GUARD_LIMITS, leaseTtlSeconds: 20 },
+  });
+  assertEquals((await accepted(await signedRequest({ nonceSeed: 52 }))).status, 200);
 });
 
 Deno.test('missing or bad HMAC is rejected before Redis, JSON, or database work', async () => {
