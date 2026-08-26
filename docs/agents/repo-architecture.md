@@ -92,7 +92,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 147 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 461 Deno behavior tests with env/read/loopback-net permissions.
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 147 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 460 Deno behavior tests with env/read/loopback-net permissions.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
