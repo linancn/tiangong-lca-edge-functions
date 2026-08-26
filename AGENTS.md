@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 55f7cb5985da3e2f7c800ed695e2f64df91a5838
-lastReviewedNote: 'Reviewed after Issue #313 bound hosted transport to the current project while allowing only the exact pinned-CLI kong URL/legacy-anon compatibility and forbidding indirect generic fallback.'
+lastReviewedCommit: df6eef9973d733b95e7912cfc8f2a644f125f3b8
+lastReviewedNote: 'Reviewed after Issue #316 added the disposable R0 HMAC/Redis interoperability fixture, isolated runtime variables, loopback provider proofs, and guarded Preview/test deploy and cleanup commands.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -94,12 +94,14 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.23.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 147 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 461 Deno behavior tests with only env/read/loopback-net permissions
+- `pnpm check` validates exact runtime versions, checks all 153 enabled function/test roots through one bounded shared Deno graph, runs 37 Node contract tests, and executes all 491 Deno behavior tests with only env/read/loopback-net permissions
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
   - `pnpm deploy:dev <function-name> [more-function-names...]`
   - `pnpm deploy:main <function-name> [more-function-names...]`
+  - `pnpm deploy:portal-r0 <preview|test>` for the fixed disposable R0 function only
+  - `pnpm cleanup:portal-r0 <preview|test>` for guarded remote function deletion plus external Redis/credential cleanup checks
 - auth and connectivity drift probe: `pnpm probe:auth --remote` or `pnpm probe:auth --local`
 - local serve and scripted remote deploys both use `--no-verify-jwt`
 - scripted remote deploys pass `supabase/functions/deno.json` as the Supabase CLI import map so remote bundling resolves shared npm/jsr imports consistently
@@ -113,7 +115,8 @@ At a human-readable level, this repo owns:
 
 - `supabase/functions/**` for Edge Function entrypoints, handlers, and runtime request or response behavior
 - `supabase/functions/_shared/**` for auth, command runtime, DB-RPC wrappers, OpenAI, Redis, Supabase client helpers, and shared domain utilities
-- `portal_data_product_results_v1`, `portal_hybrid_search_v1`, and `_shared/portal_*` for raw-body Portal HMAC verification, replay/admission control, the publishable-only public LCIA projection, and the separately budgeted/default-off R2 Hybrid projection
+- `portal_r0_hmac_verify_v1` and `_shared/portal_r0_*` for the disposable, non-business EdgeOne/Supabase Web Crypto, current/previous HMAC, isolated publishable-key, `SET NX EX`, and atomic Redis admission fixture
+- `portal_data_product_results_v1`, `portal_hybrid_search_v1`, and retained `_shared/portal_*` for raw-body Portal HMAC verification, replay/admission control, the publishable-only public LCIA projection, and the separately budgeted/default-off R2 Hybrid projection
 - direct review submission through the stable database command, the Review Admin-only manual quality-diagnostic projection, and compatibility-only handling for already deployed review-submit Gate/coordinator clients
 - `test/**` for repo-level Deno tests
 - `scripts/**` for deno-check inventory, deploy contract, auth probes, and smoke helpers
@@ -158,6 +161,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 
 - do not invent schema truth or migration history in this repo
 - do not interpret `--no-verify-jwt` as permission for anonymous business logic
+- do not deploy `portal_r0_hmac_verify_v1` through persistent Dev/Main tooling or let it read any long-lived Portal/generic credential; it accepts only complete `PORTAL_R0_*` configuration, a current-project R0 publishable key, a `portal:r0:<fixture>:v1` namespace, and an explicit short-lived Preview/test target, and it must never call a database, RPC, model, provider, repository, storage, or business kernel
 - do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes resolve only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, prove it is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, use only the platform-injected `SUPABASE_URL`, and pass that same key from exact inbound `apikey` matching to their reviewed public `api` RPC. They never use generic or `REMOTE_*` key/URL precedence. Authorization is absent in hosted traffic; only when the validated URL is exact pinned-CLI `http://kong:8000` may the injected `SUPABASE_ANON_KEY` Bearer be tolerated after HMAC
 - do not let signed Portal routes read or fall back to the generic Redis provider or credential variables used by existing Functions; Portal replay, admission, circuit, and cache storage requires the explicit `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` surface and fails closed when it is absent
 - do not let signed Portal Hybrid read or fall back to generic OpenAI, SageMaker, or AWS variables; after the exact-lowercase-true kill switch it resolves the complete `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` configuration and injects it explicitly into shared kernels, while existing login Hybrid and embedding consumers keep their generic defaults
