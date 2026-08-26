@@ -2,12 +2,6 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 
 import { extractEmbeddingVector } from '../_shared/embedding_vector.ts';
 import {
-  generateHybridSearchEmbedding,
-  rewriteHybridSearchQuery,
-  type HybridSearchKernelConfig,
-  type HybridSearchKernelProviderConfig,
-} from '../_shared/hybrid_search_kernel.ts';
-import {
   buildHybridFulltextQueryTerms,
   sanitizeHybridQueryOutput,
   type HybridSearchQuery,
@@ -26,6 +20,12 @@ import {
   PortalHybridDeadline,
   PortalHybridDeadlineError,
 } from '../_shared/portal_hybrid_deadline.ts';
+import {
+  generatePortalHybridSearchEmbedding,
+  rewritePortalHybridSearchQuery,
+  type PortalHybridKernelConfig,
+  type PortalHybridKernelProviderConfig,
+} from '../_shared/portal_hybrid_kernel.ts';
 import {
   defaultPortalHybridSecurityLogger,
   normalizePortalHybridErrorCode,
@@ -99,18 +99,18 @@ type PortalHybridHandlerOptions = {
   repository?: PortalHybridRepository;
   repositoryFactory?: (trustedPublishableKey: string) => PortalHybridRepository;
   rewriteQuery?: (
-    config: HybridSearchKernelConfig,
+    config: PortalHybridKernelConfig,
     query: string,
     signal: AbortSignal,
-    provider?: Readonly<HybridSearchKernelProviderConfig>,
+    provider?: Readonly<PortalHybridKernelProviderConfig>,
   ) => Promise<HybridSearchQuery>;
   generateEmbedding?: (
     semanticQuery: string,
     signal: AbortSignal,
-    provider?: Readonly<HybridSearchKernelProviderConfig>,
+    provider?: Readonly<PortalHybridKernelProviderConfig>,
   ) => Promise<number[]>;
-  providerConfig?: Readonly<HybridSearchKernelProviderConfig>;
-  providerConfigFactory?: () => Readonly<HybridSearchKernelProviderConfig>;
+  providerConfig?: Readonly<PortalHybridKernelProviderConfig>;
+  providerConfigFactory?: () => Readonly<PortalHybridKernelProviderConfig>;
   enabled?: boolean;
   nowSeconds?: () => number;
   nowMillis?: () => number;
@@ -185,7 +185,7 @@ function validateCircuitLimits(limits: PortalHybridCircuitLimits): PortalHybridC
   return limits;
 }
 
-function buildKernelConfig(kind: PortalHybridSearchRequest['kind']): HybridSearchKernelConfig {
+function buildKernelConfig(kind: PortalHybridSearchRequest['kind']): PortalHybridKernelConfig {
   return {
     functionName: PORTAL_HYBRID_FUNCTION_NAME,
     entityLabel: kind === 'process' ? 'Process' : 'Flow',
@@ -396,7 +396,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         return errorResponse(503, 'hybrid_disabled', 'Portal Hybrid search is disabled');
       }
 
-      let providerConfig: Readonly<HybridSearchKernelProviderConfig>;
+      let providerConfig: Readonly<PortalHybridKernelProviderConfig>;
       try {
         providerConfig =
           options.providerConfig ??
@@ -561,7 +561,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           event.model = 'called';
           try {
             rawRewrite = await deadline.run(() =>
-              (options.rewriteQuery ?? rewriteHybridSearchQuery)(
+              (options.rewriteQuery ?? rewritePortalHybridSearchQuery)(
                 buildKernelConfig(hybridRequest.kind),
                 hybridRequest.query,
                 deadline.signal,
@@ -600,7 +600,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           try {
             if (deadline.isExpired()) return timeoutResponse();
             embedding = await deadline.run(() =>
-              (options.generateEmbedding ?? generateHybridSearchEmbedding)(
+              (options.generateEmbedding ?? generatePortalHybridSearchEmbedding)(
                 modelOnly.semantic_query_en,
                 deadline.signal,
                 providerConfig,

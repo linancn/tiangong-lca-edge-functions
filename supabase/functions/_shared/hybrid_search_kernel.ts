@@ -14,53 +14,24 @@ export interface HybridSearchKernelConfig {
   entityPlural: string;
 }
 
-export interface HybridSearchKernelProviderConfig {
-  openAi: {
-    apiKey: string;
-    model: string;
-    baseUrl?: string;
-  };
-  sageMaker: {
-    endpointName: string;
-    region: string;
-    accessKeyId: string;
-    secretAccessKey: string;
-    sessionToken?: string;
-  };
-}
-
+const OPENAI_CHAT_MODEL = Deno.env.get('OPENAI_CHAT_MODEL') ?? 'gpt-4.1-mini';
+const SAGEMAKER_ENDPOINT_NAME = Deno.env.get('SAGEMAKER_ENDPOINT_NAME');
 const AWS_REGION = 'us-east-1';
+const AWS_ACCESS_KEY_ID = Deno.env.get('AWS_ACCESS_KEY_ID');
+const AWS_SECRET_ACCESS_KEY = Deno.env.get('AWS_SECRET_ACCESS_KEY');
+const AWS_SESSION_TOKEN = Deno.env.get('AWS_SESSION_TOKEN');
 const textDecoder = new TextDecoder();
 
 let sagemakerClient: SageMakerRuntimeClient | undefined;
-let genericSageMakerConfig:
-  | {
-      endpointName: string | undefined;
-      accessKeyId: string | undefined;
-      secretAccessKey: string | undefined;
-      sessionToken: string | undefined;
-    }
-  | undefined;
-
-function getGenericSageMakerConfig() {
-  genericSageMakerConfig ??= {
-    endpointName: Deno.env.get('SAGEMAKER_ENDPOINT_NAME'),
-    accessKeyId: Deno.env.get('AWS_ACCESS_KEY_ID'),
-    secretAccessKey: Deno.env.get('AWS_SECRET_ACCESS_KEY'),
-    sessionToken: Deno.env.get('AWS_SESSION_TOKEN'),
-  };
-  return genericSageMakerConfig;
-}
 
 function getSageMakerClient(): SageMakerRuntimeClient {
   if (!sagemakerClient) {
-    const config = getGenericSageMakerConfig();
     sagemakerClient = new SageMakerRuntimeClient({
       region: AWS_REGION,
       credentials: {
-        accessKeyId: config.accessKeyId ?? '',
-        secretAccessKey: config.secretAccessKey ?? '',
-        sessionToken: config.sessionToken ?? undefined,
+        accessKeyId: AWS_ACCESS_KEY_ID ?? '',
+        secretAccessKey: AWS_SECRET_ACCESS_KEY ?? '',
+        sessionToken: AWS_SESSION_TOKEN ?? undefined,
       },
     });
   }
@@ -71,7 +42,6 @@ export async function rewriteHybridSearchQuery(
   config: HybridSearchKernelConfig,
   queryText: string,
   signal?: AbortSignal,
-  provider?: Readonly<HybridSearchKernelProviderConfig>,
 ): Promise<HybridSearchQuery> {
   return await openaiStructuredOutput<HybridSearchQuery>({
     schemaName: `${config.functionName}_queries`,
@@ -80,11 +50,7 @@ export async function rewriteHybridSearchQuery(
 Task: Transform description of ${config.entityPlural} into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.
 ${HYBRID_SYNONYM_RULES}`,
     userPrompt: `${config.entityLabel} description: ${queryText}`,
-    options: {
-      model: provider?.openAi.model ?? Deno.env.get('OPENAI_CHAT_MODEL') ?? 'gpt-4.1-mini',
-      temperature: 0,
-    },
-    provider: provider?.openAi,
+    options: { model: OPENAI_CHAT_MODEL, temperature: 0 },
     signal,
   });
 }
@@ -109,38 +75,23 @@ async function readSageMakerBody(rawBody: unknown): Promise<string> {
 export async function generateHybridSearchEmbedding(
   text: string,
   signal?: AbortSignal,
-  provider?: Readonly<HybridSearchKernelProviderConfig>,
 ): Promise<number[]> {
-  const genericConfig = provider ? undefined : getGenericSageMakerConfig();
-  const endpointName = provider?.sageMaker.endpointName ?? genericConfig?.endpointName;
-  const accessKeyId = provider?.sageMaker.accessKeyId ?? genericConfig?.accessKeyId;
-  const secretAccessKey = provider?.sageMaker.secretAccessKey ?? genericConfig?.secretAccessKey;
-  if (!endpointName) {
+  if (!SAGEMAKER_ENDPOINT_NAME) {
     throw new Error('missing SAGEMAKER_ENDPOINT_NAME environment variable');
   }
-  if (!accessKeyId || !secretAccessKey) {
+  if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY) {
     throw new Error('missing AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY environment variable');
   }
 
   const command = new InvokeEndpointCommand({
-    EndpointName: endpointName,
+    EndpointName: SAGEMAKER_ENDPOINT_NAME,
     ContentType: 'application/json',
     Accept: 'application/json',
     Body: JSON.stringify({ inputs: text }),
   });
-  const client = provider
-    ? new SageMakerRuntimeClient({
-        region: provider.sageMaker.region,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-          sessionToken: provider.sageMaker.sessionToken,
-        },
-      })
-    : getSageMakerClient();
   const response = signal
-    ? await client.send(command, { abortSignal: signal })
-    : await client.send(command);
+    ? await getSageMakerClient().send(command, { abortSignal: signal })
+    : await getSageMakerClient().send(command);
   const httpStatus = response.$metadata.httpStatusCode ?? 500;
   if (httpStatus < 200 || httpStatus >= 300) {
     throw new Error(`SageMaker endpoint request failed: ${httpStatus}`);

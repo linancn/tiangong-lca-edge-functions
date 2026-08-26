@@ -57,10 +57,12 @@ Deno.test(
       './supabase/functions/_shared/portal_hmac.ts',
       './supabase/functions/_shared/portal_hybrid_contract.ts',
       './supabase/functions/_shared/portal_hybrid_deadline.ts',
+      './supabase/functions/_shared/portal_hybrid_kernel.ts',
       './supabase/functions/_shared/portal_hybrid_provider.ts',
       './supabase/functions/_shared/portal_hybrid_repository.ts',
       './supabase/functions/_shared/portal_hybrid_security_event.ts',
       './supabase/functions/_shared/portal_redis_guard.ts',
+      './supabase/functions/_shared/portal_openai_structured.ts',
       './supabase/functions/portal_hybrid_search_v1/index.ts',
     ];
     const source = (await Promise.all(files.map((file) => Deno.readTextFile(file)))).join('\n');
@@ -97,13 +99,15 @@ Deno.test(
       source,
       'Task: Transform description of ${config.entityPlural} into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.',
     );
-    assertStringIncludes(source, 'provider: provider?.openAi');
+    assertStringIncludes(source, 'provider.openAi');
     assertStringIncludes(source, 'Body: JSON.stringify({ inputs: text })');
     assertStringIncludes(source, "readPortalDeploymentSha('PORTAL_HYBRID_DEPLOYMENT_SHA')");
 
     const portalOnlyFiles = [
+      './supabase/functions/_shared/portal_hybrid_kernel.ts',
       './supabase/functions/_shared/portal_hybrid_provider.ts',
       './supabase/functions/_shared/portal_hybrid_repository.ts',
+      './supabase/functions/_shared/portal_openai_structured.ts',
       './supabase/functions/_shared/portal_public_transport.ts',
       './supabase/functions/portal_hybrid_search_v1/index.ts',
     ];
@@ -142,6 +146,21 @@ Deno.test(
 
     const loginHybridHandler = await Deno.readTextFile(
       './supabase/functions/_shared/hybrid_search_handler.ts',
+    );
+    const genericHybridKernel = await Deno.readTextFile(
+      './supabase/functions/_shared/hybrid_search_kernel.ts',
+    );
+    assertStringIncludes(
+      genericHybridKernel,
+      "const OPENAI_CHAT_MODEL = Deno.env.get('OPENAI_CHAT_MODEL') ?? 'gpt-4.1-mini';",
+    );
+    assertStringIncludes(
+      genericHybridKernel,
+      "const SAGEMAKER_ENDPOINT_NAME = Deno.env.get('SAGEMAKER_ENDPOINT_NAME');",
+    );
+    assertStringIncludes(
+      genericHybridKernel,
+      'options: { model: OPENAI_CHAT_MODEL, temperature: 0 }',
     );
     assertStringIncludes(loginHybridHandler, 'rewriteQuery: rewriteHybridSearchQuery');
     assertStringIncludes(loginHybridHandler, 'generateEmbedding: generateHybridSearchEmbedding');

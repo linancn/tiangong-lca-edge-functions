@@ -1,7 +1,6 @@
 import { assert, assertEquals, assertRejects, assertStringIncludes } from 'jsr:@std/assert';
 
 import type { HybridSearchQuery } from '../supabase/functions/_shared/hybrid_query_utils.ts';
-import type { HybridSearchKernelProviderConfig } from '../supabase/functions/_shared/hybrid_search_kernel.ts';
 import {
   type PortalHybridModelCache,
   type PortalHybridSearchRequest,
@@ -30,6 +29,7 @@ import {
   PortalHybridProviderError,
   readPortalHybridProviderConfig,
 } from '../supabase/functions/_shared/portal_hybrid_provider.ts';
+import type { PortalHybridKernelProviderConfig } from '../supabase/functions/_shared/portal_hybrid_kernel.ts';
 import {
   createPortalHybridSearchHandler,
   isPortalHybridEnabled,
@@ -70,7 +70,7 @@ const REWRITE: HybridSearchQuery = {
   fulltext_query_en: ['steel production'],
   fulltext_query_zh: ['钢铁生产'],
 };
-const PROVIDER_CONFIG: Readonly<HybridSearchKernelProviderConfig> = {
+const PROVIDER_CONFIG: Readonly<PortalHybridKernelProviderConfig> = {
   openAi: {
     apiKey: 'sk-portal-test-provider',
     model: 'portal-chat-model-v1',
@@ -335,15 +335,15 @@ Deno.test(
     };
     let rewriteSignal: AbortSignal | undefined;
     let embeddingSignal: AbortSignal | undefined;
-    let rewriteProvider: Readonly<HybridSearchKernelProviderConfig> | undefined;
-    let embeddingProvider: Readonly<HybridSearchKernelProviderConfig> | undefined;
+    let rewriteProvider: Readonly<PortalHybridKernelProviderConfig> | undefined;
+    let embeddingProvider: Readonly<PortalHybridKernelProviderConfig> | undefined;
     const handler = createPortalHybridSearchHandler(
       handlerOptions(redis, repository, {
         rewriteQuery: async (
           _config: unknown,
           _query: string,
           signal: AbortSignal,
-          provider?: Readonly<HybridSearchKernelProviderConfig>,
+          provider?: Readonly<PortalHybridKernelProviderConfig>,
         ) => {
           rewriteSignal = signal;
           rewriteProvider = provider;
@@ -352,7 +352,7 @@ Deno.test(
         generateEmbedding: async (
           _query: string,
           signal: AbortSignal,
-          provider?: Readonly<HybridSearchKernelProviderConfig>,
+          provider?: Readonly<PortalHybridKernelProviderConfig>,
         ) => {
           embeddingSignal = signal;
           embeddingProvider = provider;

@@ -1,4 +1,4 @@
-import type { HybridSearchKernelProviderConfig } from './hybrid_search_kernel.ts';
+import type { PortalHybridKernelProviderConfig } from './portal_hybrid_kernel.ts';
 
 type PortalHybridProviderEnvironment = Pick<typeof Deno.env, 'get'>;
 
@@ -64,7 +64,7 @@ function validateOpenAiBaseUrl(value: string | undefined): string | undefined {
 
 export function readPortalHybridProviderConfig(
   env: PortalHybridProviderEnvironment = Deno.env,
-): Readonly<HybridSearchKernelProviderConfig> {
+): Readonly<PortalHybridKernelProviderConfig> {
   const apiKey = readExactValue(env, 'PORTAL_OPENAI_API_KEY', true)!;
   const model = readExactValue(env, 'PORTAL_OPENAI_CHAT_MODEL', true)!;
   const baseUrl = validateOpenAiBaseUrl(readExactValue(env, 'PORTAL_OPENAI_BASE_URL', false));
