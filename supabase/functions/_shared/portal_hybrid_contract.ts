@@ -1,0 +1,263 @@
+import { z } from 'zod';
+
+const utf8Encoder = new TextEncoder();
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f]/u;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+const VERSION_PATTERN = /^\d{2}\.\d{2}\.\d{3}$/u;
+const LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/u;
+const CANONICAL_DECIMAL_PATTERN =
+  /^(?=(?:[^0-9]*[0-9]){1,38}[^0-9]*$)(?:0|-?(?:[1-9]\d*(?:\.\d*[1-9])?|0\.\d*[1-9]))$/u;
+
+function boundedText(options: {
+  maximumCodePoints: number;
+  maximumBytes: number;
+}): z.ZodPipe<z.ZodString, z.ZodTransform<string, string>> {
+  return z
+    .string()
+    .transform((value) => value.trim())
+    .refine((value) => value.length > 0, 'value must not be blank')
+    .refine(
+      (value) => Array.from(value).length <= options.maximumCodePoints,
+      'value exceeds code point limit',
+    )
+    .refine(
+      (value) => utf8Encoder.encode(value).byteLength <= options.maximumBytes,
+      'value exceeds UTF-8 byte limit',
+    )
+    .refine((value) => !CONTROL_CHARACTER_PATTERN.test(value), 'value contains control characters');
+}
+
+export const portalHybridQuerySchema = boundedText({
+  maximumCodePoints: 512,
+  maximumBytes: 2_048,
+});
+const filterTextSchema = boundedText({ maximumCodePoints: 256, maximumBytes: 1_024 });
+const yearSchema = z.number().int().min(0).max(9_999);
+
+export const portalHybridFiltersSchema = z
+  .object({
+    accessLevel: z.enum(['open', 'metadata_only']).optional(),
+    geography: filterTextSchema.optional(),
+    classification: filterTextSchema.optional(),
+    referenceYearFrom: yearSchema.optional(),
+    referenceYearTo: yearSchema.optional(),
+    processSubtype: filterTextSchema.optional(),
+    source: filterTextSchema.optional(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.referenceYearFrom !== undefined &&
+      value.referenceYearTo !== undefined &&
+      value.referenceYearFrom > value.referenceYearTo
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'referenceYearFrom must not exceed referenceYearTo',
+        path: ['referenceYearFrom'],
+      });
+    }
+  });
+
+export const portalHybridSearchRequestSchema = z
+  .object({
+    schemaVersion: z.literal('portal.hybrid-search-request.v1'),
+    kind: z.enum(['process', 'flow']),
+    query: portalHybridQuerySchema,
+    filters: portalHybridFiltersSchema,
+    limit: z.number().int().min(1).max(20),
+  })
+  .strict();
+
+export type PortalHybridSearchRequest = z.infer<typeof portalHybridSearchRequestSchema>;
+
+const uuidSchema = z.string().regex(UUID_PATTERN);
+const versionSchema = z.string().regex(VERSION_PATTERN);
+const lowerHexSha256Schema = z.string().regex(/^[0-9a-f]{64}$/u);
+const localizedTextSchema = z.array(
+  z
+    .object({
+      language: z.string().min(2).max(35).regex(LANGUAGE_PATTERN),
+      value: z.string(),
+    })
+    .strict(),
+);
+const publicDatasetKeySchema = z
+  .object({
+    kind: z.enum(['process', 'flow']),
+    id: uuidSchema,
+    version: versionSchema,
+  })
+  .strict();
+const publicCapabilitiesSchema = z
+  .object({
+    metadataVisible: z.literal(true),
+    exchangesVisible: z.boolean(),
+    lciaVisible: z.boolean(),
+    publicArtifactVisible: z.boolean(),
+    citationVisible: z.literal(true),
+    policyVersion: z.string().min(1),
+    reasonCodes: z
+      .array(z.string().min(1))
+      .refine((values) => new Set(values).size === values.length, 'reasonCodes must be unique'),
+  })
+  .strict();
+const geographySchema = z
+  .object({
+    code: z.string().min(1).nullable(),
+    label: localizedTextSchema,
+    precision: z.enum(['country', 'province', 'city', 'other', 'unknown']),
+  })
+  .strict();
+
+const hybridReasonCodeSchema = z.enum(['lexical_public_projection', 'semantic_public_projection']);
+const hybridEvidenceSchema = z
+  .object({
+    lexicalRank: z.number().int().min(1).nullable(),
+    semanticRank: z.number().int().min(1).nullable(),
+    semanticDistance: z.string().regex(CANONICAL_DECIMAL_PATTERN).nullable(),
+  })
+  .strict()
+  .refine(
+    (value) => (value.semanticRank === null) === (value.semanticDistance === null),
+    'semantic rank and distance must be present together',
+  );
+
+export const portalPublicHybridMatchSchema = z
+  .object({
+    kind: z.literal('hybrid'),
+    algorithmVersion: z.literal('portal-hybrid-rank-v1'),
+    score: z.number().min(0).max(1),
+    reasonCodes: z
+      .array(hybridReasonCodeSchema)
+      .min(1)
+      .max(2)
+      .refine((values) => new Set(values).size === values.length, 'reasonCodes must be unique'),
+    evidence: hybridEvidenceSchema,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    const lexicalReason = value.reasonCodes.includes('lexical_public_projection');
+    const semanticReason = value.reasonCodes.includes('semantic_public_projection');
+    if (lexicalReason !== (value.evidence.lexicalRank !== null)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'lexical evidence and reason code must correspond',
+        path: ['reasonCodes'],
+      });
+    }
+    if (
+      semanticReason !==
+      (value.evidence.semanticRank !== null && value.evidence.semanticDistance !== null)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'semantic evidence and reason code must correspond',
+        path: ['reasonCodes'],
+      });
+    }
+  });
+
+export const portalPublicHybridCandidateSchema = z
+  .object({
+    key: publicDatasetKeySchema,
+    accessLevel: z.enum(['open', 'metadata_only']),
+    capabilities: publicCapabilitiesSchema,
+    names: localizedTextSchema,
+    summary: localizedTextSchema,
+    geography: geographySchema,
+    referenceYear: yearSchema.nullable(),
+    modifiedAt: z.string().datetime({ offset: true }),
+    match: portalPublicHybridMatchSchema,
+  })
+  .strict();
+
+export const portalPublicHybridCandidatePageSchema = z
+  .object({
+    schemaVersion: z.literal('portal.public-hybrid-candidate-page.v1'),
+    kind: z.enum(['process', 'flow']),
+    queryFingerprint: lowerHexSha256Schema,
+    items: z.array(portalPublicHybridCandidateSchema).max(20),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    value.items.forEach((item, index) => {
+      if (item.key.kind !== value.kind) {
+        context.addIssue({
+          code: 'custom',
+          message: 'candidate kind must match page kind',
+          path: ['items', index, 'key', 'kind'],
+        });
+      }
+    });
+  });
+
+export type PortalPublicHybridCandidatePage = z.infer<typeof portalPublicHybridCandidatePageSchema>;
+
+const interpretationTextSchema = portalHybridQuerySchema;
+export const portalHybridInterpretationSchema = z
+  .object({
+    source: z.literal('model_generated'),
+    advisory: z.literal(true),
+    semanticQuery: interpretationTextSchema,
+    terms: z
+      .array(
+        z
+          .object({
+            language: z.enum(['en', 'zh-CN']),
+            value: interpretationTextSchema,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20)
+      .refine(
+        (values) =>
+          new Set(values.map((value) => `${value.language}\u0000${value.value}`)).size ===
+          values.length,
+        'interpretation terms must be unique',
+      ),
+  })
+  .strict();
+
+export type PortalHybridInterpretation = z.infer<typeof portalHybridInterpretationSchema>;
+
+export const portalHybridSearchPageSchema = z
+  .object({
+    schemaVersion: z.literal('portal.hybrid-search-page.v1'),
+    kind: z.enum(['process', 'flow']),
+    queryFingerprint: lowerHexSha256Schema,
+    interpretation: portalHybridInterpretationSchema,
+    items: z.array(portalPublicHybridCandidateSchema).max(20),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    value.items.forEach((item, index) => {
+      if (item.key.kind !== value.kind) {
+        context.addIssue({
+          code: 'custom',
+          message: 'candidate kind must match page kind',
+          path: ['items', index, 'key', 'kind'],
+        });
+      }
+    });
+  });
+
+export type PortalHybridSearchPage = z.infer<typeof portalHybridSearchPageSchema>;
+
+export const portalHybridModelCacheSchema = z
+  .object({
+    schemaVersion: z.literal('portal.hybrid-model-cache.v1'),
+    interpretation: portalHybridInterpretationSchema,
+    queryTerms: z
+      .array(interpretationTextSchema)
+      .min(1)
+      .max(20)
+      .refine((values) => new Set(values).size === values.length, 'query terms must be unique'),
+    queryEmbedding: z.array(z.number().finite()).length(1_024),
+  })
+  .strict();
+
+export type PortalHybridModelCache = z.infer<typeof portalHybridModelCacheSchema>;
+
+export { CANONICAL_DECIMAL_PATTERN };
