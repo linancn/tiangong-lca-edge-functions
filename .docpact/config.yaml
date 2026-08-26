@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-26'
-lastReviewedCommit: '4ad34d1dfc26d8f799d683d548bc7a9a7f20e650'
-lastReviewedNote: 'Reviewed after Issue #316 added the R0 runtime, optional-secret normalization, transport fixtures, and live Main-parent Preview verification to the existing Portal and deploy/proof routes.'
+lastReviewedCommit: '219a5389f390add95ba9b6eae4bc00cad0baf8c2'
+lastReviewedNote: 'Reviewed after Issue #316 separated R0 branch identity from deploy readiness and made guarded cleanup status-independent.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

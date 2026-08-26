@@ -23,8 +23,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 4ad34d1dfc26d8f799d683d548bc7a9a7f20e650
-lastReviewedNote: 'Reviewed after Issue #316 added the R0 verifier, optional-secret normalization, local Redis fixtures, and live Main-parent Preview verification for deploy and cleanup.'
+lastReviewedCommit: 219a5389f390add95ba9b6eae4bc00cad0baf8c2
+lastReviewedNote: 'Reviewed after Issue #316 added the R0 verifier, optional-secret normalization, Main-parent identity/readiness separation, and status-independent cleanup.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -223,7 +223,7 @@ PORTAL_R0_CLEANUP_ACK=delete-function-and-confirm-external-resources \
 pnpm cleanup:portal-r0 preview
 ```
 
-Set `PORTAL_R0_CLEANUP_DRY_RUN=true` to validate the command without remote mutation. Cleanup repeats the live branch query and separate acknowledgement but does not require the expiry to remain in the future. If the branch is already absent, it reports a verified terminal and skips function deletion. A successful delete, terminal, or dry run prints only the external checklist: delete the dedicated Redis database/resource, revoke the one-time HMAC/publishable/Redis credentials, and record all deletion evidence. It never prints branch metadata or credential values. Credential and Redis deletion remain explicit external operations because the repository does not own those providers.
+Set `PORTAL_R0_CLEANUP_DRY_RUN=true` to validate the command without remote mutation. Cleanup repeats the live branch query and separate acknowledgement but does not require future expiry, `FUNCTIONS_DEPLOYED`, or `ACTIVE_HEALTHY`. A paused, unhealthy, or failed branch with the exact immutable identity still receives the fixed function-delete attempt; a real delete failure blocks cleanup. If the branch is absent from a valid nonempty Main-parent response, cleanup reports a verified terminal and skips deletion. Successful delete, terminal, and dry-run paths print only the external Redis/credential evidence checklist, never branch metadata or credential values.
 
 Recommended deploy workflow:
 
@@ -453,7 +453,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 153-root Deno graph, 61 Node contract tests, and all 492 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 153-root Deno graph, 62 Node contract tests, and all 492 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

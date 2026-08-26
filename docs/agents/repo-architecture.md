@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 4ad34d1dfc26d8f799d683d548bc7a9a7f20e650
-lastReviewedNote: 'Reviewed after Issue #316 added the R0 verifier, optional-secret normalization, and live Main-parent Preview verification for deploy and cleanup.'
+lastReviewedCommit: 219a5389f390add95ba9b6eae4bc00cad0baf8c2
+lastReviewedNote: 'Reviewed after Issue #316 separated R0 branch identity from deploy readiness and made cleanup status-independent.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -93,7 +93,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 153 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 61 Node contract tests and 492 Deno behavior tests with env/read/loopback-net permissions.
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 153 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 62 Node contract tests and 492 Deno behavior tests with env/read/loopback-net permissions.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
@@ -151,7 +151,7 @@ The retired review-submit Gate, coordinator, and job endpoints are not part of t
 
 The route reads only `PORTAL_R0_*` configuration plus the platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry. Its namespace is `portal:r0:<fixture>:v1`; it cannot name Dev/Main/Production, and R0 never falls back to retained Portal or generic HMAC, publishable, Redis, provider, Supabase, or service variables. Nonce registration is exact `SET NX EX 120`, followed by the reviewed atomic budget/concurrency Lua primitive and synchronous lease cleanup. It has no cache, database, RPC, model, provider, repository, storage, business DTO, event, or logger surface. Every failure is a fixed locator-free receipt.
 
-The generic `deploy:dev` and `deploy:main` scripts reject the R0 slug. Before deploy or cleanup, the dedicated commands capture `supabase branches list --project-ref <configured-main> --output-format json` and verify exactly one matching project ref whose parent is Main, `is_default=false`, `persistent=false`, `with_data=false`, `status=FUNCTIONS_DEPLOYED`, and `preview_project_status=ACTIVE_HEALTHY`, plus exact operator-supplied branch name/Git branch and optional PR number. A 403, malformed response, or empty list fails closed. Remote `test` and arbitrary project refs are never deployment targets. Deploy additionally requires clean HEAD, deploy acknowledgement, and future expiry within 24 hours. Cleanup uses a separate acknowledgement and permits expired fixtures. It deletes only the fixed function when ready; an absent target in a valid nonempty Main-parent response is terminal. Both paths emit only fixed messages/checklists, never branch metadata or token values.
+The generic deploy scripts reject R0. Both dedicated commands verify Main parent, project ref, nondefault/nonpersistent/no-data flags, branch name, Git branch, optional PR, and clean SHA from live CLI JSON. Deploy then requires `FUNCTIONS_DEPLOYED`, `ACTIVE_HEALTHY`, deploy acknowledgement, and future expiry within 24 hours. Cleanup uses its separate acknowledgement and intentionally ignores status, health, and past expiry after identity succeeds, so paused/unhealthy/failed branches still receive the fixed function-delete attempt; delete failure blocks. An absent target in a valid nonempty response is terminal. Fixed messages never include metadata or tokens.
 
 ### Portal signed public LCIA route
 
