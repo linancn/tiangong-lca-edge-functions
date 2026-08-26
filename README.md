@@ -23,8 +23,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: cdccee827c91cd90a09ec44041cfc78e42b9510c
-lastReviewedNote: 'Reviewed after Issue #313 gave signed Portal routes a dedicated project-bound public key, explicit model/AWS providers, and independent deployment provenance.'
+lastReviewedCommit: 69822d83a7d6a4dbae8bf265091db96403b4970b
+lastReviewedNote: 'Reviewed after the Issue #313 canonical gate confirmed the dedicated project-bound public key, explicit model/AWS providers, independent provenance, and 460-test baseline.'
 ---
 
 # TianGong-LCA-Edge-Functions

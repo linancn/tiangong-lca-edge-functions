@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: cdccee827c91cd90a09ec44041cfc78e42b9510c
-lastReviewedNote: 'Reviewed after Issue #313 added current-project Portal public-key binding, explicit Portal provider injection, route-specific SHA proof, and generic-provider regression coverage.'
+lastReviewedCommit: 69822d83a7d6a4dbae8bf265091db96403b4970b
+lastReviewedNote: 'Reviewed after the Issue #313 canonical gate passed 147 roots, 15 Node contracts, and 460 Deno behavior tests including Portal isolation and generic-provider regressions.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

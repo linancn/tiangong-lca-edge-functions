@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: cdccee827c91cd90a09ec44041cfc78e42b9510c
-lastReviewedNote: 'Reviewed after Issue #313 isolated the Portal project-bound public key, explicit model/AWS provider injection, and per-route deployment provenance from existing Functions.'
+lastReviewedCommit: 69822d83a7d6a4dbae8bf265091db96403b4970b
+lastReviewedNote: 'Reviewed after the Issue #313 canonical gate confirmed Portal credential/provider/provenance isolation and the exact 460-test runtime shape.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

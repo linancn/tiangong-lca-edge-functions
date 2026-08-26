@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-26'
-lastReviewedCommit: 'cdccee827c91cd90a09ec44041cfc78e42b9510c'
-lastReviewedNote: 'Reviewed after Issue #313 added Portal-only public/provider credential resolution and route-specific deployment provenance; the existing routing intent now includes the provider resolver.'
+lastReviewedCommit: '69822d83a7d6a4dbae8bf265091db96403b4970b'
+lastReviewedNote: 'Reviewed after the Issue #313 canonical gate confirmed 147 roots, 15 Node contracts, and 460 Deno behavior tests for the isolated Portal credential runtime.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
