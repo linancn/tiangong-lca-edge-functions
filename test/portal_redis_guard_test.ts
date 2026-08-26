@@ -229,21 +229,34 @@ Deno.test('Portal Redis config requires an explicit isolated namespace and provi
 });
 
 Deno.test('Portal Redis config never falls back to generic Redis credentials', () => {
-  assertThrows(
-    () =>
-      readPortalRedisRuntimeConfig(
-        environment({
-          REDIS_CLIENT_TYPE: 'upstash',
-          UPSTASH_REDIS_URL: 'https://shared.example.upstash.io',
-          UPSTASH_REDIS_TOKEN: 'shared-token',
-          REDIS_URL: 'redis://shared.example:6379',
-          REDIS_PASSWORD: 'shared-password',
-          PORTAL_REDIS_NAMESPACE: 'portal:dev:v1',
-        }),
-      ),
-    PortalRedisError,
-    'guard_unavailable',
-  );
+  for (const values of [
+    {
+      REDIS_CLIENT_TYPE: 'upstash',
+      UPSTASH_REDIS_URL: 'https://shared.example.upstash.io',
+      UPSTASH_REDIS_TOKEN: 'shared-token',
+      REDIS_URL: 'redis://shared.example:6379',
+      REDIS_PASSWORD: 'shared-password',
+      PORTAL_REDIS_NAMESPACE: 'portal:dev:v1',
+    },
+    {
+      PORTAL_REDIS_CLIENT_TYPE: 'upstash',
+      UPSTASH_REDIS_URL: 'https://shared.example.upstash.io',
+      UPSTASH_REDIS_TOKEN: 'shared-token',
+      PORTAL_REDIS_NAMESPACE: 'portal:dev:v1',
+    },
+    {
+      PORTAL_REDIS_CLIENT_TYPE: 'standard',
+      REDIS_URL: 'redis://shared.example:6379',
+      REDIS_PASSWORD: 'shared-password',
+      PORTAL_REDIS_NAMESPACE: 'portal:dev:v1',
+    },
+  ]) {
+    assertThrows(
+      () => readPortalRedisRuntimeConfig(environment(values)),
+      PortalRedisError,
+      'guard_unavailable',
+    );
+  }
 });
 
 Deno.test('Portal nonce registration is atomic with at least a 120 second TTL', async () => {
