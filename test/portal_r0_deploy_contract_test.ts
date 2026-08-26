@@ -22,6 +22,10 @@ Deno.test('R0 deploy requires the dedicated disposable Preview/test guard', asyn
     packageJson.scripts['deploy:portal-r0'],
     'node ./scripts/deploy-portal-r0-fixture.cjs',
   );
+  assertEquals(
+    packageJson.scripts['cleanup:portal-r0'],
+    'node ./scripts/cleanup-portal-r0-fixture.cjs',
+  );
 
   const guard = await Deno.readTextFile('./scripts/deploy-portal-r0-fixture.cjs');
   for (const required of [
@@ -43,6 +47,14 @@ Deno.test('R0 deploy requires the dedicated disposable Preview/test guard', asyn
   const persistentGuard = await Deno.readTextFile('./scripts/deploy-function.cjs');
   assertStringIncludes(persistentGuard, "const disposableR0Function = 'portal_r0_hmac_verify_v1'");
   assertStringIncludes(persistentGuard, 'functionNames.includes(disposableR0Function)');
+
+  const cleanup = await Deno.readTextFile('./scripts/cleanup-portal-r0-fixture.cjs');
+  assertStringIncludes(cleanup, "require('./deploy-portal-r0-fixture.cjs')");
+  assertStringIncludes(cleanup, 'validatePortalR0Deploy({');
+  assertStringIncludes(cleanup, "'delete'");
+  assertStringIncludes(cleanup, 'FUNCTION_NAME');
+  assertStringIncludes(cleanup, 'PORTAL_R0_CLEANUP_DRY_RUN');
+  assertStringIncludes(cleanup, 'delete the dedicated R0 Redis database/resource');
 });
 
 Deno.test('R0 environment template contains only its dedicated runtime surface', async () => {

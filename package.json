@@ -22,6 +22,7 @@
     "deploy:dev": "node ./scripts/deploy-function.cjs dev",
     "deploy:main": "node ./scripts/deploy-function.cjs main",
     "deploy:portal-r0": "node ./scripts/deploy-portal-r0-fixture.cjs",
+    "cleanup:portal-r0": "node ./scripts/cleanup-portal-r0-fixture.cjs",
     "probe:auth": "node ./scripts/probe-functions-auth.cjs",
     "format": "pnpm exec prettier --write \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\"",
     "lint": "pnpm exec prettier --check \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\""
