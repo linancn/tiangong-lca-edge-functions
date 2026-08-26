@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: e2fb4a1fa37e73af5a1faa02ae30e91442703946
-lastReviewedNote: 'Reviewed after Issue #310 deadline remediation: the R2 route performs its final deadline decision after event sanitization and schedules bounded security logging outside the handler promise without changing R1.'
+lastReviewedCommit: 3130ece2dc9a1f2eb8576f67642db80e054734b4
+lastReviewedNote: 'Reviewed after Issue #312 isolated signed Portal Redis credentials while preserving the generic Redis adapter and operator template for existing Functions.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -94,7 +94,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.23.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 147 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 455 Deno behavior tests with only env/read/loopback-net permissions
+- `pnpm check` validates exact runtime versions, checks all 147 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 456 Deno behavior tests with only env/read/loopback-net permissions
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -159,6 +159,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - do not invent schema truth or migration history in this repo
 - do not interpret `--no-verify-jwt` as permission for anonymous business logic
 - do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes may call only their reviewed public `api` RPC with the same once-resolved publishable/anon credential that matched inbound `apikey`. Authorization is absent in normal Portal traffic; only the exact legacy anon Bearer injected by pinned CLI `2.106.0` local routing is tolerated after HMAC
+- do not let signed Portal routes read or fall back to the generic Redis provider or credential variables used by existing Functions; Portal replay, admission, circuit, and cache storage requires the explicit `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` surface and fails closed when it is absent
 - do not route `portal_hybrid_search_v1` through legacy `hybrid_search_processes`/`hybrid_search_flows`, a service client, or an Edge-side field projection; it remains default-off until the exact Database façade exists, and every guard/circuit/timeout failure returns a fixed signal for the Portal BFF to handle through its separate lexical façade
 - do not return a successful Portal Hybrid response after its absolute application deadline; every awaited guard/cache/model/database/finalization step consumes the same remaining budget, while lease release is detached and bounded so Redis TTL remains the interrupted-cleanup recovery authority
 - sanitize the final Portal Hybrid event before the last deadline decision, then schedule its allowlisted logger outside the handler promise; use `EdgeRuntime.waitUntil` when available and a handled macrotask fallback locally, so observability cannot delay or change the final response

@@ -172,9 +172,9 @@ Deno.test('Portal Redis config requires an explicit isolated namespace and provi
   assertEquals(
     readPortalRedisRuntimeConfig(
       environment({
-        REDIS_CLIENT_TYPE: 'upstash',
-        UPSTASH_REDIS_URL: 'https://example.upstash.io',
-        UPSTASH_REDIS_TOKEN: 'test-token',
+        PORTAL_REDIS_CLIENT_TYPE: 'upstash',
+        PORTAL_UPSTASH_REDIS_URL: 'https://example.upstash.io',
+        PORTAL_UPSTASH_REDIS_TOKEN: 'test-token',
         PORTAL_REDIS_NAMESPACE: 'portal:main:v1',
         PORTAL_REDIS_TIMEOUT_MS: '500',
       }),
@@ -190,9 +190,9 @@ Deno.test('Portal Redis config requires an explicit isolated namespace and provi
   assertEquals(
     readPortalRedisRuntimeConfig(
       environment({
-        REDIS_CLIENT_TYPE: 'standard',
-        REDIS_URL: 'redis://127.0.0.1:6379',
-        REDIS_PASSWORD: 'local-password',
+        PORTAL_REDIS_CLIENT_TYPE: 'standard',
+        PORTAL_REDIS_URL: 'redis://127.0.0.1:6379',
+        PORTAL_REDIS_PASSWORD: 'local-password',
         PORTAL_REDIS_NAMESPACE: 'portal:test:v1',
       }),
     ),
@@ -207,14 +207,14 @@ Deno.test('Portal Redis config requires an explicit isolated namespace and provi
   for (const values of [
     {},
     {
-      REDIS_CLIENT_TYPE: 'upstash',
-      UPSTASH_REDIS_URL: 'http://insecure.example',
-      UPSTASH_REDIS_TOKEN: 'token',
+      PORTAL_REDIS_CLIENT_TYPE: 'upstash',
+      PORTAL_UPSTASH_REDIS_URL: 'http://insecure.example',
+      PORTAL_UPSTASH_REDIS_TOKEN: 'token',
       PORTAL_REDIS_NAMESPACE: 'portal:main:v1',
     },
     {
-      REDIS_CLIENT_TYPE: 'standard',
-      REDIS_URL: 'redis://127.0.0.1:6379',
+      PORTAL_REDIS_CLIENT_TYPE: 'standard',
+      PORTAL_REDIS_URL: 'redis://127.0.0.1:6379',
       PORTAL_REDIS_NAMESPACE: 'shared',
     },
   ]) {
@@ -225,6 +225,37 @@ Deno.test('Portal Redis config requires an explicit isolated namespace and provi
       code = (error as PortalRedisError).code;
     }
     assertEquals(code, 'guard_unavailable');
+  }
+});
+
+Deno.test('Portal Redis config never falls back to generic Redis credentials', () => {
+  for (const values of [
+    {
+      REDIS_CLIENT_TYPE: 'upstash',
+      UPSTASH_REDIS_URL: 'https://shared.example.upstash.io',
+      UPSTASH_REDIS_TOKEN: 'shared-token',
+      REDIS_URL: 'redis://shared.example:6379',
+      REDIS_PASSWORD: 'shared-password',
+      PORTAL_REDIS_NAMESPACE: 'portal:dev:v1',
+    },
+    {
+      PORTAL_REDIS_CLIENT_TYPE: 'upstash',
+      UPSTASH_REDIS_URL: 'https://shared.example.upstash.io',
+      UPSTASH_REDIS_TOKEN: 'shared-token',
+      PORTAL_REDIS_NAMESPACE: 'portal:dev:v1',
+    },
+    {
+      PORTAL_REDIS_CLIENT_TYPE: 'standard',
+      REDIS_URL: 'redis://shared.example:6379',
+      REDIS_PASSWORD: 'shared-password',
+      PORTAL_REDIS_NAMESPACE: 'portal:dev:v1',
+    },
+  ]) {
+    assertThrows(
+      () => readPortalRedisRuntimeConfig(environment(values)),
+      PortalRedisError,
+      'guard_unavailable',
+    );
   }
 });
 

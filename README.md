@@ -23,8 +23,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: e2fb4a1fa37e73af5a1faa02ae30e91442703946
-lastReviewedNote: 'Reviewed after Issue #310 deadline remediation: R2 final-response deadline enforcement and bounded background security-event delivery are aligned.'
+lastReviewedCommit: 3130ece2dc9a1f2eb8576f67642db80e054734b4
+lastReviewedNote: 'Reviewed after Issue #312 isolated both signed Portal routes without removing the existing generic Redis operator surface.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -94,7 +94,7 @@ Core entries:
 - `REMOTE_SERVICE_API_KEY` for routes that allow `AuthMethod.SERVICE_API_KEY`.
 - `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` for user API key auth caching.
 - `PORTAL_HMAC_KEY_ID_CURRENT` / `PORTAL_HMAC_SECRET_CURRENT` and the optional previous pair for Portal-only request verification.
-- `REDIS_CLIENT_TYPE`, `PORTAL_REDIS_NAMESPACE`, `PORTAL_REDIS_TIMEOUT_MS`, and the bounded `PORTAL_LCIA_*` guard/cache/timeout settings for the signed public LCIA route. Hosted projects use Upstash; local/CI may use `REDIS_URL` plus optional `REDIS_PASSWORD`. The concurrency lease defaults to 30 seconds, never drops below 20 seconds, and must cover Redis plus upstream timeouts with a five-second recovery margin. The R1 LCIA response cache defaults to and is capped at 60 seconds.
+- `PORTAL_REDIS_CLIENT_TYPE`, `PORTAL_REDIS_NAMESPACE`, `PORTAL_REDIS_TIMEOUT_MS`, and the bounded `PORTAL_LCIA_*` guard/cache/timeout settings for the signed public LCIA route. Hosted projects use the Portal-only `PORTAL_UPSTASH_REDIS_URL` / `PORTAL_UPSTASH_REDIS_TOKEN`; local/CI may use `PORTAL_REDIS_URL` plus optional `PORTAL_REDIS_PASSWORD`. Portal routes never fall back to the generic Redis variables used by existing Functions. The concurrency lease defaults to 30 seconds, never drops below 20 seconds, and must cover Redis plus upstream timeouts with a five-second recovery margin. The R1 LCIA response cache defaults to and is capped at 60 seconds.
 - `PORTAL_HYBRID_ENABLED=false` plus independent `PORTAL_HYBRID_*` minute/day/concurrency/lease/cache/timeout/circuit settings for the R2 signed Hybrid route. Only exact lowercase `true` enables model or database work. The model cache is capped at 60 seconds and stores no raw query or database candidate.
 - `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`, and optional `OPENAI_BASE_URL`.
 - `SAGEMAKER_ENDPOINT_NAME` plus AWS credentials for hybrid search and embedding.
@@ -108,6 +108,7 @@ Credential contract:
 - Supabase secret keys are reserved for privileged Supabase execution paths and must never be exposed to browser clients.
 - Keep `REMOTE_SUPABASE_URL`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, and `REMOTE_SUPABASE_SECRET_KEY` from the same Supabase project. A mismatched or stale secret key causes local RPC calls to fail with `Invalid API key` after request authentication succeeds.
 - The Portal HMAC secret is independent of `REMOTE_SERVICE_API_KEY`, Supabase JWT secrets, and every Supabase client key. Keep dev/Preview and main/Production keyrings, Upstash databases, tokens, and `portal:<environment>:v1` namespaces distinct. Only the verifier holds an optional previous HMAC key during rotation.
+- Portal Redis provider and credential variables are independent of the generic `REDIS_CLIENT_TYPE`, `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN`, `REDIS_URL`, and `REDIS_PASSWORD` surface. Missing Portal-only values fail closed; provisioning Portal must not change Redis behavior for any existing Function.
 - `portal_data_product_results_v1` uses only the matching project publishable key for its downstream `api.portal_get_published_lcia_values_v1` call. It must never receive or construct a service-role/secret-key client.
 - `portal_hybrid_search_v1` uses the same once-resolved matching project publishable key only for `api.portal_hybrid_search_v1`. It never calls `hybrid_search_processes`, `hybrid_search_flows`, another raw/login Hybrid RPC, or a service client.
 
@@ -411,7 +412,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 147-root Deno graph, 15 Node contracts, and all 455 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 147-root Deno graph, 15 Node contracts, and all 456 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

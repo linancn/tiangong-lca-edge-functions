@@ -77,15 +77,15 @@ export function readPortalRedisTimeoutMs(env: PortalRedisEnvironment = Deno.env)
 export function readPortalRedisRuntimeConfig(
   env: PortalRedisEnvironment = Deno.env,
 ): PortalRedisRuntimeConfig {
-  const provider = portalRedisRequiredEnvironmentValue(env, 'REDIS_CLIENT_TYPE');
+  const provider = portalRedisRequiredEnvironmentValue(env, 'PORTAL_REDIS_CLIENT_TYPE');
   if (provider !== 'upstash' && provider !== 'standard') throw new PortalRedisError();
   const namespace = portalRedisRequiredEnvironmentValue(env, 'PORTAL_REDIS_NAMESPACE');
   if (!PORTAL_REDIS_NAMESPACE_PATTERN.test(namespace)) throw new PortalRedisError();
   const timeoutMs = readPortalRedisTimeoutMs(env);
 
   if (provider === 'upstash') {
-    const upstashUrl = portalRedisRequiredEnvironmentValue(env, 'UPSTASH_REDIS_URL');
-    const upstashToken = portalRedisRequiredEnvironmentValue(env, 'UPSTASH_REDIS_TOKEN');
+    const upstashUrl = portalRedisRequiredEnvironmentValue(env, 'PORTAL_UPSTASH_REDIS_URL');
+    const upstashToken = portalRedisRequiredEnvironmentValue(env, 'PORTAL_UPSTASH_REDIS_TOKEN');
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(upstashUrl);
@@ -96,7 +96,7 @@ export function readPortalRedisRuntimeConfig(
     return { provider, namespace, timeoutMs, upstashUrl, upstashToken };
   }
 
-  const redisUrl = portalRedisRequiredEnvironmentValue(env, 'REDIS_URL');
+  const redisUrl = portalRedisRequiredEnvironmentValue(env, 'PORTAL_REDIS_URL');
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(redisUrl);
@@ -111,7 +111,7 @@ export function readPortalRedisRuntimeConfig(
     namespace,
     timeoutMs,
     redisUrl,
-    redisPassword: portalRedisEnvironmentValue(env, 'REDIS_PASSWORD'),
+    redisPassword: portalRedisEnvironmentValue(env, 'PORTAL_REDIS_PASSWORD'),
   };
 }
 
