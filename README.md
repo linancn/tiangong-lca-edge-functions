@@ -23,8 +23,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 8950a1095cc5121ca68a825f6df49b145953dbc1
-lastReviewedNote: 'Reviewed for Issue #307: Portal HMAC, isolated Redis guard, publishable-only LCIA projection, environment, deploy, and validation guidance are aligned.'
+lastReviewedCommit: 90101ec3f649645ab1f0aef5c373ca3ba7a0768c
+lastReviewedNote: 'Reviewed for PR #308 acceptance remediation: pinned CLI transport compatibility, exact apikey/Cookie isolation, lease safety, 60-second visibility cache, correlation, and security-event guidance are aligned.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -94,7 +94,7 @@ Core entries:
 - `REMOTE_SERVICE_API_KEY` for routes that allow `AuthMethod.SERVICE_API_KEY`.
 - `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` for user API key auth caching.
 - `PORTAL_HMAC_KEY_ID_CURRENT` / `PORTAL_HMAC_SECRET_CURRENT` and the optional previous pair for Portal-only request verification.
-- `REDIS_CLIENT_TYPE`, `PORTAL_REDIS_NAMESPACE`, `PORTAL_REDIS_TIMEOUT_MS`, and the bounded `PORTAL_LCIA_*` guard/cache/timeout settings for the signed public LCIA route. Hosted projects use Upstash; local/CI may use `REDIS_URL` plus optional `REDIS_PASSWORD`.
+- `REDIS_CLIENT_TYPE`, `PORTAL_REDIS_NAMESPACE`, `PORTAL_REDIS_TIMEOUT_MS`, and the bounded `PORTAL_LCIA_*` guard/cache/timeout settings for the signed public LCIA route. Hosted projects use Upstash; local/CI may use `REDIS_URL` plus optional `REDIS_PASSWORD`. The concurrency lease defaults to 30 seconds, never drops below 20 seconds, and must cover Redis plus upstream timeouts with a five-second recovery margin. The R1 LCIA response cache defaults to and is capped at 60 seconds.
 - `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`, and optional `OPENAI_BASE_URL`.
 - `SAGEMAKER_ENDPOINT_NAME` plus AWS credentials for hybrid search and embedding.
 - Feature-specific entries such as Cognito, TIDAS storage, national-carbon cache, and `embedding_ft` timeout knobs are grouped in `supabase/.env.example`.
@@ -247,7 +247,9 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 
 ### Portal signed public LCIA contract
 
-`portal_data_product_results_v1` accepts only `POST /functions/v1/portal_data_product_results_v1` from the Portal BFF. It requires the five `portal-hmac-v1` headers (`x-portal-key-id`, `x-portal-timestamp`, `x-portal-nonce`, `x-portal-body-sha256`, and `x-portal-signature`) plus the matching project `apikey`. Do not send `Authorization`, a user JWT, `SERVICE_API_KEY`, a Supabase secret/service-role key, or any storage locator.
+`portal_data_product_results_v1` accepts the public `POST /functions/v1/portal_data_product_results_v1` path and the exact `/portal_data_product_results_v1` path produced after pinned Supabase CLI routing strips `/functions/v1`; no suffix or other function path is accepted. HMAC canonical bytes always contain the public path. The request requires the five `portal-hmac-v1` headers (`x-portal-key-id`, `x-portal-timestamp`, `x-portal-nonce`, `x-portal-body-sha256`, and `x-portal-signature`) plus the exact matching project `apikey`. `x-portal-correlation-id` accepts a canonical UUID; missing or invalid values are replaced, and every response returns the resolved `X-Portal-Correlation-Id`.
+
+The Portal BFF sends no `Authorization` or Cookie. For pinned CLI `2.106.0` local serving only, the handler tolerates the exact `Bearer <configured legacy anon JWT>` that Kong injects when the trusted publishable `apikey` matches; every user, service-role, other Bearer, or Cookie is rejected after HMAC and before Redis. `SERVICE_API_KEY`, Supabase secret/service-role keys, user context, and storage locators remain forbidden.
 
 The signed JSON body has one fixed shape:
 
@@ -263,7 +265,9 @@ The signed JSON body has one fixed shape:
 
 `processes_one_impact` and `ranked_processes_one_impact` require a non-empty `impactCategoryId`; `process_all_impacts` requires exactly one Process reference, while the other modes accept 1–50 exact Process ID/version references. The request/response limits remain 32 KiB/512 KiB. A successful response is the exact top-level `portal.published-lcia-page.v1` DTO with `rows`, not an artifact-derived envelope. No current finalized publication returns a stable locator-free `404`; guard/upstream outage returns `503`; budget or concurrency exhaustion returns `429`. Missing or incomplete public evidence is unavailable and is never replaced with numeric zero.
 
-The function validates HMAC over the raw body before Redis or JSON work, registers nonce with `SET NX EX 120`, acquires an atomic budget/concurrency lease, and releases the lease in `finally`. Only then may it read the hash-key five-minute cache or invoke `api.portal_get_published_lcia_values_v1` with explicit `Content-Profile: api` and a strictly validated publishable/legacy-anon credential.
+The function validates HMAC over the raw body before transport, Redis, or JSON work, then constant-time matches the inbound public `apikey`, registers nonce with `SET NX EX 120`, acquires an atomic budget/concurrency lease, and releases the lease in `finally`. Only then may it read the hash-key cache or invoke `api.portal_get_published_lcia_values_v1` with explicit `Content-Profile: api` and the same resolved publishable/legacy-anon credential. The LCIA cache is capped at 60 seconds so a revoked publication is rechecked within the visibility SLA; Redis is never a visibility or authorization fact source.
+
+Each request invokes exactly one non-blocking `portal.security-event.v1` logger with only correlation ID, route, mode, cache state, HMAC/transport outcome enums, backend class, bounded latency/row/status fields, current/previous key match, recovered-lease count, error code, and deployment SHA. Raw bodies, queries, dataset UUIDs, nonce, key ID, body hash, Redis keys, cache values, API keys, secrets, Cookies, and locators are not event fields. A throwing or never-resolving logger cannot alter or delay the response.
 
 ### TIDAS package artifact download contract
 
@@ -373,7 +377,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 144-root Deno graph, 15 Node contracts, and all 404 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 144-root Deno graph, 15 Node contracts, and all 422 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

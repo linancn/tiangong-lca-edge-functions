@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 8950a1095cc5121ca68a825f6df49b145953dbc1
-lastReviewedNote: 'Reviewed for Issue #307: the Portal HMAC verifier, isolated Redis admission guard, publishable-only public LCIA route, and exact validation inventory are part of the repo contract.'
+lastReviewedCommit: 90101ec3f649645ab1f0aef5c373ca3ba7a0768c
+lastReviewedNote: 'Reviewed for PR #308 acceptance remediation: pinned CLI transport, exact public credentials, lease/cache safety, correlation, and safe security events are part of the Portal repo contract.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -94,7 +94,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.23.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 144 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 404 Deno behavior tests with only env/read/loopback-net permissions
+- `pnpm check` validates exact runtime versions, checks all 144 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 422 Deno behavior tests with only env/read/loopback-net permissions
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -158,7 +158,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 
 - do not invent schema truth or migration history in this repo
 - do not interpret `--no-verify-jwt` as permission for anonymous business logic
-- do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT, or a database/storage locator; the signed Portal LCIA route may call only its reviewed public `api` RPC with a strictly validated publishable/anon credential
+- do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; the signed Portal LCIA route may call only its reviewed public `api` RPC with the same once-resolved publishable/anon credential that matched inbound `apikey`. Authorization is absent in normal Portal traffic; only the exact legacy anon Bearer injected by pinned CLI `2.106.0` local routing is tolerated after HMAC
 - do not move repo-level tests into `supabase/functions/**`; this repo keeps Deno tests in `test/**`
 - do not treat GitHub default branch `main` as the daily trunk
 - do not mark delivery complete if root workspace integration is still pending
