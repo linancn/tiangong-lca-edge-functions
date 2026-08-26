@@ -31,10 +31,14 @@ import {
   defaultPortalSecurityLogger,
   emitPortalSecurityEvent,
   normalizePortalSecurityErrorCode,
+  resolvePortalCorrelationId,
+  type PortalSecurityBackend,
   type PortalSecurityCacheStatus,
   type PortalSecurityErrorCode,
+  type PortalSecurityHmacOutcome,
   type PortalSecurityLogger,
   type PortalSecurityMode,
+  type PortalSecurityTransportOutcome,
 } from '../_shared/portal_security_event.ts';
 import { getSupabasePublishableKey, getSupabaseUrl } from '../_shared/supabase_client.ts';
 
@@ -487,6 +491,47 @@ function authFailure(error: unknown): Response {
   return errorResponse(401, 'portal_auth_failed', 'Portal request authentication failed');
 }
 
+export function hmacSecurityOutcome(error: unknown): PortalSecurityHmacOutcome {
+  if (!(error instanceof PortalHmacError)) return 'config';
+  switch (error.code) {
+    case 'portal_hmac_config_invalid':
+      return 'config';
+    case 'portal_hmac_method_invalid':
+      return 'method';
+    case 'portal_hmac_path_invalid':
+      return 'path';
+    case 'portal_hmac_headers_missing':
+    case 'portal_hmac_headers_invalid':
+      return 'headers';
+    case 'portal_hmac_timestamp_expired':
+      return 'timestamp';
+    case 'portal_hmac_body_hash_mismatch':
+      return 'body_hash';
+    case 'portal_hmac_key_unknown':
+      return 'unknown_key';
+    case 'portal_hmac_signature_invalid':
+      return 'signature';
+  }
+}
+
+export function transportSecurityOutcome(error: unknown): PortalSecurityTransportOutcome {
+  if (!(error instanceof PortalTransportError)) return 'config';
+  switch (error.code) {
+    case 'portal_transport_config_invalid':
+      return 'config';
+    case 'portal_apikey_missing':
+      return 'apikey_missing';
+    case 'portal_apikey_invalid':
+      return 'apikey_invalid';
+    case 'portal_apikey_mismatch':
+      return 'apikey_mismatch';
+    case 'portal_authorization_invalid':
+      return 'authorization_invalid';
+    case 'portal_cookie_invalid':
+      return 'cookie_invalid';
+  }
+}
+
 async function responseSecurityErrorCode(
   response: Response,
 ): Promise<PortalSecurityErrorCode | null> {
@@ -514,8 +559,12 @@ export function createPortalDataProductResultsHandler(
       }
     };
     const startedAt = readMonotonicTime();
+    const correlationId = resolvePortalCorrelationId(request.headers);
     let eventMode: PortalSecurityMode | null = null;
     let eventCache: PortalSecurityCacheStatus = 'not_checked';
+    let eventHmacOutcome: PortalSecurityHmacOutcome = 'not_checked';
+    let eventTransportOutcome: PortalSecurityTransportOutcome = 'not_checked';
+    let eventBackend: PortalSecurityBackend = 'none';
     let eventRows: number | null = null;
     let eventMatchedKey: 'current' | 'previous' | null = null;
     let eventRecoveredLeaseCount = 0;
@@ -539,7 +588,9 @@ export function createPortalDataProductResultsHandler(
           nowSeconds: options.nowSeconds?.(),
         });
         eventMatchedKey = verification.matchedKey;
+        eventHmacOutcome = 'accepted';
       } catch (error) {
+        eventHmacOutcome = hmacSecurityOutcome(error);
         return authFailure(error);
       }
 
@@ -554,7 +605,9 @@ export function createPortalDataProductResultsHandler(
               ? readPortalLegacyAnonCredential()
               : options.trustedLegacyAnonKey,
         });
+        eventTransportOutcome = 'accepted';
       } catch (error) {
+        eventTransportOutcome = transportSecurityOutcome(error);
         if (
           !(error instanceof PortalTransportError) ||
           error.code === 'portal_transport_config_invalid'
@@ -675,6 +728,7 @@ export function createPortalDataProductResultsHandler(
             options.repository ??
             options.repositoryFactory?.(trustedPublishableKey) ??
             createPortalPublishedLciaRepository({ publishableKey: trustedPublishableKey });
+          eventBackend = 'supabase_public_rpc';
           page = await repository.query(parsedRequest.data, abortController.signal);
         } catch (_error) {
           return errorResponse(
@@ -686,6 +740,7 @@ export function createPortalDataProductResultsHandler(
           clearTimeout(timeoutId);
         }
         if (page === null) {
+          eventRows = 0;
           return errorResponse(
             404,
             'published_lcia_unavailable',
@@ -755,9 +810,14 @@ export function createPortalDataProductResultsHandler(
       );
     }
     const errorCode = await responseSecurityErrorCode(response);
-    await emitPortalSecurityEvent(options.logger ?? defaultPortalSecurityLogger, {
+    response.headers.set('X-Portal-Correlation-Id', correlationId);
+    emitPortalSecurityEvent(options.logger ?? defaultPortalSecurityLogger, {
+      correlationId,
       mode: eventMode,
       cache: eventCache,
+      hmacOutcome: eventHmacOutcome,
+      transportOutcome: eventTransportOutcome,
+      backend: eventBackend,
       latencyMs: Math.max(0, Math.round(readMonotonicTime() - startedAt)),
       rows: eventRows,
       status: response.status,

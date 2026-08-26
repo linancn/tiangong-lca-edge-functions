@@ -4,6 +4,7 @@ import {
   buildPortalHmacCanonical,
   computePortalBodyHash,
   encodeBase64Url,
+  PortalHmacError,
   type PortalHmacKeyring,
 } from '../supabase/functions/_shared/portal_hmac.ts';
 import { PORTAL_ATOMIC_GUARD_LUA } from '../supabase/functions/_shared/portal_redis_guard.ts';
@@ -11,11 +12,14 @@ import type { PortalRedisAdapter } from '../supabase/functions/_shared/redis_cli
 import {
   createPortalDataProductResultsHandler,
   createPortalPublishedLciaRepository,
+  hmacSecurityOutcome,
   PORTAL_LCIA_FUNCTION_PATH,
   PORTAL_LCIA_MAX_REQUEST_BYTES,
   portalPublishedLciaPageSchema,
   type PortalPublishedLciaPage,
   type PortalPublishedLciaRepository,
+  PortalTransportError,
+  transportSecurityOutcome,
   validatePortalPublishableCredential,
   validatePortalSupabaseUrl,
 } from '../supabase/functions/portal_data_product_results_v1/index.ts';
@@ -30,6 +34,7 @@ const METHOD_ID = '22222222-2222-4222-8222-222222222222';
 const PUBLICATION_ID = '33333333-3333-4333-8333-333333333333';
 const PACKAGE_ID = '44444444-4444-4444-8444-444444444444';
 const TRUSTED_PUBLISHABLE_KEY = 'sb_publishable_test';
+const CORRELATION_ID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
 
 function credentialJwt(role: string): string {
   return [
@@ -115,6 +120,7 @@ async function signedRequest(
     apiKey?: string | null;
     authorization?: string | null;
     cookie?: string | null;
+    correlationId?: string | null;
   } = {},
 ): Promise<Request> {
   const rawBody =
@@ -151,6 +157,9 @@ async function signedRequest(
   }
   if (options.cookie !== null && options.cookie !== undefined) {
     headers.set('cookie', options.cookie);
+  }
+  if (options.correlationId !== null) {
+    headers.set('x-portal-correlation-id', options.correlationId ?? CORRELATION_ID);
   }
   return new Request(`https://example.supabase.co${options.path ?? PORTAL_LCIA_FUNCTION_PATH}`, {
     method: 'POST',
@@ -240,6 +249,7 @@ Deno.test('signed Portal LCIA request returns the exact locator-free database DT
   );
   const response = await handler(await signedRequest());
   assertEquals(response.status, 200);
+  assertEquals(response.headers.get('X-Portal-Correlation-Id'), CORRELATION_ID);
   assertEquals(response.headers.get('X-Portal-Cache'), 'miss');
   assertEquals(await response.json(), page());
   assertEquals(databaseCalls, ['database']);
@@ -267,8 +277,12 @@ Deno.test('Portal emits exactly one allowlisted structured event per request', a
     {
       schemaVersion: 'portal.security-event.v1',
       route: 'portal_data_product_results_v1',
+      correlationId: CORRELATION_ID,
       mode: 'process_all_impacts',
       cache: 'miss',
+      hmacOutcome: 'accepted',
+      transportOutcome: 'accepted',
+      backend: 'supabase_public_rpc',
       latencyMs: 25,
       rows: 1,
       status: 200,
@@ -279,9 +293,12 @@ Deno.test('Portal emits exactly one allowlisted structured event per request', a
     },
   ]);
   assertEquals(Object.keys(events[0]).sort(), [
+    'backend',
     'cache',
+    'correlationId',
     'deploymentSha',
     'errorCode',
+    'hmacOutcome',
     'latencyMs',
     'matchedKey',
     'mode',
@@ -290,6 +307,7 @@ Deno.test('Portal emits exactly one allowlisted structured event per request', a
     'rows',
     'schemaVersion',
     'status',
+    'transportOutcome',
   ]);
   const serializedEvent = JSON.stringify(events[0]);
   for (const forbidden of [
@@ -308,6 +326,30 @@ Deno.test('Portal emits exactly one allowlisted structured event per request', a
   }
 });
 
+Deno.test('invalid inbound correlation id is replaced and never echoed', async () => {
+  const redis = new HandlerRedis();
+  const events: Array<Record<string, unknown>> = [];
+  const handler = createPortalDataProductResultsHandler({
+    ...handlerOptions(redis, repository(page())),
+    logger: (event) => {
+      events.push({ ...event });
+    },
+  });
+  const invalidCorrelationId = `invalid:${PROCESS_ID}:private`;
+  const response = await handler(
+    await signedRequest({ correlationId: invalidCorrelationId, nonceSeed: 63 }),
+  );
+  const resolved = response.headers.get('X-Portal-Correlation-Id');
+  assert(resolved);
+  assertEquals(resolved === invalidCorrelationId, false);
+  assertEquals(
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(resolved),
+    true,
+  );
+  assertEquals(events[0].correlationId, resolved);
+  assertEquals(JSON.stringify(events[0]).includes(invalidCorrelationId), false);
+});
+
 Deno.test('security logger failure never changes or duplicates the response', async () => {
   const redis = new HandlerRedis();
   let loggerCalls = 0;
@@ -320,6 +362,25 @@ Deno.test('security logger failure never changes or duplicates the response', as
   });
   const response = await handler(await signedRequest({ nonceSeed: 61 }));
   assertEquals(response.status, 200);
+  assertEquals(loggerCalls, 1);
+});
+
+Deno.test('never-resolving async logger cannot delay the response', async () => {
+  const redis = new HandlerRedis();
+  let loggerCalls = 0;
+  const handler = createPortalDataProductResultsHandler({
+    ...handlerOptions(redis, repository(page())),
+    logger: () => {
+      loggerCalls += 1;
+      return new Promise<void>(() => undefined);
+    },
+  });
+  const outcome = await Promise.race([
+    handler(await signedRequest({ nonceSeed: 62 })),
+    new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 50)),
+  ]);
+  assertEquals(outcome instanceof Response, true);
+  if (outcome instanceof Response) assertEquals(outcome.status, 200);
   assertEquals(loggerCalls, 1);
 });
 
@@ -345,9 +406,44 @@ Deno.test(
     assertEquals(events.length, 1);
     assertEquals(events[0].errorCode, 'portal_auth_failed');
     assertEquals(events[0].matchedKey, null);
+    assertEquals(events[0].hmacOutcome, 'headers');
+    assertEquals(events[0].transportOutcome, 'not_checked');
+    assertEquals(events[0].backend, 'none');
+    assertEquals(response.headers.get('X-Portal-Correlation-Id'), events[0].correlationId);
     assertEquals(JSON.stringify(events[0]).includes('private-query-and-cookie-value'), false);
   },
 );
+
+Deno.test('security outcome mappings are fixed, complete, and locator-free', () => {
+  const hmacOutcomes = [
+    ['portal_hmac_config_invalid', 'config'],
+    ['portal_hmac_method_invalid', 'method'],
+    ['portal_hmac_path_invalid', 'path'],
+    ['portal_hmac_headers_missing', 'headers'],
+    ['portal_hmac_headers_invalid', 'headers'],
+    ['portal_hmac_timestamp_expired', 'timestamp'],
+    ['portal_hmac_body_hash_mismatch', 'body_hash'],
+    ['portal_hmac_key_unknown', 'unknown_key'],
+    ['portal_hmac_signature_invalid', 'signature'],
+  ] as const;
+  assertEquals(
+    hmacOutcomes.map(([code]) => hmacSecurityOutcome(new PortalHmacError(code))),
+    hmacOutcomes.map(([, outcome]) => outcome),
+  );
+
+  const transportOutcomes = [
+    ['portal_transport_config_invalid', 'config'],
+    ['portal_apikey_missing', 'apikey_missing'],
+    ['portal_apikey_invalid', 'apikey_invalid'],
+    ['portal_apikey_mismatch', 'apikey_mismatch'],
+    ['portal_authorization_invalid', 'authorization_invalid'],
+    ['portal_cookie_invalid', 'cookie_invalid'],
+  ] as const;
+  assertEquals(
+    transportOutcomes.map(([code]) => transportSecurityOutcome(new PortalTransportError(code))),
+    transportOutcomes.map(([, outcome]) => outcome),
+  );
+});
 
 Deno.test(
   'Supabase stripped path and exact pinned-CLI legacy anon transport are accepted',
@@ -387,24 +483,30 @@ Deno.test('HMAC rejection precedes inbound transport validation', async () => {
 });
 
 Deno.test('inbound apikey must be strict public and exact before Redis or database', async () => {
-  const invalidApiKeys: Array<string | null> = [
-    null,
-    'sb_publishable_mismatch',
-    'sb_secret_test',
-    credentialJwt('authenticated'),
-    credentialJwt('service_role'),
+  const invalidApiKeys: Array<[string | null, string]> = [
+    [null, 'apikey_missing'],
+    ['sb_publishable_mismatch', 'apikey_mismatch'],
+    ['sb_secret_test', 'apikey_invalid'],
+    [credentialJwt('authenticated'), 'apikey_invalid'],
+    [credentialJwt('service_role'), 'apikey_invalid'],
   ];
-  for (const [index, apiKey] of invalidApiKeys.entries()) {
+  for (const [index, [apiKey, expectedOutcome]] of invalidApiKeys.entries()) {
     const redis = new HandlerRedis();
     const databaseCalls: string[] = [];
-    const handler = createPortalDataProductResultsHandler(
-      handlerOptions(redis, repository(page(), databaseCalls)),
-    );
+    const events: Array<Record<string, unknown>> = [];
+    const handler = createPortalDataProductResultsHandler({
+      ...handlerOptions(redis, repository(page(), databaseCalls)),
+      logger: (event) => {
+        events.push({ ...event });
+      },
+    });
     const response = await handler(await signedRequest({ apiKey, nonceSeed: 30 + index }));
     assertEquals(response.status, 401);
     assertEquals((await response.json()).code, 'portal_auth_failed');
     assertEquals(redis.calls, []);
     assertEquals(databaseCalls, []);
+    assertEquals(events[0].hmacOutcome, 'accepted');
+    assertEquals(events[0].transportOutcome, expectedOutcome);
   }
 });
 
@@ -433,9 +535,13 @@ Deno.test(
 Deno.test('inbound Cookie is rejected after HMAC and before Redis or database', async () => {
   const redis = new HandlerRedis();
   const databaseCalls: string[] = [];
-  const handler = createPortalDataProductResultsHandler(
-    handlerOptions(redis, repository(page(), databaseCalls)),
-  );
+  const events: Array<Record<string, unknown>> = [];
+  const handler = createPortalDataProductResultsHandler({
+    ...handlerOptions(redis, repository(page(), databaseCalls)),
+    logger: (event) => {
+      events.push({ ...event });
+    },
+  });
   const response = await handler(
     await signedRequest({ cookie: 'session=user-token', nonceSeed: 49 }),
   );
@@ -443,6 +549,9 @@ Deno.test('inbound Cookie is rejected after HMAC and before Redis or database', 
   assertEquals((await response.json()).code, 'portal_auth_failed');
   assertEquals(redis.calls, []);
   assertEquals(databaseCalls, []);
+  assertEquals(events[0].hmacOutcome, 'accepted');
+  assertEquals(events[0].transportOutcome, 'cookie_invalid');
+  assertEquals(JSON.stringify(events[0]).includes('session=user-token'), false);
 });
 
 Deno.test('invalid trusted transport configuration fails closed before Redis', async () => {
@@ -580,12 +689,20 @@ Deno.test('budget and concurrency rejection never call database', async () => {
 
 Deno.test('missing publication is unavailable and never synthesized as zero', async () => {
   const redis = new HandlerRedis();
-  const handler = createPortalDataProductResultsHandler(handlerOptions(redis, repository(null)));
+  const events: Array<Record<string, unknown>> = [];
+  const handler = createPortalDataProductResultsHandler({
+    ...handlerOptions(redis, repository(null)),
+    logger: (event) => {
+      events.push({ ...event });
+    },
+  });
   const response = await handler(await signedRequest({ nonceSeed: 9 }));
   assertEquals(response.status, 404);
   const body = await response.json();
   assertEquals(body.code, 'published_lcia_unavailable');
   assertEquals(JSON.stringify(body).includes(':0'), false);
+  assertEquals(events[0].rows, 0);
+  assertEquals(events[0].backend, 'supabase_public_rpc');
 });
 
 Deno.test('numeric zero and incomplete response context fail the exact DTO boundary', async () => {
