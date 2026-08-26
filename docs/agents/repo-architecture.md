@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: df6eef9973d733b95e7912cfc8f2a644f125f3b8
-lastReviewedNote: 'Reviewed after Issue #316 added the disposable R0 HMAC/Redis verifier plus deploy and cleanup paths that cannot target persistent Dev/Main.'
+lastReviewedCommit: 4ad34d1dfc26d8f799d683d548bc7a9a7f20e650
+lastReviewedNote: 'Reviewed after Issue #316 added the R0 verifier, optional-secret normalization, and live Main-parent Preview verification for deploy and cleanup.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -57,7 +57,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 | --- | --- | --- |
 | `supabase/functions/<name>/index.ts` | stable | default Edge Function entrypoint; baseline `pnpm check` includes every enabled `index.ts` root in one bounded shared Deno graph |
 | `supabase/functions/<name>/handler.ts` | stable | larger routes sometimes split real logic here while `index.ts` stays thin |
-| `supabase/functions/portal_r0_hmac_verify_v1/**` and `_shared/portal_r0_*` | disposable | non-business EdgeOne Web Crypto/Supabase Deno interoperability fixture with R0-only HMAC, publishable-key, Redis, namespace, receipt, and Preview/test deployment contracts |
+| `supabase/functions/portal_r0_hmac_verify_v1/**` and `_shared/portal_r0_*` | disposable | non-business EdgeOne Web Crypto/Supabase Deno interoperability fixture with R0-only HMAC, publishable-key, Redis, namespace, receipt, local-test, and live Preview deployment contracts |
 | `supabase/functions/_shared/auth.ts` | stable | central runtime auth and credential-selection logic |
 | `supabase/functions/_shared/portal_hmac.ts`, `portal_redis_guard.ts`, and the Portal adapter in `redis_client.ts` | stable | Portal-only raw-body request verification, explicitly isolated provider credentials, replay protection, atomic route budget, concurrency lease, and hash-key cache behavior without generic Redis fallback |
 | `supabase/functions/_shared/portal_public_transport.ts` | stable | dedicated current-project publishable-key resolution, platform-only current-project URL, exact inbound/legacy-anon transport, Cookie rejection, and bounded raw-byte reader shared by signed Portal routes |
@@ -93,7 +93,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 153 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 37 Node contract tests and 491 Deno behavior tests with env/read/loopback-net permissions.
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 153 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 53 Node contract tests and 492 Deno behavior tests with env/read/loopback-net permissions.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
@@ -151,7 +151,7 @@ The retired review-submit Gate, coordinator, and job endpoints are not part of t
 
 The route reads only `PORTAL_R0_*` configuration plus the platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry. Its namespace is `portal:r0:<fixture>:v1`; it cannot name Dev/Main/Production, and R0 never falls back to retained Portal or generic HMAC, publishable, Redis, provider, Supabase, or service variables. Nonce registration is exact `SET NX EX 120`, followed by the reviewed atomic budget/concurrency Lua primitive and synchronous lease cleanup. It has no cache, database, RPC, model, provider, repository, storage, business DTO, event, or logger surface. Every failure is a fixed locator-free receipt.
 
-The generic `deploy:dev` and `deploy:main` scripts reject the R0 slug. `pnpm deploy:portal-r0 <preview|test>` requires a different 20-character project ref, exact clean HEAD SHA, matching runtime target, deletion acknowledgement, and expiry within 24 hours. `pnpm cleanup:portal-r0 <preview|test>` reuses the same guard, deletes only the fixed remote function, and emits the remaining external Redis/credential deletion checklist without their values. Remote evidence must record removal of the function, one-time credentials, and one-time Redis resource.
+The generic `deploy:dev` and `deploy:main` scripts reject the R0 slug. Before deploy or cleanup, the dedicated commands capture `supabase branches list --project-ref <configured-main> --output-format json` and verify exactly one matching project ref whose parent is Main, `is_default=false`, `persistent=false`, `with_data=false`, `status=FUNCTIONS_DEPLOYED`, and `preview_project_status=ACTIVE_HEALTHY`, plus exact operator-supplied branch name/Git branch and optional PR number. A 403, malformed response, or empty list fails closed. Remote `test` and arbitrary project refs are never deployment targets. Deploy additionally requires clean HEAD, deploy acknowledgement, and future expiry within 24 hours. Cleanup uses a separate acknowledgement and permits expired fixtures. It deletes only the fixed function when ready; an absent target in a valid nonempty Main-parent response is terminal. Both paths emit only fixed messages/checklists, never branch metadata or token values.
 
 ### Portal signed public LCIA route
 
