@@ -1,10 +1,7 @@
 import { authenticateRequest, AuthMethod } from './auth.ts';
 import { corsHeaders } from './cors.ts';
 import { extractEmbeddingVector } from './embedding_vector.ts';
-import {
-  generateHybridSearchEmbedding,
-  rewriteHybridSearchQuery,
-} from './hybrid_search_kernel.ts';
+import { generateHybridSearchEmbedding, rewriteHybridSearchQuery } from './hybrid_search_kernel.ts';
 import {
   buildHybridFulltextQueryTerms,
   sanitizeHybridQueryOutput,

@@ -89,38 +89,41 @@ Deno.test(
   },
 );
 
-Deno.test('shared Hybrid handler extraction preserves its exact legacy response bytes', async () => {
-  const handler = createHybridSearchHandler(CONTACT_CONFIG, {
-    authenticate: async () => ({ isAuthenticated: true }),
-    rewriteQuery: async () => ({
-      semantic_query_en: 'contact',
-      fulltext_query_en: ['contact'],
-      fulltext_query_zh: ['联系人'],
-    }),
-    generateEmbedding: async () => VECTOR,
-    createRpcClient: () => ({
-      client: {
-        rpc() {
-          return Promise.resolve({ data: [{ id: 'contact-1' }], error: null });
-        },
-      } as unknown as SupabaseClient,
-      userContextKind: 'service',
-    }),
-    logger: { log: () => undefined, error: () => undefined },
-  });
+Deno.test(
+  'shared Hybrid handler extraction preserves its exact legacy response bytes',
+  async () => {
+    const handler = createHybridSearchHandler(CONTACT_CONFIG, {
+      authenticate: async () => ({ isAuthenticated: true }),
+      rewriteQuery: async () => ({
+        semantic_query_en: 'contact',
+        fulltext_query_en: ['contact'],
+        fulltext_query_zh: ['联系人'],
+      }),
+      generateEmbedding: async () => VECTOR,
+      createRpcClient: () => ({
+        client: {
+          rpc() {
+            return Promise.resolve({ data: [{ id: 'contact-1' }], error: null });
+          },
+        } as unknown as SupabaseClient,
+        userContextKind: 'service',
+      }),
+      logger: { log: () => undefined, error: () => undefined },
+    });
 
-  const response = await handler(
-    new Request('http://localhost/contact_hybrid_search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: '{"query":"contact"}',
-    }),
-  );
+    const response = await handler(
+      new Request('http://localhost/contact_hybrid_search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{"query":"contact"}',
+      }),
+    );
 
-  assertEquals(response.status, 200);
-  assertEquals(response.headers.get('content-type'), 'application/json');
-  assertEquals(await response.text(), '{"data":[{"id":"contact-1"}]}');
-});
+    assertEquals(response.status, 200);
+    assertEquals(response.headers.get('content-type'), 'application/json');
+    assertEquals(await response.text(), '{"data":[{"id":"contact-1"}]}');
+  },
+);
 
 Deno.test(
   'shared Hybrid handler does not add visibility RPC fields for mature routes',

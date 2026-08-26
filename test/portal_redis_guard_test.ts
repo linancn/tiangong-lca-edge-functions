@@ -7,18 +7,33 @@ import {
 } from 'jsr:@std/assert';
 
 import {
+  checkPortalHybridCircuit,
+  DEFAULT_HYBRID_CIRCUIT_FAILURE_THRESHOLD,
+  DEFAULT_HYBRID_CIRCUIT_OPEN_SECONDS,
+  DEFAULT_HYBRID_CIRCUIT_WINDOW_SECONDS,
   DEFAULT_LEASE_TTL_SECONDS,
   minimumPortalLeaseTtlSeconds,
   MINIMUM_LEASE_TTL_SECONDS,
   PORTAL_ATOMIC_GUARD_LUA,
+  PORTAL_HYBRID_CACHE_TTL_SECONDS,
+  PORTAL_HYBRID_CIRCUIT_CHECK_LUA,
+  PORTAL_HYBRID_CIRCUIT_FAILURE_LUA,
+  PORTAL_HYBRID_CIRCUIT_SUCCESS_LUA,
+  PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
   PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS,
+  readPortalHybridCircuitLimits,
+  readPortalHybridGuardLimits,
+  readPortalHybridTotalTimeoutMs,
   readPortalLciaGuardLimits,
   readPortalResponseCache,
   redisEvalAtomicGuard,
+  recordPortalHybridCircuitFailure,
+  recordPortalHybridCircuitSuccess,
   registerPortalNonce,
   releasePortalConcurrencyLease,
   REPLAY_TTL_SECONDS,
   validatePortalLciaGuardLimits,
+  validatePortalHybridGuardLimits,
   writePortalResponseCache,
 } from '../supabase/functions/_shared/portal_redis_guard.ts';
 import {
@@ -415,5 +430,109 @@ Deno.test(
         .leaseTtlSeconds,
       30,
     );
+  },
+);
+
+Deno.test(
+  'Portal Hybrid guard, timeout, cache, and circuit budgets are independently bounded',
+  () => {
+    assertEquals(readPortalHybridTotalTimeoutMs(environment({})), PORTAL_HYBRID_TOTAL_TIMEOUT_MS);
+    assertEquals(readPortalHybridGuardLimits(environment({})), {
+      minuteBudget: 60,
+      dailyBudget: 5_000,
+      maxConcurrency: 4,
+      leaseTtlSeconds: DEFAULT_LEASE_TTL_SECONDS,
+      cacheTtlSeconds: PORTAL_HYBRID_CACHE_TTL_SECONDS,
+    });
+    assertEquals(readPortalHybridCircuitLimits(environment({})), {
+      failureThreshold: DEFAULT_HYBRID_CIRCUIT_FAILURE_THRESHOLD,
+      failureWindowSeconds: DEFAULT_HYBRID_CIRCUIT_WINDOW_SECONDS,
+      openSeconds: DEFAULT_HYBRID_CIRCUIT_OPEN_SECONDS,
+    });
+
+    assertThrows(() =>
+      readPortalHybridTotalTimeoutMs(environment({ PORTAL_HYBRID_TIMEOUT_MS: '8001' })),
+    );
+    assertThrows(() =>
+      readPortalHybridGuardLimits(environment({ PORTAL_HYBRID_CACHE_TTL_SECONDS: '61' })),
+    );
+    assertThrows(() =>
+      readPortalHybridCircuitLimits(environment({ PORTAL_HYBRID_CIRCUIT_FAILURE_THRESHOLD: '0' })),
+    );
+    assertThrows(() =>
+      validatePortalHybridGuardLimits(
+        {
+          minuteBudget: 60,
+          dailyBudget: 5_000,
+          maxConcurrency: 4,
+          leaseTtlSeconds: 19,
+          cacheTtlSeconds: 60,
+        },
+        { redisTimeoutMs: 500, upstreamTimeoutMs: 8_000 },
+      ),
+    );
+  },
+);
+
+Deno.test(
+  'Portal Hybrid circuit uses only isolated hash-free circuit keys and fixed Lua operations',
+  async () => {
+    const calls: Array<{ script: string; keys: string[]; args: string[] }> = [];
+    const responses: unknown[] = [[0, 0], [1, 3, 65_000], [1, 80_000], 1];
+    const redis: PortalRedisAdapter = {
+      namespace: 'portal:test:v1',
+      setNxEx: () => Promise.resolve(true),
+      eval: (script, keys, args) => {
+        calls.push({ script, keys, args });
+        return Promise.resolve(responses.shift());
+      },
+      get: () => Promise.resolve(null),
+      setEx: () => Promise.resolve(),
+      close: () => Promise.resolve(),
+    };
+    const route = 'portal_hybrid_search_v1';
+    assertEquals(await checkPortalHybridCircuit({ route, nowMillis: 5_000 }, redis), {
+      status: 'closed',
+      retryAfterSeconds: 0,
+    });
+    assertEquals(
+      await recordPortalHybridCircuitFailure(
+        {
+          route,
+          limits: { failureThreshold: 3, failureWindowSeconds: 30, openSeconds: 60 },
+          nowMillis: 5_000,
+        },
+        redis,
+      ),
+      { opened: true, failureCount: 3, retryAfterSeconds: 60 },
+    );
+    assertEquals(await checkPortalHybridCircuit({ route, nowMillis: 20_000 }, redis), {
+      status: 'open',
+      retryAfterSeconds: 60,
+    });
+    await recordPortalHybridCircuitSuccess({ route }, redis);
+
+    assertEquals(
+      calls.map((call) => call.script),
+      [
+        PORTAL_HYBRID_CIRCUIT_CHECK_LUA,
+        PORTAL_HYBRID_CIRCUIT_FAILURE_LUA,
+        PORTAL_HYBRID_CIRCUIT_CHECK_LUA,
+        PORTAL_HYBRID_CIRCUIT_SUCCESS_LUA,
+      ],
+    );
+    assertEquals(calls[0].keys, ['portal:test:v1:circuit:portal_hybrid_search_v1:open_until']);
+    assertEquals(calls[1].keys, [
+      'portal:test:v1:circuit:portal_hybrid_search_v1:failures',
+      'portal:test:v1:circuit:portal_hybrid_search_v1:open_until',
+    ]);
+    assertEquals(
+      calls
+        .flatMap((call) => call.keys)
+        .some((key) => key.includes('query') || key.includes('nonce')),
+      false,
+    );
+    assertStringIncludes(PORTAL_HYBRID_CIRCUIT_FAILURE_LUA, "redis.call('INCR'");
+    assertStringIncludes(PORTAL_HYBRID_CIRCUIT_FAILURE_LUA, "redis.call('SET'");
   },
 );

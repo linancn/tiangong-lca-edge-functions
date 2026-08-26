@@ -1,7 +1,4 @@
-import {
-  constantTimeEqual,
-  decodeCanonicalBase64Url,
-} from './portal_hmac.ts';
+import { constantTimeEqual, decodeCanonicalBase64Url } from './portal_hmac.ts';
 
 const DEFAULT_MAX_REQUEST_BYTES = 32 * 1024;
 
