@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: c32580416bf2dbc9366a5c2f7baaae8870cd529a
-lastReviewedNote: 'Reviewed after Issue #313 bound Portal public/database transport to platform-injected current-project URL before cost work and retained generic defaults.'
+lastReviewedCommit: 55f7cb5985da3e2f7c800ed695e2f64df91a5838
+lastReviewedNote: 'Reviewed after Issue #313 added exact pinned-CLI kong/local-anon compatibility and indirect generic-fallback proof while retaining hosted current-project binding and generic defaults.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -92,7 +92,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 147 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 460 Deno behavior tests with env/read/loopback-net permissions.
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 147 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 461 Deno behavior tests with env/read/loopback-net permissions.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
@@ -148,7 +148,7 @@ The retired review-submit Gate, coordinator, and job endpoints are not part of t
 
 `portal_data_product_results_v1` is an additive server-to-server route for the anonymous Portal BFF. It accepts exactly one raw JSON serialization over public `POST /functions/v1/portal_data_product_results_v1` and the exact `/portal_data_product_results_v1` path produced after pinned CLI `2.106.0` strips the public prefix. The raw bytes, body hash, timestamp, 128-bit nonce, method, and public function path are bound by `portal-hmac-v1`; the runtime pathname is never substituted into canonical bytes. Suffixes and cross-function paths fail. The verifier has one current key and an optional previous key only during rotation. Preview/dev and Production/main use separate keys, Redis databases, tokens, and `portal:<environment>:v1` namespaces.
 
-After HMAC succeeds, transport validation reads only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, proves the modern key is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, binds database transport only to platform-injected `SUPABASE_URL`, requires an exact constant-time inbound `apikey` match, rejects every Cookie, and normally requires Authorization to be absent. The only compatibility exception is the exact `SUPABASE_ANON_KEY` Bearer injected by pinned local CLI Kong after that trusted publishable key matches; user, service, and other Bearers fail before Redis. The same once-resolved dedicated key is passed to the public repository; generic and `REMOTE_*` key/URL precedence is not available.
+After HMAC succeeds, transport validation reads only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, proves the modern key is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, binds database transport only to platform-injected `SUPABASE_URL`, requires an exact constant-time inbound `apikey` match, and rejects every Cookie. Hosted transport is HTTPS and rejects every Authorization. The only non-loopback HTTP/current-anon compatibility is exact pinned CLI `SUPABASE_URL=http://kong:8000`, where its exact injected `SUPABASE_ANON_KEY` Bearer is tolerated after the trusted publishable key matches; user, service, and other Bearers fail before Redis. The same once-resolved dedicated key is passed to the public repository; generic and `REMOTE_*` key/URL precedence or indirect helper import is not available.
 
 Redis atomically registers the nonce for 120 seconds and runs one Lua admission operation for minute/day budgets plus a TTL-backed concurrency lease. The Portal adapter reads only `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` provider credentials and never falls back to the generic Redis surface consumed by existing Functions. The lease defaults to 30 seconds, is at least 20 seconds, and must cover Redis plus upstream timeouts with five seconds of recovery margin. Missing configuration, timeout, malformed response, or provider outage fails closed before JSON, cache, or database work. The lease is released in `finally`; its TTL recovers an interrupted isolate and Lua reports only the recovered count. Public-result cache keys contain only the request body hash and expire in at most 60 seconds. This bound ensures direct same-origin BFF traffic rechecks a revoked publication within the visibility SLA; Redis does not decide visibility or authorization.
 

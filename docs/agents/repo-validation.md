@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: c32580416bf2dbc9366a5c2f7baaae8870cd529a
-lastReviewedNote: 'Reviewed after Issue #313 bound Portal database transport to platform current-project URL before Redis/model work and retained generic runtime behavior.'
+lastReviewedCommit: 55f7cb5985da3e2f7c800ed695e2f64df91a5838
+lastReviewedNote: 'Reviewed after Issue #313 added exact pinned-CLI kong/local-anon coverage plus direct and indirect generic-fallback denial while retaining generic runtime behavior.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -54,7 +54,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.9.5` / bundled TypeScript `6.0.3` plus Node `24.19.0` / pnpm `11.23.0`. It then checks all 147 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs Node contract tests, and executes all 460 Deno behavior tests with only env, read, and loopback-network permissions. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.9.5` / bundled TypeScript `6.0.3` plus Node `24.19.0` / pnpm `11.23.0`. It then checks all 147 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs Node contract tests, and executes all 461 Deno behavior tests with only env, read, and loopback-network permissions. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 The current baseline intentionally skips:
 
@@ -89,7 +89,7 @@ If you reactivate or rely on that route family, update the inventory and validat
 
 Changes to `portal_public_transport.ts`, `portal_hybrid_provider.ts`, `portal_hybrid_kernel.ts`, or `portal_openai_structured.ts` must additionally prove all of the following in the existing Portal test files and static deploy contract:
 
-- `PORTAL_SUPABASE_PUBLISHABLE_KEY` is a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry, is paired only with platform-injected `SUPABASE_URL`, matches inbound `apikey` exactly, and is reused unchanged downstream; generic, `REMOTE_*`, legacy-anon, secret/service-role, user, missing, malformed, and cross-project key/URL configurations fail before Redis, model, or database work
+- `PORTAL_SUPABASE_PUBLISHABLE_KEY` is a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry, is paired only with platform-injected `SUPABASE_URL`, matches inbound `apikey` exactly, and is reused unchanged downstream; hosted requires HTTPS and rejects Authorization, while exact pinned CLI `http://kong:8000` alone may use its injected anon Bearer. Generic/direct-or-helper `REMOTE_*`, legacy-anon fallback, secret/service-role, user, missing, malformed, and cross-project key/URL configurations fail before Redis, model, or database work
 - exact false or unset `PORTAL_HYBRID_ENABLED` returns before Portal Redis, JSON, OpenAI, SageMaker/AWS, or database configuration is read
 - enabled R2 requires the complete strict `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` surface and passes that exact object into both shared model kernels; generic-only, partial, malformed, whitespace-bearing, credential-bearing URL, and insecure remote URL configurations fail before provider or database calls
 - `hybrid_search_kernel.ts` and `openai_structured.ts` remain byte-for-byte equal to the `dev` baseline, while existing login Hybrid, embedding, auth, and shared-kernel tests pass unchanged, proving their generic environment precedence and responses were not replaced by Portal values

@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: c32580416bf2dbc9366a5c2f7baaae8870cd529a
-lastReviewedNote: 'Reviewed after Issue #313 bound Portal public/database transport to the platform current-project URL before cost work while preserving all existing generic client semantics.'
+lastReviewedCommit: 55f7cb5985da3e2f7c800ed695e2f64df91a5838
+lastReviewedNote: 'Reviewed after Issue #313 bound hosted transport to the current project while allowing only the exact pinned-CLI kong URL/legacy-anon compatibility and forbidding indirect generic fallback.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -94,7 +94,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.23.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 147 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 460 Deno behavior tests with only env/read/loopback-net permissions
+- `pnpm check` validates exact runtime versions, checks all 147 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 461 Deno behavior tests with only env/read/loopback-net permissions
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -158,7 +158,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 
 - do not invent schema truth or migration history in this repo
 - do not interpret `--no-verify-jwt` as permission for anonymous business logic
-- do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes resolve only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, prove it is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, use only the platform-injected `SUPABASE_URL`, and pass that same key from exact inbound `apikey` matching to their reviewed public `api` RPC. They never use generic or `REMOTE_*` key/URL precedence. Authorization is absent in normal Portal traffic; only the exact legacy anon Bearer injected by pinned CLI `2.106.0` local routing is tolerated after HMAC
+- do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes resolve only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, prove it is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, use only the platform-injected `SUPABASE_URL`, and pass that same key from exact inbound `apikey` matching to their reviewed public `api` RPC. They never use generic or `REMOTE_*` key/URL precedence. Authorization is absent in hosted traffic; only when the validated URL is exact pinned-CLI `http://kong:8000` may the injected `SUPABASE_ANON_KEY` Bearer be tolerated after HMAC
 - do not let signed Portal routes read or fall back to the generic Redis provider or credential variables used by existing Functions; Portal replay, admission, circuit, and cache storage requires the explicit `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` surface and fails closed when it is absent
 - do not let signed Portal Hybrid read or fall back to generic OpenAI, SageMaker, or AWS variables; after the exact-lowercase-true kill switch it resolves the complete `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` configuration and injects it explicitly into shared kernels, while existing login Hybrid and embedding consumers keep their generic defaults
 - do not use one shared Portal deployment SHA; LCIA events read only `PORTAL_LCIA_DEPLOYMENT_SHA` and Hybrid events read only `PORTAL_HYBRID_DEPLOYMENT_SHA`, with invalid or missing values normalized to `unknown`
