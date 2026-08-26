@@ -87,7 +87,7 @@ test('builds one fixed remote function deletion and no generic delete surface', 
 test('dry-run applies cleanup guard and emits external Redis/credential cleanup checks', () => {
   const { result, logs } = run();
   assert.deepEqual(result.externalCleanupChecklist, EXTERNAL_CLEANUP_CHECKLIST);
-  assert.equal(result.branchState, 'ready');
+  assert.equal(result.branchState, 'present');
   assert.equal(logs[0], '[cleanup:portal-r0] dry-run guard passed');
   assert.equal(logs.length, EXTERNAL_CLEANUP_CHECKLIST.length + 1);
   assert.match(logs.join('\n'), /delete the dedicated R0 Redis database/u);
@@ -139,7 +139,7 @@ test('cleanup remains allowed after expiry and deletes the still-present disposa
     },
   });
   assert.equal(result.expiresAtText, expiredAt);
-  assert.equal(result.branchState, 'ready');
+  assert.equal(result.branchState, 'present');
   assert.equal(calls.length, 1);
 });
 
@@ -156,6 +156,21 @@ test('absent branch is a verified terminal and never invokes function delete', (
   assert.equal(result.branchState, 'absent');
   assert.equal(calls.length, 0);
   assert.equal(logs[0], '[cleanup:portal-r0] verified terminal: Preview branch is absent');
+});
+
+test('cleanup still deletes the exact branch function when status is paused and unhealthy', () => {
+  const calls = [];
+  const { result } = run({
+    environment: environment({ PORTAL_R0_CLEANUP_DRY_RUN: 'false' }),
+    branchListRunner: () => [readyBranch({ status: 'PAUSED', preview_project_status: 'INACTIVE' })],
+    spawnSyncImpl(command, args) {
+      calls.push({ command, args });
+      return { status: 0 };
+    },
+  });
+  assert.equal(result.branchState, 'present');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args[4], 'portal_r0_hmac_verify_v1');
 });
 
 test('non-dry cleanup invokes only the fixed Supabase delete command after live verification', () => {

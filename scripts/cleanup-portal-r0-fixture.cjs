@@ -63,7 +63,7 @@ function main(options = {}) {
   });
   const args = buildPortalR0CleanupArgs(validated.projectRef);
 
-  if (environment.PORTAL_R0_CLEANUP_DRY_RUN !== 'true' && validated.branchState === 'ready') {
+  if (environment.PORTAL_R0_CLEANUP_DRY_RUN !== 'true' && validated.branchState === 'present') {
     const result = (options.spawnSyncImpl ?? spawnSync)('pnpm', args, {
       cwd: repoRoot,
       stdio: 'inherit',

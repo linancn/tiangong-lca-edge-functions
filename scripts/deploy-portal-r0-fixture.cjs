@@ -91,26 +91,34 @@ function matchingBranchRows(input, projectRef) {
   return input.branches.filter((candidate) => candidate.project_ref === projectRef);
 }
 
-function validateReadyDisposableBranch(input, projectRef) {
+function validateDisposableBranchIdentity(input, projectRef) {
   const matches = matchingBranchRows(input, projectRef);
   if (matches.length !== 1) {
-    throw new Error('R0 target is not one ready disposable Preview branch.');
+    throw new Error('R0 target is not one disposable Preview branch identity.');
   }
   const branch = matches[0];
   if (
     branch.parent_project_ref !== input.productionProjectRef ||
     branch.is_default !== false ||
     branch.persistent !== false ||
-    branch.status !== READY_BRANCH_STATUS ||
-    branch.preview_project_status !== READY_PROJECT_STATUS ||
     branch.with_data !== false ||
     branch.name !== input.branchName ||
     branch.git_branch !== input.gitBranch ||
     (input.prNumber !== null && branch.pr_number !== input.prNumber)
   ) {
+    throw new Error('R0 target is not one disposable Preview branch identity.');
+  }
+  return branch;
+}
+
+function validateReadyDisposableBranch(input, projectRef) {
+  const branch = validateDisposableBranchIdentity(input, projectRef);
+  if (
+    branch.status !== READY_BRANCH_STATUS ||
+    branch.preview_project_status !== READY_PROJECT_STATUS
+  ) {
     throw new Error('R0 target is not one ready disposable Preview branch.');
   }
-  return { state: 'ready' };
 }
 
 function validatePortalR0Base(input, acknowledgementName, acknowledgementValue) {
@@ -171,8 +179,8 @@ function validatePortalR0Cleanup(input) {
   const validated = validatePortalR0Base(input, 'PORTAL_R0_CLEANUP_ACK', CLEANUP_ACK);
   const matches = matchingBranchRows(input, validated.projectRef);
   if (matches.length === 0) return { ...validated, branchState: 'absent' };
-  validateReadyDisposableBranch({ ...input, ...validated }, validated.projectRef);
-  return { ...validated, branchState: 'ready' };
+  validateDisposableBranchIdentity({ ...input, ...validated }, validated.projectRef);
+  return { ...validated, branchState: 'present' };
 }
 
 function buildPortalR0DeployArgs(projectRef, importMapPath) {
