@@ -114,6 +114,7 @@ async function signedRequest(
     path?: string;
     apiKey?: string | null;
     authorization?: string | null;
+    cookie?: string | null;
   } = {},
 ): Promise<Request> {
   const rawBody =
@@ -147,6 +148,9 @@ async function signedRequest(
   }
   if (options.authorization !== null && options.authorization !== undefined) {
     headers.set('authorization', options.authorization);
+  }
+  if (options.cookie !== null && options.cookie !== undefined) {
+    headers.set('cookie', options.cookie);
   }
   return new Request(`https://example.supabase.co${options.path ?? PORTAL_LCIA_FUNCTION_PATH}`, {
     method: 'POST',
@@ -323,6 +327,21 @@ Deno.test(
   },
 );
 
+Deno.test('inbound Cookie is rejected after HMAC and before Redis or database', async () => {
+  const redis = new HandlerRedis();
+  const databaseCalls: string[] = [];
+  const handler = createPortalDataProductResultsHandler(
+    handlerOptions(redis, repository(page(), databaseCalls)),
+  );
+  const response = await handler(
+    await signedRequest({ cookie: 'session=user-token', nonceSeed: 49 }),
+  );
+  assertEquals(response.status, 401);
+  assertEquals((await response.json()).code, 'portal_auth_failed');
+  assertEquals(redis.calls, []);
+  assertEquals(databaseCalls, []);
+});
+
 Deno.test('invalid trusted transport configuration fails closed before Redis', async () => {
   const redis = new HandlerRedis();
   const databaseCalls: string[] = [];
@@ -356,6 +375,21 @@ Deno.test('Portal handler rejects lease 19 and accepts the 20-second safety boun
     guardLimits: { ...GUARD_LIMITS, leaseTtlSeconds: 20 },
   });
   assertEquals((await accepted(await signedRequest({ nonceSeed: 52 }))).status, 200);
+});
+
+Deno.test('default repository receives the same resolved trusted project key', async () => {
+  const redis = new HandlerRedis();
+  const resolvedKeys: string[] = [];
+  const handler = createPortalDataProductResultsHandler({
+    ...handlerOptions(redis, repository(page())),
+    repository: undefined,
+    repositoryFactory: (trustedPublishableKey) => {
+      resolvedKeys.push(trustedPublishableKey);
+      return repository(page());
+    },
+  });
+  assertEquals((await handler(await signedRequest({ nonceSeed: 53 }))).status, 200);
+  assertEquals(resolvedKeys, [TRUSTED_PUBLISHABLE_KEY]);
 });
 
 Deno.test('missing or bad HMAC is rejected before Redis, JSON, or database work', async () => {

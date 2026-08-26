@@ -225,6 +225,7 @@ export type PortalTransportErrorCode =
   | 'portal_apikey_missing'
   | 'portal_apikey_invalid'
   | 'portal_apikey_mismatch'
+  | 'portal_cookie_invalid'
   | 'portal_authorization_invalid';
 
 export class PortalTransportError extends Error {
@@ -283,6 +284,10 @@ export function validatePortalInboundTransport(input: {
   }
   if (!constantTimeStringEqual(validatedInboundApiKey, trustedPublishableKey)) {
     throw new PortalTransportError('portal_apikey_mismatch');
+  }
+
+  if (input.request.headers.has('cookie')) {
+    throw new PortalTransportError('portal_cookie_invalid');
   }
 
   const authorization = input.request.headers.get('authorization');
@@ -431,6 +436,7 @@ type PortalDataProductResultsHandlerOptions = {
   redisFactory?: () => Promise<PortalRedisAdapter>;
   guardLimits?: PortalRouteGuardLimits;
   repository?: PortalPublishedLciaRepository;
+  repositoryFactory?: (trustedPublishableKey: string) => PortalPublishedLciaRepository;
   nowSeconds?: () => number;
   nowMillis?: () => number;
   upstreamTimeoutMs?: number;
@@ -494,10 +500,12 @@ export function createPortalDataProductResultsHandler(
       return authFailure(error);
     }
 
+    let trustedPublishableKey: string;
     try {
+      trustedPublishableKey = options.trustedPublishableKey ?? getSupabasePublishableKey();
       validatePortalInboundTransport({
         request,
-        trustedPublishableKey: options.trustedPublishableKey ?? getSupabasePublishableKey(),
+        trustedPublishableKey,
         trustedLegacyAnonKey:
           options.trustedLegacyAnonKey === undefined
             ? readPortalLegacyAnonCredential()
@@ -505,7 +513,7 @@ export function createPortalDataProductResultsHandler(
       });
     } catch (error) {
       if (
-        error instanceof PortalTransportError &&
+        !(error instanceof PortalTransportError) ||
         error.code === 'portal_transport_config_invalid'
       ) {
         return errorResponse(
@@ -613,10 +621,11 @@ export function createPortalDataProductResultsHandler(
       const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
       let page: PortalPublishedLciaPage | null;
       try {
-        page = await (options.repository ?? createPortalPublishedLciaRepository()).query(
-          parsedRequest.data,
-          abortController.signal,
-        );
+        const repository =
+          options.repository ??
+          options.repositoryFactory?.(trustedPublishableKey) ??
+          createPortalPublishedLciaRepository({ publishableKey: trustedPublishableKey });
+        page = await repository.query(parsedRequest.data, abortController.signal);
       } catch (_error) {
         return errorResponse(
           503,
