@@ -77,6 +77,20 @@ Deno.test(
     assertStringIncludes(source, "env.get('PORTAL_HYBRID_ENABLED') === 'true'");
     assertStringIncludes(source, 'abortSignal: signal');
     assertStringIncludes(source, '{ signal: request.signal }');
+    assertStringIncludes(
+      source,
+      'Task: Transform description of ${config.entityPlural} into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.',
+    );
+    assertStringIncludes(source, 'options: { model: OPENAI_CHAT_MODEL, temperature: 0 }');
+    assertStringIncludes(source, 'Body: JSON.stringify({ inputs: text })');
+
+    const loginHybridHandler = await Deno.readTextFile(
+      './supabase/functions/_shared/hybrid_search_handler.ts',
+    );
+    assertStringIncludes(loginHybridHandler, 'rewriteQuery: rewriteHybridSearchQuery');
+    assertStringIncludes(loginHybridHandler, 'generateEmbedding: generateHybridSearchEmbedding');
+    assertStringIncludes(loginHybridHandler, '? jsonResponse({ data }, 200)');
+    assertStringIncludes(loginHybridHandler, ': jsonResponse([], 200)');
 
     const environmentTemplate = await Deno.readTextFile('./supabase/.env.example');
     for (const expected of [
