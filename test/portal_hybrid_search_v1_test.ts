@@ -108,24 +108,32 @@ function databasePage(): PortalPublicHybridCandidatePage {
 class FakePortalRedis implements PortalRedisAdapter {
   readonly namespace = 'portal:test:v1';
   replay = false;
-  outage = false;
+  admissionOutage = false;
+  cacheReadFails = false;
   guardStatus: 'admitted' | 'budget_exhausted' | 'concurrency_exhausted' = 'admitted';
   circuitOpen = false;
   cached: string | null = null;
   cacheWriteFails = false;
+  circuitCheckOperation?: () => Promise<unknown>;
+  circuitSuccessOperation?: () => Promise<unknown>;
+  cacheGetOperation?: () => Promise<string | null>;
+  cacheSetOperation?: () => Promise<void>;
+  leaseReleaseOperation?: () => Promise<unknown>;
   readonly calls: string[] = [];
   readonly cacheWrites: string[] = [];
 
   setNxEx(): Promise<boolean> {
     this.calls.push('nonce');
-    if (this.outage) return Promise.reject(new Error('private redis provider details'));
+    if (this.admissionOutage) return Promise.reject(new Error('private redis provider details'));
     return Promise.resolve(!this.replay);
   }
 
   eval(script: string, _keys: string[], args: string[]): Promise<unknown> {
-    if (this.outage) return Promise.reject(new Error('private redis provider details'));
     if (script === PORTAL_ATOMIC_GUARD_LUA) {
       this.calls.push('guard');
+      if (this.admissionOutage) {
+        return Promise.reject(new Error('private redis provider details'));
+      }
       if (this.guardStatus === 'budget_exhausted') return Promise.resolve([1, 0, 0, 1, 0]);
       if (this.guardStatus === 'concurrency_exhausted') {
         return Promise.resolve([2, 1, 1, 0, 0]);
@@ -134,6 +142,7 @@ class FakePortalRedis implements PortalRedisAdapter {
     }
     if (script === PORTAL_HYBRID_CIRCUIT_CHECK_LUA) {
       this.calls.push('circuit_check');
+      if (this.circuitCheckOperation) return this.circuitCheckOperation();
       return Promise.resolve(this.circuitOpen ? [1, Number(args[0]) + 60_000] : [0, 0]);
     }
     if (script === PORTAL_HYBRID_CIRCUIT_FAILURE_LUA) {
@@ -142,20 +151,24 @@ class FakePortalRedis implements PortalRedisAdapter {
     }
     if (script === PORTAL_HYBRID_CIRCUIT_SUCCESS_LUA) {
       this.calls.push('circuit_success');
+      if (this.circuitSuccessOperation) return this.circuitSuccessOperation();
       return Promise.resolve(1);
     }
     this.calls.push('lease_release');
+    if (this.leaseReleaseOperation) return this.leaseReleaseOperation();
     return Promise.resolve(1);
   }
 
   get(): Promise<string | null> {
     this.calls.push('cache_get');
-    if (this.outage) return Promise.reject(new Error('private redis provider details'));
+    if (this.cacheGetOperation) return this.cacheGetOperation();
+    if (this.cacheReadFails) return Promise.reject(new Error('private redis provider details'));
     return Promise.resolve(this.cached);
   }
 
   setEx(_key: string, value: string): Promise<void> {
     this.calls.push('cache_set');
+    if (this.cacheSetOperation) return this.cacheSetOperation();
     if (this.cacheWriteFails) return Promise.reject(new Error('private redis provider details'));
     this.cacheWrites.push(value);
     return Promise.resolve();
@@ -165,6 +178,10 @@ class FakePortalRedis implements PortalRedisAdapter {
     this.calls.push('close');
     return Promise.resolve();
   }
+}
+
+function neverPromise<T>(): Promise<T> {
+  return new Promise<T>(() => undefined);
 }
 
 async function hmacSignature(secret: Uint8Array, canonical: string): Promise<string> {
@@ -597,7 +614,7 @@ Deno.test('Portal Hybrid public transport rejects Cookie before Redis or cost', 
 });
 
 Deno.test(
-  'Portal Hybrid replay, Redis, budget, concurrency, and circuit failures make zero cost calls',
+  'Portal Hybrid replay, nonce/admission Redis, budget, concurrency, and open-circuit rejections make zero cost calls',
   async () => {
     const cases: Array<{
       configure: (redis: FakePortalRedis) => void;
@@ -605,7 +622,11 @@ Deno.test(
       code: string;
     }> = [
       { configure: (redis) => (redis.replay = true), status: 403, code: 'replay_rejected' },
-      { configure: (redis) => (redis.outage = true), status: 503, code: 'guard_unavailable' },
+      {
+        configure: (redis) => (redis.admissionOutage = true),
+        status: 503,
+        code: 'guard_unavailable',
+      },
       {
         configure: (redis) => (redis.guardStatus = 'budget_exhausted'),
         status: 429,
@@ -646,6 +667,65 @@ Deno.test(
       assertEquals(modelCalls, 0);
       assertEquals(databaseCalls, 0);
     }
+  },
+);
+
+Deno.test(
+  'Portal Hybrid circuit or cache deadline stops before every model and database call',
+  async () => {
+    for (const stage of ['circuit', 'cache'] as const) {
+      const redis = new FakePortalRedis();
+      if (stage === 'circuit') redis.circuitCheckOperation = () => neverPromise();
+      if (stage === 'cache') redis.cacheGetOperation = () => neverPromise();
+      let modelCalls = 0;
+      let databaseCalls = 0;
+      const handler = createPortalHybridSearchHandler(
+        handlerOptions(
+          redis,
+          {
+            query() {
+              databaseCalls += 1;
+              return Promise.resolve(databasePage());
+            },
+          },
+          {
+            timeoutMs: 100,
+            rewriteQuery: async () => {
+              modelCalls += 1;
+              return REWRITE;
+            },
+          },
+        ),
+      );
+      const response = await handler(await signedRequest());
+      assertEquals(response.status, 503);
+      assertEquals(await responseCode(response), 'hybrid_timeout');
+      assertEquals(modelCalls, 0, stage);
+      assertEquals(databaseCalls, 0, stage);
+      assert(redis.calls.includes(stage === 'circuit' ? 'circuit_check' : 'cache_get'));
+    }
+  },
+);
+
+Deno.test(
+  'Portal Hybrid cache-write and circuit-reset errors remain bounded best effort',
+  async () => {
+    const redis = new FakePortalRedis();
+    redis.cacheWriteFails = true;
+    redis.circuitSuccessOperation = () => Promise.reject(new Error('private redis reset details'));
+    const events: PortalHybridSecurityEvent[] = [];
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        { query: () => Promise.resolve(databasePage()) },
+        { logger: (event: PortalHybridSecurityEvent) => events.push(event) },
+      ),
+    );
+    const response = await handler(await signedRequest());
+    assertEquals(response.status, 200);
+    assertEquals(events.length, 1);
+    assertEquals(events[0].cache, 'write_failed');
+    assertEquals(events[0].circuit, 'reset_failed');
   },
 );
 
@@ -802,7 +882,45 @@ Deno.test(
 );
 
 Deno.test(
-  'Portal Hybrid total timeout aborts the SageMaker stage and never calls database',
+  'Portal Hybrid absolute deadline aborts OpenAI and stops SageMaker and database downstream',
+  async () => {
+    const redis = new FakePortalRedis();
+    let rewriteSignal: AbortSignal | undefined;
+    let embeddingCalls = 0;
+    let databaseCalls = 0;
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query() {
+            databaseCalls += 1;
+            return Promise.resolve(databasePage());
+          },
+        },
+        {
+          timeoutMs: 100,
+          rewriteQuery: (_config: unknown, _query: string, signal: AbortSignal) => {
+            rewriteSignal = signal;
+            return neverPromise();
+          },
+          generateEmbedding: async () => {
+            embeddingCalls += 1;
+            return VECTOR;
+          },
+        },
+      ),
+    );
+    const response = await handler(await signedRequest());
+    assertEquals(response.status, 503);
+    assertEquals(await responseCode(response), 'hybrid_timeout');
+    assertEquals(rewriteSignal?.aborted, true);
+    assertEquals(embeddingCalls, 0);
+    assertEquals(databaseCalls, 0);
+  },
+);
+
+Deno.test(
+  'Portal Hybrid absolute deadline shares the same signal with SageMaker and stops database',
   async () => {
     const redis = new FakePortalRedis();
     let embeddingSignal: AbortSignal | undefined;
@@ -841,6 +959,89 @@ Deno.test(
     assertEquals(embeddingSignal?.aborted, true);
     assertEquals(databaseCalls, 0);
     assertEquals(events[0].model, 'aborted');
+  },
+);
+
+Deno.test(
+  'Portal Hybrid absolute deadline aborts PostgREST and prevents circuit reset',
+  async () => {
+    const redis = new FakePortalRedis();
+    let rewriteSignal: AbortSignal | undefined;
+    let embeddingSignal: AbortSignal | undefined;
+    let databaseSignal: AbortSignal | undefined;
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query(_request, _terms, _embedding, signal) {
+            databaseSignal = signal;
+            return neverPromise();
+          },
+        },
+        {
+          timeoutMs: 100,
+          rewriteQuery: async (_config: unknown, _query: string, signal: AbortSignal) => {
+            rewriteSignal = signal;
+            return REWRITE;
+          },
+          generateEmbedding: async (_query: string, signal: AbortSignal) => {
+            embeddingSignal = signal;
+            return VECTOR;
+          },
+        },
+      ),
+    );
+    const response = await handler(await signedRequest());
+    assertEquals(response.status, 503);
+    assertEquals(await responseCode(response), 'hybrid_timeout');
+    assertEquals(rewriteSignal, embeddingSignal);
+    assertEquals(embeddingSignal, databaseSignal);
+    assertEquals(databaseSignal?.aborted, true);
+    assertEquals(redis.calls.includes('circuit_success'), false);
+  },
+);
+
+Deno.test(
+  'Portal Hybrid DB success cannot become 200 after circuit reset crosses deadline',
+  async () => {
+    const redis = new FakePortalRedis();
+    redis.circuitSuccessOperation = () => neverPromise();
+    let databaseCalls = 0;
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query() {
+            databaseCalls += 1;
+            return Promise.resolve(databasePage());
+          },
+        },
+        { timeoutMs: 100 },
+      ),
+    );
+    const response = await handler(await signedRequest());
+    assertEquals(response.status, 503);
+    assertEquals(await responseCode(response), 'hybrid_timeout');
+    assertEquals(databaseCalls, 1);
+    assert(redis.calls.includes('circuit_success'));
+  },
+);
+
+Deno.test(
+  'Portal Hybrid never waits for lease release and relies on lease TTL recovery',
+  async () => {
+    const redis = new FakePortalRedis();
+    redis.leaseReleaseOperation = () => neverPromise();
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(redis, { query: () => Promise.resolve(databasePage()) }, { timeoutMs: 500 }),
+    );
+    const result = await Promise.race([
+      handler(await signedRequest()).then((response) => response.status),
+      new Promise<number>((resolve) => setTimeout(() => resolve(599), 100)),
+    ]);
+    await Promise.resolve();
+    assertEquals(result, 200);
+    assert(redis.calls.includes('lease_release'));
   },
 );
 

@@ -21,6 +21,11 @@ import {
   type PortalHybridSearchRequest,
 } from '../_shared/portal_hybrid_contract.ts';
 import {
+  isPortalHybridDeadlineError,
+  PortalHybridDeadline,
+  PortalHybridDeadlineError,
+} from '../_shared/portal_hybrid_deadline.ts';
+import {
   defaultPortalHybridSecurityLogger,
   emitPortalHybridSecurityEvent,
   normalizePortalHybridErrorCode,
@@ -45,6 +50,7 @@ import {
 } from '../_shared/portal_hmac.ts';
 import {
   checkPortalHybridCircuit,
+  PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
   readPortalHybridCircuitLimits,
   readPortalHybridGuardLimits,
   readPortalHybridTotalTimeoutMs,
@@ -255,14 +261,30 @@ async function responseErrorCode(response: Response): Promise<PortalHybridErrorC
 export function createPortalHybridSearchHandler(options: PortalHybridHandlerOptions = {}) {
   return async (request: Request): Promise<Response> => {
     const monotonicNow = () => {
-      try {
-        const value = options.monotonicNow?.() ?? performance.now();
-        return Number.isFinite(value) ? value : 0;
-      } catch (_error) {
-        return 0;
+      if (options.monotonicNow) {
+        try {
+          const value = options.monotonicNow();
+          if (Number.isFinite(value)) return value;
+        } catch (_error) {
+          // Fall through to the runtime monotonic clock.
+        }
       }
+      return performance.now();
     };
     const startedAt = monotonicNow();
+    let timeoutMs = PORTAL_HYBRID_TOTAL_TIMEOUT_MS;
+    let timeoutConfigurationValid = true;
+    try {
+      timeoutMs = options.timeoutMs ?? readPortalHybridTotalTimeoutMs();
+      if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 8_000) {
+        timeoutConfigurationValid = false;
+        timeoutMs = PORTAL_HYBRID_TOTAL_TIMEOUT_MS;
+      }
+    } catch (_error) {
+      timeoutConfigurationValid = false;
+      timeoutMs = PORTAL_HYBRID_TOTAL_TIMEOUT_MS;
+    }
+    const deadline = new PortalHybridDeadline(timeoutMs, monotonicNow, startedAt);
     const correlationId = resolvePortalCorrelationId(request.headers);
     const event: MutableHybridEventState = {
       kind: null,
@@ -277,28 +299,36 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
       matchedKey: null,
       recoveredLeaseCount: 0,
     };
+    const timeoutResponse = () =>
+      errorResponse(503, 'hybrid_timeout', 'Portal Hybrid search timed out');
 
     const execute = async (): Promise<Response> => {
       let rawBody: Uint8Array;
       try {
-        rawBody = await readPortalRawBody(request, PORTAL_HYBRID_MAX_REQUEST_BYTES);
-      } catch (_error) {
+        rawBody = await deadline.run(() =>
+          readPortalRawBody(request, PORTAL_HYBRID_MAX_REQUEST_BYTES),
+        );
+      } catch (error) {
+        if (isPortalHybridDeadlineError(error)) return timeoutResponse();
         return errorResponse(413, 'request_too_large', 'Request body exceeds the allowed size');
       }
 
       let verification;
       try {
-        verification = await verifyPortalHmacRequest({
-          request,
-          rawBody,
-          expectedFunctionPath: PORTAL_HYBRID_FUNCTION_PATH,
-          allowedRequestPaths: [PORTAL_HYBRID_FUNCTION_PATH, PORTAL_HYBRID_RUNTIME_PATH],
-          keyring: options.keyring ?? loadPortalHmacKeyring(),
-          nowSeconds: options.nowSeconds?.(),
-        });
+        verification = await deadline.run(() =>
+          verifyPortalHmacRequest({
+            request,
+            rawBody,
+            expectedFunctionPath: PORTAL_HYBRID_FUNCTION_PATH,
+            allowedRequestPaths: [PORTAL_HYBRID_FUNCTION_PATH, PORTAL_HYBRID_RUNTIME_PATH],
+            keyring: options.keyring ?? loadPortalHmacKeyring(),
+            nowSeconds: options.nowSeconds?.(),
+          }),
+        );
         event.hmacOutcome = 'accepted';
         event.matchedKey = verification.matchedKey;
       } catch (error) {
+        if (isPortalHybridDeadlineError(error)) return timeoutResponse();
         event.hmacOutcome = portalHybridHmacOutcome(error);
         return authFailure(error);
       }
@@ -336,12 +366,10 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         return errorResponse(503, 'hybrid_disabled', 'Portal Hybrid search is disabled');
       }
 
-      let timeoutMs: number;
       let guardLimits: PortalRouteGuardLimits;
       let circuitLimits: PortalHybridCircuitLimits;
       try {
-        timeoutMs = options.timeoutMs ?? readPortalHybridTotalTimeoutMs();
-        if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 8_000) {
+        if (!timeoutConfigurationValid) {
           throw new PortalRedisError();
         }
         const timing: PortalGuardTiming = {
@@ -359,50 +387,57 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
       }
 
-      const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
       const wallNow = () => options.nowMillis?.() ?? Date.now();
       let redis: PortalRedisAdapter;
       let ownsRedis = false;
       try {
-        redis = options.redis ?? (await (options.redisFactory ?? createPortalRedisAdapter)());
+        redis =
+          options.redis ??
+          (await deadline.run(() => (options.redisFactory ?? createPortalRedisAdapter)()));
         ownsRedis = options.redis === undefined;
-      } catch (_error) {
-        clearTimeout(timeoutId);
+      } catch (error) {
+        if (isPortalHybridDeadlineError(error)) return timeoutResponse();
         event.guardOutcome = 'unavailable';
         return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
       }
 
       let leaseId: string | undefined;
-      const recordFailure = async () => {
+      const recordFailure = async (): Promise<boolean> => {
         try {
-          await recordPortalHybridCircuitFailure(
-            { route: PORTAL_HYBRID_FUNCTION_NAME, limits: circuitLimits, nowMillis: wallNow() },
-            redis,
+          await deadline.run(() =>
+            recordPortalHybridCircuitFailure(
+              { route: PORTAL_HYBRID_FUNCTION_NAME, limits: circuitLimits, nowMillis: wallNow() },
+              redis,
+            ),
           );
           event.circuit = 'failure_recorded';
+          return true;
         } catch (_error) {
           event.circuit = 'record_failed';
+          return !deadline.isExpired();
         }
       };
+      const responseAfterCircuitFailure = async (response: Response): Promise<Response> =>
+        (await recordFailure()) && !deadline.isExpired() ? response : timeoutResponse();
 
       try {
-        const nonceRegistered = await registerPortalNonce(
-          { keyId: verification.keyId, nonce: verification.nonce },
-          redis,
+        const nonceRegistered = await deadline.run(() =>
+          registerPortalNonce({ keyId: verification.keyId, nonce: verification.nonce }, redis),
         );
         if (!nonceRegistered) {
           event.guardOutcome = 'replay_rejected';
           return errorResponse(403, 'replay_rejected', 'Portal request replay rejected');
         }
 
-        const guard = await redisEvalAtomicGuard(
-          {
-            route: PORTAL_HYBRID_FUNCTION_NAME,
-            limits: guardLimits,
-            nowMillis: wallNow(),
-          },
-          redis,
+        const guard = await deadline.run(() =>
+          redisEvalAtomicGuard(
+            {
+              route: PORTAL_HYBRID_FUNCTION_NAME,
+              limits: guardLimits,
+              nowMillis: wallNow(),
+            },
+            redis,
+          ),
         );
         event.recoveredLeaseCount = guard.recoveredLeaseCount;
         if (guard.status === 'budget_exhausted') {
@@ -417,13 +452,13 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         leaseId = guard.leaseId;
         event.guardOutcome = 'admitted';
 
-        if (abortController.signal.aborted) {
-          return errorResponse(503, 'hybrid_timeout', 'Portal Hybrid search timed out');
-        }
+        if (deadline.isExpired()) return timeoutResponse();
 
-        const circuit = await checkPortalHybridCircuit(
-          { route: PORTAL_HYBRID_FUNCTION_NAME, nowMillis: wallNow() },
-          redis,
+        const circuit = await deadline.run(() =>
+          checkPortalHybridCircuit(
+            { route: PORTAL_HYBRID_FUNCTION_NAME, nowMillis: wallNow() },
+            redis,
+          ),
         );
         if (circuit.status === 'open') {
           event.circuit = 'open';
@@ -447,11 +482,14 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         let modelCache: PortalHybridModelCache;
         let cached: string | null;
         try {
-          cached = await readPortalResponseCache(
-            { route: PORTAL_HYBRID_FUNCTION_NAME, bodyHash: verification.bodyHash },
-            redis,
+          cached = await deadline.run(() =>
+            readPortalResponseCache(
+              { route: PORTAL_HYBRID_FUNCTION_NAME, bodyHash: verification.bodyHash },
+              redis,
+            ),
           );
-        } catch (_error) {
+        } catch (error) {
+          if (isPortalHybridDeadlineError(error)) return timeoutResponse();
           event.cache = 'invalid';
           event.guardOutcome = 'unavailable';
           return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
@@ -465,117 +503,133 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           }
           if (!parsedCache.success) {
             event.cache = 'invalid';
-            await recordFailure();
-            return errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable');
+            return await responseAfterCircuitFailure(
+              errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable'),
+            );
           }
           event.cache = 'hit';
           event.model = 'cache_hit';
           modelCache = parsedCache.data;
         } else {
           event.cache = 'miss';
+          if (deadline.isExpired()) return timeoutResponse();
           let rawRewrite: HybridSearchQuery;
           event.model = 'called';
           try {
-            rawRewrite = await (options.rewriteQuery ?? rewriteHybridSearchQuery)(
-              buildKernelConfig(hybridRequest.kind),
-              hybridRequest.query,
-              abortController.signal,
+            rawRewrite = await deadline.run(() =>
+              (options.rewriteQuery ?? rewriteHybridSearchQuery)(
+                buildKernelConfig(hybridRequest.kind),
+                hybridRequest.query,
+                deadline.signal,
+              ),
             );
-          } catch (_error) {
-            event.model = abortController.signal.aborted ? 'aborted' : 'failed';
-            await recordFailure();
-            return abortController.signal.aborted
-              ? errorResponse(503, 'hybrid_timeout', 'Portal Hybrid search timed out')
-              : errorResponse(
-                  503,
-                  'hybrid_upstream_unavailable',
-                  'Portal Hybrid search unavailable',
-                );
+          } catch (error) {
+            event.model = deadline.signal.aborted ? 'aborted' : 'failed';
+            return await responseAfterCircuitFailure(
+              isPortalHybridDeadlineError(error) || deadline.isExpired()
+                ? timeoutResponse()
+                : errorResponse(
+                    503,
+                    'hybrid_upstream_unavailable',
+                    'Portal Hybrid search unavailable',
+                  ),
+            );
           }
 
           const modelOnly = sanitizeHybridQueryOutput(rawRewrite, '');
           if (!modelOnly.semantic_query_en) {
             event.model = 'failed';
-            await recordFailure();
-            return errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable');
+            return await responseAfterCircuitFailure(
+              errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable'),
+            );
           }
 
           let embedding: number[];
           try {
-            embedding = await (options.generateEmbedding ?? generateHybridSearchEmbedding)(
-              modelOnly.semantic_query_en,
-              abortController.signal,
+            if (deadline.isExpired()) return timeoutResponse();
+            embedding = await deadline.run(() =>
+              (options.generateEmbedding ?? generateHybridSearchEmbedding)(
+                modelOnly.semantic_query_en,
+                deadline.signal,
+              ),
             );
             modelCache = buildModelCache(rawRewrite, hybridRequest, embedding);
           } catch (error) {
-            event.model = abortController.signal.aborted ? 'aborted' : 'failed';
-            await recordFailure();
-            if (abortController.signal.aborted) {
-              return errorResponse(503, 'hybrid_timeout', 'Portal Hybrid search timed out');
+            event.model = deadline.signal.aborted ? 'aborted' : 'failed';
+            if (isPortalHybridDeadlineError(error) || deadline.isExpired()) {
+              return await responseAfterCircuitFailure(timeoutResponse());
             }
             if (error instanceof PortalHybridRepositoryError && error.code === 'contract_failure') {
-              return errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable');
+              return await responseAfterCircuitFailure(
+                errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable'),
+              );
             }
             const code =
               typeof error === 'object' && error !== null ? Reflect.get(error, 'code') : null;
-            return code === 'EMBEDDING_VECTOR_MISSING' || code === 'EMBEDDING_DIMENSION_MISMATCH'
-              ? errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable')
-              : errorResponse(
-                  503,
-                  'hybrid_upstream_unavailable',
-                  'Portal Hybrid search unavailable',
-                );
+            return await responseAfterCircuitFailure(
+              code === 'EMBEDDING_VECTOR_MISSING' || code === 'EMBEDDING_DIMENSION_MISMATCH'
+                ? errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable')
+                : errorResponse(
+                    503,
+                    'hybrid_upstream_unavailable',
+                    'Portal Hybrid search unavailable',
+                  ),
+            );
           }
 
           try {
-            await writePortalResponseCache(
-              {
-                route: PORTAL_HYBRID_FUNCTION_NAME,
-                bodyHash: verification.bodyHash,
-                value: JSON.stringify(modelCache),
-                ttlSeconds: guardLimits.cacheTtlSeconds,
-              },
-              redis,
+            await deadline.run(() =>
+              writePortalResponseCache(
+                {
+                  route: PORTAL_HYBRID_FUNCTION_NAME,
+                  bodyHash: verification.bodyHash,
+                  value: JSON.stringify(modelCache),
+                  ttlSeconds: guardLimits.cacheTtlSeconds,
+                },
+                redis,
+              ),
             );
-          } catch (_error) {
+          } catch (error) {
+            if (isPortalHybridDeadlineError(error)) return timeoutResponse();
             event.cache = 'write_failed';
           }
         }
 
-        if (abortController.signal.aborted) {
+        if (deadline.isExpired()) {
           event.model = event.model === 'called' ? 'aborted' : event.model;
-          await recordFailure();
-          return errorResponse(503, 'hybrid_timeout', 'Portal Hybrid search timed out');
+          return await responseAfterCircuitFailure(timeoutResponse());
         }
 
         const queryTerms = retrievalTermsFromModelCache(modelCache, hybridRequest.query);
 
         let databasePage;
         try {
+          if (deadline.isExpired()) return timeoutResponse();
           const repository =
             options.repository ??
             options.repositoryFactory?.(trustedPublishableKey) ??
             createPortalHybridRepository({ publishableKey: trustedPublishableKey });
           event.database = 'called';
-          databasePage = await repository.query(
-            hybridRequest,
-            queryTerms,
-            modelCache.queryEmbedding,
-            abortController.signal,
+          databasePage = await deadline.run(() =>
+            repository.query(hybridRequest, queryTerms, modelCache.queryEmbedding, deadline.signal),
           );
         } catch (error) {
-          if (abortController.signal.aborted) {
+          if (isPortalHybridDeadlineError(error) || deadline.isExpired()) {
             event.database = 'failed';
-            await recordFailure();
-            return errorResponse(503, 'hybrid_timeout', 'Portal Hybrid search timed out');
+            return await responseAfterCircuitFailure(timeoutResponse());
           }
           const contractFailure =
             error instanceof PortalHybridRepositoryError && error.code === 'contract_failure';
           event.database = contractFailure ? 'contract_failed' : 'failed';
-          await recordFailure();
-          return contractFailure
-            ? errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable')
-            : errorResponse(503, 'hybrid_upstream_unavailable', 'Portal Hybrid search unavailable');
+          return await responseAfterCircuitFailure(
+            contractFailure
+              ? errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable')
+              : errorResponse(
+                  503,
+                  'hybrid_upstream_unavailable',
+                  'Portal Hybrid search unavailable',
+                ),
+          );
         }
 
         const edgePage: PortalHybridSearchPage = {
@@ -588,59 +642,91 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         const parsedPage = portalHybridSearchPageSchema.safeParse(edgePage);
         if (!parsedPage.success || parsedPage.data.kind !== hybridRequest.kind) {
           event.database = 'contract_failed';
-          await recordFailure();
-          return errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable');
+          return await responseAfterCircuitFailure(
+            errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable'),
+          );
         }
         const serialized = JSON.stringify(parsedPage.data);
         if (new TextEncoder().encode(serialized).byteLength > PORTAL_HYBRID_MAX_RESPONSE_BYTES) {
           event.database = 'contract_failed';
-          await recordFailure();
-          return errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable');
+          return await responseAfterCircuitFailure(
+            errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable'),
+          );
         }
 
         try {
-          await recordPortalHybridCircuitSuccess({ route: PORTAL_HYBRID_FUNCTION_NAME }, redis);
-        } catch (_error) {
+          await deadline.run(() =>
+            recordPortalHybridCircuitSuccess({ route: PORTAL_HYBRID_FUNCTION_NAME }, redis),
+          );
+        } catch (error) {
+          if (isPortalHybridDeadlineError(error)) return timeoutResponse();
           event.circuit = 'reset_failed';
         }
+        if (deadline.isExpired()) return timeoutResponse();
         event.items = parsedPage.data.items.length;
         return jsonResponse(200, parsedPage.data, {
           'X-Portal-Cache': event.cache === 'hit' ? 'hit' : 'miss',
         });
       } catch (error) {
+        if (isPortalHybridDeadlineError(error)) return timeoutResponse();
         if (error instanceof PortalRedisError) {
           event.guardOutcome = 'unavailable';
           return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
         }
         return errorResponse(503, 'internal_error', 'Portal Hybrid search unavailable');
       } finally {
-        clearTimeout(timeoutId);
-        if (leaseId) {
-          await releasePortalConcurrencyLease(
-            { route: PORTAL_HYBRID_FUNCTION_NAME, leaseId },
-            redis,
-          ).catch(() => undefined);
+        if (leaseId || ownsRedis) {
+          deadline.detach(async () => {
+            try {
+              if (leaseId) {
+                await releasePortalConcurrencyLease(
+                  { route: PORTAL_HYBRID_FUNCTION_NAME, leaseId },
+                  redis,
+                );
+              }
+            } catch (_error) {
+              // The TTL is the authoritative interrupted-isolate recovery path.
+            } finally {
+              if (ownsRedis) await redis.close().catch(() => undefined);
+            }
+          });
         }
-        if (ownsRedis) await redis.close().catch(() => undefined);
       }
     };
 
     let response: Response;
+    let errorCode: PortalHybridErrorCode | null;
     try {
-      response = await execute();
-    } catch (_error) {
-      response = errorResponse(503, 'internal_error', 'Portal Hybrid search unavailable');
+      response = await deadline.run(execute);
+      if (deadline.isExpired()) throw new PortalHybridDeadlineError();
+      errorCode = await deadline.run(() => responseErrorCode(response));
+      if (response.status === 200 && deadline.isExpired()) {
+        throw new PortalHybridDeadlineError();
+      }
+    } catch (error) {
+      if (isPortalHybridDeadlineError(error) || deadline.isExpired()) {
+        response = timeoutResponse();
+        errorCode = 'hybrid_timeout';
+        event.items = null;
+      } else {
+        response = errorResponse(503, 'internal_error', 'Portal Hybrid search unavailable');
+        errorCode = 'internal_error';
+      }
     }
     response.headers.set('X-Portal-Correlation-Id', correlationId);
-    emitPortalHybridSecurityEvent(options.logger ?? defaultPortalHybridSecurityLogger, {
-      correlationId,
-      ...event,
-      latencyMs: Math.max(0, Math.round(monotonicNow() - startedAt)),
-      status: response.status,
-      errorCode: await responseErrorCode(response),
-      deploymentSha: options.deploymentSha ?? Deno.env.get('PORTAL_DEPLOYMENT_SHA') ?? 'unknown',
-    });
-    return response;
+    try {
+      emitPortalHybridSecurityEvent(options.logger ?? defaultPortalHybridSecurityLogger, {
+        correlationId,
+        ...event,
+        latencyMs: Math.max(0, Math.round(monotonicNow() - startedAt)),
+        status: response.status,
+        errorCode,
+        deploymentSha: options.deploymentSha ?? Deno.env.get('PORTAL_DEPLOYMENT_SHA') ?? 'unknown',
+      });
+      return response;
+    } finally {
+      deadline.dispose();
+    }
   };
 }
 
