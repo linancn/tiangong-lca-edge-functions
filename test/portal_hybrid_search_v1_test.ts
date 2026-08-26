@@ -879,6 +879,33 @@ Deno.test(
         generateEmbedding: async () => [0.1, 0.2],
         code: 'contract_failure',
       },
+      {
+        rewriteQuery: async () => null as unknown as HybridSearchQuery,
+        generateEmbedding: async () => {
+          throw new Error('must not embed an invalid rewrite');
+        },
+        code: 'contract_failure',
+      },
+      {
+        rewriteQuery: async () =>
+          ({
+            semantic_query_en: 'steel',
+            fulltext_query_en: ['steel', 42],
+            fulltext_query_zh: [],
+          }) as unknown as HybridSearchQuery,
+        generateEmbedding: async () => {
+          throw new Error('must not embed an invalid rewrite');
+        },
+        code: 'contract_failure',
+      },
+      {
+        rewriteQuery: async () =>
+          ({ ...REWRITE, private_provider_field: 'must not pass' }) as HybridSearchQuery,
+        generateEmbedding: async () => {
+          throw new Error('must not embed an invalid rewrite');
+        },
+        code: 'contract_failure',
+      },
     ]) {
       const redis = new FakePortalRedis();
       let databaseCalls = 0;

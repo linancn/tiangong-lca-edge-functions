@@ -183,6 +183,23 @@ function buildKernelConfig(kind: PortalHybridSearchRequest['kind']): HybridSearc
   };
 }
 
+function isHybridSearchQuery(value: unknown): value is HybridSearchQuery {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return (
+    keys.length === 3 &&
+    keys[0] === 'fulltext_query_en' &&
+    keys[1] === 'fulltext_query_zh' &&
+    keys[2] === 'semantic_query_en' &&
+    typeof record.semantic_query_en === 'string' &&
+    Array.isArray(record.fulltext_query_en) &&
+    record.fulltext_query_en.every((item) => typeof item === 'string') &&
+    Array.isArray(record.fulltext_query_zh) &&
+    record.fulltext_query_zh.every((item) => typeof item === 'string')
+  );
+}
+
 function uniqueInterpretationTerms(
   normalized: HybridSearchQuery,
 ): PortalHybridInterpretation['terms'] {
@@ -514,7 +531,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         } else {
           event.cache = 'miss';
           if (deadline.isExpired()) return timeoutResponse();
-          let rawRewrite: HybridSearchQuery;
+          let rawRewrite: unknown;
           event.model = 'called';
           try {
             rawRewrite = await deadline.run(() =>
@@ -534,6 +551,13 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
                     'hybrid_upstream_unavailable',
                     'Portal Hybrid search unavailable',
                   ),
+            );
+          }
+
+          if (!isHybridSearchQuery(rawRewrite)) {
+            event.model = 'failed';
+            return await responseAfterCircuitFailure(
+              errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable'),
             );
           }
 
