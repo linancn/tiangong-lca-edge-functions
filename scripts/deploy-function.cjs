@@ -6,9 +6,15 @@ const { spawnSync } = require('node:child_process');
 
 const [, , target, ...functionNames] = process.argv;
 const validTargets = new Set(['dev', 'main']);
+const disposableR0Function = 'portal_r0_hmac_verify_v1';
 
 if (!validTargets.has(target) || functionNames.length === 0) {
   console.error('Usage: pnpm deploy:<dev|main> <function-name> [more-function-names...]');
+  process.exit(1);
+}
+
+if (functionNames.includes(disposableR0Function)) {
+  console.error('Disposable Portal R0 can only use the dedicated Preview/test deploy guard.');
   process.exit(1);
 }
 
