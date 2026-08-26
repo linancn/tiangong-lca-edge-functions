@@ -11,10 +11,11 @@ const CANONICAL_DECIMAL_PATTERN =
 function boundedText(options: {
   maximumCodePoints: number;
   maximumBytes: number;
+  normalize?: (value: string) => string;
 }): z.ZodPipe<z.ZodString, z.ZodTransform<string, string>> {
   return z
     .string()
-    .transform((value) => value.trim())
+    .transform((value) => options.normalize?.(value) ?? value.trim())
     .refine((value) => value.length > 0, 'value must not be blank')
     .refine(
       (value) => Array.from(value).length <= options.maximumCodePoints,
@@ -31,9 +32,11 @@ export const portalHybridQuerySchema = boundedText({
   maximumCodePoints: 512,
   maximumBytes: 2_048,
 });
-const filterTextSchema = boundedText({ maximumCodePoints: 128, maximumBytes: 1_024 }).transform(
-  (value) => value.toLowerCase(),
-);
+const filterTextSchema = boundedText({
+  maximumCodePoints: 128,
+  maximumBytes: 1_024,
+  normalize: (value) => value.trim().toLowerCase(),
+});
 const yearSchema = z.number().int().min(0).max(9_999);
 
 export const portalHybridFiltersSchema = z

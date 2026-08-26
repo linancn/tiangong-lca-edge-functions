@@ -167,6 +167,26 @@ Deno.test(
       }).success,
       false,
     );
+    assertEquals(
+      portalHybridSearchRequestSchema.safeParse({
+        schemaVersion: 'portal.hybrid-search-request.v1',
+        kind: 'process',
+        query: 'process',
+        filters: { source: 'İ'.repeat(64) },
+        limit: 1,
+      }).success,
+      true,
+    );
+    assertEquals(
+      portalHybridSearchRequestSchema.safeParse({
+        schemaVersion: 'portal.hybrid-search-request.v1',
+        kind: 'process',
+        query: 'process',
+        filters: { source: 'İ'.repeat(128) },
+        limit: 1,
+      }).success,
+      false,
+    );
   },
 );
 
