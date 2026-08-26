@@ -8,6 +8,7 @@ import {
 } from './portal_security_event.ts';
 
 export const PORTAL_HYBRID_SECURITY_EVENT_SCHEMA = 'portal.hybrid-security-event.v1';
+export const PORTAL_HYBRID_SECURITY_EVENT_DELIVERY_TIMEOUT_MS = 100;
 
 export type PortalHybridErrorCode =
   | 'method_not_allowed'
@@ -228,18 +229,60 @@ export const defaultPortalHybridSecurityLogger: PortalHybridSecurityLogger = (ev
   console.info(JSON.stringify(event));
 };
 
-export function emitPortalHybridSecurityEvent(
-  logger: PortalHybridSecurityLogger,
-  event: Omit<PortalHybridSecurityEvent, 'schemaVersion' | 'route'>,
-): void {
+type PortalHybridEdgeRuntime = {
+  waitUntil?: (promise: Promise<unknown>) => void;
+};
+
+function resolvePortalHybridWaitUntil(): ((promise: Promise<unknown>) => void) | null {
   try {
-    const result = logger(sanitizePortalHybridSecurityEvent(event));
-    if (result && typeof (result as PromiseLike<void>).then === 'function') {
-      void Promise.resolve(result).catch(() => undefined);
-    }
+    const runtime = Reflect.get(globalThis, 'EdgeRuntime') as PortalHybridEdgeRuntime | undefined;
+    return typeof runtime?.waitUntil === 'function' ? runtime.waitUntil.bind(runtime) : null;
   } catch (_error) {
-    // Observability must never alter or delay the response.
+    return null;
   }
+}
+
+function runPortalHybridSecurityLogger(
+  logger: PortalHybridSecurityLogger,
+  event: Readonly<PortalHybridSecurityEvent>,
+): Promise<void> {
+  const loggerPromise = Promise.resolve()
+    .then(() => logger(event))
+    .then(
+      () => undefined,
+      () => undefined,
+    );
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<void>((resolve) => {
+    timeoutId = setTimeout(resolve, PORTAL_HYBRID_SECURITY_EVENT_DELIVERY_TIMEOUT_MS);
+  });
+  return Promise.race([loggerPromise, timeoutPromise])
+    .then(() => undefined)
+    .finally(() => {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    });
+}
+
+export function schedulePortalHybridSecurityEvent(
+  logger: PortalHybridSecurityLogger,
+  event: Readonly<PortalHybridSecurityEvent>,
+): void {
+  const delivery = new Promise<void>((resolve) => {
+    setTimeout(() => {
+      void runPortalHybridSecurityLogger(logger, event).then(resolve, resolve);
+    }, 0);
+  });
+
+  const waitUntil = resolvePortalHybridWaitUntil();
+  if (waitUntil) {
+    try {
+      waitUntil(delivery);
+      return;
+    } catch (_error) {
+      // The scheduled fallback still owns and observes the delivery promise.
+    }
+  }
+  void delivery.catch(() => undefined);
 }
 
 export { resolvePortalCorrelationId };

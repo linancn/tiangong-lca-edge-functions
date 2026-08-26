@@ -27,11 +27,12 @@ import {
 } from '../_shared/portal_hybrid_deadline.ts';
 import {
   defaultPortalHybridSecurityLogger,
-  emitPortalHybridSecurityEvent,
   normalizePortalHybridErrorCode,
   portalHybridHmacOutcome,
   portalHybridTransportOutcome,
   resolvePortalCorrelationId,
+  sanitizePortalHybridSecurityEvent,
+  schedulePortalHybridSecurityEvent,
   type PortalHybridErrorCode,
   type PortalHybridSecurityEvent,
   type PortalHybridSecurityLogger,
@@ -711,19 +712,47 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
       }
     }
     response.headers.set('X-Portal-Correlation-Id', correlationId);
-    try {
-      emitPortalHybridSecurityEvent(options.logger ?? defaultPortalHybridSecurityLogger, {
-        correlationId,
-        ...event,
-        latencyMs: Math.max(0, Math.round(monotonicNow() - startedAt)),
-        status: response.status,
-        errorCode,
-        deploymentSha: options.deploymentSha ?? Deno.env.get('PORTAL_DEPLOYMENT_SHA') ?? 'unknown',
-      });
-      return response;
-    } finally {
-      deadline.dispose();
+    let deploymentSha = options.deploymentSha ?? 'unknown';
+    if (options.deploymentSha === undefined) {
+      try {
+        deploymentSha = Deno.env.get('PORTAL_DEPLOYMENT_SHA') ?? 'unknown';
+      } catch (_error) {
+        // Observability configuration must not alter the response.
+      }
     }
+    deadline.dispose();
+
+    let securityEvent: PortalHybridSecurityEvent | null = null;
+    while (true) {
+      try {
+        securityEvent = sanitizePortalHybridSecurityEvent({
+          correlationId,
+          ...event,
+          latencyMs: Math.max(0, Math.round(monotonicNow() - startedAt)),
+          status: response.status,
+          errorCode,
+          deploymentSha,
+        });
+      } catch (_error) {
+        securityEvent = null;
+      }
+
+      const expiredBeforeReturn = deadline.isExpired();
+      if (response.status !== 200 || !expiredBeforeReturn) break;
+
+      response = timeoutResponse();
+      response.headers.set('X-Portal-Correlation-Id', correlationId);
+      errorCode = 'hybrid_timeout';
+      event.items = null;
+    }
+
+    if (securityEvent) {
+      schedulePortalHybridSecurityEvent(
+        options.logger ?? defaultPortalHybridSecurityLogger,
+        securityEvent,
+      );
+    }
+    return response;
   };
 }
 

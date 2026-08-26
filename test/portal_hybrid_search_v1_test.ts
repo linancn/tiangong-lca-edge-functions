@@ -288,6 +288,10 @@ async function responseCode(response: Response): Promise<string | null> {
   return payload.code ?? null;
 }
 
+async function flushPortalHybridSecurityEvent(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 10));
+}
+
 Deno.test(
   'signed Portal Hybrid success is advisory, public-only, correlated, and no-CORS',
   async () => {
@@ -344,11 +348,19 @@ Deno.test(
     assertEquals(repositoryCalls[0].signal, rewriteSignal);
     assertEquals(repositoryCalls[0].signal, embeddingSignal);
     assertEquals(repositoryCalls[0].signal.aborted, false);
+    await flushPortalHybridSecurityEvent();
     assertEquals(events.length, 1);
     assertEquals(events[0].correlationId, CORRELATION_ID);
     assertEquals(events[0].model, 'called');
     assertEquals(events[0].database, 'called');
     assertEquals(events[0].items, 1);
+    assertEquals(events[0].status, response.status);
+    assertEquals(events[0].errorCode, null);
+    const serializedEvent = JSON.stringify(events[0]);
+    assertEquals(serializedEvent.includes(REQUEST.query), false);
+    assertEquals(serializedEvent.includes(PROCESS_ID), false);
+    assertEquals(serializedEvent.includes(KEYRING.current.keyId), false);
+    assertEquals(serializedEvent.includes(TRUSTED_PUBLISHABLE_KEY), false);
     assertEquals(redis.cacheWrites.length, 1);
     assertEquals(redis.cacheWrites[0].includes(PROCESS_ID), false);
     assertEquals(redis.cacheWrites[0].includes(REQUEST.query), false);
@@ -731,6 +743,7 @@ Deno.test(
     );
     const response = await handler(await signedRequest());
     assertEquals(response.status, 200);
+    await flushPortalHybridSecurityEvent();
     assertEquals(events.length, 1);
     assertEquals(events[0].cache, 'write_failed');
     assertEquals(events[0].circuit, 'reset_failed');
@@ -814,6 +827,7 @@ Deno.test(
     assertEquals(response.status, 200);
     assertEquals(response.headers.get('x-portal-cache'), 'hit');
     assertEquals(databaseCalls, 1);
+    await flushPortalHybridSecurityEvent();
     assertEquals(events[0].model, 'cache_hit');
   },
 );
@@ -966,7 +980,10 @@ Deno.test(
     assertEquals(await responseCode(response), 'hybrid_timeout');
     assertEquals(embeddingSignal?.aborted, true);
     assertEquals(databaseCalls, 0);
+    await flushPortalHybridSecurityEvent();
     assertEquals(events[0].model, 'aborted');
+    assertEquals(events[0].status, response.status);
+    assertEquals(events[0].errorCode, 'hybrid_timeout');
   },
 );
 
@@ -1083,7 +1100,50 @@ Deno.test(
 );
 
 Deno.test(
-  'Portal Hybrid emits exactly one event and a never-resolving logger cannot delay',
+  'Portal Hybrid bounds a never-resolving logger through EdgeRuntime waitUntil',
+  async () => {
+    const redis = new FakePortalRedis();
+    let loggerCalls = 0;
+    let backgroundDelivery: Promise<unknown> | undefined;
+    Object.defineProperty(globalThis, 'EdgeRuntime', {
+      configurable: true,
+      value: {
+        waitUntil(promise: Promise<unknown>) {
+          backgroundDelivery = promise;
+        },
+      },
+    });
+    try {
+      const handler = createPortalHybridSearchHandler(
+        handlerOptions(
+          redis,
+          { query: () => Promise.resolve(databasePage()) },
+          {
+            logger: () => {
+              loggerCalls += 1;
+              return new Promise<void>(() => undefined);
+            },
+          },
+        ),
+      );
+      const response = await handler(await signedRequest());
+      assertEquals(response.status, 200);
+      assertEquals(loggerCalls, 0);
+      assert(backgroundDelivery);
+      const completed = await Promise.race([
+        backgroundDelivery.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
+      ]);
+      assertEquals(completed, true);
+      assertEquals(loggerCalls, 1);
+    } finally {
+      Reflect.deleteProperty(globalThis, 'EdgeRuntime');
+    }
+  },
+);
+
+Deno.test(
+  'Portal Hybrid sync-busy logger runs after handler resolution and cannot return a late 200',
   async () => {
     const redis = new FakePortalRedis();
     let loggerCalls = 0;
@@ -1092,18 +1152,54 @@ Deno.test(
         redis,
         { query: () => Promise.resolve(databasePage()) },
         {
+          timeoutMs: 250,
           logger: () => {
             loggerCalls += 1;
-            return new Promise<void>(() => undefined);
+            const loggerStartedAt = performance.now();
+            while (performance.now() - loggerStartedAt < 400) {
+              // Simulate a synchronous observability sink that blocks its own background task.
+            }
           },
         },
       ),
     );
-    const result = await Promise.race([
-      handler(await signedRequest()).then((response) => response.status),
-      new Promise<number>((resolve) => setTimeout(() => resolve(599), 250)),
-    ]);
-    assertEquals(result, 200);
+    const request = await signedRequest();
+    const startedAt = performance.now();
+    const response = await handler(request);
+    const handlerLatencyMs = performance.now() - startedAt;
+
+    assertEquals(response.status, 200);
+    assert(handlerLatencyMs < 250);
+    assertEquals(loggerCalls, 0);
+    await new Promise((resolve) => setTimeout(resolve, 450));
     assertEquals(loggerCalls, 1);
   },
 );
+
+Deno.test('Portal Hybrid absorbs detached logger throws and rejections', async () => {
+  let loggerCalls = 0;
+  const loggers = [
+    () => {
+      loggerCalls += 1;
+      throw new Error('private synchronous logger details');
+    },
+    () => {
+      loggerCalls += 1;
+      return Promise.reject(new Error('private asynchronous logger details'));
+    },
+  ];
+
+  for (const logger of loggers) {
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        new FakePortalRedis(),
+        { query: () => Promise.resolve(databasePage()) },
+        { logger },
+      ),
+    );
+    const response = await handler(await signedRequest());
+    assertEquals(response.status, 200);
+  }
+  await flushPortalHybridSecurityEvent();
+  assertEquals(loggerCalls, 2);
+});
