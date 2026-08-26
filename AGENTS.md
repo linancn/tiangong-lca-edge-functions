@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 1101463915b1d757f56f13ca742855fcf2b1c3e2
-lastReviewedNote: 'Reviewed for Issue #310: the separate R2 signed Hybrid route, default-off cost boundary, public-only database façade, and unchanged login Hybrid surface are part of the Portal repo contract.'
+lastReviewedCommit: 1015d5abeed5b5f44da7bf602a28379b8822ae93
+lastReviewedNote: 'Reviewed after Issue #310 independent review: the R2 route has one absolute deadline through final response, TTL-backed non-blocking cleanup, normalized filter bounds, and unchanged login Hybrid behavior.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -94,7 +94,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.23.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 147 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 447 Deno behavior tests with only env/read/loopback-net permissions
+- `pnpm check` validates exact runtime versions, checks all 147 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all 453 Deno behavior tests with only env/read/loopback-net permissions
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -160,6 +160,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - do not interpret `--no-verify-jwt` as permission for anonymous business logic
 - do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes may call only their reviewed public `api` RPC with the same once-resolved publishable/anon credential that matched inbound `apikey`. Authorization is absent in normal Portal traffic; only the exact legacy anon Bearer injected by pinned CLI `2.106.0` local routing is tolerated after HMAC
 - do not route `portal_hybrid_search_v1` through legacy `hybrid_search_processes`/`hybrid_search_flows`, a service client, or an Edge-side field projection; it remains default-off until the exact Database façade exists, and every guard/circuit/timeout failure returns a fixed signal for the Portal BFF to handle through its separate lexical façade
+- do not return a successful Portal Hybrid response after its absolute application deadline; every awaited guard/cache/model/database/finalization step consumes the same remaining budget, while lease release is detached and bounded so Redis TTL remains the interrupted-cleanup recovery authority
 - do not move repo-level tests into `supabase/functions/**`; this repo keeps Deno tests in `test/**`
 - do not treat GitHub default branch `main` as the daily trunk
 - do not mark delivery complete if root workspace integration is still pending

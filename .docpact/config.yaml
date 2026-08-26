@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-26'
-lastReviewedCommit: '1101463915b1d757f56f13ca742855fcf2b1c3e2'
-lastReviewedNote: 'Reviewed for Issue #310: the separate signed Portal Hybrid entrypoint, strict contracts, shared model kernel, independent cost controls, and proof surface are routed with the Portal runtime.'
+lastReviewedCommit: '1015d5abeed5b5f44da7bf602a28379b8822ae93'
+lastReviewedNote: 'Reviewed after Issue #310 independent review: the absolute Portal Hybrid deadline, bounded detached cleanup, normalized-filter limits, and expanded proof surface are routed with the Portal runtime.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -127,6 +127,7 @@ routing:
         - supabase/functions/_shared/portal_redis_guard.ts
         - supabase/functions/_shared/portal_security_event.ts
         - supabase/functions/_shared/portal_hybrid_contract.ts
+        - supabase/functions/_shared/portal_hybrid_deadline.ts
         - supabase/functions/_shared/portal_hybrid_repository.ts
         - supabase/functions/_shared/portal_hybrid_security_event.ts
         - supabase/functions/_shared/hybrid_search_kernel.ts
@@ -399,6 +400,8 @@ rules:
         kind: observability-runtime
       - path: supabase/functions/_shared/portal_hybrid_contract.ts
         kind: runtime-contract
+      - path: supabase/functions/_shared/portal_hybrid_deadline.ts
+        kind: runtime-guard
       - path: supabase/functions/_shared/portal_hybrid_repository.ts
         kind: runtime-code
       - path: supabase/functions/_shared/portal_hybrid_security_event.ts

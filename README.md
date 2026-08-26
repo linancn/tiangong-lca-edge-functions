@@ -23,8 +23,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 1101463915b1d757f56f13ca742855fcf2b1c3e2
-lastReviewedNote: 'Reviewed for Issue #310: the default-off signed Portal Hybrid route, independent cost/circuit/cache controls, strict public DTO, and deferred live Database proof are aligned.'
+lastReviewedCommit: 1015d5abeed5b5f44da7bf602a28379b8822ae93
+lastReviewedNote: 'Reviewed after Issue #310 independent review: the absolute deadline, bounded detached cleanup, post-normalization filter limits, and deferred live Database proof are aligned.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -295,9 +295,9 @@ The strict request is:
 }
 ```
 
-The query is trim-nonempty, at most 512 Unicode code points and 2048 UTF-8 bytes, and contains no C0/C1 controls. String filters are lowercased, at most 128 code points/1024 bytes each, and the serialized filter object is at most 4096 bytes. `processSubtype` is Process-only. Extra fields—including cursor, sort, state, actor, team, `data_source`, model, weights, threshold, embedding, visitor hash, or notes—fail as `invalid_request`. There is no Hybrid cursor; use the lexical GET page for additional results.
+The query is trim-nonempty, at most 512 Unicode code points and 2048 UTF-8 bytes, and contains no C0/C1 controls. String filters are first trimmed and lowercased, then limited to 128 code points/1024 bytes each; the fully transformed serialized filter object is at most 4096 bytes. This order ensures Unicode lowercase expansion is included in every bound. `processSubtype` is Process-only. Extra fields—including cursor, sort, state, actor, team, `data_source`, model, weights, threshold, embedding, visitor hash, or notes—fail as `invalid_request`. There is no Hybrid cursor; use the lexical GET page for additional results.
 
-The route reuses the existing deterministic query-rewrite and 1024-dimensional SageMaker kernels with one 8-second abort signal. Its hash-key Redis cache holds only bounded model-generated interpretation plus embedding, never the raw query or database candidates, and expires in at most 60 seconds. Every success still calls publishable-only `api.portal_hybrid_search_v1(p_kind,p_query_terms,p_query_embedding,p_filters,p_limit)` with explicit `Content-Profile: api`. Live proof against that RPC remains deferred until the matching database-engine R2 façade is available in the selected non-production environment.
+The route reuses the existing deterministic query-rewrite and 1024-dimensional SageMaker kernels under one absolute deadline that starts at handler entry. Raw body/HMAC work and every awaited Redis, model, database, cache-write, circuit-record/reset, and final-response operation are capped to the same remaining budget; OpenAI, SageMaker, and PostgREST receive the same AbortSignal. A late operation cannot start downstream model/database work or produce HTTP 200. Lease release and owned Redis close are bounded detached cleanup and never delay the response; the lease TTL recovers any unfinished release. Its hash-key Redis cache holds only bounded model-generated interpretation plus embedding, never the raw query or database candidates, and expires in at most 60 seconds. Every success still calls publishable-only `api.portal_hybrid_search_v1(p_kind,p_query_terms,p_query_embedding,p_filters,p_limit)` with explicit `Content-Profile: api`. Live proof against that RPC remains deferred until the matching database-engine R2 façade is available in the selected non-production environment.
 
 A success is exact `portal.hybrid-search-page.v1`: the Database fingerprint and up to 20 unique R1 public cards, plus `interpretation.source=model_generated`, `advisory=true`, one semantic query, and at most 12 bounded language-tagged terms. Match evidence uses only algorithm `portal-hybrid-rank-v1`, score, actual lexical/semantic ranks, and non-negative canonical semantic distance; reason codes must correspond to present evidence. Raw JSON/search text, embeddings, owner/team/model/review fields, locators, and duplicate identities fail the contract.
 
@@ -411,7 +411,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 147-root Deno graph, 15 Node contracts, and all 447 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 147-root Deno graph, 15 Node contracts, and all 453 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

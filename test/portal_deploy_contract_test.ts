@@ -45,6 +45,7 @@ Deno.test(
       './supabase/functions/_shared/openai_structured.ts',
       './supabase/functions/_shared/portal_hmac.ts',
       './supabase/functions/_shared/portal_hybrid_contract.ts',
+      './supabase/functions/_shared/portal_hybrid_deadline.ts',
       './supabase/functions/_shared/portal_hybrid_repository.ts',
       './supabase/functions/_shared/portal_hybrid_security_event.ts',
       './supabase/functions/_shared/portal_redis_guard.ts',
@@ -77,6 +78,9 @@ Deno.test(
     assertStringIncludes(source, "env.get('PORTAL_HYBRID_ENABLED') === 'true'");
     assertStringIncludes(source, 'abortSignal: signal');
     assertStringIncludes(source, '{ signal: request.signal }');
+    assertStringIncludes(source, 'new PortalHybridDeadline(timeoutMs, monotonicNow, startedAt)');
+    assertStringIncludes(source, 'await deadline.run');
+    assertStringIncludes(source, 'deadline.detach');
     assertStringIncludes(
       source,
       'Task: Transform description of ${config.entityPlural} into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.',

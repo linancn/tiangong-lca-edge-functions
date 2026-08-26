@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 1101463915b1d757f56f13ca742855fcf2b1c3e2
-lastReviewedNote: 'Reviewed for Issue #310: the additive signed Portal Hybrid route shares only reviewed HMAC/model kernels while keeping its own public DTO, cost controls, cache, circuit, and event boundary.'
+lastReviewedCommit: 1015d5abeed5b5f44da7bf602a28379b8822ae93
+lastReviewedNote: 'Reviewed after Issue #310 independent review: the signed Hybrid route uses one absolute deadline, deadline-bounded operations, detached lease cleanup, and post-normalization filter bounds.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -62,6 +62,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 | `supabase/functions/_shared/portal_public_transport.ts` | stable | exact publishable/legacy-anon transport, Cookie rejection, safe Supabase URL, and bounded raw-byte reader shared by signed Portal routes |
 | `supabase/functions/_shared/portal_security_event.ts` and `portal_hybrid_security_event.ts` | stable | route-specific allowlisted exactly-once Portal events, correlation IDs, safe outcome enums, and non-blocking logger boundaries |
 | `supabase/functions/_shared/portal_hybrid_contract.ts` and `portal_hybrid_repository.ts` | stable | strict R2 request/public candidate/Edge response DTOs and the publishable-only `api.portal_hybrid_search_v1` transport |
+| `supabase/functions/_shared/portal_hybrid_deadline.ts` | stable | one absolute handler-entry deadline, shared model/database AbortSignal, remaining-time operation caps, and non-blocking bounded cleanup |
 | `supabase/functions/_shared/command_runtime/**` | stable | request parsing, actor context, audit payload, and command-handler skeleton |
 | `supabase/functions/_shared/commands/**` | stable | dataset, review, membership, notification, and profile command logic |
 | `supabase/functions/_shared/db_rpc/**` | stable | thin wrappers over database RPC calls; SQL truth still lives in `database-engine` |
@@ -90,7 +91,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 147 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 447 Deno behavior tests with env/read/loopback-net permissions.
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 147 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation also runs all 453 Deno behavior tests with env/read/loopback-net permissions.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
@@ -158,11 +159,11 @@ Every request resolves or generates one correlation UUID, returns it as `X-Porta
 
 `portal_hybrid_search_v1` is a separate R2 server-to-server route. It reuses the exact R1 HMAC/keyring/path, public-apikey/Cookie, Redis provider, OpenAI rewrite, and SageMaker embedding kernels, but not the old Hybrid handler's authentication, service client, raw RPCs, request options, database response, or fallback. The extraction keeps all seven login Hybrid endpoints on their existing request/RPC/fallback/response bytes.
 
-The strict signed request contains only schema version, Process/Flow kind, a 512-code-point/2048-byte control-free query, bounded lowercase public filters, and limit at most 20. It has no cursor, state, actor, team, data source, model, weight, threshold, embedding, visitor hash, or notes. HMAC and exact public transport finish before the default-off `PORTAL_HYBRID_ENABLED` switch; nonce, independent minute/day budgets, a TTL concurrency lease, and circuit state then finish before JSON or cost work. Redis/guard, budget, concurrency, disabled, circuit, timeout, upstream, and contract failures return fixed locator-free codes. Edge never calls a lexical fallback; the Portal BFF owns that behavior through the separate R1 public façade.
+The strict signed request contains only schema version, Process/Flow kind, a 512-code-point/2048-byte control-free query, bounded lowercase public filters, and limit at most 20. Filter strings are trimmed and lowercased before their 128-code-point/1024-byte bounds and the transformed filter object receives the 4096-byte aggregate bound, so Unicode lowercase expansion cannot bypass the contract. It has no cursor, state, actor, team, data source, model, weight, threshold, embedding, visitor hash, or notes. HMAC and exact public transport finish before the default-off `PORTAL_HYBRID_ENABLED` switch; nonce, independent minute/day budgets, a TTL concurrency lease, and circuit state then finish before JSON or cost work. Redis/guard, budget, concurrency, disabled, circuit, timeout, upstream, and contract failures return fixed locator-free codes. Edge never calls a lexical fallback; the Portal BFF owns that behavior through the separate R1 public façade.
 
 The shared model cache is keyed only by the signed body hash, expires in at most 60 seconds, and contains only bounded model-generated interpretation terms plus the 1024-dimensional embedding. It does not contain the raw user query or any database candidates, so every successful request still calls only `api.portal_hybrid_search_v1` with explicit `Content-Profile: api` and the once-resolved publishable credential. The database owns unioned public scope, stable ranking, public-card hydration, fingerprint, and evidence. Edge validates the exact public DTO, adds only `source=model_generated`/`advisory=true` interpretation, and rejects raw/private fields, negative distance, evidence drift, duplicate candidates, or more than 20 items.
 
-One 8-second abort signal covers OpenAI, SageMaker, and public PostgREST fetch. The route emits exactly one allowlisted `portal.hybrid-security-event.v1` with no query, terms, embedding, identifiers, credentials, Redis data, or locators, returns the same correlation UUID in its response, and exposes no wildcard CORS header. Live database integration stays deferred until the matching database-engine façade is present in the selected non-production environment.
+One absolute deadline starts at handler entry and caps raw-body/HMAC work plus every awaited Redis, OpenAI, SageMaker, public PostgREST, cache-write, circuit-record/reset, and final-response step to its remaining budget. OpenAI, SageMaker, and PostgREST share the deadline's AbortSignal. No operation that resolves after expiry can start downstream model/database work or turn a timed-out request into HTTP 200. Lease release and owned-client close run as bounded detached cleanup and never delay the response; an uncompleted release is recovered by the existing lease TTL. The route emits exactly one allowlisted `portal.hybrid-security-event.v1` with no query, terms, embedding, identifiers, credentials, Redis data, or locators, returns the same correlation UUID in its response, and exposes no wildcard CORS header. Live database integration stays deferred until the matching database-engine façade is present in the selected non-production environment.
 
 ### Search, embedding, and AI-backed routes
 
