@@ -38,7 +38,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 1015d5abeed5b5f44da7bf602a28379b8822ae93
+lastReviewedCommit: 0a62fe0a81a98eda95b1d257637b8f65a8dd2f15
 lastReviewedNote: 'Reviewed after Issue #310 independent review: the R2 route has one absolute deadline through final response, TTL-backed non-blocking cleanup, normalized filter bounds, and unchanged login Hybrid behavior.'
 related:
   - .docpact/config.yaml

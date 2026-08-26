@@ -23,7 +23,7 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-26
-lastReviewedCommit: 1015d5abeed5b5f44da7bf602a28379b8822ae93
+lastReviewedCommit: 0a62fe0a81a98eda95b1d257637b8f65a8dd2f15
 lastReviewedNote: 'Reviewed after Issue #310 independent review: the absolute deadline, bounded detached cleanup, post-normalization filter limits, and deferred live Database proof are aligned.'
 ---
 

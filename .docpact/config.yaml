@@ -1,7 +1,7 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-26'
-lastReviewedCommit: '1015d5abeed5b5f44da7bf602a28379b8822ae93'
+lastReviewedCommit: '0a62fe0a81a98eda95b1d257637b8f65a8dd2f15'
 lastReviewedNote: 'Reviewed after Issue #310 independent review: the absolute Portal Hybrid deadline, bounded detached cleanup, normalized-filter limits, and expanded proof surface are routed with the Portal runtime.'
 
 # Keep deterministic governance facts here.
