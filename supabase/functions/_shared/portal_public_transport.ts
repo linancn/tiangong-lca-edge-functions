@@ -25,8 +25,10 @@ export function validatePortalSupabaseUrl(value: string): string {
   const secureRemote = url.protocol === 'https:';
   const loopback =
     isLoopbackHostname(url.hostname) && (url.protocol === 'http:' || url.protocol === 'https:');
+  const pinnedCliInternal =
+    url.protocol === 'http:' && url.hostname === 'kong' && url.port === '8000';
   if (
-    (!secureRemote && !loopback) ||
+    (!secureRemote && !loopback && !pinnedCliInternal) ||
     url.username !== '' ||
     url.password !== '' ||
     url.search !== '' ||
@@ -187,6 +189,7 @@ export function readPortalSupabaseUrl(env: PortalTransportEnvironment = Deno.env
 export function readPortalLegacyAnonCredential(
   env: Pick<typeof Deno.env, 'get'> = Deno.env,
 ): string | null {
+  if (readPortalSupabaseUrl(env) !== 'http://kong:8000') return null;
   const configured = env.get('SUPABASE_ANON_KEY')?.trim();
   if (!configured) return null;
   try {

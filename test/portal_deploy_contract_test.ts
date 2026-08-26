@@ -43,6 +43,10 @@ Deno.test(
       "'REMOTE_SUPABASE_ANON_KEY'",
       "'REMOTE_SUPABASE_URL'",
       "Deno.env.get('PORTAL_DEPLOYMENT_SHA')",
+      "from './supabase_client.ts'",
+      "from '../_shared/supabase_client.ts'",
+      'getSupabasePublishableKey(',
+      'getSupabaseUrl(',
     ]) {
       assertEquals(source.includes(forbidden), false, `forbidden Portal fallback: ${forbidden}`);
     }
@@ -127,6 +131,16 @@ Deno.test(
       "'AWS_SECRET_ACCESS_KEY'",
       "'AWS_SESSION_TOKEN'",
       "Deno.env.get('PORTAL_DEPLOYMENT_SHA')",
+      "from './supabase_client.ts'",
+      "from '../_shared/supabase_client.ts'",
+      "from './hybrid_search_kernel.ts'",
+      "from '../_shared/hybrid_search_kernel.ts'",
+      "from './openai_structured.ts'",
+      "from '../_shared/openai_structured.ts'",
+      'getSupabasePublishableKey(',
+      'getSupabaseUrl(',
+      'rewriteHybridSearchQuery(',
+      'generateHybridSearchEmbedding(',
     ]) {
       assertEquals(
         portalOnlySource.includes(forbidden),
@@ -235,6 +249,8 @@ Deno.test('Portal transport is pinned to reviewed Supabase CLI source evidence',
     kongStripPath: true,
     trustedApikeyMatchInjectsAuthorization: 'Bearer <legacy-anon-key>',
     serveExportsLegacyAnonAs: 'SUPABASE_ANON_KEY',
+    serveExportsSupabaseUrlAs: 'http://kong:8000',
+    workerExportsPublishableRegistryAs: 'SUPABASE_PUBLISHABLE_KEYS.default',
     canonicalPathSource: 'publicPathTemplate',
   });
   assertEquals(

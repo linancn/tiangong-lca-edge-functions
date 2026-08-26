@@ -31,6 +31,8 @@
     "kongStripPath": true,
     "trustedApikeyMatchInjectsAuthorization": "Bearer <legacy-anon-key>",
     "serveExportsLegacyAnonAs": "SUPABASE_ANON_KEY",
+    "serveExportsSupabaseUrlAs": "http://kong:8000",
+    "workerExportsPublishableRegistryAs": "SUPABASE_PUBLISHABLE_KEYS.default",
     "canonicalPathSource": "publicPathTemplate"
   }
 }

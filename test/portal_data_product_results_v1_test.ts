@@ -19,6 +19,7 @@ import {
   type PortalPublishedLciaPage,
   type PortalPublishedLciaRepository,
   PortalTransportError,
+  readPortalLegacyAnonCredential,
   readPortalPublishableCredential,
   readPortalSupabaseUrl,
   transportSecurityOutcome,
@@ -623,32 +624,53 @@ Deno.test('Portal publishable credential is dedicated and bound to the current p
       environment({
         PORTAL_SUPABASE_PUBLISHABLE_KEY: portalKey,
         SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ portal: portalKey, web: 'sb_publishable_web' }),
+        SUPABASE_URL: 'https://current-project.supabase.co',
         REMOTE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_forbidden_fallback',
       }),
     ),
     portalKey,
+  );
+  assertEquals(
+    readPortalLegacyAnonCredential(
+      environment({ SUPABASE_ANON_KEY: LEGACY_ANON_KEY, SUPABASE_URL: 'http://kong:8000' }),
+    ),
+    LEGACY_ANON_KEY,
+  );
+  assertEquals(
+    readPortalLegacyAnonCredential(
+      environment({
+        SUPABASE_ANON_KEY: LEGACY_ANON_KEY,
+        SUPABASE_URL: 'https://current-project.supabase.co',
+      }),
+    ),
+    null,
   );
 
   for (const values of [
     {
       REMOTE_SUPABASE_PUBLISHABLE_KEY: portalKey,
       SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ portal: portalKey }),
+      SUPABASE_URL: 'https://current-project.supabase.co',
     },
     {
       PORTAL_SUPABASE_PUBLISHABLE_KEY: portalKey,
       SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ otherProject: 'sb_publishable_other_project' }),
+      SUPABASE_URL: 'https://current-project.supabase.co',
     },
     {
       PORTAL_SUPABASE_PUBLISHABLE_KEY: 'sb_secret_forbidden_portal',
       SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ secret: 'sb_secret_forbidden_portal' }),
+      SUPABASE_URL: 'https://current-project.supabase.co',
     },
     {
       PORTAL_SUPABASE_PUBLISHABLE_KEY: ` ${portalKey}`,
       SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ portal: portalKey }),
+      SUPABASE_URL: 'https://current-project.supabase.co',
     },
     {
       PORTAL_SUPABASE_PUBLISHABLE_KEY: portalKey,
       SUPABASE_PUBLISHABLE_KEYS: '{bad-json',
+      SUPABASE_URL: 'https://current-project.supabase.co',
     },
   ]) {
     assertThrows(
@@ -666,6 +688,25 @@ Deno.test('Portal publishable credential is dedicated and bound to the current p
       }),
     ),
     'https://current-project.supabase.co',
+  );
+  assertEquals(
+    readPortalSupabaseUrl(environment({ SUPABASE_URL: 'http://kong:8000' })),
+    'http://kong:8000',
+  );
+  assertEquals(
+    readPortalPublishableCredential(
+      environment({
+        PORTAL_SUPABASE_PUBLISHABLE_KEY: portalKey,
+        SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: portalKey }),
+        SUPABASE_URL: 'http://kong:8000',
+      }),
+    ),
+    portalKey,
+  );
+  assertThrows(
+    () => readPortalSupabaseUrl(environment({ SUPABASE_URL: 'http://api.supabase.internal:8000' })),
+    PortalTransportError,
+    'portal_transport_config_invalid',
   );
   assertThrows(
     () =>

@@ -713,6 +713,48 @@ Deno.test('Portal Hybrid provider configuration is strict and has no generic fal
 });
 
 Deno.test(
+  'Portal Hybrid default provider resolver rejects generic-only environment wiring',
+  async () => {
+    const redis = new FakePortalRedis();
+    let modelCalls = 0;
+    let databaseCalls = 0;
+    const genericOnlyEnvironment = environment({
+      OPENAI_API_KEY: 'sk-generic-must-not-win',
+      OPENAI_CHAT_MODEL: 'generic-model',
+      SAGEMAKER_ENDPOINT_NAME: 'generic-endpoint',
+      AWS_ACCESS_KEY_ID: 'AKIAGENERICTEST123',
+      AWS_SECRET_ACCESS_KEY: 'generic-secret-access-key-123456789',
+    });
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query() {
+            databaseCalls += 1;
+            return Promise.resolve(databasePage());
+          },
+        },
+        {
+          providerConfig: undefined,
+          providerConfigFactory: () => readPortalHybridProviderConfig(genericOnlyEnvironment),
+          rewriteQuery: async () => {
+            modelCalls += 1;
+            return REWRITE;
+          },
+        },
+      ),
+    );
+
+    const response = await handler(await signedRequest());
+    assertEquals(response.status, 503);
+    assertEquals(await responseCode(response), 'hybrid_upstream_unavailable');
+    assertEquals(redis.calls, []);
+    assertEquals(modelCalls, 0);
+    assertEquals(databaseCalls, 0);
+  },
+);
+
+Deno.test(
   'Portal Hybrid invalid provider or database config fails before Redis or cost',
   async () => {
     const redis = new FakePortalRedis();
