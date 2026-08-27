@@ -17,6 +17,7 @@
     "check:types": "node scripts/deno-check-all.cjs",
     "test:node": "node --test scripts/*.test.cjs",
     "test:deno": "deno test --config supabase/functions/deno.json --allow-env --allow-read --allow-net=127.0.0.1 test",
+    "test:portal-upstash-live": "node scripts/run-portal-upstash-live-fixture.cjs",
     "test": "pnpm test:node && pnpm test:deno",
     "check": "pnpm check:env && pnpm check:types && pnpm test",
     "deploy:dev": "node ./scripts/deploy-function.cjs dev",

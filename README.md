@@ -22,9 +22,9 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-26
-lastReviewedCommit: 219a5389f390add95ba9b6eae4bc00cad0baf8c2
-lastReviewedNote: 'Reviewed after Issue #316 added the R0 verifier, optional-secret normalization, Main-parent identity/readiness separation, and status-independent cleanup.'
+lastReviewedAt: 2026-08-27
+lastReviewedCommit: 22b01818322517fbb50f9f4d8ef623e5ae1b3968
+lastReviewedNote: 'Reviewed for the least-privilege real Upstash runner, deterministic recovery cleanup, and offline runner contracts.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -117,6 +117,19 @@ Credential contract:
 - Portal Hybrid provider variables are likewise independent of generic OpenAI, SageMaker, and AWS values. Missing, partial, whitespace-bearing, malformed, or unsafe Portal provider configuration fails before Redis, model, AWS, or database calls; an exact-false/unset kill switch returns before that provider configuration is read.
 - `portal_data_product_results_v1` uses only the matching project publishable key for its downstream `api.portal_get_published_lcia_values_v1` call. It must never receive or construct a service-role/secret-key client.
 - `portal_hybrid_search_v1` uses the same once-resolved dedicated current-project publishable key only for `api.portal_hybrid_search_v1`. It never calls `hybrid_search_processes`, `hybrid_search_flows`, another raw/login Hybrid RPC, or a service client.
+
+### Real Upstash guard fixture
+
+The real network fixture is explicit and excluded from `pnpm check`. Give it a mode-0600 file containing exactly the two official Upstash exports:
+
+```bash
+chmod 600 /absolute/path/to/upstash.env
+pnpm test:portal-upstash-live -- --env-file /absolute/path/to/upstash.env
+# Recovery after interruption or a failed cleanup:
+pnpm test:portal-upstash-live -- --env-file /absolute/path/to/upstash.env --cleanup-only
+```
+
+The runner accepts only `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, maps them in-memory to the Portal-prefixed runtime names for one minimal-environment Deno child, grants no filesystem access, and restricts network access to the exact Upstash host. It uses the fixed isolated `portal:test-live-fixture:v1` namespace and deterministic keys so cleanup is recoverable without retaining credentials or a receipt. A normal run removes those exact keys before and after proving replay `SET NX EX`, Lua budget/concurrency, lease release, and bounded cache; `--cleanup-only` is idempotent recovery. Neither mode prints the endpoint, token, nonce, keys, or values. Do not load this source file into Portal/Next, a browser build, or the general Edge runtime env. Passing this fixture does not deploy a Function or authorize production enablement.
 
 ### 2. HTTP test env (repo root `.env`)
 
@@ -453,7 +466,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 153-root Deno graph, 62 Node contract tests, and all 492 Deno behavior tests with only env/read/loopback-net permissions. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 154-root Deno graph, 67 Node contract tests, and 492 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 
