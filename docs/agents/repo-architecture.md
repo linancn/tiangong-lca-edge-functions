@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-27
-lastReviewedCommit: 22b01818322517fbb50f9f4d8ef623e5ae1b3968
-lastReviewedNote: 'Reviewed for the least-privilege real Upstash runner, deterministic recovery cleanup, and offline runner contracts.'
+lastReviewedCommit: 48db61703c2f37ebd4e8fd5d8522361d968f670c
+lastReviewedNote: 'Reviewed for shared-Upstash R0 exact-key cleanup and resource-preservation boundaries.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -151,7 +151,7 @@ The retired review-submit Gate, coordinator, and job endpoints are not part of t
 
 The route reads only `PORTAL_R0_*` configuration plus the platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry. Its namespace is `portal:r0:<fixture>:v1`; it cannot name Dev/Main/Production, and R0 never falls back to retained Portal or generic HMAC, publishable, Redis, provider, Supabase, or service variables. Nonce registration is exact `SET NX EX 120`, followed by the reviewed atomic budget/concurrency Lua primitive and synchronous lease cleanup. It has no cache, database, RPC, model, provider, repository, storage, business DTO, event, or logger surface. Every failure is a fixed locator-free receipt.
 
-The generic deploy scripts reject R0. Both dedicated commands verify Main parent, project ref, nondefault/nonpersistent/no-data flags, branch name, Git branch, optional PR, and clean SHA from live CLI JSON. Deploy then requires `FUNCTIONS_DEPLOYED`, `ACTIVE_HEALTHY`, deploy acknowledgement, and future expiry within 24 hours. Cleanup uses its separate acknowledgement and intentionally ignores status, health, and past expiry after identity succeeds, so paused/unhealthy/failed branches still receive the fixed function-delete attempt; delete failure blocks. An absent target in a valid nonempty response is terminal. Fixed messages never include metadata or tokens.
+The generic deploy scripts reject R0. Both dedicated commands verify Main parent, project ref, nondefault/nonpersistent/no-data flags, branch name, Git branch, optional PR, and clean SHA from live CLI JSON. Deploy then requires `FUNCTIONS_DEPLOYED`, `ACTIVE_HEALTHY`, deploy acknowledgement, and future expiry within 24 hours. Cleanup uses its separate acknowledgement and intentionally ignores status, health, and past expiry after identity succeeds, so paused/unhealthy/failed branches still receive the fixed function-delete attempt; delete failure blocks. An absent target in a valid nonempty response is terminal. External cleanup is exact-key and temporary-secret only: the approved shared Upstash database, coordinated source token, and Dev/Main namespaces must remain untouched. Fixed messages never include metadata or tokens.
 
 ### Portal signed public LCIA route
 

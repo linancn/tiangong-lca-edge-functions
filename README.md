@@ -23,8 +23,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-27
-lastReviewedCommit: 22b01818322517fbb50f9f4d8ef623e5ae1b3968
-lastReviewedNote: 'Reviewed for the least-privilege real Upstash runner, deterministic recovery cleanup, and offline runner contracts.'
+lastReviewedCommit: 48db61703c2f37ebd4e8fd5d8522361d968f670c
+lastReviewedNote: 'Reviewed for shared-Upstash R0 exact-key cleanup and resource-preservation boundaries.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -93,7 +93,7 @@ Core entries:
 - `REMOTE_SUPABASE_SECRET_KEY` for privileged RPC / database execution.
 - `REMOTE_SERVICE_API_KEY` for routes that allow `AuthMethod.SERVICE_API_KEY`.
 - `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` for user API key auth caching.
-- `PORTAL_R0_*` is the complete, disposable R0 verifier surface: current/optional-previous HMAC, current-project publishable key, explicit `preview`/`test` runtime target, dedicated Standard/Upstash Redis credentials, `portal:r0:<fixture>:v1` namespace, and small admission limits. It never falls back to the long-lived Portal or generic variables below.
+- `PORTAL_R0_*` is the complete, disposable R0 verifier surface: current/optional-previous HMAC, current-project publishable key, explicit `preview`/`test` runtime target, R0-only Standard/Upstash Redis configuration, `portal:r0:<fixture>:v1` namespace, and small admission limits. The operator may map the approved shared Upstash endpoint/token into those R0-only names, but the runtime never falls back to the long-lived Portal or generic variables below.
 - `PORTAL_HMAC_KEY_ID_CURRENT` / `PORTAL_HMAC_SECRET_CURRENT` and the optional previous pair for Portal-only request verification.
 - `PORTAL_SUPABASE_PUBLISHABLE_KEY` for both signed Portal routes. It must be a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` JSON registry and is paired only with platform-injected `SUPABASE_URL`; there is no generic or `REMOTE_*` key/URL fallback.
 - `PORTAL_REDIS_CLIENT_TYPE`, `PORTAL_REDIS_NAMESPACE`, `PORTAL_REDIS_TIMEOUT_MS`, and the bounded `PORTAL_LCIA_*` guard/cache/timeout settings for the signed public LCIA route. Hosted projects use the Portal-only `PORTAL_UPSTASH_REDIS_URL` / `PORTAL_UPSTASH_REDIS_TOKEN`; local/CI may use `PORTAL_REDIS_URL` plus optional `PORTAL_REDIS_PASSWORD`. Portal routes never fall back to the generic Redis variables used by existing Functions. The concurrency lease defaults to 30 seconds, never drops below 20 seconds, and must cover Redis plus upstream timeouts with a five-second recovery margin. The R1 LCIA response cache defaults to and is capped at 60 seconds.
@@ -110,8 +110,8 @@ Credential contract:
 - JWT validation and user-api-key sign-in flows must use publishable keys.
 - Supabase secret keys are reserved for privileged Supabase execution paths and must never be exposed to browser clients.
 - Keep `REMOTE_SUPABASE_URL`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, and `REMOTE_SUPABASE_SECRET_KEY` from the same Supabase project. A mismatched or stale secret key causes local RPC calls to fail with `Invalid API key` after request authentication succeeds.
-- The Portal HMAC secret is independent of `REMOTE_SERVICE_API_KEY`, Supabase JWT secrets, and every Supabase client key. Keep dev/Preview and main/Production keyrings, Upstash databases, tokens, and `portal:<environment>:v1` namespaces distinct. Only the verifier holds an optional previous HMAC key during rotation.
-- The R0 HMAC, publishable key, Redis database/token, and namespace are one-time Preview/local-test fixtures. Current and previous require different key IDs and constant-time-distinct secrets. Both empty optional previous values mean absent; one empty side fails closed. An empty optional Standard Redis password means absent. These values are not the long-lived Portal verifier configuration and must be removed together with `portal_r0_hmac_verify_v1` after evidence capture.
+- The Portal HMAC secret is independent of `REMOTE_SERVICE_API_KEY`, Supabase JWT secrets, and every Supabase client key. Keep dev/Preview and main/Production keyrings, Supabase projects, EdgeOne deployments, and `portal:<environment>:v1` namespaces distinct. The user-approved initial deployment shares one Upstash database/token across R0, Dev, and Production; this is a recorded residual risk and never a permission boundary. Only the verifier holds an optional previous HMAC key during rotation.
+- The R0 HMAC, publishable key, namespace, and Preview secret copies are one-time fixtures. Current and previous require different key IDs and constant-time-distinct secrets. Both empty optional previous values mean absent; one empty side fails closed. An empty optional Standard Redis password means absent. Under the approved shared-Upstash deployment, the endpoint/token source is retained and coordinated across environments: cleanup removes only its R0 secret copies and exact fixture keys together with `portal_r0_hmac_verify_v1`.
 - `PORTAL_SUPABASE_PUBLISHABLE_KEY` is matched in constant time against the inbound `apikey`, checked against the current project's `SUPABASE_PUBLISHABLE_KEYS` registry, paired only with platform-injected `SUPABASE_URL`, and reused unchanged for the downstream public RPC. Remote runtime requires HTTPS; the only non-loopback HTTP origin is exact pinned CLI `http://kong:8000`. `REMOTE_SUPABASE_URL`, generic keys, legacy anon keys, secret/service-role keys, and user credentials cannot replace the Portal key. `SUPABASE_ANON_KEY` is consulted only when Authorization is present and the validated URL is that exact local CLI origin; hosted Authorization is rejected.
 - Portal Redis provider and credential variables are independent of the generic `REDIS_CLIENT_TYPE`, `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN`, `REDIS_URL`, and `REDIS_PASSWORD` surface. Missing Portal-only values fail closed; provisioning Portal must not change Redis behavior for any existing Function.
 - Portal Hybrid provider variables are likewise independent of generic OpenAI, SageMaker, and AWS values. Missing, partial, whitespace-bearing, malformed, or unsafe Portal provider configuration fails before Redis, model, AWS, or database calls; an exact-false/unset kill switch returns before that provider configuration is read.
@@ -227,7 +227,7 @@ pnpm deploy:portal-r0 preview
 
 When the Preview is PR-bound, also export `PORTAL_R0_SUPABASE_PR_NUMBER=<exact-pr-number>`; if supplied, it must exactly match the live branch row.
 
-The guard fixes the slug to `portal_r0_hmac_verify_v1`, rejects the persistent Dev/Main refs, rejects dirty or mismatched SHAs, and rejects `main`, `production`, or an expiry beyond 24 hours. Provision its one-time `PORTAL_R0_*` secrets separately, collect the immutable EdgeOne/Supabase/Redis evidence, then delete the remote function, secrets, and Redis resource.
+The guard fixes the slug to `portal_r0_hmac_verify_v1`, rejects the persistent Dev/Main refs, rejects dirty or mismatched SHAs, and rejects `main`, `production`, or an expiry beyond 24 hours. Provision its one-time `PORTAL_R0_*` identities and secret copies separately, collect the immutable EdgeOne/Supabase/Redis evidence, then delete the remote function, exact receipt-bound fixture keys, and disposable Preview secret copies. Never delete the shared Upstash database, touch Dev/Main namespaces, or rotate its source token as a single-environment cleanup action.
 
 Using the same guarded environment and exact deployed checkout, delete only the remote function with:
 
@@ -236,7 +236,7 @@ PORTAL_R0_CLEANUP_ACK=delete-function-and-confirm-external-resources \
 pnpm cleanup:portal-r0 preview
 ```
 
-Set `PORTAL_R0_CLEANUP_DRY_RUN=true` to validate the command without remote mutation. Cleanup repeats the live branch query and separate acknowledgement but does not require future expiry, `FUNCTIONS_DEPLOYED`, or `ACTIVE_HEALTHY`. A paused, unhealthy, or failed branch with the exact immutable identity still receives the fixed function-delete attempt; a real delete failure blocks cleanup. If the branch is absent from a valid nonempty Main-parent response, cleanup reports a verified terminal and skips deletion. Successful delete, terminal, and dry-run paths print only the external Redis/credential evidence checklist, never branch metadata or credential values.
+Set `PORTAL_R0_CLEANUP_DRY_RUN=true` to validate the command without remote mutation. Cleanup repeats the live branch query and separate acknowledgement but does not require future expiry, `FUNCTIONS_DEPLOYED`, or `ACTIVE_HEALTHY`. A paused, unhealthy, or failed branch with the exact immutable identity still receives the fixed function-delete attempt; a real delete failure blocks cleanup. If the branch is absent from a valid nonempty Main-parent response, cleanup reports a verified terminal and skips deletion. Successful delete, terminal, and dry-run paths print only the external exact-key/temporary-secret checklist, including the mandatory shared-resource preservation check, never branch metadata or credential values.
 
 Recommended deploy workflow:
 
@@ -299,7 +299,7 @@ See `test.example.http` for local and remote examples. Treat it as a supporting 
 
 After raw-byte HMAC, the handler constant-time matches the dedicated current-project `PORTAL_R0_SUPABASE_PUBLISHABLE_KEY`, rejects Authorization and Cookie, registers nonce with `SET NX EX 120`, and invokes the reviewed atomic Lua budget/concurrency primitive under `portal:r0:<fixture>:v1`. Only then does it parse the one-field request. Success returns only `{"schemaVersion":"portal.r0-hmac-redis-receipt.v1","ok":true}`. Failures return the same schema with a fixed code and no secret, nonce, body, Redis key/value, credential, locator, or internal error.
 
-The endpoint has no database, RPC, model, provider, repository, storage, cache, business payload, or logging path. Generic-only or retained Portal configuration, replay, Redis outage/timeout/malformed reply, budget/concurrency contention, and lease-cleanup failure all fail closed. Current+previous rotation is allowed only for the short fixture window. Delete the endpoint and all one-time resources after the recorded Preview proof.
+The endpoint has no database, RPC, model, provider, repository, storage, cache, business payload, or logging path. Generic-only or retained Portal configuration, replay, Redis outage/timeout/malformed reply, budget/concurrency contention, and lease-cleanup failure all fail closed. Current+previous rotation is allowed only for the short fixture window. After the recorded Preview proof, delete the endpoint, exact R0 fixture keys, and temporary Preview identities/copies while preserving the shared Upstash database and Dev/Main namespaces.
 
 ### Portal signed public LCIA contract
 
