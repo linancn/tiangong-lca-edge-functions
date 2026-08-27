@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-27
-lastReviewedCommit: a836343d2546fdce68e7a2d9a2b04926d4541170
-lastReviewedNote: 'Reviewed for the opt-in real Upstash Portal replay/admission/cache fixture and verified cleanup contract.'
+lastReviewedCommit: 22b01818322517fbb50f9f4d8ef623e5ae1b3968
+lastReviewedNote: 'Reviewed for the least-privilege real Upstash runner, deterministic recovery cleanup, and offline runner contracts.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -54,7 +54,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.9.5` / bundled TypeScript `6.0.3` plus Node `24.19.0` / pnpm `11.23.0`. It then checks all 154 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 62 Node contract tests, and executes 492 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.9.5` / bundled TypeScript `6.0.3` plus Node `24.19.0` / pnpm `11.23.0`. It then checks all 154 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 67 Node contract tests, and executes 492 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 The current baseline intentionally skips:
 
@@ -86,7 +86,7 @@ If you reactivate or rely on that route family, update the inventory and validat
 | Repo tests only | `pnpm lint`; `pnpm check`; targeted `deno check --config supabase/functions/deno.json <changed-test-file>` | run neighboring tests that cover the same shared module or function family | This repo keeps Deno tests in `test/**`, not under each function folder. |
 | Repo docs or docpact config only | `scripts/docpact validate-config --root . --strict`; `scripts/docpact lint --root . --worktree --mode enforce` | perform scenario-based route checks for the affected intent surface | Refresh review metadata when governed docs change without code changes. |
 
-The real Upstash proof is opt-in and stays outside `pnpm check`. Run `pnpm test:portal-upstash-live -- --env-file <mode-0600-file>` only with a disposable or explicitly authorized database. The source file must contain exactly `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`; the operator runner maps them in-memory to the Portal-prefixed child environment, generates one random `portal:test-live-*` namespace, proves replay, atomic budgets, concurrency, lease release, cache, and exact-key cleanup, and prints no endpoint, token, nonce, key, or value. It never authorizes Function deployment or production enablement.
+The real Upstash proof is opt-in and stays outside `pnpm check`. Run `pnpm test:portal-upstash-live -- --env-file <mode-0600-file>` only with a disposable or explicitly authorized database. The source file must contain exactly `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`; the operator runner maps them in-memory to one minimal Portal-prefixed child environment, grants no filesystem access, restricts network access to the exact Upstash host, and uses fixed namespace `portal:test-live-fixture:v1` plus deterministic keys. A normal run removes those exact keys before and after proving replay, atomic budgets, concurrency, lease release, and cache. After interruption or cleanup failure, rerun with `--cleanup-only`; recovery is idempotent and needs no retained credential receipt. The runner prints no endpoint, token, nonce, key, or value. It never authorizes Function deployment or production enablement.
 
 ### Portal provider and provenance isolation proof
 

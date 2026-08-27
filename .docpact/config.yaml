@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-27'
-lastReviewedCommit: 'a836343d2546fdce68e7a2d9a2b04926d4541170'
-lastReviewedNote: 'Reviewed for the opt-in real Upstash Portal guard fixture and credential-safe operator mapping.'
+lastReviewedCommit: '22b01818322517fbb50f9f4d8ef623e5ae1b3968'
+lastReviewedNote: 'Reviewed for the least-privilege real Upstash runner, deterministic recovery cleanup, and offline runner contracts; routing remains correct.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

@@ -23,8 +23,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-27
-lastReviewedCommit: a836343d2546fdce68e7a2d9a2b04926d4541170
-lastReviewedNote: 'Reviewed for the opt-in real Upstash Portal guard fixture and credential-safe env-file workflow.'
+lastReviewedCommit: 22b01818322517fbb50f9f4d8ef623e5ae1b3968
+lastReviewedNote: 'Reviewed for the least-privilege real Upstash runner, deterministic recovery cleanup, and offline runner contracts.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -125,9 +125,11 @@ The real network fixture is explicit and excluded from `pnpm check`. Give it a m
 ```bash
 chmod 600 /absolute/path/to/upstash.env
 pnpm test:portal-upstash-live -- --env-file /absolute/path/to/upstash.env
+# Recovery after interruption or a failed cleanup:
+pnpm test:portal-upstash-live -- --env-file /absolute/path/to/upstash.env --cleanup-only
 ```
 
-The runner accepts only `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, maps them in-memory to the Portal-prefixed runtime names for one Deno child, and uses a random `portal:test-live-*` namespace. It proves replay `SET NX EX`, Lua budget/concurrency, lease release, bounded cache, and exact-key cleanup without printing the endpoint, token, nonce, keys, or values. Do not load this source file into Portal/Next, a browser build, or the general Edge runtime env. Passing this fixture does not deploy a Function or authorize production enablement.
+The runner accepts only `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, maps them in-memory to the Portal-prefixed runtime names for one minimal-environment Deno child, grants no filesystem access, and restricts network access to the exact Upstash host. It uses the fixed isolated `portal:test-live-fixture:v1` namespace and deterministic keys so cleanup is recoverable without retaining credentials or a receipt. A normal run removes those exact keys before and after proving replay `SET NX EX`, Lua budget/concurrency, lease release, and bounded cache; `--cleanup-only` is idempotent recovery. Neither mode prints the endpoint, token, nonce, keys, or values. Do not load this source file into Portal/Next, a browser build, or the general Edge runtime env. Passing this fixture does not deploy a Function or authorize production enablement.
 
 ### 2. HTTP test env (repo root `.env`)
 
@@ -464,7 +466,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 154-root Deno graph, 62 Node contract tests, and 492 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 154-root Deno graph, 67 Node contract tests, and 492 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

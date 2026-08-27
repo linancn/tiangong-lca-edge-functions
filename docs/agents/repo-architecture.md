@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-27
-lastReviewedCommit: a836343d2546fdce68e7a2d9a2b04926d4541170
-lastReviewedNote: 'Reviewed for credential-safe official-to-Portal Upstash mapping and opt-in live guard evidence.'
+lastReviewedCommit: 22b01818322517fbb50f9f4d8ef623e5ae1b3968
+lastReviewedNote: 'Reviewed for the least-privilege real Upstash runner, deterministic recovery cleanup, and offline runner contracts.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -93,7 +93,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 154 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 62 Node contract tests and 492 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 154 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 67 Node contract tests and 492 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
