@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-25'
-lastReviewedCommit: 'e79caf0e8aa53024b705c4fa22786026256e8298'
-lastReviewedNote: 'Reviewed for Issue #304: exact Deno/Node/pnpm, formatter, lock, and CI inputs now join the existing deploy-and-ops contract; the proof rule already covers graph and behavior tests.'
+lastReviewedAt: '2026-08-27'
+lastReviewedCommit: '48db61703c2f37ebd4e8fd5d8522361d968f670c'
+lastReviewedNote: 'Reviewed for shared-Upstash R0 exact-key cleanup; routing remains correct.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -118,6 +118,50 @@ routing:
         - supabase/functions/_shared/decode_api_key.ts
         - scripts/probe-functions-auth.cjs
         - test.example.http
+    portal-public-runtime:
+      paths:
+        - supabase/functions/portal_r0_hmac_verify_v1/**
+        - supabase/functions/portal_data_product_results_v1/**
+        - supabase/functions/portal_hybrid_search_v1/**
+        - supabase/functions/_shared/portal_r0_hmac.ts
+        - supabase/functions/_shared/portal_r0_redis.ts
+        - supabase/functions/_shared/portal_r0_transport.ts
+        - supabase/functions/_shared/portal_hmac.ts
+        - supabase/functions/_shared/portal_public_transport.ts
+        - supabase/functions/_shared/portal_redis_guard.ts
+        - supabase/functions/_shared/portal_security_event.ts
+        - supabase/functions/_shared/portal_hybrid_contract.ts
+        - supabase/functions/_shared/portal_hybrid_deadline.ts
+        - supabase/functions/_shared/portal_hybrid_kernel.ts
+        - supabase/functions/_shared/portal_hybrid_provider.ts
+        - supabase/functions/_shared/portal_hybrid_repository.ts
+        - supabase/functions/_shared/portal_hybrid_security_event.ts
+        - supabase/functions/_shared/portal_openai_structured.ts
+        - supabase/functions/_shared/hybrid_search_kernel.ts
+        - supabase/functions/_shared/openai_structured.ts
+        - supabase/functions/_shared/redis_client.ts
+        - test/portal_hmac_test.ts
+        - test/portal_redis_guard_test.ts
+        - test/portal_data_product_results_v1_test.ts
+        - test/portal_hybrid_contract_test.ts
+        - test/portal_hybrid_search_v1_test.ts
+        - test/portal_deploy_contract_test.ts
+        - test/portal_r0_deploy_contract_test.ts
+        - test/portal_r0_hmac_transport_test.ts
+        - test/portal_r0_hmac_verify_v1_test.ts
+        - test/portal_r0_redis_live_fixture_test.ts
+        - test/portal_redis_upstash_live_test.ts
+        - test/portal_r0_redis_test.ts
+        - scripts/deploy-portal-r0-fixture.cjs
+        - scripts/deploy-portal-r0-fixture.test.cjs
+        - scripts/cleanup-portal-r0-fixture.cjs
+        - scripts/cleanup-portal-r0-fixture.test.cjs
+        - scripts/run-portal-upstash-live-fixture.cjs
+        - test/fixtures/supabase-cli-v2.106.0-functions-transport.json
+        - supabase/.env.example
+        - README.md
+        - docs/agents/repo-architecture.md
+        - docs/agents/repo-validation.md
     command-runtime:
       paths:
         - supabase/functions/app_dataset_*/**
@@ -201,6 +245,7 @@ routing:
         - supabase/functions/_shared/flow_extraction.ts
         - supabase/functions/_shared/foundation_dataset_extraction.ts
         - supabase/functions/_shared/hybrid_search_handler.ts
+        - supabase/functions/_shared/hybrid_search_kernel.ts
         - supabase/functions/_shared/hybrid_search_request.ts
         - supabase/functions/_shared/hybrid_search_rpc_context.ts
         - supabase/functions/_shared/openai_*.ts
@@ -235,6 +280,8 @@ routing:
         - supabase/config.toml
         - supabase/.env.example
         - scripts/deploy-function.cjs
+        - scripts/deploy-portal-r0-fixture.cjs
+        - scripts/cleanup-portal-r0-fixture.cjs
         - scripts/probe-functions-auth.cjs
         - .github/PULL_REQUEST_TEMPLATE/*.md
         - README.md
@@ -355,6 +402,68 @@ rules:
       - path: docs/agents/repo-architecture.md
         mode: review_or_update
     reason: Runtime changes can alter repo boundaries, routing, validation scope, and hotspot ownership.
+  - id: edge-functions-portal-public-runtime-contract
+    scope: repo
+    repo: edge-functions
+    triggers:
+      - path: supabase/functions/portal_r0_hmac_verify_v1/**
+        kind: runtime-code
+      - path: supabase/functions/portal_data_product_results_v1/**
+        kind: runtime-code
+      - path: supabase/functions/portal_hybrid_search_v1/**
+        kind: runtime-code
+      - path: supabase/functions/_shared/portal_hmac.ts
+        kind: auth-runtime
+      - path: supabase/functions/_shared/portal_r0_hmac.ts
+        kind: auth-runtime
+      - path: supabase/functions/_shared/portal_r0_transport.ts
+        kind: auth-runtime
+      - path: supabase/functions/_shared/portal_r0_redis.ts
+        kind: guard-runtime
+      - path: supabase/functions/_shared/portal_public_transport.ts
+        kind: auth-runtime
+      - path: supabase/functions/_shared/portal_redis_guard.ts
+        kind: guard-runtime
+      - path: supabase/functions/_shared/portal_security_event.ts
+        kind: observability-runtime
+      - path: supabase/functions/_shared/portal_hybrid_contract.ts
+        kind: runtime-contract
+      - path: supabase/functions/_shared/portal_hybrid_deadline.ts
+        kind: runtime-guard
+      - path: supabase/functions/_shared/portal_hybrid_kernel.ts
+        kind: model-runtime
+      - path: supabase/functions/_shared/portal_hybrid_provider.ts
+        kind: provider-runtime
+      - path: supabase/functions/_shared/portal_hybrid_repository.ts
+        kind: runtime-code
+      - path: supabase/functions/_shared/portal_hybrid_security_event.ts
+        kind: observability-runtime
+      - path: supabase/functions/_shared/portal_openai_structured.ts
+        kind: model-runtime
+      - path: supabase/functions/_shared/hybrid_search_kernel.ts
+        kind: model-runtime
+      - path: supabase/functions/_shared/openai_structured.ts
+        kind: model-runtime
+      - path: supabase/functions/_shared/redis_client.ts
+        kind: shared-runtime
+      - path: test/portal_*_test.ts
+        kind: runtime-test
+      - path: scripts/run-portal-upstash-live-fixture.cjs
+        kind: live-proof-runner
+      - path: test/fixtures/supabase-cli-v2.106.0-functions-transport.json
+        kind: source-contract-fixture
+    requiredDocs:
+      - path: AGENTS.md
+        mode: review_or_update
+      - path: .docpact/config.yaml
+        mode: review_or_update
+      - path: docs/agents/repo-validation.md
+        mode: review_or_update
+      - path: docs/agents/repo-architecture.md
+        mode: review_or_update
+      - path: README.md
+        mode: review_or_update
+    reason: The disposable R0 interoperability fixture, Portal server identity, dedicated current-project public keys, isolated replay/admission boundaries, R1 LCIA and R2 Hybrid publishable-only projections, Portal-only provider injection, route provenance, cost controls, model kernel, and operator isolation requirements must remain aligned.
   - id: edge-functions-review-quality-diagnostic-contract
     scope: repo
     repo: edge-functions
@@ -498,6 +607,10 @@ rules:
       - path: supabase/.env.example
         kind: env-template
       - path: scripts/deploy-function.cjs
+        kind: deploy-script
+      - path: scripts/deploy-portal-r0-fixture.cjs
+        kind: deploy-script
+      - path: scripts/cleanup-portal-r0-fixture.cjs
         kind: deploy-script
       - path: scripts/probe-functions-auth.cjs
         kind: ops-script

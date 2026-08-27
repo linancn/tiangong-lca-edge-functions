@@ -37,9 +37,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-25
-lastReviewedCommit: e79caf0e8aa53024b705c4fa22786026256e8298
-lastReviewedNote: 'Reviewed for Issue #304: Deno 2.9.5 and its bundled TypeScript 6.0.3 are authoritative, while exact Node 24.19.0 and pnpm 11.23.0 own only Supabase CLI, formatting, and validation orchestration.'
+lastReviewedAt: 2026-08-27
+lastReviewedCommit: 48db61703c2f37ebd4e8fd5d8522361d968f670c
+lastReviewedNote: 'Reviewed for shared-Upstash R0 exact-key cleanup; runtime ownership and non-Portal boundaries are unchanged.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -84,7 +84,7 @@ Do not start from repo landing prose or raw function inventories when the core c
 - human setup and request-example guidance stay in `README.md`
 - `test.example.http` is a supporting request collection for concrete payloads, not a governed source doc
 - repo-local documentation maintenance is enforced locally by the pre-push docpact gate; `.github/workflows/ai-doc-lint.yml` is manual-dispatch fallback
-- the main routing intents are `function-runtime`, `auth-runtime`, `command-runtime`, `data-product-runtime`, `review-quality-diagnostic`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
+- the main routing intents are `function-runtime`, `auth-runtime`, `portal-public-runtime`, `command-runtime`, `data-product-runtime`, `review-quality-diagnostic`, `search-and-embedding`, `lca-runtime`, `tidas-package`, `deploy-auth-drift`, `proof`, `repo-docs`, and `root-integration`
 
 ## Minimal Execution Facts
 
@@ -94,12 +94,14 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.23.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 139 enabled function/test roots through one bounded shared Deno graph, runs Node contract tests, and executes all Deno behavior tests with only env/read/loopback-net permissions
+- `pnpm check` validates exact runtime versions, checks all 154 enabled function/test roots through one bounded shared Deno graph, runs 67 Node contract tests, and executes 492 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
   - `pnpm deploy:dev <function-name> [more-function-names...]`
   - `pnpm deploy:main <function-name> [more-function-names...]`
+  - `pnpm deploy:portal-r0 preview` for the fixed disposable R0 function only
+  - `pnpm cleanup:portal-r0 preview` for guarded remote function deletion plus external Redis/credential cleanup checks
 - auth and connectivity drift probe: `pnpm probe:auth --remote` or `pnpm probe:auth --local`
 - local serve and scripted remote deploys both use `--no-verify-jwt`
 - scripted remote deploys pass `supabase/functions/deno.json` as the Supabase CLI import map so remote bundling resolves shared npm/jsr imports consistently
@@ -113,6 +115,8 @@ At a human-readable level, this repo owns:
 
 - `supabase/functions/**` for Edge Function entrypoints, handlers, and runtime request or response behavior
 - `supabase/functions/_shared/**` for auth, command runtime, DB-RPC wrappers, OpenAI, Redis, Supabase client helpers, and shared domain utilities
+- `portal_r0_hmac_verify_v1` and `_shared/portal_r0_*` for the disposable, non-business EdgeOne/Supabase Web Crypto, current/previous HMAC, isolated publishable-key, `SET NX EX`, and atomic Redis admission fixture
+- `portal_data_product_results_v1`, `portal_hybrid_search_v1`, and retained `_shared/portal_*` for raw-body Portal HMAC verification, replay/admission control, the publishable-only public LCIA projection, and the separately budgeted/default-off R2 Hybrid projection
 - direct review submission through the stable database command, the Review Admin-only manual quality-diagnostic projection, and compatibility-only handling for already deployed review-submit Gate/coordinator clients
 - `test/**` for repo-level Deno tests
 - `scripts/**` for deno-check inventory, deploy contract, auth probes, and smoke helpers
@@ -157,6 +161,16 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 
 - do not invent schema truth or migration history in this repo
 - do not interpret `--no-verify-jwt` as permission for anonymous business logic
+- do not deploy `portal_r0_hmac_verify_v1` through persistent Dev/Main tooling or let it read any long-lived Portal/generic credential; remote deploy accepts only a live `FUNCTIONS_DEPLOYED` / `ACTIVE_HEALTHY`, nondefault, nonpersistent, no-data Preview branch returned by a read-only `branches list` against the configured Main parent and exactly matching the operator-supplied branch name, Git branch, and optional PR number. It also requires complete `PORTAL_R0_*` configuration, a current-project R0 publishable key, and a `portal:r0:<fixture>:v1` namespace. Local `test` is not a remote deploy target. The function must never call a database, RPC, model, provider, repository, storage, or business kernel
+- do not require an identified R0 branch to remain ready or healthy before cleanup; once Main parent, project ref, nondefault/nonpersistent/no-data flags, branch name, Git branch, optional PR, exact SHA, and cleanup acknowledgement still match, cleanup must attempt the fixed function deletion and surface any real delete failure
+- do not delete the user-approved shared Upstash database, scan or delete broad prefixes, touch Dev/Main namespaces, or rotate the shared token for one R0 cleanup; remove only the exact receipt-bound fixture keys and disposable Preview secret copies, verify absence, and preserve the shared resource
+- do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes resolve only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, prove it is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, use only the platform-injected `SUPABASE_URL`, and pass that same key from exact inbound `apikey` matching to their reviewed public `api` RPC. They never use generic or `REMOTE_*` key/URL precedence. Authorization is absent in hosted traffic; only when the validated URL is exact pinned-CLI `http://kong:8000` may the injected `SUPABASE_ANON_KEY` Bearer be tolerated after HMAC
+- do not let signed Portal routes read or fall back to the generic Redis provider or credential variables used by existing Functions; Portal replay, admission, circuit, and cache storage requires the explicit `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` surface and fails closed when it is absent
+- do not let signed Portal Hybrid read or fall back to generic OpenAI, SageMaker, or AWS variables; after the exact-lowercase-true kill switch it resolves the complete `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` configuration and injects it explicitly into shared kernels, while existing login Hybrid and embedding consumers keep their generic defaults
+- do not use one shared Portal deployment SHA; LCIA events read only `PORTAL_LCIA_DEPLOYMENT_SHA` and Hybrid events read only `PORTAL_HYBRID_DEPLOYMENT_SHA`, with invalid or missing values normalized to `unknown`
+- do not route `portal_hybrid_search_v1` through legacy `hybrid_search_processes`/`hybrid_search_flows`, a service client, or an Edge-side field projection; it remains default-off until the exact Database façade exists, and every guard/circuit/timeout failure returns a fixed signal for the Portal BFF to handle through its separate lexical façade
+- do not return a successful Portal Hybrid response after its absolute application deadline; every awaited guard/cache/model/database/finalization step consumes the same remaining budget, while lease release is detached and bounded so Redis TTL remains the interrupted-cleanup recovery authority
+- sanitize the final Portal Hybrid event before the last deadline decision, then schedule its allowlisted logger outside the handler promise; use `EdgeRuntime.waitUntil` when available and a handled macrotask fallback locally, so observability cannot delay or change the final response
 - do not move repo-level tests into `supabase/functions/**`; this repo keeps Deno tests in `test/**`
 - do not treat GitHub default branch `main` as the daily trunk
 - do not mark delivery complete if root workspace integration is still pending

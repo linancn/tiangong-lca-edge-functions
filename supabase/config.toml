@@ -162,6 +162,11 @@ skip_nonce_check = false
 # Persistent Supabase branch project used by Git `dev`.
 project_id = "submidrhbtknjxfympna"
 
+# Disposable R0 interoperability probe. The dedicated deploy guard is the only supported remote
+# deployment path and rejects persistent dev/main project refs and production-shaped targets.
+[functions.portal_r0_hmac_verify_v1]
+verify_jwt = false
+
 [analytics]
 enabled = false
 port = 54327

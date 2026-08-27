@@ -17,10 +17,13 @@
     "check:types": "node scripts/deno-check-all.cjs",
     "test:node": "node --test scripts/*.test.cjs",
     "test:deno": "deno test --config supabase/functions/deno.json --allow-env --allow-read --allow-net=127.0.0.1 test",
+    "test:portal-upstash-live": "node scripts/run-portal-upstash-live-fixture.cjs",
     "test": "pnpm test:node && pnpm test:deno",
     "check": "pnpm check:env && pnpm check:types && pnpm test",
     "deploy:dev": "node ./scripts/deploy-function.cjs dev",
     "deploy:main": "node ./scripts/deploy-function.cjs main",
+    "deploy:portal-r0": "node ./scripts/deploy-portal-r0-fixture.cjs",
+    "cleanup:portal-r0": "node ./scripts/cleanup-portal-r0-fixture.cjs",
     "probe:auth": "node ./scripts/probe-functions-auth.cjs",
     "format": "pnpm exec prettier --write \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\"",
     "lint": "pnpm exec prettier --check \"**/*.{cjs,js,jsx,tsx,ts,less,md,json,yml,yaml}\""
