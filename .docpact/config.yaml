@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-27'
-lastReviewedCommit: '22b01818322517fbb50f9f4d8ef623e5ae1b3968'
-lastReviewedNote: 'Reviewed for the least-privilege real Upstash runner, deterministic recovery cleanup, and offline runner contracts; routing remains correct.'
+lastReviewedCommit: '48db61703c2f37ebd4e8fd5d8522361d968f670c'
+lastReviewedNote: 'Reviewed for shared-Upstash R0 exact-key cleanup; routing remains correct.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

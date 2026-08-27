@@ -12,9 +12,10 @@ const {
 } = require('./deploy-portal-r0-fixture.cjs');
 
 const EXTERNAL_CLEANUP_CHECKLIST = Object.freeze([
-  'delete the dedicated R0 Redis database/resource',
-  'revoke the one-time R0 HMAC, publishable, and Redis credentials',
-  'record function, credential, and Redis deletion evidence',
+  'delete only the exact R0 fixture keys and verify every key is absent',
+  'remove the disposable Preview copies of the R0 HMAC, publishable, and Redis secrets',
+  'preserve the shared Upstash database, Dev/Main namespaces, and coordinated source token',
+  'record function, exact-key, and temporary-secret cleanup evidence',
 ]);
 
 function buildPortalR0CleanupArgs(projectRef) {

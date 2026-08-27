@@ -84,13 +84,15 @@ test('builds one fixed remote function deletion and no generic delete surface', 
   ]);
 });
 
-test('dry-run applies cleanup guard and emits external Redis/credential cleanup checks', () => {
+test('dry-run requires exact-key cleanup and preserves the shared Redis resource', () => {
   const { result, logs } = run();
   assert.deepEqual(result.externalCleanupChecklist, EXTERNAL_CLEANUP_CHECKLIST);
   assert.equal(result.branchState, 'present');
   assert.equal(logs[0], '[cleanup:portal-r0] dry-run guard passed');
   assert.equal(logs.length, EXTERNAL_CLEANUP_CHECKLIST.length + 1);
-  assert.match(logs.join('\n'), /delete the dedicated R0 Redis database/u);
+  assert.match(logs.join('\n'), /delete only the exact R0 fixture keys/u);
+  assert.match(logs.join('\n'), /preserve the shared Upstash database/u);
+  assert.doesNotMatch(logs.join('\n'), /delete (?:the )?(?:shared )?Upstash database/u);
   assert.doesNotMatch(logs.join('\n'), new RegExp(PREVIEW_REF, 'u'));
   assert.doesNotMatch(logs.join('\n'), new RegExp(HEAD, 'u'));
 });

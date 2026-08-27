@@ -69,7 +69,9 @@ Deno.test('R0 deploy requires the dedicated live disposable Preview guard', asyn
   assertStringIncludes(cleanup, 'FUNCTION_NAME');
   assertStringIncludes(cleanup, "'--yes'");
   assertStringIncludes(cleanup, 'PORTAL_R0_CLEANUP_DRY_RUN');
-  assertStringIncludes(cleanup, 'delete the dedicated R0 Redis database/resource');
+  assertStringIncludes(cleanup, 'delete only the exact R0 fixture keys');
+  assertStringIncludes(cleanup, 'preserve the shared Upstash database');
+  assertEquals(cleanup.includes('delete the dedicated R0 Redis database/resource'), false);
 });
 
 Deno.test('R0 environment template contains only its dedicated runtime surface', async () => {
