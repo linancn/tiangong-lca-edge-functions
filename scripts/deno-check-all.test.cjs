@@ -16,13 +16,13 @@ test('checks the exact inventory through one bounded shared graph', () => {
   );
   const targets = discoverTargets();
 
-  assert.equal(targets.length, 153);
+  assert.equal(targets.length, 154);
   assert.deepEqual(targets, [...new Set(targets)].sort());
   assert.equal(
     targets.some((target) => target.includes('/antchain_')),
     false,
   );
-  assert.equal(targets.filter((target) => target.startsWith('test/')).length, 76);
+  assert.equal(targets.filter((target) => target.startsWith('test/')).length, 77);
 
   const batches = buildCheckBatches(targets);
   assert.equal(MAX_ROOTS_PER_BATCH, 200);

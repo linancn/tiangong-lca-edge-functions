@@ -33,9 +33,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-26
-lastReviewedCommit: 219a5389f390add95ba9b6eae4bc00cad0baf8c2
-lastReviewedNote: 'Reviewed after Issue #316 separated R0 branch identity from deploy readiness and made cleanup status-independent.'
+lastReviewedAt: 2026-08-27
+lastReviewedCommit: a836343d2546fdce68e7a2d9a2b04926d4541170
+lastReviewedNote: 'Reviewed for credential-safe official-to-Portal Upstash mapping and opt-in live guard evidence.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -93,7 +93,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 153 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 62 Node contract tests and 492 Deno behavior tests with env/read/loopback-net permissions.
+The authoritative runtime/compiler is Deno `2.9.5` and the actual compiler reported by that runtime is TypeScript `6.0.3`. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.23.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 154 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 62 Node contract tests and 492 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
@@ -160,6 +160,8 @@ The generic deploy scripts reject R0. Both dedicated commands verify Main parent
 After HMAC succeeds, transport validation reads only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, proves the modern key is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, binds database transport only to platform-injected `SUPABASE_URL`, requires an exact constant-time inbound `apikey` match, and rejects every Cookie. Hosted transport is HTTPS and rejects every Authorization. The only non-loopback HTTP/current-anon compatibility is exact pinned CLI `SUPABASE_URL=http://kong:8000`, where its exact injected `SUPABASE_ANON_KEY` Bearer is tolerated after the trusted publishable key matches; user, service, and other Bearers fail before Redis. The same once-resolved dedicated key is passed to the public repository; generic and `REMOTE_*` key/URL precedence or indirect helper import is not available.
 
 Redis atomically registers the nonce for 120 seconds and runs one Lua admission operation for minute/day budgets plus a TTL-backed concurrency lease. The Portal adapter reads only `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` provider credentials and never falls back to the generic Redis surface consumed by existing Functions. The lease defaults to 30 seconds, is at least 20 seconds, and must cover Redis plus upstream timeouts with five seconds of recovery margin. Missing configuration, timeout, malformed response, or provider outage fails closed before JSON, cache, or database work. The lease is released in `finally`; its TTL recovers an interrupted isolate and Lua reports only the recovered count. Public-result cache keys contain only the request body hash and expire in at most 60 seconds. This bound ensures direct same-origin BFF traffic rechecks a revoked publication within the visibility SLA; Redis does not decide visibility or authorization.
+
+Upstash's exported `UPSTASH_REDIS_REST_URL/TOKEN` names are an operator-source format, not a runtime fallback. The opt-in live fixture accepts only those two keys from a mode-0600 file, maps them into a single child process as `PORTAL_UPSTASH_REDIS_URL/TOKEN`, uses a random test-only namespace, and deletes every exact fixture key. Portal/EdgeOne application code never loads that file, and long-lived Supabase secrets retain the Portal-prefixed names.
 
 The route then calls only `api.portal_get_published_lcia_values_v1` with explicit `Content-Profile: api` and the strictly validated dedicated publishable credential. It rejects `sb_secret_*`, JWT credentials, non-project keys, credential-bearing/non-HTTPS remote URLs, user context, service clients, artifacts, and locators. A successful response is the exact bounded `portal.published-lcia-page.v1` DTO. A missing publication is unavailable with zero rows, never numeric zero.
 

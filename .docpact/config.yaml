@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-26'
-lastReviewedCommit: '219a5389f390add95ba9b6eae4bc00cad0baf8c2'
-lastReviewedNote: 'Reviewed after Issue #316 separated R0 branch identity from deploy readiness and made guarded cleanup status-independent.'
+lastReviewedAt: '2026-08-27'
+lastReviewedCommit: 'a836343d2546fdce68e7a2d9a2b04926d4541170'
+lastReviewedNote: 'Reviewed for the opt-in real Upstash Portal guard fixture and credential-safe operator mapping.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -150,11 +150,13 @@ routing:
         - test/portal_r0_hmac_transport_test.ts
         - test/portal_r0_hmac_verify_v1_test.ts
         - test/portal_r0_redis_live_fixture_test.ts
+        - test/portal_redis_upstash_live_test.ts
         - test/portal_r0_redis_test.ts
         - scripts/deploy-portal-r0-fixture.cjs
         - scripts/deploy-portal-r0-fixture.test.cjs
         - scripts/cleanup-portal-r0-fixture.cjs
         - scripts/cleanup-portal-r0-fixture.test.cjs
+        - scripts/run-portal-upstash-live-fixture.cjs
         - test/fixtures/supabase-cli-v2.106.0-functions-transport.json
         - supabase/.env.example
         - README.md
@@ -446,6 +448,8 @@ rules:
         kind: shared-runtime
       - path: test/portal_*_test.ts
         kind: runtime-test
+      - path: scripts/run-portal-upstash-live-fixture.cjs
+        kind: live-proof-runner
       - path: test/fixtures/supabase-cli-v2.106.0-functions-transport.json
         kind: source-contract-fixture
     requiredDocs:
