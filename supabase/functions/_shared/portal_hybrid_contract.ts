@@ -7,6 +7,7 @@ const VERSION_PATTERN = /^\d{2}\.\d{2}\.\d{3}$/u;
 const LANGUAGE_PATTERN = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/u;
 const CANONICAL_DECIMAL_PATTERN =
   /^(?=(?:[^0-9]*[0-9]){1,38}[^0-9]*$)(?:0|-?(?:[1-9]\d*(?:\.\d*[1-9])?|0\.\d*[1-9]))$/u;
+const PUBLIC_HTTPS_URI_PATTERN = /^https:\/\/[^/?#@\s]+(?:\/[^?#\s]*)?$/u;
 
 function boundedText(options: {
   maximumCodePoints: number;
@@ -129,6 +130,44 @@ const geographySchema = z
     precision: z.enum(['country', 'province', 'city', 'other', 'unknown']),
   })
   .strict();
+const nullableNonEmptyStringSchema = z.string().min(1).nullable();
+const publicCardReferenceSchema = z
+  .object({
+    kind: z.enum(['reference_product', 'reference_flow_property']),
+    name: localizedTextSchema,
+  })
+  .strict();
+const completeFunctionalUnitSchema = z
+  .object({
+    amount: z.string().regex(CANONICAL_DECIMAL_PATTERN),
+    unit: z.string().min(1),
+    description: localizedTextSchema,
+  })
+  .strict();
+const publicSourceSchema = z
+  .object({
+    databaseId: nullableNonEmptyStringSchema,
+    databaseVersion: nullableNonEmptyStringSchema,
+    sourceRecordId: nullableNonEmptyStringSchema,
+    providerName: localizedTextSchema,
+    licenseId: nullableNonEmptyStringSchema,
+    licenseUrl: z.string().url().regex(PUBLIC_HTTPS_URI_PATTERN).nullable(),
+  })
+  .strict();
+const publicCardQualitySchema = z
+  .object({
+    reviewStatus: nullableNonEmptyStringSchema,
+  })
+  .strict();
+const publicCardContextSchema = z
+  .object({
+    reference: publicCardReferenceSchema,
+    functionalUnit: completeFunctionalUnitSchema.nullable(),
+    technology: localizedTextSchema,
+    source: publicSourceSchema,
+    quality: publicCardQualitySchema,
+  })
+  .strict();
 
 const hybridReasonCodeSchema = z.enum(['lexical_public_projection', 'semantic_public_projection']);
 const hybridEvidenceSchema = z
@@ -191,6 +230,7 @@ export const portalPublicHybridCandidateSchema = z
     summary: localizedTextSchema,
     geography: geographySchema,
     referenceYear: yearSchema.nullable(),
+    context: publicCardContextSchema,
     modifiedAt: z.string().datetime({ offset: true }),
     match: portalPublicHybridMatchSchema,
   })

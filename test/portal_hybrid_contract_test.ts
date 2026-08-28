@@ -38,6 +38,27 @@ function candidatePage() {
           precision: 'country',
         },
         referenceYear: 2025,
+        context: {
+          reference: {
+            kind: 'reference_product',
+            name: [{ language: 'en', value: 'Steel' }],
+          },
+          functionalUnit: {
+            amount: '1',
+            unit: 'kg',
+            description: [{ language: 'en', value: '1 kg steel' }],
+          },
+          technology: [{ language: 'en', value: 'Electric arc furnace' }],
+          source: {
+            databaseId: 'tiangong-database',
+            databaseVersion: '2026.1',
+            sourceRecordId: null,
+            providerName: [{ language: 'en', value: 'TianGong' }],
+            licenseId: 'CC-BY-4.0',
+            licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+          },
+          quality: { reviewStatus: 'reviewed' },
+        },
         modifiedAt: '2026-08-26T00:00:00Z',
         match: {
           kind: 'hybrid',
@@ -209,6 +230,27 @@ Deno.test('Portal public Hybrid page strictly binds R1 cards to real ranking evi
   const privateField = structuredClone(page) as Record<string, unknown>;
   (privateField.items as Array<Record<string, unknown>>)[0].team_id = 'private-team';
   assertEquals(portalPublicHybridCandidatePageSchema.safeParse(privateField).success, false);
+
+  const missingContext = structuredClone(page) as Record<string, unknown>;
+  delete (missingContext.items as Array<Record<string, unknown>>)[0].context;
+  assertEquals(portalPublicHybridCandidatePageSchema.safeParse(missingContext).success, false);
+
+  const malformedAmount = structuredClone(page);
+  malformedAmount.items[0].context.functionalUnit!.amount = '01';
+  assertEquals(portalPublicHybridCandidatePageSchema.safeParse(malformedAmount).success, false);
+
+  const privateContext = structuredClone(page) as Record<string, unknown>;
+  const context = (privateContext.items as Array<Record<string, unknown>>)[0].context as Record<
+    string,
+    unknown
+  >;
+  (context.source as Record<string, unknown>).storagePath = 'private/bucket/object';
+  assertEquals(portalPublicHybridCandidatePageSchema.safeParse(privateContext).success, false);
+
+  const unsafeLicenseUrl = structuredClone(page);
+  unsafeLicenseUrl.items[0].context.source.licenseUrl =
+    'https://example.com/license?private_locator=value';
+  assertEquals(portalPublicHybridCandidatePageSchema.safeParse(unsafeLicenseUrl).success, false);
 
   const wrongKind = structuredClone(page);
   wrongKind.items[0].key.kind = 'flow';
