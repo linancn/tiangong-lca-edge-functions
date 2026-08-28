@@ -115,6 +115,27 @@ function databasePage(): PortalPublicHybridCandidatePage {
           precision: 'country',
         },
         referenceYear: 2025,
+        context: {
+          reference: {
+            kind: 'reference_product',
+            name: [{ language: 'en', value: 'Steel' }],
+          },
+          functionalUnit: {
+            amount: '1',
+            unit: 'kg',
+            description: [{ language: 'en', value: '1 kg steel' }],
+          },
+          technology: [{ language: 'en', value: 'Electric arc furnace' }],
+          source: {
+            databaseId: 'tiangong-database',
+            databaseVersion: '2026.1',
+            sourceRecordId: null,
+            providerName: [{ language: 'en', value: 'TianGong' }],
+            licenseId: 'CC-BY-4.0',
+            licenseUrl: 'https://creativecommons.org/licenses/by/4.0/',
+          },
+          quality: { reviewStatus: 'reviewed' },
+        },
         modifiedAt: '2026-08-26T00:00:00Z',
         match: {
           kind: 'hybrid',
@@ -1324,22 +1345,34 @@ Deno.test(
 );
 
 Deno.test(
-  'Portal Hybrid database contract drift never leaks or falls back to raw Hybrid RPC',
+  'Portal Hybrid context and private-field drift never leaks or falls back to raw Hybrid RPC',
   async () => {
-    const redis = new FakePortalRedis();
-    const invalid = structuredClone(databasePage()) as unknown as Record<string, unknown>;
-    (invalid.items as Array<Record<string, unknown>>)[0].owner_id = 'private-owner';
-    const handler = createPortalHybridSearchHandler(
-      handlerOptions(redis, {
-        query: () => Promise.resolve(invalid as unknown as PortalPublicHybridCandidatePage),
-      }),
-    );
-    const response = await handler(await signedRequest());
-    const body = await response.text();
-    assertEquals(response.status, 503);
-    assertStringIncludes(body, 'contract_failure');
-    assertEquals(body.includes('private-owner'), false);
-    assert(redis.calls.includes('circuit_failure'));
+    const privateField = structuredClone(databasePage()) as unknown as Record<string, unknown>;
+    (privateField.items as Array<Record<string, unknown>>)[0].owner_id = 'private-owner';
+    const missingContext = structuredClone(databasePage()) as unknown as Record<string, unknown>;
+    delete (missingContext.items as Array<Record<string, unknown>>)[0].context;
+    const privateContext = structuredClone(databasePage()) as unknown as Record<string, unknown>;
+    const context = (privateContext.items as Array<Record<string, unknown>>)[0].context as Record<
+      string,
+      unknown
+    >;
+    (context.source as Record<string, unknown>).storagePath = 'private/bucket/object';
+
+    for (const invalid of [privateField, missingContext, privateContext]) {
+      const redis = new FakePortalRedis();
+      const handler = createPortalHybridSearchHandler(
+        handlerOptions(redis, {
+          query: () => Promise.resolve(invalid as unknown as PortalPublicHybridCandidatePage),
+        }),
+      );
+      const response = await handler(await signedRequest());
+      const body = await response.text();
+      assertEquals(response.status, 503);
+      assertStringIncludes(body, 'contract_failure');
+      assertEquals(body.includes('private-owner'), false);
+      assertEquals(body.includes('private/bucket/object'), false);
+      assert(redis.calls.includes('circuit_failure'));
+    }
   },
 );
 
