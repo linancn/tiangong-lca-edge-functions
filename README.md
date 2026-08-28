@@ -22,9 +22,9 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-27
-lastReviewedCommit: 48db61703c2f37ebd4e8fd5d8522361d968f670c
-lastReviewedNote: 'Reviewed for shared-Upstash R0 exact-key cleanup and resource-preservation boundaries.'
+lastReviewedAt: 2026-08-28
+lastReviewedCommit: 3dc0f3000be0cc42cd7dbbe51ac04cbc4099bfef
+lastReviewedNote: 'Reviewed for Edge #322: Portal Hybrid success now requires the promoted exhaustive public-card context.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -353,7 +353,7 @@ The query is trim-nonempty, at most 512 Unicode code points and 2048 UTF-8 bytes
 
 The route reuses the existing deterministic query-rewrite and 1024-dimensional SageMaker kernels under one absolute deadline that starts at handler entry. Raw body/HMAC work and every awaited Redis, model, database, cache-write, circuit-record/reset, and final-response operation are capped to the same remaining budget; OpenAI, SageMaker, and PostgREST receive the same AbortSignal. A late operation cannot start downstream model/database work or produce HTTP 200. Lease release and owned Redis close are bounded detached cleanup and never delay the response; the lease TTL recovers any unfinished release. After sanitizing the final security event, the handler performs its last deadline decision and schedules the logger in a later macrotask. Supabase tracks the bounded delivery with `EdgeRuntime.waitUntil`; local/test runtimes use a handled fallback outside the handler promise. Synchronously blocking, throwing, rejecting, and never-settling loggers cannot change or delay the response, and the event status/error code matches the response actually returned. Its hash-key Redis cache holds only bounded model-generated interpretation plus embedding, never the raw query or database candidates, and expires in at most 60 seconds. Every success still calls publishable-only `api.portal_hybrid_search_v1(p_kind,p_query_terms,p_query_embedding,p_filters,p_limit)` with explicit `Content-Profile: api`. Live proof against that RPC remains deferred until the matching database-engine R2 façade is available in the selected non-production environment.
 
-A success is exact `portal.hybrid-search-page.v1`: the Database fingerprint and up to 20 unique R1 public cards, plus `interpretation.source=model_generated`, `advisory=true`, one semantic query, and at most 12 bounded language-tagged terms. Match evidence uses only algorithm `portal-hybrid-rank-v1`, score, actual lexical/semantic ranks, and non-negative canonical semantic distance; reason codes must correspond to present evidence. Raw JSON/search text, embeddings, owner/team/model/review fields, locators, and duplicate identities fail the contract.
+A success is exact `portal.hybrid-search-page.v1`: the Database fingerprint and up to 20 unique R1 public cards, each with exhaustive reference, functional-unit, technology, source/license, and public-quality context, plus `interpretation.source=model_generated`, `advisory=true`, one semantic query, and at most 12 bounded language-tagged terms. Match evidence uses only algorithm `portal-hybrid-rank-v1`, score, actual lexical/semantic ranks, and non-negative canonical semantic distance; reason codes must correspond to present evidence. Missing/malformed context, raw JSON/search text, embeddings, owner/team/model/review fields, locators, and duplicate identities fail the contract.
 
 Stable error codes are `method_not_allowed`, `request_too_large`, `portal_auth_unavailable`, `portal_auth_failed`, `hybrid_disabled`, `guard_unavailable`, `replay_rejected`, `budget_exhausted`, `concurrency_exhausted`, `circuit_open`, `invalid_request`, `hybrid_timeout`, `hybrid_upstream_unavailable`, `contract_failure`, and `internal_error`. Edge returns no lexical results or fallback envelope. The same-origin Portal BFF maps these fixed codes to its observable fallback reason and calls the separate R1 lexical façade. The function emits one allowlisted `portal.hybrid-security-event.v1` with only its exact validated `PORTAL_HYBRID_DEPLOYMENT_SHA` (or `unknown`), never reads the LCIA or retired shared SHA name, never logs query/model/identifier/credential/Redis/locator data, and sets no wildcard CORS header.
 
