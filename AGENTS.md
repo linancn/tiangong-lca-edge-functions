@@ -37,8 +37,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-27
-lastReviewedCommit: 48db61703c2f37ebd4e8fd5d8522361d968f670c
+lastReviewedAt: 2026-08-28
+lastReviewedCommit: 3dc0f3000be0cc42cd7dbbe51ac04cbc4099bfef
 lastReviewedNote: 'Reviewed for Edge #322: exhaustive Portal Hybrid card-context parity changes no runtime ownership or non-Portal boundary.'
 related:
   - .docpact/config.yaml

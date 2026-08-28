@@ -22,8 +22,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-27
-lastReviewedCommit: 48db61703c2f37ebd4e8fd5d8522361d968f670c
+lastReviewedAt: 2026-08-28
+lastReviewedCommit: 3dc0f3000be0cc42cd7dbbe51ac04cbc4099bfef
 lastReviewedNote: 'Reviewed for Edge #322: Portal Hybrid success now requires the promoted exhaustive public-card context.'
 ---
 
