@@ -39,7 +39,7 @@ checkPaths:
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-27
 lastReviewedCommit: 48db61703c2f37ebd4e8fd5d8522361d968f670c
-lastReviewedNote: 'Reviewed for shared-Upstash R0 exact-key cleanup; runtime ownership and non-Portal boundaries are unchanged.'
+lastReviewedNote: 'Reviewed for Edge #322: exhaustive Portal Hybrid card-context parity changes no runtime ownership or non-Portal boundary.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

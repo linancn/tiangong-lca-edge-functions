@@ -2,7 +2,7 @@ version: 1
 layout: repo
 lastReviewedAt: '2026-08-27'
 lastReviewedCommit: '48db61703c2f37ebd4e8fd5d8522361d968f670c'
-lastReviewedNote: 'Reviewed for shared-Upstash R0 exact-key cleanup; routing remains correct.'
+lastReviewedNote: 'Reviewed for Edge #322: exhaustive Portal Hybrid card-context parity changes no ownership, routing, or coverage rule.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
