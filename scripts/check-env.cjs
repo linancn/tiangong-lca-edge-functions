@@ -2,12 +2,16 @@
 'use strict';
 
 const { execFileSync } = require('node:child_process');
+const path = require('node:path');
+
+const repoRoot = path.resolve(__dirname, '..');
 
 const EXPECTED_TOOLCHAIN_VERSIONS = Object.freeze({
-  deno: '2.9.5',
-  denoTypescript: '6.0.3',
+  deno: '2.1.4',
+  denoTypescript: '5.6.2',
   node: '24.19.0',
   pnpm: '11.24.0',
+  supabaseCli: '2.116.0',
 });
 
 function parseDenoVersionOutput(output) {
@@ -19,6 +23,7 @@ function parseDenoVersionOutput(output) {
 function readToolchainVersions() {
   let denoVersions = { deno: 'unavailable', denoTypescript: 'unavailable' };
   let pnpm = 'unavailable';
+  let supabaseCli = 'unavailable';
 
   try {
     denoVersions = parseDenoVersionOutput(
@@ -32,11 +37,20 @@ function readToolchainVersions() {
   } catch {
     // The fail-closed validator reports the unavailable package manager.
   }
+  try {
+    supabaseCli = execFileSync('pnpm', ['exec', 'supabase', '--version'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    // The fail-closed validator reports an unavailable or mismatched local CLI.
+  }
 
   return {
     ...denoVersions,
     node: process.versions.node,
     pnpm,
+    supabaseCli,
   };
 }
 

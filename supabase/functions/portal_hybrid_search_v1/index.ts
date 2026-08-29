@@ -120,6 +120,7 @@ type PortalHybridHandlerOptions = {
   trustedLegacyAnonKey?: string | null;
   deploymentSha?: string;
   logger?: PortalHybridSecurityLogger;
+  scheduleSecurityEvent?: typeof schedulePortalHybridSecurityEvent;
   monotonicNow?: () => number;
 };
 
@@ -809,7 +810,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
     }
 
     if (securityEvent) {
-      schedulePortalHybridSecurityEvent(
+      (options.scheduleSecurityEvent ?? schedulePortalHybridSecurityEvent)(
         options.logger ?? defaultPortalHybridSecurityLogger,
         securityEvent,
       );

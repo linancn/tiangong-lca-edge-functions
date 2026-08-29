@@ -6,7 +6,10 @@ import {
   type PortalHybridSearchRequest,
   type PortalPublicHybridCandidatePage,
 } from '../supabase/functions/_shared/portal_hybrid_contract.ts';
-import type { PortalHybridSecurityEvent } from '../supabase/functions/_shared/portal_hybrid_security_event.ts';
+import {
+  schedulePortalHybridSecurityEvent,
+  type PortalHybridSecurityEvent,
+} from '../supabase/functions/_shared/portal_hybrid_security_event.ts';
 import {
   createPortalHybridRepository,
   PortalHybridRepositoryError,
@@ -83,6 +86,19 @@ const PROVIDER_CONFIG: Readonly<PortalHybridKernelProviderConfig> = {
     secretAccessKey: 'portal-secret-access-key-1234567890',
     sessionToken: 'portal-session-token-1234',
   },
+};
+
+const schedulePortalHybridSecurityEventForTest: typeof schedulePortalHybridSecurityEvent = (
+  logger,
+  event,
+) => {
+  queueMicrotask(() => {
+    queueMicrotask(() => {
+      void Promise.resolve()
+        .then(() => logger(event))
+        .catch(() => undefined);
+    });
+  });
 };
 
 function environment(values: Record<string, string | undefined>) {
@@ -324,6 +340,7 @@ function handlerOptions(
     trustedLegacyAnonKey: null,
     providerConfig: PROVIDER_CONFIG,
     logger: () => undefined,
+    scheduleSecurityEvent: schedulePortalHybridSecurityEventForTest,
     ...overrides,
   };
 }
@@ -334,7 +351,25 @@ async function responseCode(response: Response): Promise<string | null> {
 }
 
 async function flushPortalHybridSecurityEvent(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+async function raceWithTimeout<T, U>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  timeoutValue: U,
+): Promise<T | U> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<U>((resolve) => {
+    timeoutId = setTimeout(() => resolve(timeoutValue), timeoutMs);
+  });
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
 }
 
 Deno.test(
@@ -925,10 +960,11 @@ Deno.test(
   async () => {
     for (const stage of ['circuit', 'cache'] as const) {
       const redis = new FakePortalRedis();
+      let rejectLateCircuit: ((reason?: unknown) => void) | undefined;
       if (stage === 'circuit') {
         redis.circuitCheckOperation = () =>
           new Promise((_resolve, reject) => {
-            setTimeout(() => reject(new Error('late private circuit rejection')), 150);
+            rejectLateCircuit = reject;
           });
       }
       if (stage === 'cache') redis.cacheGetOperation = () => neverPromise();
@@ -959,7 +995,8 @@ Deno.test(
       assertEquals(databaseCalls, 0, stage);
       assert(redis.calls.includes(stage === 'circuit' ? 'circuit_check' : 'cache_get'));
       if (stage === 'circuit') {
-        await new Promise((resolve) => setTimeout(resolve, 75));
+        rejectLateCircuit?.(new Error('late private circuit rejection'));
+        await Promise.resolve();
       }
     }
   },
@@ -1333,10 +1370,11 @@ Deno.test(
         },
       ),
     );
-    const result = await Promise.race([
+    const result = await raceWithTimeout(
       handler(await signedRequest()).then((response) => response.status),
-      new Promise<number>((resolve) => setTimeout(() => resolve(599), 50)),
-    ]);
+      50,
+      599,
+    );
     assertEquals(result, 200);
     assert(redis.calls.includes('lease_release'));
     await new Promise((resolve) => setTimeout(resolve, 125));
@@ -1400,6 +1438,7 @@ Deno.test(
               loggerCalls += 1;
               return new Promise<void>(() => undefined);
             },
+            scheduleSecurityEvent: schedulePortalHybridSecurityEvent,
           },
         ),
       );
@@ -1407,10 +1446,11 @@ Deno.test(
       assertEquals(response.status, 200);
       assertEquals(loggerCalls, 0);
       assert(backgroundDelivery);
-      const completed = await Promise.race([
+      const completed = await raceWithTimeout(
         backgroundDelivery.then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
-      ]);
+        250,
+        false,
+      );
       assertEquals(completed, true);
       assertEquals(loggerCalls, 1);
     } finally {
@@ -1437,6 +1477,7 @@ Deno.test(
               // Simulate a synchronous observability sink that blocks its own background task.
             }
           },
+          scheduleSecurityEvent: schedulePortalHybridSecurityEvent,
         },
       ),
     );
@@ -1447,6 +1488,8 @@ Deno.test(
 
     assertEquals(response.status, 200);
     assert(handlerLatencyMs < 250);
+    assertEquals(loggerCalls, 0);
+    for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
     assertEquals(loggerCalls, 0);
     await new Promise((resolve) => setTimeout(resolve, 450));
     assertEquals(loggerCalls, 1);

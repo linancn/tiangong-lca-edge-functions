@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "portal.supabase-cli-transport-source.v2",
+  "cliVersion": "2.116.0",
+  "repository": "supabase/cli",
+  "ref": "v2.116.0",
+  "sources": [
+    {
+      "path": "apps/cli/src/legacy/commands/start/templates/kong.yml.ts",
+      "gitBlobSha": "60912939332c117c41ecf9ebdf67d1e7fb2707db",
+      "url": "https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/commands/start/templates/kong.yml.ts"
+    },
+    {
+      "path": "apps/cli/src/legacy/commands/start/services/kong.service.ts",
+      "gitBlobSha": "d0e38c603814ec3c4cd5c0914ed5c95a187e5e2f",
+      "url": "https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/legacy/commands/start/services/kong.service.ts"
+    },
+    {
+      "path": "apps/cli/src/shared/functions/serve.ts",
+      "gitBlobSha": "a763e2ae78828f8803825dcc2d4dcb9ea5d86671",
+      "url": "https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/shared/functions/serve.ts"
+    },
+    {
+      "path": "apps/cli/src/shared/functions/serve.main.ts",
+      "gitBlobSha": "2cf89e2e719feaeaf0a8f93f77fb10619c94f59e",
+      "url": "https://github.com/supabase/cli/blob/v2.116.0/apps/cli/src/shared/functions/serve.main.ts"
+    }
+  ],
+  "contract": {
+    "publicPathTemplate": "/functions/v1/<function-name>",
+    "runtimePathTemplate": "/<function-name>",
+    "kongStripPath": true,
+    "trustedApikeyMatchInjectsWorkerHeader": "sb-api-key: Bearer <legacy-anon-key>",
+    "functionsGatewayInjectsAuthorization": false,
+    "serveExportsLegacyAnonAs": "SUPABASE_ANON_KEY",
+    "serveExportsSupabaseUrlAs": "http://kong:8000",
+    "workerExportsPublishableRegistryAs": "SUPABASE_PUBLISHABLE_KEYS.default",
+    "canonicalPathSource": "publicPathTemplate"
+  }
+}
