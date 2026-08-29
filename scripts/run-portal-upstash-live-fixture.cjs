@@ -53,10 +53,13 @@ function parseArguments(args) {
   }
   if (!envFile) {
     throw new PortalUpstashFixtureError(
-      'usage: pnpm test:portal-upstash-live -- --env-file <path> [--run-id <uuid>] [--cleanup-only]',
+      'usage: pnpm test:portal-upstash-live -- --env-file <path> [--cleanup-only --run-id <uuid>]',
     );
   }
   if (runId !== undefined) validateFixtureRunId(runId);
+  if (!cleanupOnly && runId !== undefined) {
+    throw new PortalUpstashFixtureError('--run-id is reserved for --cleanup-only');
+  }
   if (cleanupOnly && runId === undefined) {
     throw new PortalUpstashFixtureError('--cleanup-only requires the retained --run-id');
   }
@@ -70,9 +73,15 @@ function validateFixtureRunId(runId) {
   return runId;
 }
 
-function resolveFixtureRunId(candidate, dependencies = {}) {
+function generateFixtureRunId(dependencies = {}) {
   const generate = dependencies.randomUUIDImpl ?? randomUUID;
-  return validateFixtureRunId(candidate ?? generate());
+  return validateFixtureRunId(generate());
+}
+
+function selectFixtureRunId(options, dependencies = {}) {
+  return options.cleanupOnly
+    ? validateFixtureRunId(options.runId)
+    : generateFixtureRunId(dependencies);
 }
 
 function buildFixtureNamespace(runId) {
@@ -179,7 +188,7 @@ function runPortalUpstashFixture(input, dependencies = {}) {
 function main() {
   try {
     const options = parseArguments(process.argv.slice(2));
-    const runId = resolveFixtureRunId(options.runId);
+    const runId = selectFixtureRunId(options);
     process.stdout.write(`Portal Upstash fixture run ID: ${runId}\n`);
     const status = runPortalUpstashFixture({
       ...options,
@@ -215,9 +224,10 @@ module.exports = {
   buildChildEnvironment,
   buildDenoArguments,
   buildFixtureNamespace,
+  generateFixtureRunId,
   parseArguments,
   readSourceCredentials,
-  resolveFixtureRunId,
   runPortalUpstashFixture,
+  selectFixtureRunId,
   validateFixtureRunId,
 };
