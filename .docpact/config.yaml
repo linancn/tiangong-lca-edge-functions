@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-29'
-lastReviewedCommit: 'ac426727046e24a41f37f2acb47e115b0e9fbc79'
-lastReviewedNote: 'Reviewed for Edge #330: runtime/toolchain coverage now includes the shared Deno version file and source-attested CLI/Edge Runtime fixtures without changing repository ownership or route boundaries.'
+lastReviewedCommit: 'b845a8fd76dfc0e89bac7e86eb9312fd16187825'
+lastReviewedNote: 'Reviewed for Edge #330 follow-up: production macrotask logging and test-only timer-free scheduling remain covered by the existing Portal/runtime rules without ownership or routing changes.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

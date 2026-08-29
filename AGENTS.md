@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-29
-lastReviewedCommit: ac426727046e24a41f37f2acb47e115b0e9fbc79
-lastReviewedNote: 'Reviewed for Edge #330: Supabase CLI 2.116.0, Edge Runtime 1.74.3, and standalone Deno 2.1.4 now share one source-attested compatibility contract; the required TS 5.6 and timer/type compatibility fixes preserve existing API and authorization boundaries.'
+lastReviewedCommit: b845a8fd76dfc0e89bac7e86eb9312fd16187825
+lastReviewedNote: 'Reviewed for Edge #330 follow-up: the real Portal Hybrid logger again crosses a macrotask boundary, while test-only scheduler injection keeps Deno 2.1 resource checks deterministic without changing API or authorization boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

@@ -24,8 +24,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-29
-lastReviewedCommit: ac426727046e24a41f37f2acb47e115b0e9fbc79
-lastReviewedNote: 'Reviewed for Edge #330: local, CI, CLI, and container evidence now align on Supabase Edge Runtime-compatible Deno 2.1.4 rather than the newest standalone Deno.'
+lastReviewedCommit: b845a8fd76dfc0e89bac7e86eb9312fd16187825
+lastReviewedNote: 'Reviewed for Edge #330 follow-up: source-attested Deno 2.1 alignment retains the real post-response Portal Hybrid macrotask logger boundary.'
 ---
 
 # TianGong-LCA-Edge-Functions

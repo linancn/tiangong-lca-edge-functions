@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-29
-lastReviewedCommit: ac426727046e24a41f37f2acb47e115b0e9fbc79
-lastReviewedNote: 'Reviewed for Edge #330: the full proof matrix now runs on the source-attested Supabase Edge Runtime-compatible Deno 2.1.4/TypeScript 5.6.2 toolchain and includes timer/type compatibility regressions.'
+lastReviewedCommit: b845a8fd76dfc0e89bac7e86eb9312fd16187825
+lastReviewedNote: 'Reviewed for Edge #330 follow-up: the proof matrix now distinguishes test-only timer-free scheduling from the production macrotask/waitUntil logger boundary and passes under Deno 2.1.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

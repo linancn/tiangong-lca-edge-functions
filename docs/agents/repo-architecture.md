@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-29
-lastReviewedCommit: ac426727046e24a41f37f2acb47e115b0e9fbc79
-lastReviewedNote: 'Reviewed for Edge #330: the runtime map now binds CLI 2.116.0 to Edge Runtime 1.74.3 and Deno 2.1.4; localized TS 5.6 and timer compatibility fixes leave route ownership and behavior intact.'
+lastReviewedCommit: b845a8fd76dfc0e89bac7e86eb9312fd16187825
+lastReviewedNote: 'Reviewed for Edge #330 follow-up: the runtime map retains its real Portal Hybrid macrotask logger boundary while tests inject a timer-free scheduler; route ownership and behavior remain intact.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
