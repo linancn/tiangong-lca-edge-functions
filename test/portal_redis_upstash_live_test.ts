@@ -13,19 +13,32 @@ import {
 } from '../supabase/functions/_shared/portal_redis_guard.ts';
 
 const LIVE_FIXTURE_ENABLED = Deno.env.get('PORTAL_UPSTASH_LIVE_FIXTURE') === '1';
+const FIXTURE_RUN_ID = Deno.env.get('PORTAL_UPSTASH_LIVE_FIXTURE_RUN_ID') ?? '';
 const CLEANUP_ONLY = Deno.args.includes('--cleanup-only');
 const FIXTURE_NOW_MILLIS = Date.parse('2026-08-27T00:00:00.000Z');
+const FIXTURE_RUN_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const CLEANUP_LUA = `
 for _, key in ipairs(KEYS) do redis.call('DEL', key) end
 return #KEYS
 `;
 
+function fixtureNamespace(runId: string): string {
+  const uuidHex = runId.replaceAll('-', '');
+  const runToken = BigInt(`0x${uuidHex}`).toString(36).padStart(25, '0');
+  return `portal:t${runToken}:v1`;
+}
+
 Deno.test({
   name: 'real Upstash proves Portal replay, atomic admission, lease release, cache, and cleanup',
   ignore: !LIVE_FIXTURE_ENABLED,
   fn: async () => {
+    if (!FIXTURE_RUN_ID_PATTERN.test(FIXTURE_RUN_ID)) {
+      throw new Error('live fixture requires a canonical lowercase UUIDv4 run ID');
+    }
     const config = readPortalRedisRuntimeConfig();
-    if (config.provider !== 'upstash' || !config.namespace.startsWith('portal:test-live-')) {
+    const expectedNamespace = fixtureNamespace(FIXTURE_RUN_ID);
+    if (config.provider !== 'upstash' || config.namespace !== expectedNamespace) {
       throw new Error('live fixture requires an isolated test namespace');
     }
 

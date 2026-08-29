@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-29
-lastReviewedCommit: b845a8fd76dfc0e89bac7e86eb9312fd16187825
-lastReviewedNote: 'Reviewed for Edge #330 follow-up: the real Portal Hybrid logger again crosses a macrotask boundary, while test-only scheduler injection keeps Deno 2.1 resource checks deterministic without changing API or authorization boundaries.'
+lastReviewedCommit: 355a9d4710bb6fecf2478d23f2fcfb9f47dfad75
+lastReviewedNote: 'Reviewed for Edge #334: receipt-bound per-run Upstash fixture isolation changes only opt-in proof tooling and leaves runtime, authorization, deployment, and ownership boundaries unchanged.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

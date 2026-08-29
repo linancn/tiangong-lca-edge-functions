@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-29'
-lastReviewedCommit: 'b845a8fd76dfc0e89bac7e86eb9312fd16187825'
-lastReviewedNote: 'Reviewed for Edge #330 follow-up: production macrotask logging and test-only timer-free scheduling remain covered by the existing Portal/runtime rules without ownership or routing changes.'
+lastReviewedCommit: '355a9d4710bb6fecf2478d23f2fcfb9f47dfad75'
+lastReviewedNote: 'Reviewed for Edge #334: receipt-bound per-run Upstash fixture isolation remains covered by the existing proof ownership and routing rules; no catalog or runtime boundary changes.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
