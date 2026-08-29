@@ -8,7 +8,7 @@ const { randomUUID } = require('node:crypto');
 const { parseEnv } = require('node:util');
 
 const SOURCE_KEYS = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'];
-const FIXTURE_NAMESPACE_PREFIX = 'portal:test-live-fixture';
+const FIXTURE_NAMESPACE_PREFIX = 'portal:t';
 const FIXTURE_RUN_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 // The SDK reads these telemetry selectors while constructing an explicitly configured client.
@@ -76,7 +76,9 @@ function resolveFixtureRunId(candidate, dependencies = {}) {
 }
 
 function buildFixtureNamespace(runId) {
-  return `${FIXTURE_NAMESPACE_PREFIX}:${validateFixtureRunId(runId)}:v1`;
+  const uuidHex = validateFixtureRunId(runId).replaceAll('-', '');
+  const runToken = BigInt(`0x${uuidHex}`).toString(36).padStart(25, '0');
+  return `${FIXTURE_NAMESPACE_PREFIX}${runToken}:v1`;
 }
 
 function readSourceCredentials(envFile, dependencies = {}) {

@@ -39,7 +39,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-29
-lastReviewedCommit: e1b323197932c8fbd234c466fd2b206602e6b593
+lastReviewedCommit: 355a9d4710bb6fecf2478d23f2fcfb9f47dfad75
 lastReviewedNote: 'Reviewed for Edge #334: receipt-bound per-run Upstash fixture isolation changes only opt-in proof tooling and leaves runtime, authorization, deployment, and ownership boundaries unchanged.'
 related:
   - .docpact/config.yaml

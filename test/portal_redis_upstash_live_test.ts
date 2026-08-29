@@ -23,6 +23,12 @@ for _, key in ipairs(KEYS) do redis.call('DEL', key) end
 return #KEYS
 `;
 
+function fixtureNamespace(runId: string): string {
+  const uuidHex = runId.replaceAll('-', '');
+  const runToken = BigInt(`0x${uuidHex}`).toString(36).padStart(25, '0');
+  return `portal:t${runToken}:v1`;
+}
+
 Deno.test({
   name: 'real Upstash proves Portal replay, atomic admission, lease release, cache, and cleanup',
   ignore: !LIVE_FIXTURE_ENABLED,
@@ -31,7 +37,7 @@ Deno.test({
       throw new Error('live fixture requires a canonical lowercase UUIDv4 run ID');
     }
     const config = readPortalRedisRuntimeConfig();
-    const expectedNamespace = `portal:test-live-fixture:${FIXTURE_RUN_ID}:v1`;
+    const expectedNamespace = fixtureNamespace(FIXTURE_RUN_ID);
     if (config.provider !== 'upstash' || config.namespace !== expectedNamespace) {
       throw new Error('live fixture requires an isolated test namespace');
     }

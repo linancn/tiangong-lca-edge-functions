@@ -75,8 +75,9 @@ test('generates distinct canonical run receipts and derives disjoint namespaces'
   const first = resolveFixtureRunId(undefined, { randomUUIDImpl: () => generated.shift() });
   const second = resolveFixtureRunId(undefined, { randomUUIDImpl: () => generated.shift() });
   assert.notEqual(first, second);
-  assert.equal(buildFixtureNamespace(first), `${FIXTURE_NAMESPACE_PREFIX}:${RUN_ID_A}:v1`);
-  assert.equal(buildFixtureNamespace(second), `${FIXTURE_NAMESPACE_PREFIX}:${RUN_ID_B}:v1`);
+  assert.match(buildFixtureNamespace(first), /^portal:t[a-z0-9]{25}:v1$/u);
+  assert.match(buildFixtureNamespace(second), /^portal:t[a-z0-9]{25}:v1$/u);
+  assert.equal(buildFixtureNamespace(first).startsWith(FIXTURE_NAMESPACE_PREFIX), true);
   assert.notEqual(buildFixtureNamespace(first), buildFixtureNamespace(second));
 });
 
@@ -121,7 +122,7 @@ test('maps credentials into a minimal Portal-only child environment', () => {
     PORTAL_UPSTASH_LIVE_FIXTURE: '1',
     PORTAL_UPSTASH_LIVE_FIXTURE_RUN_ID: RUN_ID_A,
     PORTAL_REDIS_CLIENT_TYPE: 'upstash',
-    PORTAL_REDIS_NAMESPACE: `${FIXTURE_NAMESPACE_PREFIX}:${RUN_ID_A}:v1`,
+    PORTAL_REDIS_NAMESPACE: buildFixtureNamespace(RUN_ID_A),
     PORTAL_REDIS_TIMEOUT_MS: '5000',
     PORTAL_UPSTASH_REDIS_URL: 'https://fixture.example.upstash.io',
     PORTAL_UPSTASH_REDIS_TOKEN: 'fixture-token',
