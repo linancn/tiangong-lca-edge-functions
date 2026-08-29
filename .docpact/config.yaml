@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-28'
-lastReviewedCommit: '3dc0f3000be0cc42cd7dbbe51ac04cbc4099bfef'
-lastReviewedNote: 'Reviewed for Edge #322: exhaustive Portal Hybrid card-context parity changes no ownership, routing, or coverage rule.'
+lastReviewedAt: '2026-08-29'
+lastReviewedCommit: 'd3bb4a6200b2d7f50f96dc812475ee1e54ee2010'
+lastReviewedNote: 'Reviewed for Edge #326: exact pnpm 11.24 changes no Deno compiler, runtime ownership, routing, or coverage rule.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

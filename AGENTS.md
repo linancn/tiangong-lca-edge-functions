@@ -37,9 +37,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-28
-lastReviewedCommit: 3dc0f3000be0cc42cd7dbbe51ac04cbc4099bfef
-lastReviewedNote: 'Reviewed for Edge #322: exhaustive Portal Hybrid card-context parity changes no runtime ownership or non-Portal boundary.'
+lastReviewedAt: 2026-08-29
+lastReviewedCommit: d3bb4a6200b2d7f50f96dc812475ee1e54ee2010
+lastReviewedNote: 'Reviewed for Edge #326: exact pnpm 11.24 remains auxiliary tooling and changes no Deno compiler, runtime, auth, deploy, or API boundary.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -91,7 +91,7 @@ Do not start from repo landing prose or raw function inventories when the core c
 Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/repo-validation.md` for the full setup and proof details.
 
 - authoritative runtime/compiler: Deno `2.9.5` with its actual bundled TypeScript `6.0.3`; this repository does not install or claim TypeScript 7
-- auxiliary package manager/runtime: pnpm `11.23.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
+- auxiliary package manager/runtime: pnpm `11.24.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
 - `pnpm check` validates exact runtime versions, checks all 154 enabled function/test roots through one bounded shared Deno graph, runs 67 Node contract tests, and executes 492 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
