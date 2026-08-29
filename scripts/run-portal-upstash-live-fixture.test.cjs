@@ -7,13 +7,18 @@ const { join } = require('node:path');
 const test = require('node:test');
 
 const {
-  FIXTURE_NAMESPACE,
+  FIXTURE_NAMESPACE_PREFIX,
   buildChildEnvironment,
   buildDenoArguments,
+  buildFixtureNamespace,
   parseArguments,
   readSourceCredentials,
+  resolveFixtureRunId,
   runPortalUpstashFixture,
 } = require('./run-portal-upstash-live-fixture.cjs');
+
+const RUN_ID_A = '11111111-1111-4111-8111-111111111111';
+const RUN_ID_B = '22222222-2222-4222-a222-222222222222';
 
 const SOURCE_TEXT = [
   'UPSTASH_REDIS_REST_URL=https://fixture.example.upstash.io',
@@ -33,16 +38,46 @@ function withSourceFile(sourceText, mode, callback) {
   }
 }
 
-test('accepts one env path plus the optional deterministic cleanup mode', () => {
+test('accepts an optional run receipt and requires it for deterministic cleanup', () => {
   assert.deepEqual(parseArguments(['--env-file', '/tmp/upstash.env']), {
     envFile: '/tmp/upstash.env',
     cleanupOnly: false,
+    runId: undefined,
   });
-  assert.deepEqual(parseArguments(['--', '--cleanup-only', '--env-file', '/tmp/upstash.env']), {
-    envFile: '/tmp/upstash.env',
-    cleanupOnly: true,
-  });
+  assert.deepEqual(
+    parseArguments([
+      '--',
+      '--cleanup-only',
+      '--run-id',
+      RUN_ID_A,
+      '--env-file',
+      '/tmp/upstash.env',
+    ]),
+    {
+      envFile: '/tmp/upstash.env',
+      cleanupOnly: true,
+      runId: RUN_ID_A,
+    },
+  );
+  assert.throws(
+    () => parseArguments(['--cleanup-only', '--env-file', '/not-read.env']),
+    /requires the retained --run-id/u,
+  );
+  assert.throws(
+    () => parseArguments(['--env-file', '/not-read.env', '--run-id', 'predictable']),
+    /canonical lowercase UUIDv4/u,
+  );
   assert.throws(() => parseArguments(['--unknown']), /unknown argument/u);
+});
+
+test('generates distinct canonical run receipts and derives disjoint namespaces', () => {
+  const generated = [RUN_ID_A, RUN_ID_B];
+  const first = resolveFixtureRunId(undefined, { randomUUIDImpl: () => generated.shift() });
+  const second = resolveFixtureRunId(undefined, { randomUUIDImpl: () => generated.shift() });
+  assert.notEqual(first, second);
+  assert.equal(buildFixtureNamespace(first), `${FIXTURE_NAMESPACE_PREFIX}:${RUN_ID_A}:v1`);
+  assert.equal(buildFixtureNamespace(second), `${FIXTURE_NAMESPACE_PREFIX}:${RUN_ID_B}:v1`);
+  assert.notEqual(buildFixtureNamespace(first), buildFixtureNamespace(second));
 });
 
 test('accepts only a mode-0600 source with the two official REST names', () => {
@@ -78,13 +113,15 @@ test('maps credentials into a minimal Portal-only child environment', () => {
   const child = buildChildEnvironment(
     { PATH: '/bin', HOME: '/tmp/home', UNRELATED: 'must-not-pass' },
     { urlText: 'https://fixture.example.upstash.io', token: 'fixture-token' },
+    RUN_ID_A,
   );
   assert.deepEqual(child, {
     PATH: '/bin',
     HOME: '/tmp/home',
     PORTAL_UPSTASH_LIVE_FIXTURE: '1',
+    PORTAL_UPSTASH_LIVE_FIXTURE_RUN_ID: RUN_ID_A,
     PORTAL_REDIS_CLIENT_TYPE: 'upstash',
-    PORTAL_REDIS_NAMESPACE: FIXTURE_NAMESPACE,
+    PORTAL_REDIS_NAMESPACE: `${FIXTURE_NAMESPACE_PREFIX}:${RUN_ID_A}:v1`,
     PORTAL_REDIS_TIMEOUT_MS: '5000',
     PORTAL_UPSTASH_REDIS_URL: 'https://fixture.example.upstash.io',
     PORTAL_UPSTASH_REDIS_TOKEN: 'fixture-token',
@@ -102,7 +139,7 @@ test('grants no filesystem access and restricts network access to the exact Upst
     '--config',
     'supabase/functions/deno.json',
     '--allow-net=fixture.example.upstash.io',
-    '--allow-env=PORTAL_UPSTASH_LIVE_FIXTURE,PORTAL_REDIS_CLIENT_TYPE,PORTAL_REDIS_NAMESPACE,PORTAL_REDIS_TIMEOUT_MS,PORTAL_UPSTASH_REDIS_URL,PORTAL_UPSTASH_REDIS_TOKEN,UPSTASH_DISABLE_TELEMETRY,UPSTASH_CONSOLE,VERCEL,AWS_REGION',
+    '--allow-env=PORTAL_UPSTASH_LIVE_FIXTURE,PORTAL_UPSTASH_LIVE_FIXTURE_RUN_ID,PORTAL_REDIS_CLIENT_TYPE,PORTAL_REDIS_NAMESPACE,PORTAL_REDIS_TIMEOUT_MS,PORTAL_UPSTASH_REDIS_URL,PORTAL_UPSTASH_REDIS_TOKEN,UPSTASH_DISABLE_TELEMETRY,UPSTASH_CONSOLE,VERCEL,AWS_REGION',
     'test/portal_redis_upstash_live_test.ts',
   ]);
   assert.equal(
@@ -122,6 +159,7 @@ test('runs one inherited-stdio Deno child and propagates its status', () => {
       {
         envFile,
         cleanupOnly: false,
+        runId: RUN_ID_A,
         environment: { PATH: '/bin', UNRELATED: 'must-not-pass' },
         repoRoot: '/fixture/repo',
       },
@@ -145,6 +183,7 @@ test('runs one inherited-stdio Deno child and propagates its status', () => {
         {
           envFile,
           cleanupOnly: true,
+          runId: RUN_ID_A,
           environment: { PATH: '/bin' },
           repoRoot: '/fixture/repo',
         },
@@ -153,4 +192,28 @@ test('runs one inherited-stdio Deno child and propagates its status', () => {
       1,
     );
   });
+});
+
+test('rejects an invalid cleanup receipt before inspecting credentials', () => {
+  let credentialReadCount = 0;
+  assert.throws(
+    () =>
+      runPortalUpstashFixture(
+        {
+          envFile: '/not-read.env',
+          cleanupOnly: true,
+          runId: undefined,
+          environment: { PATH: '/bin' },
+          repoRoot: '/fixture/repo',
+        },
+        {
+          lstatSyncImpl: () => {
+            credentialReadCount += 1;
+            return { isFile: () => true, mode: 0o100600 };
+          },
+        },
+      ),
+    /canonical lowercase UUIDv4/u,
+  );
+  assert.equal(credentialReadCount, 0);
 });

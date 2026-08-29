@@ -127,10 +127,11 @@ The real network fixture is explicit and excluded from `pnpm check`. Give it a m
 chmod 600 /absolute/path/to/upstash.env
 pnpm test:portal-upstash-live -- --env-file /absolute/path/to/upstash.env
 # Recovery after interruption or a failed cleanup:
-pnpm test:portal-upstash-live -- --env-file /absolute/path/to/upstash.env --cleanup-only
+pnpm test:portal-upstash-live -- --env-file /absolute/path/to/upstash.env \
+  --cleanup-only --run-id <retained-run-id>
 ```
 
-The runner accepts only `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, maps them in-memory to the Portal-prefixed runtime names for one minimal-environment Deno child, grants no filesystem access, and restricts network access to the exact Upstash host. It uses the fixed isolated `portal:test-live-fixture:v1` namespace and deterministic keys so cleanup is recoverable without retaining credentials or a receipt. A normal run removes those exact keys before and after proving replay `SET NX EX`, Lua budget/concurrency, lease release, and bounded cache; `--cleanup-only` is idempotent recovery. Neither mode prints the endpoint, token, nonce, keys, or values. Do not load this source file into Portal/Next, a browser build, or the general Edge runtime env. Passing this fixture does not deploy a Function or authorize production enablement.
+The runner accepts only `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`, maps them in-memory to the Portal-prefixed runtime names for one minimal-environment Deno child, grants no filesystem access, and restricts network access to the exact Upstash host. Each normal run generates and prints one non-secret canonical UUIDv4 receipt before starting the child, then derives `portal:test-live-fixture:<run-id>:v1`; deterministic keys exist only inside that per-run namespace. Retain the run ID from interrupted output and pass it explicitly to `--cleanup-only`, which reconstructs and removes only that run's exact keys. Normal runs remove their own exact keys before and after proving replay `SET NX EX`, Lua budget/concurrency, lease release, and bounded cache. Neither mode prints the endpoint, token, nonce, Redis keys, or values. Do not load this source file into Portal/Next, a browser build, or the general Edge runtime env. Passing this fixture does not deploy a Function or authorize production enablement.
 
 ### 2. HTTP test env (repo root `.env`)
 
