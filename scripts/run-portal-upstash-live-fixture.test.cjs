@@ -11,10 +11,11 @@ const {
   buildChildEnvironment,
   buildDenoArguments,
   buildFixtureNamespace,
+  generateFixtureRunId,
   parseArguments,
   readSourceCredentials,
-  resolveFixtureRunId,
   runPortalUpstashFixture,
+  selectFixtureRunId,
 } = require('./run-portal-upstash-live-fixture.cjs');
 
 const RUN_ID_A = '11111111-1111-4111-8111-111111111111';
@@ -67,18 +68,52 @@ test('accepts an optional run receipt and requires it for deterministic cleanup'
     () => parseArguments(['--env-file', '/not-read.env', '--run-id', 'predictable']),
     /canonical lowercase UUIDv4/u,
   );
+  assert.throws(
+    () => parseArguments(['--env-file', '/not-read.env', '--run-id', RUN_ID_A]),
+    /reserved for --cleanup-only/u,
+  );
   assert.throws(() => parseArguments(['--unknown']), /unknown argument/u);
 });
 
 test('generates distinct canonical run receipts and derives disjoint namespaces', () => {
   const generated = [RUN_ID_A, RUN_ID_B];
-  const first = resolveFixtureRunId(undefined, { randomUUIDImpl: () => generated.shift() });
-  const second = resolveFixtureRunId(undefined, { randomUUIDImpl: () => generated.shift() });
+  const first = generateFixtureRunId({ randomUUIDImpl: () => generated.shift() });
+  const second = generateFixtureRunId({ randomUUIDImpl: () => generated.shift() });
   assert.notEqual(first, second);
   assert.match(buildFixtureNamespace(first), /^portal:t[a-z0-9]{25}:v1$/u);
   assert.match(buildFixtureNamespace(second), /^portal:t[a-z0-9]{25}:v1$/u);
   assert.equal(buildFixtureNamespace(first).startsWith(FIXTURE_NAMESPACE_PREFIX), true);
   assert.notEqual(buildFixtureNamespace(first), buildFixtureNamespace(second));
+});
+
+test('normal selection always calls the CSPRNG while cleanup reuses only its retained receipt', () => {
+  let generatedCount = 0;
+  assert.equal(
+    selectFixtureRunId(
+      { cleanupOnly: false, runId: undefined },
+      {
+        randomUUIDImpl: () => {
+          generatedCount += 1;
+          return RUN_ID_A;
+        },
+      },
+    ),
+    RUN_ID_A,
+  );
+  assert.equal(generatedCount, 1);
+  assert.equal(
+    selectFixtureRunId(
+      { cleanupOnly: true, runId: RUN_ID_B },
+      {
+        randomUUIDImpl: () => {
+          generatedCount += 1;
+          return RUN_ID_A;
+        },
+      },
+    ),
+    RUN_ID_B,
+  );
+  assert.equal(generatedCount, 1);
 });
 
 test('accepts only a mode-0600 source with the two official REST names', () => {

@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-29'
-lastReviewedCommit: '355a9d4710bb6fecf2478d23f2fcfb9f47dfad75'
-lastReviewedNote: 'Reviewed for Edge #334: receipt-bound per-run Upstash fixture isolation remains covered by the existing proof ownership and routing rules; no catalog or runtime boundary changes.'
+lastReviewedCommit: 'd4273002014cb191fa37fe2af75987555c11c0c2'
+lastReviewedNote: 'Reviewed for Edge #338: normal-run CSPRNG enforcement remains within existing proof ownership and routing; no catalog or runtime boundary changes.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-29
-lastReviewedCommit: b845a8fd76dfc0e89bac7e86eb9312fd16187825
-lastReviewedNote: 'Reviewed for Edge #330 follow-up: the runtime map retains its real Portal Hybrid macrotask logger boundary while tests inject a timer-free scheduler; route ownership and behavior remain intact.'
+lastReviewedCommit: d4273002014cb191fa37fe2af75987555c11c0c2
+lastReviewedNote: 'Reviewed for Edge #338: every normal Upstash proof run remains CSPRNG-isolated while retained receipts are cleanup-only; runtime topology is unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
