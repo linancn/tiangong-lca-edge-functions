@@ -6,7 +6,10 @@ import {
   type PortalHybridSearchRequest,
   type PortalPublicHybridCandidatePage,
 } from '../supabase/functions/_shared/portal_hybrid_contract.ts';
-import type { PortalHybridSecurityEvent } from '../supabase/functions/_shared/portal_hybrid_security_event.ts';
+import {
+  schedulePortalHybridSecurityEvent,
+  type PortalHybridSecurityEvent,
+} from '../supabase/functions/_shared/portal_hybrid_security_event.ts';
 import {
   createPortalHybridRepository,
   PortalHybridRepositoryError,
@@ -83,6 +86,19 @@ const PROVIDER_CONFIG: Readonly<PortalHybridKernelProviderConfig> = {
     secretAccessKey: 'portal-secret-access-key-1234567890',
     sessionToken: 'portal-session-token-1234',
   },
+};
+
+const schedulePortalHybridSecurityEventForTest: typeof schedulePortalHybridSecurityEvent = (
+  logger,
+  event,
+) => {
+  queueMicrotask(() => {
+    queueMicrotask(() => {
+      void Promise.resolve()
+        .then(() => logger(event))
+        .catch(() => undefined);
+    });
+  });
 };
 
 function environment(values: Record<string, string | undefined>) {
@@ -324,6 +340,7 @@ function handlerOptions(
     trustedLegacyAnonKey: null,
     providerConfig: PROVIDER_CONFIG,
     logger: () => undefined,
+    scheduleSecurityEvent: schedulePortalHybridSecurityEventForTest,
     ...overrides,
   };
 }
@@ -334,7 +351,9 @@ async function responseCode(response: Response): Promise<string | null> {
 }
 
 async function flushPortalHybridSecurityEvent(): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 async function raceWithTimeout<T, U>(
@@ -1419,6 +1438,7 @@ Deno.test(
               loggerCalls += 1;
               return new Promise<void>(() => undefined);
             },
+            scheduleSecurityEvent: schedulePortalHybridSecurityEvent,
           },
         ),
       );
@@ -1457,6 +1477,7 @@ Deno.test(
               // Simulate a synchronous observability sink that blocks its own background task.
             }
           },
+          scheduleSecurityEvent: schedulePortalHybridSecurityEvent,
         },
       ),
     );
@@ -1467,6 +1488,8 @@ Deno.test(
 
     assertEquals(response.status, 200);
     assert(handlerLatencyMs < 250);
+    assertEquals(loggerCalls, 0);
+    for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
     assertEquals(loggerCalls, 0);
     await new Promise((resolve) => setTimeout(resolve, 450));
     assertEquals(loggerCalls, 1);
