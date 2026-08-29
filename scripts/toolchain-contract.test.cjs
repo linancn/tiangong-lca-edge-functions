@@ -23,8 +23,8 @@ const expectedActions = new Map([
 test('keeps Deno authoritative and auxiliary Node tooling exact', () => {
   const packageJson = readJson('package.json');
 
-  assert.equal(packageJson.packageManager, 'pnpm@11.23.0');
-  assert.deepEqual(packageJson.engines, { node: '24.19.0', pnpm: '11.23.0' });
+  assert.equal(packageJson.packageManager, 'pnpm@11.24.0');
+  assert.deepEqual(packageJson.engines, { node: '24.19.0', pnpm: '11.24.0' });
   assert.equal(packageJson.config.denoVersion, '2.9.5');
   assert.equal(packageJson.config.denoTypeScriptVersion, '6.0.3');
   assert.equal(packageJson.devDependencies.prettier, '3.9.5');
@@ -77,6 +77,10 @@ test('uses pnpm only across active repository automation', () => {
       .readdirSync(path.join(repositoryRoot, '.githooks'))
       .map((fileName) => [`.githooks/${fileName}`, read(`.githooks/${fileName}`)]),
     ...workflowSources.map(({ fileName, source }) => [`.github/workflows/${fileName}`, source]),
+    ['AGENTS.md', read('AGENTS.md')],
+    ['README.md', read('README.md')],
+    ['docs/agents/repo-architecture.md', read('docs/agents/repo-architecture.md')],
+    ['docs/agents/repo-validation.md', read('docs/agents/repo-validation.md')],
   ];
 
   for (const [relativePath, source] of activeSources) {
@@ -119,7 +123,7 @@ test('pins every external action to a reviewed executable commit', () => {
 
 test('binds CI to exact Deno and auxiliary Node runtimes', () => {
   const ci = read('.github/workflows/ci.yml');
-  assert.match(ci, /version:\s*11\.23\.0/u);
+  assert.match(ci, /version:\s*11\.24\.0/u);
   assert.match(ci, /runtime:\s*node@24\.19\.0/u);
   assert.match(ci, /deno-version:\s*2\.9\.5/u);
   assert.match(ci, /run:\s*pnpm install --frozen-lockfile/u);

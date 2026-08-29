@@ -22,9 +22,9 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-28
-lastReviewedCommit: 3dc0f3000be0cc42cd7dbbe51ac04cbc4099bfef
-lastReviewedNote: 'Reviewed for Edge #322: Portal Hybrid success now requires the promoted exhaustive public-card context.'
+lastReviewedAt: 2026-08-29
+lastReviewedCommit: d3bb4a6200b2d7f50f96dc812475ee1e54ee2010
+lastReviewedNote: 'Reviewed for Edge #326: auxiliary Node tooling now requires exact pnpm 11.24 while Deno remains authoritative.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -64,7 +64,7 @@ These files are the low-token entry path for repo ownership, branch and deploy r
 ## Prerequisites
 
 - Deno 2.9.5; `deno --version` must report bundled TypeScript 6.0.3
-- Node.js 24.19.0 and pnpm 11.23.0 for auxiliary Supabase CLI, formatting, and validation wrappers
+- Node.js 24.19.0 and pnpm 11.24.0 for auxiliary Supabase CLI, formatting, and validation wrappers
 - Docker Engine (required if you run local Supabase stack)
 - Supabase CLI 2.106.0, installed through this repository's `supabase` dev dependency
 

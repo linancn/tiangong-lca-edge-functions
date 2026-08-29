@@ -33,9 +33,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-28
-lastReviewedCommit: 3dc0f3000be0cc42cd7dbbe51ac04cbc4099bfef
-lastReviewedNote: 'Reviewed for Edge #322: Portal Hybrid candidate validation now requires the promoted exhaustive public-card context.'
+lastReviewedAt: 2026-08-29
+lastReviewedCommit: d3bb4a6200b2d7f50f96dc812475ee1e54ee2010
+lastReviewedNote: 'Reviewed for Edge #326: exact pnpm 11.24 is enforced without changing the Deno compiler or runtime proof matrix.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -54,7 +54,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.9.5` / bundled TypeScript `6.0.3` plus Node `24.19.0` / pnpm `11.23.0`. It then checks all 154 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 67 Node contract tests, and executes 492 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.9.5` / bundled TypeScript `6.0.3` plus Node `24.19.0` / pnpm `11.24.0`. It then checks all 154 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 67 Node contract tests, and executes 492 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 The current baseline intentionally skips:
 

@@ -6,10 +6,10 @@
     "supabaseProjectRefDev": "submidrhbtknjxfympna",
     "supabaseProjectRefMain": "qgzvkongdjqiiamzbbts"
   },
-  "packageManager": "pnpm@11.23.0",
+  "packageManager": "pnpm@11.24.0",
   "engines": {
     "node": "24.19.0",
-    "pnpm": "11.23.0"
+    "pnpm": "11.24.0"
   },
   "scripts": {
     "start": "pnpm exec supabase functions serve --env-file ./supabase/.env.local --no-verify-jwt",

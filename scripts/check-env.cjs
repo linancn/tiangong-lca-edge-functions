@@ -7,7 +7,7 @@ const EXPECTED_TOOLCHAIN_VERSIONS = Object.freeze({
   deno: '2.9.5',
   denoTypescript: '6.0.3',
   node: '24.19.0',
-  pnpm: '11.23.0',
+  pnpm: '11.24.0',
 });
 
 function parseDenoVersionOutput(output) {

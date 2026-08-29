@@ -15,7 +15,7 @@ test('accepts only the exact Deno-owned compiler and auxiliary Node toolchain', 
       deno: '2.9.5',
       denoTypescript: '6.0.3',
       node: '24.19.0',
-      pnpm: '11.23.0',
+      pnpm: '11.24.0',
     }),
     [],
   );
@@ -23,7 +23,7 @@ test('accepts only the exact Deno-owned compiler and auxiliary Node toolchain', 
     deno: '2.9.5',
     denoTypescript: '6.0.3',
     node: '24.19.0',
-    pnpm: '11.23.0',
+    pnpm: '11.24.0',
   });
 });
 
