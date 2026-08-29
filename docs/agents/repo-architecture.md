@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-29
-lastReviewedCommit: b845a8fd76dfc0e89bac7e86eb9312fd16187825
-lastReviewedNote: 'Reviewed for Edge #330 follow-up: the runtime map retains its real Portal Hybrid macrotask logger boundary while tests inject a timer-free scheduler; route ownership and behavior remain intact.'
+lastReviewedCommit: d4273002014cb191fa37fe2af75987555c11c0c2
+lastReviewedNote: 'Reviewed for Edge #338: every normal Upstash proof run remains CSPRNG-isolated while retained receipts are cleanup-only; runtime topology is unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -163,7 +163,7 @@ After HMAC succeeds, transport validation reads only `PORTAL_SUPABASE_PUBLISHABL
 
 Redis atomically registers the nonce for 120 seconds and runs one Lua admission operation for minute/day budgets plus a TTL-backed concurrency lease. The Portal adapter reads only `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` provider credentials and never falls back to the generic Redis surface consumed by existing Functions. The lease defaults to 30 seconds, is at least 20 seconds, and must cover Redis plus upstream timeouts with five seconds of recovery margin. Missing configuration, timeout, malformed response, or provider outage fails closed before JSON, cache, or database work. The lease is released in `finally`; its TTL recovers an interrupted isolate and Lua reports only the recovered count. Public-result cache keys contain only the request body hash and expire in at most 60 seconds. This bound ensures direct same-origin BFF traffic rechecks a revoked publication within the visibility SLA; Redis does not decide visibility or authorization.
 
-Upstash's exported `UPSTASH_REDIS_REST_URL/TOKEN` names are an operator-source format, not a runtime fallback. The opt-in live fixture accepts only those two keys from a mode-0600 file, maps them into a single child process as `PORTAL_UPSTASH_REDIS_URL/TOKEN`, uses a random test-only namespace, and deletes every exact fixture key. Portal/EdgeOne application code never loads that file, and long-lived Supabase secrets retain the Portal-prefixed names.
+Upstash's exported `UPSTASH_REDIS_REST_URL/TOKEN` names are an operator-source format, not a runtime fallback. The opt-in live fixture accepts only those two keys from a mode-0600 file, maps them into a single child process as `PORTAL_UPSTASH_REDIS_URL/TOKEN`, and derives one runtime-compatible test namespace by losslessly base36-encoding a CSPRNG UUIDv4 receipt printed before child startup. Concurrent runs therefore share no replay, budget, lease, cache, startup-cleanup, or final-cleanup key. Interrupted cleanup requires that retained non-secret run ID and deletes only the exact derived keys. Portal/EdgeOne application code never loads the credential file, and long-lived Supabase secrets retain the Portal-prefixed names.
 
 The route then calls only `api.portal_get_published_lcia_values_v1` with explicit `Content-Profile: api` and the strictly validated dedicated publishable credential. It rejects `sb_secret_*`, JWT credentials, non-project keys, credential-bearing/non-HTTPS remote URLs, user context, service clients, artifacts, and locators. A successful response is the exact bounded `portal.published-lcia-page.v1` DTO. A missing publication is unavailable with zero rows, never numeric zero.
 

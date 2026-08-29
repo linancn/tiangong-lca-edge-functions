@@ -4,14 +4,18 @@
 const { lstatSync, readFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { randomUUID } = require('node:crypto');
 const { parseEnv } = require('node:util');
 
 const SOURCE_KEYS = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'];
-const FIXTURE_NAMESPACE = 'portal:test-live-fixture:v1';
+const FIXTURE_NAMESPACE_PREFIX = 'portal:t';
+const FIXTURE_RUN_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 // The SDK reads these telemetry selectors while constructing an explicitly configured client.
 // Only the disable flag exists in the already-whitelisted child environment.
 const DENO_ENV_PERMISSIONS = [
   'PORTAL_UPSTASH_LIVE_FIXTURE',
+  'PORTAL_UPSTASH_LIVE_FIXTURE_RUN_ID',
   'PORTAL_REDIS_CLIENT_TYPE',
   'PORTAL_REDIS_NAMESPACE',
   'PORTAL_REDIS_TIMEOUT_MS',
@@ -28,6 +32,7 @@ class PortalUpstashFixtureError extends Error {}
 function parseArguments(args) {
   let envFile;
   let cleanupOnly = false;
+  let runId;
   for (let index = 0; index < args.length; index += 1) {
     if (args[index] === '--') continue;
     if (args[index] === '--env-file') {
@@ -39,14 +44,50 @@ function parseArguments(args) {
       cleanupOnly = true;
       continue;
     }
+    if (args[index] === '--run-id') {
+      runId = args[index + 1];
+      index += 1;
+      continue;
+    }
     throw new PortalUpstashFixtureError(`unknown argument: ${args[index]}`);
   }
   if (!envFile) {
     throw new PortalUpstashFixtureError(
-      'usage: pnpm test:portal-upstash-live -- --env-file <path> [--cleanup-only]',
+      'usage: pnpm test:portal-upstash-live -- --env-file <path> [--cleanup-only --run-id <uuid>]',
     );
   }
-  return { envFile, cleanupOnly };
+  if (runId !== undefined) validateFixtureRunId(runId);
+  if (!cleanupOnly && runId !== undefined) {
+    throw new PortalUpstashFixtureError('--run-id is reserved for --cleanup-only');
+  }
+  if (cleanupOnly && runId === undefined) {
+    throw new PortalUpstashFixtureError('--cleanup-only requires the retained --run-id');
+  }
+  return { envFile, cleanupOnly, runId };
+}
+
+function validateFixtureRunId(runId) {
+  if (typeof runId !== 'string' || !FIXTURE_RUN_ID_PATTERN.test(runId)) {
+    throw new PortalUpstashFixtureError('fixture run ID must be a canonical lowercase UUIDv4');
+  }
+  return runId;
+}
+
+function generateFixtureRunId(dependencies = {}) {
+  const generate = dependencies.randomUUIDImpl ?? randomUUID;
+  return validateFixtureRunId(generate());
+}
+
+function selectFixtureRunId(options, dependencies = {}) {
+  return options.cleanupOnly
+    ? validateFixtureRunId(options.runId)
+    : generateFixtureRunId(dependencies);
+}
+
+function buildFixtureNamespace(runId) {
+  const uuidHex = validateFixtureRunId(runId).replaceAll('-', '');
+  const runToken = BigInt(`0x${uuidHex}`).toString(36).padStart(25, '0');
+  return `${FIXTURE_NAMESPACE_PREFIX}${runToken}:v1`;
 }
 
 function readSourceCredentials(envFile, dependencies = {}) {
@@ -92,7 +133,8 @@ function readSourceCredentials(envFile, dependencies = {}) {
   return { urlText, token, host: url.host };
 }
 
-function buildChildEnvironment(environment, credentials) {
+function buildChildEnvironment(environment, credentials, runId) {
+  const fixtureRunId = validateFixtureRunId(runId);
   const inherited = Object.fromEntries(
     ['PATH', 'HOME', 'TMPDIR', 'DENO_DIR', 'SSL_CERT_FILE'].flatMap((key) =>
       environment[key] ? [[key, environment[key]]] : [],
@@ -101,8 +143,9 @@ function buildChildEnvironment(environment, credentials) {
   return {
     ...inherited,
     PORTAL_UPSTASH_LIVE_FIXTURE: '1',
+    PORTAL_UPSTASH_LIVE_FIXTURE_RUN_ID: fixtureRunId,
     PORTAL_REDIS_CLIENT_TYPE: 'upstash',
-    PORTAL_REDIS_NAMESPACE: FIXTURE_NAMESPACE,
+    PORTAL_REDIS_NAMESPACE: buildFixtureNamespace(fixtureRunId),
     PORTAL_REDIS_TIMEOUT_MS: '5000',
     PORTAL_UPSTASH_REDIS_URL: credentials.urlText,
     PORTAL_UPSTASH_REDIS_TOKEN: credentials.token,
@@ -126,8 +169,9 @@ function buildDenoArguments(host, cleanupOnly) {
 
 function runPortalUpstashFixture(input, dependencies = {}) {
   const spawn = dependencies.spawnSyncImpl ?? spawnSync;
+  const runId = validateFixtureRunId(input.runId);
   const credentials = readSourceCredentials(input.envFile, dependencies);
-  const childEnv = buildChildEnvironment(input.environment, credentials);
+  const childEnv = buildChildEnvironment(input.environment, credentials, runId);
   const result = spawn('deno', buildDenoArguments(credentials.host, input.cleanupOnly), {
     cwd: input.repoRoot,
     env: childEnv,
@@ -144,20 +188,23 @@ function runPortalUpstashFixture(input, dependencies = {}) {
 function main() {
   try {
     const options = parseArguments(process.argv.slice(2));
+    const runId = selectFixtureRunId(options);
+    process.stdout.write(`Portal Upstash fixture run ID: ${runId}\n`);
     const status = runPortalUpstashFixture({
       ...options,
+      runId,
       environment: process.env,
       repoRoot: resolve(__dirname, '..'),
     });
     if (status !== 0) {
       process.stderr.write(
-        'Portal Upstash fixture failed; rerun with the same env file and --cleanup-only.\n',
+        `Portal Upstash fixture failed; rerun with the same env file, --cleanup-only, and --run-id ${runId}.\n`,
       );
       process.exit(status);
     }
     process.stdout.write(
       options.cleanupOnly
-        ? 'Portal Upstash fixture keys are absent.\n'
+        ? `Portal Upstash fixture keys are absent for run ${runId}.\n`
         : 'Portal Upstash live fixture passed with verified cleanup.\n',
     );
   } catch (error) {
@@ -171,11 +218,16 @@ function main() {
 if (require.main === module) main();
 
 module.exports = {
-  FIXTURE_NAMESPACE,
+  FIXTURE_NAMESPACE_PREFIX,
+  FIXTURE_RUN_ID_PATTERN,
   PortalUpstashFixtureError,
   buildChildEnvironment,
   buildDenoArguments,
+  buildFixtureNamespace,
+  generateFixtureRunId,
   parseArguments,
   readSourceCredentials,
   runPortalUpstashFixture,
+  selectFixtureRunId,
+  validateFixtureRunId,
 };
