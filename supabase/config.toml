@@ -10,6 +10,11 @@
 # working directory name when running `supabase init`.
 project_id = "tiangong-lca-edge-function"
 
+# Hosted Supabase and the pinned CLI use the Deno 2 Edge Runtime generation.
+# The exact compatible standalone toolchain is pinned in `.tool-versions`.
+[edge_runtime]
+deno_version = 2
+
 [api]
 enabled = true
 # Port to use for the API URL.

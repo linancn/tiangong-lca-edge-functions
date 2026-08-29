@@ -378,6 +378,22 @@ Deno.test('security logger failure never changes or duplicates the response', as
   assertEquals(loggerCalls, 1);
 });
 
+async function raceWithTimeout<T, U>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  timeoutValue: U,
+): Promise<T | U> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<U>((resolve) => {
+    timeoutId = setTimeout(() => resolve(timeoutValue), timeoutMs);
+  });
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 Deno.test('never-resolving async logger cannot delay the response', async () => {
   const redis = new HandlerRedis();
   let loggerCalls = 0;
@@ -388,10 +404,11 @@ Deno.test('never-resolving async logger cannot delay the response', async () => 
       return new Promise<void>(() => undefined);
     },
   });
-  const outcome = await Promise.race([
+  const outcome = await raceWithTimeout(
     handler(await signedRequest({ nonceSeed: 62 })),
-    new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 50)),
-  ]);
+    50,
+    'timeout' as const,
+  );
   assertEquals(outcome instanceof Response, true);
   if (outcome instanceof Response) assertEquals(outcome.status, 200);
   assertEquals(loggerCalls, 1);

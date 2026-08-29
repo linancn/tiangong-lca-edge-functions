@@ -229,7 +229,7 @@ Deno.test('Portal transport is pinned to reviewed Supabase CLI source evidence',
     devDependencies: { supabase: string };
   };
   const fixture = JSON.parse(
-    await Deno.readTextFile('./test/fixtures/supabase-cli-v2.106.0-functions-transport.json'),
+    await Deno.readTextFile('./test/fixtures/supabase-cli-v2.116.0-functions-transport.json'),
   ) as {
     schemaVersion: string;
     cliVersion: string;
@@ -238,7 +238,7 @@ Deno.test('Portal transport is pinned to reviewed Supabase CLI source evidence',
     sources: Array<{ path: string; gitBlobSha: string; url: string }>;
     contract: Record<string, unknown>;
   };
-  assertEquals(fixture.schemaVersion, 'portal.supabase-cli-transport-source.v1');
+  assertEquals(fixture.schemaVersion, 'portal.supabase-cli-transport-source.v2');
   assertEquals(fixture.cliVersion, packageJson.config.supabaseCliVersion);
   assertEquals(fixture.cliVersion, packageJson.devDependencies.supabase);
   assertEquals(fixture.repository, 'supabase/cli');
@@ -247,7 +247,8 @@ Deno.test('Portal transport is pinned to reviewed Supabase CLI source evidence',
     publicPathTemplate: '/functions/v1/<function-name>',
     runtimePathTemplate: '/<function-name>',
     kongStripPath: true,
-    trustedApikeyMatchInjectsAuthorization: 'Bearer <legacy-anon-key>',
+    trustedApikeyMatchInjectsWorkerHeader: 'sb-api-key: Bearer <legacy-anon-key>',
+    functionsGatewayInjectsAuthorization: false,
     serveExportsLegacyAnonAs: 'SUPABASE_ANON_KEY',
     serveExportsSupabaseUrlAs: 'http://kong:8000',
     workerExportsPublishableRegistryAs: 'SUPABASE_PUBLISHABLE_KEYS.default',
@@ -257,25 +258,25 @@ Deno.test('Portal transport is pinned to reviewed Supabase CLI source evidence',
     fixture.sources.map(({ path, gitBlobSha }) => ({ path, gitBlobSha })),
     [
       {
-        path: 'apps/cli-go/internal/start/templates/kong.yml',
-        gitBlobSha: '4cbfc3b1eb388f4427fda35e22a4db022e4bad43',
+        path: 'apps/cli/src/legacy/commands/start/templates/kong.yml.ts',
+        gitBlobSha: '60912939332c117c41ecf9ebdf67d1e7fb2707db',
       },
       {
-        path: 'apps/cli-go/internal/start/start.go',
-        gitBlobSha: '6ce6a4434dafce83ee4db398f3b16ed04a8dae59',
+        path: 'apps/cli/src/legacy/commands/start/services/kong.service.ts',
+        gitBlobSha: 'd0e38c603814ec3c4cd5c0914ed5c95a187e5e2f',
       },
       {
-        path: 'apps/cli-go/internal/functions/serve/templates/main.ts',
-        gitBlobSha: 'bac39b39eb3c9c7668570c3265203294b7323d85',
+        path: 'apps/cli/src/shared/functions/serve.ts',
+        gitBlobSha: 'a763e2ae78828f8803825dcc2d4dcb9ea5d86671',
       },
       {
-        path: 'apps/cli-go/internal/functions/serve/serve.go',
-        gitBlobSha: '38ca9f7e2ebf62827b2a8dd9a0e7cb76382cf5c5',
+        path: 'apps/cli/src/shared/functions/serve.main.ts',
+        gitBlobSha: '2cf89e2e719feaeaf0a8f93f77fb10619c94f59e',
       },
     ],
   );
   for (const source of fixture.sources) {
-    assertEquals(source.url, `https://github.com/supabase/cli/blob/v2.106.0/${source.path}`);
+    assertEquals(source.url, `https://github.com/supabase/cli/blob/v2.116.0/${source.path}`);
   }
 
   const runtime = await Deno.readTextFile(
