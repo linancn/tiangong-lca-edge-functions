@@ -23,6 +23,7 @@ checkPaths:
   - pnpm-lock.yaml
   - pnpm-workspace.yaml
   - .nvmrc
+  - .tool-versions
   - deno.json
   - .prettierrc.js
   - supabase/config.toml
@@ -38,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-29
-lastReviewedCommit: d3bb4a6200b2d7f50f96dc812475ee1e54ee2010
-lastReviewedNote: 'Reviewed for Edge #326: exact pnpm 11.24 remains auxiliary tooling and changes no Deno compiler, runtime, auth, deploy, or API boundary.'
+lastReviewedCommit: ac426727046e24a41f37f2acb47e115b0e9fbc79
+lastReviewedNote: 'Reviewed for Edge #330: Supabase CLI 2.116.0, Edge Runtime 1.74.3, and standalone Deno 2.1.4 now share one source-attested compatibility contract; the required TS 5.6 and timer/type compatibility fixes preserve existing API and authorization boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -90,11 +91,11 @@ Do not start from repo landing prose or raw function inventories when the core c
 
 Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/repo-validation.md` for the full setup and proof details.
 
-- authoritative runtime/compiler: Deno `2.9.5` with its actual bundled TypeScript `6.0.3`; this repository does not install or claim TypeScript 7
+- authoritative runtime/compiler: Deno `2.1.4` with its actual bundled TypeScript `5.6.2`, matching Supabase CLI `2.116.0` and Edge Runtime `1.74.3`; this repository does not install or claim TypeScript 7
 - auxiliary package manager/runtime: pnpm `11.24.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 154 enabled function/test roots through one bounded shared Deno graph, runs 67 Node contract tests, and executes 492 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
+- `pnpm check` validates exact runtime versions, checks all 154 enabled function/test roots through one bounded shared Deno graph, runs 69 Node contract tests, and executes 492 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -164,7 +165,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - do not deploy `portal_r0_hmac_verify_v1` through persistent Dev/Main tooling or let it read any long-lived Portal/generic credential; remote deploy accepts only a live `FUNCTIONS_DEPLOYED` / `ACTIVE_HEALTHY`, nondefault, nonpersistent, no-data Preview branch returned by a read-only `branches list` against the configured Main parent and exactly matching the operator-supplied branch name, Git branch, and optional PR number. It also requires complete `PORTAL_R0_*` configuration, a current-project R0 publishable key, and a `portal:r0:<fixture>:v1` namespace. Local `test` is not a remote deploy target. The function must never call a database, RPC, model, provider, repository, storage, or business kernel
 - do not require an identified R0 branch to remain ready or healthy before cleanup; once Main parent, project ref, nondefault/nonpersistent/no-data flags, branch name, Git branch, optional PR, exact SHA, and cleanup acknowledgement still match, cleanup must attempt the fixed function deletion and surface any real delete failure
 - do not delete the user-approved shared Upstash database, scan or delete broad prefixes, touch Dev/Main namespaces, or rotate the shared token for one R0 cleanup; remove only the exact receipt-bound fixture keys and disposable Preview secret copies, verify absence, and preserve the shared resource
-- do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes resolve only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, prove it is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, use only the platform-injected `SUPABASE_URL`, and pass that same key from exact inbound `apikey` matching to their reviewed public `api` RPC. They never use generic or `REMOTE_*` key/URL precedence. Authorization is absent in hosted traffic; only when the validated URL is exact pinned-CLI `http://kong:8000` may the injected `SUPABASE_ANON_KEY` Bearer be tolerated after HMAC
+- do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes resolve only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, prove it is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, use only the platform-injected `SUPABASE_URL`, and pass that same key from exact inbound `apikey` matching to their reviewed public `api` RPC. They never use generic or `REMOTE_*` key/URL precedence. Authorization is absent in hosted and pinned-CLI `2.116.0` traffic: local Kong maps the matched publishable key into `sb-api-key` and does not inject Authorization. The exact `http://kong:8000` plus configured `SUPABASE_ANON_KEY` Bearer remains only a narrow older-local-client compatibility path after HMAC
 - do not let signed Portal routes read or fall back to the generic Redis provider or credential variables used by existing Functions; Portal replay, admission, circuit, and cache storage requires the explicit `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` surface and fails closed when it is absent
 - do not let signed Portal Hybrid read or fall back to generic OpenAI, SageMaker, or AWS variables; after the exact-lowercase-true kill switch it resolves the complete `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` configuration and injects it explicitly into shared kernels, while existing login Hybrid and embedding consumers keep their generic defaults
 - do not use one shared Portal deployment SHA; LCIA events read only `PORTAL_LCIA_DEPLOYMENT_SHA` and Hybrid events read only `PORTAL_HYBRID_DEPLOYMENT_SHA`, with invalid or missing values normalized to `unknown`

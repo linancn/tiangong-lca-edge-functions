@@ -18,13 +18,14 @@ checkPaths:
   - pnpm-lock.yaml
   - pnpm-workspace.yaml
   - .nvmrc
+  - .tool-versions
   - deno.json
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-29
-lastReviewedCommit: d3bb4a6200b2d7f50f96dc812475ee1e54ee2010
-lastReviewedNote: 'Reviewed for Edge #326: auxiliary Node tooling now requires exact pnpm 11.24 while Deno remains authoritative.'
+lastReviewedCommit: ac426727046e24a41f37f2acb47e115b0e9fbc79
+lastReviewedNote: 'Reviewed for Edge #330: local, CI, CLI, and container evidence now align on Supabase Edge Runtime-compatible Deno 2.1.4 rather than the newest standalone Deno.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -33,7 +34,7 @@ lastReviewedNote: 'Reviewed for Edge #326: auxiliary Node tooling now requires e
 
 Supabase Edge Functions for LCA search, embedding, TIDAS package orchestration, solving workflows, and the signed public Portal LCIA and R2 Hybrid projections.
 
-- Runtime/compiler: Deno 2.9.5 with bundled TypeScript 6.0.3
+- Runtime/compiler: Deno 2.1.4 with bundled TypeScript 5.6.2
 - Functions root: `supabase/functions`
 - Local serve command: `pnpm start`
 
@@ -63,10 +64,10 @@ These files are the low-token entry path for repo ownership, branch and deploy r
 
 ## Prerequisites
 
-- Deno 2.9.5; `deno --version` must report bundled TypeScript 6.0.3
+- Deno 2.1.4; `deno --version` must report bundled TypeScript 5.6.2. `.tool-versions` is the shared local/CI version source.
 - Node.js 24.19.0 and pnpm 11.24.0 for auxiliary Supabase CLI, formatting, and validation wrappers
 - Docker Engine (required if you run local Supabase stack)
-- Supabase CLI 2.106.0, installed through this repository's `supabase` dev dependency
+- Supabase CLI 2.116.0, installed through this repository's `supabase` dev dependency; it embeds Edge Runtime 1.74.3, whose runtime reports Deno 2.1.4
 
 Initialize/refresh Node dependencies:
 
@@ -112,7 +113,7 @@ Credential contract:
 - Keep `REMOTE_SUPABASE_URL`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, and `REMOTE_SUPABASE_SECRET_KEY` from the same Supabase project. A mismatched or stale secret key causes local RPC calls to fail with `Invalid API key` after request authentication succeeds.
 - The Portal HMAC secret is independent of `REMOTE_SERVICE_API_KEY`, Supabase JWT secrets, and every Supabase client key. Keep dev/Preview and main/Production keyrings, Supabase projects, EdgeOne deployments, and `portal:<environment>:v1` namespaces distinct. The user-approved initial deployment shares one Upstash database/token across R0, Dev, and Production; this is a recorded residual risk and never a permission boundary. Only the verifier holds an optional previous HMAC key during rotation.
 - The R0 HMAC, publishable key, namespace, and Preview secret copies are one-time fixtures. Current and previous require different key IDs and constant-time-distinct secrets. Both empty optional previous values mean absent; one empty side fails closed. An empty optional Standard Redis password means absent. Under the approved shared-Upstash deployment, the endpoint/token source is retained and coordinated across environments: cleanup removes only its R0 secret copies and exact fixture keys together with `portal_r0_hmac_verify_v1`.
-- `PORTAL_SUPABASE_PUBLISHABLE_KEY` is matched in constant time against the inbound `apikey`, checked against the current project's `SUPABASE_PUBLISHABLE_KEYS` registry, paired only with platform-injected `SUPABASE_URL`, and reused unchanged for the downstream public RPC. Remote runtime requires HTTPS; the only non-loopback HTTP origin is exact pinned CLI `http://kong:8000`. `REMOTE_SUPABASE_URL`, generic keys, legacy anon keys, secret/service-role keys, and user credentials cannot replace the Portal key. `SUPABASE_ANON_KEY` is consulted only when Authorization is present and the validated URL is that exact local CLI origin; hosted Authorization is rejected.
+- `PORTAL_SUPABASE_PUBLISHABLE_KEY` is matched in constant time against the inbound `apikey`, checked against the current project's `SUPABASE_PUBLISHABLE_KEYS` registry, paired only with platform-injected `SUPABASE_URL`, and reused unchanged for the downstream public RPC. Remote runtime requires HTTPS; the only non-loopback HTTP origin is exact pinned CLI `http://kong:8000`. `REMOTE_SUPABASE_URL`, generic keys, legacy anon keys, secret/service-role keys, and user credentials cannot replace the Portal key. CLI 2.116.0 maps the local key into `sb-api-key` and leaves Authorization absent. `SUPABASE_ANON_KEY` is consulted only for the narrow older-local-client Bearer compatibility path at that exact local origin; hosted Authorization is rejected.
 - Portal Redis provider and credential variables are independent of the generic `REDIS_CLIENT_TYPE`, `UPSTASH_REDIS_URL`, `UPSTASH_REDIS_TOKEN`, `REDIS_URL`, and `REDIS_PASSWORD` surface. Missing Portal-only values fail closed; provisioning Portal must not change Redis behavior for any existing Function.
 - Portal Hybrid provider variables are likewise independent of generic OpenAI, SageMaker, and AWS values. Missing, partial, whitespace-bearing, malformed, or unsafe Portal provider configuration fails before Redis, model, AWS, or database calls; an exact-false/unset kill switch returns before that provider configuration is read.
 - `portal_data_product_results_v1` uses only the matching project publishable key for its downstream `api.portal_get_published_lcia_values_v1` call. It must never receive or construct a service-role/secret-key client.
@@ -305,7 +306,7 @@ The endpoint has no database, RPC, model, provider, repository, storage, cache, 
 
 `portal_data_product_results_v1` accepts the public `POST /functions/v1/portal_data_product_results_v1` path and the exact `/portal_data_product_results_v1` path produced after pinned Supabase CLI routing strips `/functions/v1`; no suffix or other function path is accepted. HMAC canonical bytes always contain the public path. The request requires the five `portal-hmac-v1` headers (`x-portal-key-id`, `x-portal-timestamp`, `x-portal-nonce`, `x-portal-body-sha256`, and `x-portal-signature`) plus the exact matching project `apikey`. `x-portal-correlation-id` accepts a canonical UUID; missing or invalid values are replaced, and every response returns the resolved `X-Portal-Correlation-Id`.
 
-The Portal BFF sends no `Authorization` or Cookie. The handler resolves only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, proves it belongs to the current project through `SUPABASE_PUBLISHABLE_KEYS`, constant-time matches it to inbound `apikey`, and passes the same value downstream. Only when `SUPABASE_URL` is exact pinned CLI `http://kong:8000` does the handler tolerate the exact `Bearer <configured legacy anon JWT>` that Kong injects; hosted HTTPS rejects every Authorization. User, service-role, other Bearer, Cookie, `REMOTE_*` public keys, `SERVICE_API_KEY`, Supabase secret/service-role keys, user context, and storage locators remain forbidden after HMAC and before Redis.
+The Portal BFF sends no `Authorization` or Cookie. The handler resolves only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, proves it belongs to the current project through `SUPABASE_PUBLISHABLE_KEYS`, constant-time matches it to inbound `apikey`, and passes the same value downstream. Pinned CLI 2.116.0 maps that key into `sb-api-key` while leaving Authorization absent. At exact local `SUPABASE_URL=http://kong:8000`, the handler still tolerates the exact `Bearer <configured legacy anon JWT>` only for older local-client compatibility; hosted HTTPS rejects every Authorization. User, service-role, other Bearer, Cookie, `REMOTE_*` public keys, `SERVICE_API_KEY`, Supabase secret/service-role keys, user context, and storage locators remain forbidden after HMAC and before Redis.
 
 The signed JSON body has one fixed shape:
 
@@ -466,7 +467,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 154-root Deno graph, 67 Node contract tests, and 492 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 154-root Deno graph, 69 Node contract tests, and 492 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

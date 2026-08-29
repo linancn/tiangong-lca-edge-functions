@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-29'
-lastReviewedCommit: 'd3bb4a6200b2d7f50f96dc812475ee1e54ee2010'
-lastReviewedNote: 'Reviewed for Edge #326: exact pnpm 11.24 changes no Deno compiler, runtime ownership, routing, or coverage rule.'
+lastReviewedCommit: 'ac426727046e24a41f37f2acb47e115b0e9fbc79'
+lastReviewedNote: 'Reviewed for Edge #330: runtime/toolchain coverage now includes the shared Deno version file and source-attested CLI/Edge Runtime fixtures without changing repository ownership or route boundaries.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -32,6 +32,7 @@ ownership:
           - scripts/**
           - package.json
           - .nvmrc
+          - .tool-versions
           - .prettierignore
           - .prettierrc.js
           - deno.json
@@ -78,6 +79,7 @@ coverage:
     - .github/workflows/ci.yml
     - package.json
     - .nvmrc
+    - .tool-versions
     - .prettierignore
     - .prettierrc.js
     - deno.json
@@ -157,7 +159,8 @@ routing:
         - scripts/cleanup-portal-r0-fixture.cjs
         - scripts/cleanup-portal-r0-fixture.test.cjs
         - scripts/run-portal-upstash-live-fixture.cjs
-        - test/fixtures/supabase-cli-v2.106.0-functions-transport.json
+        - test/fixtures/supabase-cli-v2.116.0-functions-transport.json
+        - test/fixtures/supabase-edge-runtime-v1.74.3-deno.json
         - supabase/.env.example
         - README.md
         - docs/agents/repo-architecture.md
@@ -272,6 +275,7 @@ routing:
       paths:
         - package.json
         - .nvmrc
+        - .tool-versions
         - .prettierignore
         - .prettierrc.js
         - deno.json
@@ -450,7 +454,9 @@ rules:
         kind: runtime-test
       - path: scripts/run-portal-upstash-live-fixture.cjs
         kind: live-proof-runner
-      - path: test/fixtures/supabase-cli-v2.106.0-functions-transport.json
+      - path: test/fixtures/supabase-cli-v2.116.0-functions-transport.json
+        kind: source-contract-fixture
+      - path: test/fixtures/supabase-edge-runtime-v1.74.3-deno.json
         kind: source-contract-fixture
     requiredDocs:
       - path: AGENTS.md
@@ -592,6 +598,8 @@ rules:
         kind: runtime-config
       - path: .nvmrc
         kind: runtime-config
+      - path: .tool-versions
+        kind: runtime-config
       - path: .prettierignore
         kind: format-config
       - path: .prettierrc.js
@@ -602,6 +610,8 @@ rules:
         kind: dependency-lock
       - path: pnpm-workspace.yaml
         kind: package-manager-config
+      - path: test/fixtures/supabase-edge-runtime-v1.74.3-deno.json
+        kind: source-contract-fixture
       - path: supabase/config.toml
         kind: deploy-config
       - path: supabase/.env.example
