@@ -20,19 +20,65 @@ const expectedActions = new Map([
   ['pnpm/setup', '84cb39b217b10273981911c288cd62326dc7c6d2'],
 ]);
 
-test('keeps Deno authoritative and auxiliary Node tooling exact', () => {
+test('keeps Supabase Edge Runtime-compatible Deno authoritative and auxiliary tooling exact', () => {
   const packageJson = readJson('package.json');
 
   assert.equal(packageJson.packageManager, 'pnpm@11.24.0');
   assert.deepEqual(packageJson.engines, { node: '24.19.0', pnpm: '11.24.0' });
-  assert.equal(packageJson.config.denoVersion, '2.9.5');
-  assert.equal(packageJson.config.denoTypeScriptVersion, '6.0.3');
+  assert.equal(packageJson.config.denoVersion, '2.1.4');
+  assert.equal(packageJson.config.denoTypeScriptVersion, '5.6.2');
+  assert.equal(packageJson.config.supabaseCliVersion, '2.116.0');
+  assert.equal(packageJson.config.supabaseEdgeRuntimeVersion, '1.74.3');
   assert.equal(packageJson.devDependencies.prettier, '3.9.5');
-  assert.equal(packageJson.devDependencies.supabase, '2.106.0');
+  assert.equal(packageJson.devDependencies.supabase, '2.116.0');
   assert.equal(packageJson.devDependencies.typescript, undefined);
   assert.equal(packageJson.devDependencies['prettier-plugin-organize-imports'], undefined);
   assert.equal(read('.nvmrc').trim(), '24.19.0');
+  assert.equal(read('.tool-versions').trim(), 'deno 2.1.4');
   assert.doesNotMatch(read('.prettierrc.js'), /prettier-plugin-organize-imports/u);
+});
+
+test('binds the Supabase CLI image to reviewed Edge Runtime and Deno source evidence', () => {
+  const packageJson = readJson('package.json');
+  const fixture = readJson('test/fixtures/supabase-edge-runtime-v1.74.3-deno.json');
+
+  assert.equal(fixture.schemaVersion, 'supabase.edge-runtime-deno-source.v1');
+  assert.equal(fixture.cli.version, packageJson.config.supabaseCliVersion);
+  assert.equal(fixture.cli.edgeRuntimeVersion, packageJson.config.supabaseEdgeRuntimeVersion);
+  assert.equal(fixture.edgeRuntime.version, packageJson.config.supabaseEdgeRuntimeVersion);
+  assert.equal(fixture.edgeRuntime.denoVersion, packageJson.config.denoVersion);
+  assert.equal(fixture.deno.version, packageJson.config.denoVersion);
+  assert.equal(fixture.deno.bundledTypeScriptVersion, packageJson.config.denoTypeScriptVersion);
+  assert.deepEqual(
+    [fixture.cli.source, fixture.edgeRuntime.source, fixture.deno.source].map(
+      ({ repository, ref, path: sourcePath, gitBlobSha }) => ({
+        repository,
+        ref,
+        path: sourcePath,
+        gitBlobSha,
+      }),
+    ),
+    [
+      {
+        repository: 'supabase/cli',
+        ref: 'v2.116.0',
+        path: 'apps/cli-go/pkg/config/templates/Dockerfile',
+        gitBlobSha: 'f24a2d104363a974b44c0c6b711e12bd19b62376',
+      },
+      {
+        repository: 'supabase/edge-runtime',
+        ref: 'v1.74.3',
+        path: 'deno/Cargo.toml',
+        gitBlobSha: 'a71e701672fc20c82d9d08f71f8bf157a9dbdd3b',
+      },
+      {
+        repository: 'denoland/deno',
+        ref: 'v2.1.4',
+        path: 'cli/build.rs',
+        gitBlobSha: '3d986612841584b764e9996aa861724b744017a7',
+      },
+    ],
+  );
 });
 
 test('uses one frozen pnpm graph without npm-owned compiler tooling', () => {
@@ -40,7 +86,7 @@ test('uses one frozen pnpm graph without npm-owned compiler tooling', () => {
   const workspace = read('pnpm-workspace.yaml');
 
   assert.match(lockfile, /^\s{2}prettier@3\.9\.5:/mu);
-  assert.match(lockfile, /^\s{2}supabase@2\.106\.0:/mu);
+  assert.match(lockfile, /^\s{2}supabase@2\.116\.0:/mu);
   assert.doesNotMatch(lockfile, /^\s{2}typescript@/mu);
   assert.doesNotMatch(lockfile, /prettier-plugin-organize-imports/u);
   assert.match(workspace, /supabase:\s*true/u);
@@ -123,9 +169,12 @@ test('pins every external action to a reviewed executable commit', () => {
 
 test('binds CI to exact Deno and auxiliary Node runtimes', () => {
   const ci = read('.github/workflows/ci.yml');
+  const supabaseConfig = read('supabase/config.toml');
   assert.match(ci, /version:\s*11\.24\.0/u);
   assert.match(ci, /runtime:\s*node@24\.19\.0/u);
-  assert.match(ci, /deno-version:\s*2\.9\.5/u);
+  assert.match(ci, /deno-version-file:\s*\.tool-versions/u);
+  assert.doesNotMatch(ci, /^\s+deno-version:/mu);
   assert.match(ci, /run:\s*pnpm install --frozen-lockfile/u);
   assert.match(ci, /run:\s*pnpm check/u);
+  assert.match(supabaseConfig, /\[edge_runtime\][\s\S]*?deno_version\s*=\s*2/u);
 });

@@ -337,6 +337,22 @@ async function flushPortalHybridSecurityEvent(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 10));
 }
 
+async function raceWithTimeout<T, U>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  timeoutValue: U,
+): Promise<T | U> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<U>((resolve) => {
+    timeoutId = setTimeout(() => resolve(timeoutValue), timeoutMs);
+  });
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 Deno.test(
   'signed Portal Hybrid success is advisory, public-only, correlated, and no-CORS',
   async () => {
@@ -925,10 +941,11 @@ Deno.test(
   async () => {
     for (const stage of ['circuit', 'cache'] as const) {
       const redis = new FakePortalRedis();
+      let rejectLateCircuit: ((reason?: unknown) => void) | undefined;
       if (stage === 'circuit') {
         redis.circuitCheckOperation = () =>
           new Promise((_resolve, reject) => {
-            setTimeout(() => reject(new Error('late private circuit rejection')), 150);
+            rejectLateCircuit = reject;
           });
       }
       if (stage === 'cache') redis.cacheGetOperation = () => neverPromise();
@@ -959,7 +976,8 @@ Deno.test(
       assertEquals(databaseCalls, 0, stage);
       assert(redis.calls.includes(stage === 'circuit' ? 'circuit_check' : 'cache_get'));
       if (stage === 'circuit') {
-        await new Promise((resolve) => setTimeout(resolve, 75));
+        rejectLateCircuit?.(new Error('late private circuit rejection'));
+        await Promise.resolve();
       }
     }
   },
@@ -1333,10 +1351,11 @@ Deno.test(
         },
       ),
     );
-    const result = await Promise.race([
+    const result = await raceWithTimeout(
       handler(await signedRequest()).then((response) => response.status),
-      new Promise<number>((resolve) => setTimeout(() => resolve(599), 50)),
-    ]);
+      50,
+      599,
+    );
     assertEquals(result, 200);
     assert(redis.calls.includes('lease_release'));
     await new Promise((resolve) => setTimeout(resolve, 125));
@@ -1407,10 +1426,11 @@ Deno.test(
       assertEquals(response.status, 200);
       assertEquals(loggerCalls, 0);
       assert(backgroundDelivery);
-      const completed = await Promise.race([
+      const completed = await raceWithTimeout(
         backgroundDelivery.then(() => true),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
-      ]);
+        250,
+        false,
+      );
       assertEquals(completed, true);
       assertEquals(loggerCalls, 1);
     } finally {

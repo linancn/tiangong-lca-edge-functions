@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "supabase.edge-runtime-deno-source.v1",
+  "cli": {
+    "version": "2.116.0",
+    "edgeRuntimeVersion": "1.74.3",
+    "source": {
+      "repository": "supabase/cli",
+      "ref": "v2.116.0",
+      "path": "apps/cli-go/pkg/config/templates/Dockerfile",
+      "gitBlobSha": "f24a2d104363a974b44c0c6b711e12bd19b62376",
+      "url": "https://github.com/supabase/cli/blob/v2.116.0/apps/cli-go/pkg/config/templates/Dockerfile"
+    }
+  },
+  "edgeRuntime": {
+    "version": "1.74.3",
+    "denoVersion": "2.1.4",
+    "source": {
+      "repository": "supabase/edge-runtime",
+      "ref": "v1.74.3",
+      "path": "deno/Cargo.toml",
+      "gitBlobSha": "a71e701672fc20c82d9d08f71f8bf157a9dbdd3b",
+      "url": "https://github.com/supabase/edge-runtime/blob/v1.74.3/deno/Cargo.toml"
+    }
+  },
+  "deno": {
+    "version": "2.1.4",
+    "bundledTypeScriptVersion": "5.6.2",
+    "source": {
+      "repository": "denoland/deno",
+      "ref": "v2.1.4",
+      "path": "cli/build.rs",
+      "gitBlobSha": "3d986612841584b764e9996aa861724b744017a7",
+      "url": "https://github.com/denoland/deno/blob/v2.1.4/cli/build.rs"
+    }
+  }
+}

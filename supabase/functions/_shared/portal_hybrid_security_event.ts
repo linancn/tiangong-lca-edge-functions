@@ -268,9 +268,13 @@ export function schedulePortalHybridSecurityEvent(
   event: Readonly<PortalHybridSecurityEvent>,
 ): void {
   const delivery = new Promise<void>((resolve) => {
-    setTimeout(() => {
-      void runPortalHybridSecurityLogger(logger, event).then(resolve, resolve);
-    }, 0);
+    // Two microtask turns preserve the post-handler boundary without leaving a
+    // zero-delay timer behind when the local/test runtime has no waitUntil.
+    queueMicrotask(() => {
+      queueMicrotask(() => {
+        void runPortalHybridSecurityLogger(logger, event).then(resolve, resolve);
+      });
+    });
   });
 
   const waitUntil = resolvePortalHybridWaitUntil();
