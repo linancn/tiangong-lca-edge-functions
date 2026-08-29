@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 importers:
+
   .:
     devDependencies:
       prettier:
@@ -15,90 +16,62 @@ importers:
         version: 2.106.0
 
 packages:
+
   '@supabase/cli-darwin-arm64@2.106.0':
-    resolution:
-      {
-        integrity: sha512-xi/IAjjbebh6xA9Nkkb7ZwC5ACKJ38OqMoYk1y20ScW5Wt+pxTCcOcaWDWu+2u2Pwc3vTYnXhbknVcQt9UcChQ==,
-      }
+    resolution: {integrity: sha512-xi/IAjjbebh6xA9Nkkb7ZwC5ACKJ38OqMoYk1y20ScW5Wt+pxTCcOcaWDWu+2u2Pwc3vTYnXhbknVcQt9UcChQ==}
     cpu: [arm64]
     os: [darwin]
 
   '@supabase/cli-darwin-x64@2.106.0':
-    resolution:
-      {
-        integrity: sha512-AT2s/8/3Ffb7IkcUXK6sA/iPCzJhh4Fh/XqzAGNGsVd1xCA/ZGniqU8BL03TqPkN1sR0iDaShjMLLIlHEflyPQ==,
-      }
+    resolution: {integrity: sha512-AT2s/8/3Ffb7IkcUXK6sA/iPCzJhh4Fh/XqzAGNGsVd1xCA/ZGniqU8BL03TqPkN1sR0iDaShjMLLIlHEflyPQ==}
     cpu: [x64]
     os: [darwin]
 
   '@supabase/cli-linux-arm64-musl@2.106.0':
-    resolution:
-      {
-        integrity: sha512-2LExuOHuU6odXorNTvq4M/OvueW+wOs3KDsaCpk+scQMnB6LbmqNidEjXAsKpZu3zyE8MmmtdbJBlRNN/KLdcw==,
-      }
+    resolution: {integrity: sha512-2LExuOHuU6odXorNTvq4M/OvueW+wOs3KDsaCpk+scQMnB6LbmqNidEjXAsKpZu3zyE8MmmtdbJBlRNN/KLdcw==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
   '@supabase/cli-linux-arm64@2.106.0':
-    resolution:
-      {
-        integrity: sha512-L/pX7fkV31x7zPrUOcD6KMtZ03j16o41XxgkACFoOAE9lFz8KaJOBSHvn2QLeWEa2kLz7jwpisvpshPSMjuxOw==,
-      }
+    resolution: {integrity: sha512-L/pX7fkV31x7zPrUOcD6KMtZ03j16o41XxgkACFoOAE9lFz8KaJOBSHvn2QLeWEa2kLz7jwpisvpshPSMjuxOw==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
   '@supabase/cli-linux-x64-musl@2.106.0':
-    resolution:
-      {
-        integrity: sha512-wz7heB3wwzmRdLRgqngd2VjPPNIdv6/Y8Q0dX/ZvjcL9/Nk8BYSZ7yjypapLpra+swRnbEJ4jAU6eAShiaB1Hg==,
-      }
+    resolution: {integrity: sha512-wz7heB3wwzmRdLRgqngd2VjPPNIdv6/Y8Q0dX/ZvjcL9/Nk8BYSZ7yjypapLpra+swRnbEJ4jAU6eAShiaB1Hg==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
   '@supabase/cli-linux-x64@2.106.0':
-    resolution:
-      {
-        integrity: sha512-+ihtqFNURc8ssULgQoHQBR4AtUmxez9dtqjclqOV0y5r65SX7Ginmiby4XDW9LPlqHT+MB7OyD1vk0T6pQUtPA==,
-      }
+    resolution: {integrity: sha512-+ihtqFNURc8ssULgQoHQBR4AtUmxez9dtqjclqOV0y5r65SX7Ginmiby4XDW9LPlqHT+MB7OyD1vk0T6pQUtPA==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
   '@supabase/cli-windows-arm64@2.106.0':
-    resolution:
-      {
-        integrity: sha512-QkEfRDiuuQwcfASo2DIJZ59AFV6xpqhPNo4r0kSVt38StYk3iL7ZcSOkZvGQWLlJ8kXKPBWEMhLnfHQF9r+Xfg==,
-      }
+    resolution: {integrity: sha512-QkEfRDiuuQwcfASo2DIJZ59AFV6xpqhPNo4r0kSVt38StYk3iL7ZcSOkZvGQWLlJ8kXKPBWEMhLnfHQF9r+Xfg==}
     cpu: [arm64]
     os: [win32]
 
   '@supabase/cli-windows-x64@2.106.0':
-    resolution:
-      {
-        integrity: sha512-1tQFbrH1KJhWJqHrY087XPz1WRi20eKG1pebG+6PjSD6XN+j0+x1PTOtBZrylXgY1fOg8BqgU8kl3KX8hI5l9w==,
-      }
+    resolution: {integrity: sha512-1tQFbrH1KJhWJqHrY087XPz1WRi20eKG1pebG+6PjSD6XN+j0+x1PTOtBZrylXgY1fOg8BqgU8kl3KX8hI5l9w==}
     cpu: [x64]
     os: [win32]
 
   prettier@3.9.5:
-    resolution:
-      {
-        integrity: sha512-/FVl766LpUfB5vXgCYOYa0MeV/441Ia99AeICQIQFTY/Nw0roZwULcXpku5i1/m5kt/baz+s4Zogspd839HSMg==,
-      }
-    engines: { node: '>=14' }
+    resolution: {integrity: sha512-/FVl766LpUfB5vXgCYOYa0MeV/441Ia99AeICQIQFTY/Nw0roZwULcXpku5i1/m5kt/baz+s4Zogspd839HSMg==}
+    engines: {node: '>=14'}
     hasBin: true
 
   supabase@2.106.0:
-    resolution:
-      {
-        integrity: sha512-jV0PJi5LqXUMZ4kriRLvST3DX1YDhrxOgnFJLOn6oUw3KQEFJPXhA60yLQ9aWG1E1uZCp4vUJwSuSGq3HPfaSQ==,
-      }
+    resolution: {integrity: sha512-jV0PJi5LqXUMZ4kriRLvST3DX1YDhrxOgnFJLOn6oUw3KQEFJPXhA60yLQ9aWG1E1uZCp4vUJwSuSGq3HPfaSQ==}
     hasBin: true
 
 snapshots:
+
   '@supabase/cli-darwin-arm64@2.106.0':
     optional: true
 
