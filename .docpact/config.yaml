@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-30'
-lastReviewedCommit: '3b850d5b9301985b0b65bb2381982aac1d2ef1ba'
-lastReviewedNote: 'Reviewed for Edge #340: Portal-only concurrent provider execution and its tests remain covered by the existing runtime, proof, documentation, and root-integration routes.'
+lastReviewedCommit: '67b180a'
+lastReviewedNote: 'Reviewed for Edge #345: fixed provider-stage outcomes and bounded latency remain inside the existing Portal runtime, observability, proof, documentation, and root-integration routes.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -469,7 +469,7 @@ rules:
         mode: review_or_update
       - path: README.md
         mode: review_or_update
-    reason: The disposable R0 interoperability fixture, Portal server identity, dedicated current-project public keys, isolated replay/admission boundaries, R1 LCIA and R2 Hybrid publishable-only projections, Portal-only provider injection, route provenance, cost controls, model kernel, and operator isolation requirements must remain aligned.
+    reason: The disposable R0 interoperability fixture, Portal server identity, dedicated current-project public keys, isolated replay/admission boundaries, R1 LCIA and R2 Hybrid publishable-only projections, Portal-only provider injection, sanitized provider-stage telemetry, route provenance, cost controls, model kernel, and operator isolation requirements must remain aligned.
   - id: edge-functions-review-quality-diagnostic-contract
     scope: repo
     repo: edge-functions

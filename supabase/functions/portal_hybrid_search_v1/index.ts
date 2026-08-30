@@ -133,6 +133,10 @@ type MutableHybridEventState = Pick<
   | 'guardOutcome'
   | 'circuit'
   | 'model'
+  | 'rewriteOutcome'
+  | 'embeddingOutcome'
+  | 'rewriteLatencyMs'
+  | 'embeddingLatencyMs'
   | 'database'
   | 'items'
   | 'matchedKey'
@@ -331,10 +335,60 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
       guardOutcome: 'not_checked',
       circuit: 'not_checked',
       model: 'not_called',
+      rewriteOutcome: 'not_called',
+      embeddingOutcome: 'not_called',
+      rewriteLatencyMs: null,
+      embeddingLatencyMs: null,
       database: 'not_called',
       items: null,
       matchedKey: null,
       recoveredLeaseCount: 0,
+    };
+    let rewriteStartedAt: number | null = null;
+    let embeddingStartedAt: number | null = null;
+    const runProviderStage = async <T>(
+      stage: 'rewrite' | 'embedding',
+      operation: () => Promise<T>,
+    ): Promise<T> => {
+      const stageStartedAt = monotonicNow();
+      if (stage === 'rewrite') {
+        rewriteStartedAt = stageStartedAt;
+        event.rewriteOutcome = 'called';
+      } else {
+        embeddingStartedAt = stageStartedAt;
+        event.embeddingOutcome = 'called';
+      }
+      try {
+        const value = await operation();
+        if (stage === 'rewrite') event.rewriteOutcome = 'succeeded';
+        else event.embeddingOutcome = 'succeeded';
+        return value;
+      } catch (error) {
+        const outcome = operationSignal.aborted || deadline.isExpired() ? 'aborted' : 'failed';
+        if (stage === 'rewrite') event.rewriteOutcome = outcome;
+        else event.embeddingOutcome = outcome;
+        throw error;
+      } finally {
+        const latencyMs = Math.max(0, Math.round(monotonicNow() - stageStartedAt));
+        if (stage === 'rewrite') event.rewriteLatencyMs = latencyMs;
+        else event.embeddingLatencyMs = latencyMs;
+      }
+    };
+    const markPendingProviderStagesAborted = () => {
+      if (event.rewriteOutcome === 'called') {
+        event.rewriteOutcome = 'aborted';
+        event.rewriteLatencyMs = Math.max(
+          0,
+          Math.round(monotonicNow() - (rewriteStartedAt ?? startedAt)),
+        );
+      }
+      if (event.embeddingOutcome === 'called') {
+        event.embeddingOutcome = 'aborted';
+        event.embeddingLatencyMs = Math.max(
+          0,
+          Math.round(monotonicNow() - (embeddingStartedAt ?? startedAt)),
+        );
+      }
     };
     const timeoutResponse = () =>
       errorResponse(503, 'hybrid_timeout', 'Portal Hybrid search timed out');
@@ -576,6 +630,8 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           }
           event.cache = 'hit';
           event.model = 'cache_hit';
+          event.rewriteOutcome = 'cache_hit';
+          event.embeddingOutcome = 'cache_hit';
           modelCache = parsedCache.data;
         } else {
           event.cache = 'miss';
@@ -586,22 +642,27 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           try {
             [rawRewrite, embedding] = await deadline.run(() =>
               Promise.all([
-                (options.rewriteQuery ?? rewritePortalHybridSearchQuery)(
-                  buildKernelConfig(hybridRequest.kind),
-                  hybridRequest.query,
-                  operationSignal,
-                  providerConfig,
+                runProviderStage('rewrite', () =>
+                  (options.rewriteQuery ?? rewritePortalHybridSearchQuery)(
+                    buildKernelConfig(hybridRequest.kind),
+                    hybridRequest.query,
+                    operationSignal,
+                    providerConfig,
+                  ),
                 ),
-                (options.generateEmbedding ?? generatePortalHybridSearchEmbedding)(
-                  hybridRequest.query,
-                  operationSignal,
-                  providerConfig,
+                runProviderStage('embedding', () =>
+                  (options.generateEmbedding ?? generatePortalHybridSearchEmbedding)(
+                    hybridRequest.query,
+                    operationSignal,
+                    providerConfig,
+                  ),
                 ),
               ]),
             );
           } catch (error) {
             event.model = deadline.signal.aborted ? 'aborted' : 'failed';
             abortOperations();
+            markPendingProviderStagesAborted();
             const code =
               typeof error === 'object' && error !== null ? Reflect.get(error, 'code') : null;
             return await responseAfterCircuitFailure(
@@ -674,6 +735,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
 
         if (deadline.isExpired()) {
           event.model = event.model === 'called' ? 'aborted' : event.model;
+          markPendingProviderStagesAborted();
           return await responseAfterCircuitFailure(timeoutResponse());
         }
 
