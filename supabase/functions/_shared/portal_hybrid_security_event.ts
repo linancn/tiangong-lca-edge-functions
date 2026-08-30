@@ -45,6 +45,22 @@ export type PortalHybridSecurityEvent = {
   circuit:
     'not_checked' | 'closed' | 'open' | 'failure_recorded' | 'record_failed' | 'reset_failed';
   model: 'not_called' | 'cache_hit' | 'called' | 'failed' | 'aborted';
+  rewriteOutcome:
+    | 'not_called'
+    | 'cache_hit'
+    | 'called'
+    | 'succeeded'
+    | 'failed'
+    | 'aborted';
+  embeddingOutcome:
+    | 'not_called'
+    | 'cache_hit'
+    | 'called'
+    | 'succeeded'
+    | 'failed'
+    | 'aborted';
+  rewriteLatencyMs: number | null;
+  embeddingLatencyMs: number | null;
   database: 'not_called' | 'called' | 'failed' | 'contract_failed';
   latencyMs: number;
   items: number | null;
@@ -129,6 +145,14 @@ const MODEL_OUTCOMES = new Set<PortalHybridSecurityEvent['model']>([
   'failed',
   'aborted',
 ]);
+const PROVIDER_OUTCOMES = new Set<PortalHybridSecurityEvent['rewriteOutcome']>([
+  'not_called',
+  'cache_hit',
+  'called',
+  'succeeded',
+  'failed',
+  'aborted',
+]);
 const DATABASE_OUTCOMES = new Set<PortalHybridSecurityEvent['database']>([
   'not_called',
   'called',
@@ -146,6 +170,17 @@ function boundedInteger(
   return Number.isSafeInteger(value) && Number(value) >= minimum && Number(value) <= maximum
     ? Number(value)
     : fallback;
+}
+
+function boundedNullableInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): number | null {
+  if (value === null) return null;
+  return Number.isSafeInteger(value) && Number(value) >= minimum && Number(value) <= maximum
+    ? Number(value)
+    : null;
 }
 
 export function normalizePortalHybridErrorCode(value: unknown): PortalHybridErrorCode {
@@ -213,6 +248,14 @@ export function sanitizePortalHybridSecurityEvent(
     guardOutcome: GUARD_OUTCOMES.has(event.guardOutcome) ? event.guardOutcome : 'not_checked',
     circuit: CIRCUIT_OUTCOMES.has(event.circuit) ? event.circuit : 'not_checked',
     model: MODEL_OUTCOMES.has(event.model) ? event.model : 'not_called',
+    rewriteOutcome: PROVIDER_OUTCOMES.has(event.rewriteOutcome)
+      ? event.rewriteOutcome
+      : 'not_called',
+    embeddingOutcome: PROVIDER_OUTCOMES.has(event.embeddingOutcome)
+      ? event.embeddingOutcome
+      : 'not_called',
+    rewriteLatencyMs: boundedNullableInteger(event.rewriteLatencyMs, 0, 3_600_000),
+    embeddingLatencyMs: boundedNullableInteger(event.embeddingLatencyMs, 0, 3_600_000),
     database: DATABASE_OUTCOMES.has(event.database) ? event.database : 'not_called',
     latencyMs: boundedInteger(event.latencyMs, 0, 0, 3_600_000),
     items: event.items === null ? null : boundedInteger(event.items, 0, 0, 20),
