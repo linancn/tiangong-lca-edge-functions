@@ -23,9 +23,9 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-30
-lastReviewedCommit: 23c1378
-lastReviewedNote: 'Reviewed for Edge #348: Portal-only structured rewrite output is non-stored and bounded for latency without changing model identity, provider isolation, response privacy, deadline, or generic Hybrid behavior.'
+lastReviewedAt: 2026-08-31
+lastReviewedCommit: cd8050fb0edb2fb191f926533aad6df59be52db4
+lastReviewedNote: 'Reviewed for Edge #351: Supabase JWTs are claims-first, sensitive bridge routes opt into fresh-user lookup, and legacy User API Key Redis is lazy with an email-free cache key.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -90,10 +90,10 @@ Required keys are managed in this file. Keep this file local-only; do not copy i
 Core entries:
 
 - `REMOTE_SUPABASE_URL`
-- `REMOTE_SUPABASE_PUBLISHABLE_KEY` for JWT validation and request-scoped user clients.
+- `REMOTE_SUPABASE_PUBLISHABLE_KEY` for claims/JWKS JWT validation and request-scoped user clients. The configured URL and token issuer must belong to the same project.
 - `REMOTE_SUPABASE_SECRET_KEY` for privileged RPC / database execution.
 - `REMOTE_SERVICE_API_KEY` for routes that allow `AuthMethod.SERVICE_API_KEY`.
-- `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` for user API key auth caching.
+- `UPSTASH_REDIS_URL` / `UPSTASH_REDIS_TOKEN` for the retained legacy User API Key auth cache. The runtime resolves them only after a non-JWT bearer decodes as the old email/password credential; normal JWT/OAuth/service requests never initialize Redis.
 - `PORTAL_R0_*` is the complete, disposable R0 verifier surface: current/optional-previous HMAC, current-project publishable key, explicit `preview`/`test` runtime target, R0-only Standard/Upstash Redis configuration, `portal:r0:<fixture>:v1` namespace, and small admission limits. The operator may map the approved shared Upstash endpoint/token into those R0-only names, but the runtime never falls back to the long-lived Portal or generic variables below.
 - `PORTAL_HMAC_KEY_ID_CURRENT` / `PORTAL_HMAC_SECRET_CURRENT` and the optional previous pair for Portal-only request verification.
 - `PORTAL_SUPABASE_PUBLISHABLE_KEY` for both signed Portal routes. It must be a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` JSON registry and is paired only with platform-injected `SUPABASE_URL`; there is no generic or `REMOTE_*` key/URL fallback.
@@ -107,8 +107,10 @@ Core entries:
 Credential contract:
 
 - `REMOTE_SERVICE_API_KEY` / `SERVICE_API_KEY` are custom function-level shared secrets. They are not Supabase client credentials.
-- `USER_API_KEY` is only a request credential. It can authenticate a function call, but it cannot replace `REMOTE_SUPABASE_SECRET_KEY` for RPC calls made from the function runtime.
-- JWT validation and user-api-key sign-in flows must use publishable keys.
+- `USER_API_KEY` is a bounded legacy request credential. It can authenticate compatibility function calls, but it cannot replace `REMOTE_SUPABASE_SECRET_KEY` for RPC calls made from the function runtime and must not be issued by new CLI/MCP flows.
+- Ordinary Supabase JWT validation uses `getClaims(token)`, validates issuer/audience/expiry/issued-at/role/subject/session and optional OAuth `client_id`, then exposes a minimal principal. Identity synchronization and the three Cognito email/password bridge operations explicitly opt into `fresh_user`, which adds the online `getUser(token)` check.
+- JWT claims validation and legacy user-api-key sign-in flows must use publishable keys. Asymmetric Supabase signing keys allow `getClaims` to use cached JWKS without putting Auth in the per-request hot path.
+- The legacy Redis key is `auth:legacy-user-api-key:v2:<sha256(email NUL password)>`; it contains no email and has no `lca_` prefix. Earlier keys simply expire under their existing one-hour TTL.
 - Supabase secret keys are reserved for privileged Supabase execution paths and must never be exposed to browser clients.
 - Keep `REMOTE_SUPABASE_URL`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, and `REMOTE_SUPABASE_SECRET_KEY` from the same Supabase project. A mismatched or stale secret key causes local RPC calls to fail with `Invalid API key` after request authentication succeeds.
 - The Portal HMAC secret is independent of `REMOTE_SERVICE_API_KEY`, Supabase JWT secrets, and every Supabase client key. Keep dev/Preview and main/Production keyrings, Supabase projects, EdgeOne deployments, and `portal:<environment>:v1` namespaces distinct. The user-approved initial deployment shares one Upstash database/token across R0, Dev, and Production; this is a recorded residual risk and never a permission boundary. Only the verifier holds an optional previous HMAC key during rotation.
@@ -468,7 +470,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 154-root Deno graph, 69 Node contract tests, and 494 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 154-root Deno graph, 69 Node contract tests, and 501 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 
