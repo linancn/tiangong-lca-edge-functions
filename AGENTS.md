@@ -38,9 +38,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-29
-lastReviewedCommit: d4273002014cb191fa37fe2af75987555c11c0c2
-lastReviewedNote: 'Reviewed for Edge #338: reserving supplied receipts for exact cleanup changes only opt-in proof tooling and leaves runtime, authorization, deployment, and ownership boundaries unchanged.'
+lastReviewedAt: 2026-08-30
+lastReviewedCommit: 3b850d5b9301985b0b65bb2381982aac1d2ef1ba
+lastReviewedNote: 'Reviewed for Edge #340: Portal-only concurrent rewrite/original-query embedding remains behind HMAC, transport, kill-switch, Redis admission and one absolute deadline; generic/login Hybrid and ownership boundaries remain unchanged.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -95,7 +95,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.24.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 154 enabled function/test roots through one bounded shared Deno graph, runs 69 Node contract tests, and executes 492 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
+- `pnpm check` validates exact runtime versions, checks all 154 enabled function/test roots through one bounded shared Deno graph, runs 69 Node contract tests, and executes 493 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -171,6 +171,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - do not use one shared Portal deployment SHA; LCIA events read only `PORTAL_LCIA_DEPLOYMENT_SHA` and Hybrid events read only `PORTAL_HYBRID_DEPLOYMENT_SHA`, with invalid or missing values normalized to `unknown`
 - do not route `portal_hybrid_search_v1` through legacy `hybrid_search_processes`/`hybrid_search_flows`, a service client, or an Edge-side field projection; it remains default-off until the exact Database façade exists, and every guard/circuit/timeout failure returns a fixed signal for the Portal BFF to handle through its separate lexical façade
 - do not return a successful Portal Hybrid response after its absolute application deadline; every awaited guard/cache/model/database/finalization step consumes the same remaining budget, while lease release is detached and bounded so Redis TTL remains the interrupted-cleanup recovery authority
+- on a Portal Hybrid model-cache miss, start the OpenAI rewrite and 1024-dimensional SageMaker embedding of the original bounded query concurrently only after admission; both share one request operation signal inherited from the absolute deadline, either failure aborts its peer before lease release, and database work starts only after both succeed. The rewrite remains the sole interpretation/fulltext source, while the cache stores only its bounded interpretation plus the vector and never the raw query
 - sanitize the final Portal Hybrid event before the last deadline decision, then schedule its allowlisted logger outside the handler promise; use `EdgeRuntime.waitUntil` when available and a handled macrotask fallback locally, so observability cannot delay or change the final response
 - do not move repo-level tests into `supabase/functions/**`; this repo keeps Deno tests in `test/**`
 - do not treat GitHub default branch `main` as the daily trunk

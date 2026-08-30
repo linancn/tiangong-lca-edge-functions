@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-29'
-lastReviewedCommit: 'd4273002014cb191fa37fe2af75987555c11c0c2'
-lastReviewedNote: 'Reviewed for Edge #338: normal-run CSPRNG enforcement remains within existing proof ownership and routing; no catalog or runtime boundary changes.'
+lastReviewedAt: '2026-08-30'
+lastReviewedCommit: '3b850d5b9301985b0b65bb2381982aac1d2ef1ba'
+lastReviewedNote: 'Reviewed for Edge #340: Portal-only concurrent provider execution and its tests remain covered by the existing runtime, proof, documentation, and root-integration routes.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
