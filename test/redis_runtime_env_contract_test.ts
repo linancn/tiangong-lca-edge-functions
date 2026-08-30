@@ -16,5 +16,13 @@ Deno.test(
     assertEquals(genericUpstashFactory.includes('UPSTASH_REDIS_URL'), false);
     assertEquals(genericUpstashFactory.includes('UPSTASH_REDIS_TOKEN'), false);
     assertEquals(genericUpstashFactory.includes('PORTAL_'), false);
+
+    const environmentTemplate = await Deno.readTextFile(
+      new URL('../supabase/.env.example', import.meta.url),
+    );
+    assertStringIncludes(environmentTemplate, 'UPSTASH_REDIS_REST_URL=');
+    assertStringIncludes(environmentTemplate, 'UPSTASH_REDIS_REST_TOKEN=');
+    assertEquals(/^UPSTASH_REDIS_URL=/mu.test(environmentTemplate), false);
+    assertEquals(/^UPSTASH_REDIS_TOKEN=/mu.test(environmentTemplate), false);
   },
 );
