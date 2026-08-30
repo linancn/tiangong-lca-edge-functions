@@ -52,7 +52,7 @@ export async function resolveActorContext(
     allowedMethods: [AuthMethod.JWT],
   });
 
-  if (!authResult.isAuthenticated || !authResult.user?.id) {
+  if (!authResult.isAuthenticated || !authResult.principal?.userId) {
     return {
       ok: false,
       response:
@@ -63,7 +63,7 @@ export async function resolveActorContext(
   return {
     ok: true,
     value: {
-      userId: authResult.user.id,
+      userId: authResult.principal.userId,
       accessToken,
       supabase: requestSupabase,
     },

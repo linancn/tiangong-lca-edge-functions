@@ -1,6 +1,11 @@
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
 
-import { authenticateRequest, AuthMethod, type AuthResult } from '../_shared/auth.ts';
+import {
+  authenticateRequest,
+  AuthMethod,
+  type AuthConfig,
+  type AuthResult,
+} from '../_shared/auth.ts';
 import { getRedisClient, type RedisClient } from '../_shared/redis_client.ts';
 import { createSupabaseServiceClient, supabaseAuthClient } from '../_shared/supabase_client.ts';
 import { json, lookupTidasPackageJob, TidasPackageError } from '../_shared/tidas_package.ts';
@@ -13,11 +18,7 @@ export type TidasPackageJobsHandlerDeps = {
   authClient: SupabaseClient;
   authenticateRequest: (
     req: Request,
-    config: {
-      authClient?: SupabaseClient;
-      redis?: RedisClient;
-      allowedMethods: AuthMethod[];
-    },
+    config: AuthConfig & { allowedMethods: AuthMethod[] },
   ) => Promise<AuthResult>;
   getRedisClient: () => Promise<RedisClient | undefined>;
   supabase: SupabaseClient;
@@ -90,14 +91,13 @@ export function createTidasPackageJobsHandler(
       );
     }
 
-    const redis = await deps.getRedisClient();
     const authResult = await deps.authenticateRequest(req, {
       authClient: deps.authClient,
-      redis,
+      redisFactory: deps.getRedisClient,
       allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
     });
 
-    if (!authResult.isAuthenticated || !authResult.user?.id) {
+    if (!authResult.isAuthenticated || !authResult.principal?.userId) {
       return (
         authResult.response ??
         json(
@@ -136,7 +136,11 @@ export function createTidasPackageJobsHandler(
     }
 
     try {
-      const response = await lookupTidasPackageJob(deps.supabase, authResult.user.id, jobId);
+      const response = await lookupTidasPackageJob(
+        deps.supabase,
+        authResult.principal.userId,
+        jobId,
+      );
       return json(response, 200);
     } catch (error) {
       console.error('tidas_package_jobs failed', error);

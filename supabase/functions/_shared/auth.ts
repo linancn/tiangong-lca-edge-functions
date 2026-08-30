@@ -7,8 +7,13 @@ import type {
 // import { Redis } from '@upstash/redis';
 import { authenticateCognitoToken } from './cognito_auth.ts';
 import { corsHeaders } from './cors.ts';
-import decodeApiKey from './decode_api_key.ts';
-import { type RedisClient, redisGet, redisSet } from './redis_client.ts';
+import decodeApiKey, { type Credentials } from './decode_api_key.ts';
+import {
+  getRedisClient as getDefaultRedisClient,
+  type RedisClient,
+  redisGet,
+  redisSet,
+} from './redis_client.ts';
 import { createSupabaseAuthClient, getSupabaseUrl } from './supabase_client.ts';
 
 const _defaultAppMetadata: UserAppMetadata = {
@@ -23,6 +28,10 @@ const _defaultAud = '';
 
 const _defaultCreatedAt = '';
 const textEncoder = new TextEncoder();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const AUTHENTICATED_AUDIENCE = 'authenticated';
+const SUPABASE_AUTH_PATH = '/auth/v1';
+const CLOCK_SKEW_SECONDS = 60;
 
 function readOptionalEnv(name: string): string | undefined {
   const value = Deno.env.get(name);
@@ -112,7 +121,7 @@ function bytesToHex(bytes: Uint8Array): string {
 
 async function createUserApiKeyCacheKey(email: string, password: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', textEncoder.encode(`${email}\0${password}`));
-  return `lca_${email}_${bytesToHex(new Uint8Array(digest))}`;
+  return `auth:legacy-user-api-key:v2:${bytesToHex(new Uint8Array(digest))}`;
 }
 
 export interface AuthedUser extends User {
@@ -124,8 +133,25 @@ export interface AuthedUser extends User {
  */
 export interface AuthResult {
   isAuthenticated: boolean;
+  principal?: AuthPrincipal;
+  /** @deprecated Use the minimal principal for authorization. Retained for compatibility callers. */
   user?: User | AuthedUser;
   response?: Response;
+}
+
+export type JwtAssurance = 'claims' | 'fresh_user';
+
+export type AuthPrincipalMethod =
+  'supabase_jwt' | 'cognito_jwt' | 'legacy_user_api_key' | 'service_api_key';
+
+export interface AuthPrincipal {
+  userId: string;
+  email?: string;
+  authMethod: AuthPrincipalMethod;
+  assurance: JwtAssurance | 'legacy_user_api_key' | 'service_api_key';
+  clientId?: string;
+  sessionId?: string;
+  claims?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -136,12 +162,16 @@ export interface AuthConfig {
   authClient?: SupabaseClient;
   /** Redis client instance for caching */
   redis?: RedisClient;
+  /** Lazily resolve Redis only after an opaque legacy user key has decoded successfully. */
+  redisFactory?: () => Promise<RedisClient | undefined>;
   /** Whether to require authentication (default: true) */
   requireAuth?: boolean;
   /** Allowed authentication methods */
   allowedMethods?: AuthMethod[];
   /** Optional override for Service API key (defaults to env vars) */
   serviceApiKey?: string;
+  /** JWT assurance. Claims/JWKS is the default; online user lookup must be explicit. */
+  jwtAssurance?: JwtAssurance;
 }
 
 /**
@@ -196,6 +226,8 @@ export async function authenticateRequest(
     requireAuth = true,
     allowedMethods = [AuthMethod.JWT, AuthMethod.USER_API_KEY, AuthMethod.SERVICE_API_KEY],
     serviceApiKey,
+    redisFactory = getDefaultRedisClient,
+    jwtAssurance = 'claims',
   } = config;
 
   const resolvedServiceApiKey =
@@ -230,14 +262,9 @@ export async function authenticateRequest(
   }
 
   // Check User API key
-  if (
-    allowedMethods.includes(AuthMethod.USER_API_KEY) &&
-    redis &&
-    bearerToken &&
-    !bearerLooksLikeJwt
-  ) {
+  if (allowedMethods.includes(AuthMethod.USER_API_KEY) && bearerToken && !bearerLooksLikeJwt) {
     console.log('Checking User API key authentication');
-    const result = authenticateUserApiKey(bearerToken, redis);
+    const result = authenticateLegacyUserApiKey(bearerToken, redis, redisFactory);
     authResults.push({ method: AuthMethod.USER_API_KEY, result });
   }
 
@@ -254,7 +281,7 @@ export async function authenticateRequest(
       });
     } else {
       console.log('Checking Supabase JWT authentication');
-      const result = authenticateSupabaseJWT(bearerToken, authClient);
+      const result = authenticateSupabaseJWT(bearerToken, authClient, jwtAssurance);
       authResults.push({ method: AuthMethod.JWT, result });
     }
   }
@@ -309,6 +336,16 @@ async function finalizeAuthResults(
   if (successfulAuths.length === 1) {
     const { method, result } = successfulAuths[0];
     console.log(`Authentication successful with method: ${method}`);
+    if (result.principal) {
+      console.log(
+        JSON.stringify({
+          event: 'edge.auth.success',
+          authMethod: result.principal.authMethod,
+          assurance: result.principal.assurance,
+          clientIdPresent: Boolean(result.principal.clientId),
+        }),
+      );
+    }
     return result;
   }
 
@@ -353,13 +390,49 @@ function getTokenType(bearerKey: string): 'cognito' | 'supabase' {
 async function authenticateSupabaseJWT(
   token: string,
   supabase: SupabaseClient,
+  assurance: JwtAssurance,
 ): Promise<AuthResult> {
   if (getTokenType(token) === 'cognito') {
+    if (assurance === 'fresh_user') {
+      return {
+        isAuthenticated: false,
+        response: createAuthResponse('Fresh user assurance requires a Supabase session', 401),
+      };
+    }
     console.log('Detected Cognito token, delegating to Cognito authentication');
     return await authenticateCognitoToken(token);
   }
 
   try {
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError) {
+      console.error('Supabase JWT claims verification failed:', claimsError);
+      return {
+        isAuthenticated: false,
+        response: createAuthResponse(
+          getErrorMessage(claimsError, 'JWT authentication failed'),
+          getErrorStatus(claimsError, 401),
+        ),
+      };
+    }
+
+    const claims = claimsData?.claims as Record<string, unknown> | undefined;
+    const claimsResult = validateSupabaseClaims(claims);
+    if (!claimsResult.ok) {
+      return {
+        isAuthenticated: false,
+        response: createAuthResponse(claimsResult.message, claimsResult.status),
+      };
+    }
+
+    if (assurance === 'claims') {
+      return {
+        isAuthenticated: true,
+        principal: claimsResult.principal,
+        user: claimsResult.user,
+      };
+    }
+
     const { data: authData, error } = await supabase.auth.getUser(token);
     if (error) {
       console.error('Supabase JWT authentication failed:', error);
@@ -371,8 +444,6 @@ async function authenticateSupabaseJWT(
         ),
       };
     }
-
-    console.log('Supabase JWT authentication result:', authData);
 
     if (!authData?.user) {
       return {
@@ -388,8 +459,20 @@ async function authenticateSupabaseJWT(
       };
     }
 
+    if (authData.user.id !== claimsResult.principal.userId) {
+      return {
+        isAuthenticated: false,
+        response: createAuthResponse('JWT subject mismatch', 401),
+      };
+    }
+
     return {
       isAuthenticated: true,
+      principal: {
+        ...claimsResult.principal,
+        email: authData.user.email ?? claimsResult.principal.email,
+        assurance: 'fresh_user',
+      },
       user: authData.user,
     };
   } catch (error) {
@@ -401,13 +484,137 @@ async function authenticateSupabaseJWT(
   }
 }
 
+type ClaimsValidationResult =
+  | { ok: true; principal: AuthPrincipal; user: AuthedUser }
+  | { ok: false; message: string; status: number };
+
+function validateSupabaseClaims(
+  claims: Record<string, unknown> | undefined,
+): ClaimsValidationResult {
+  if (!claims) {
+    return { ok: false, message: 'JWT claims missing', status: 401 };
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const issuer = claims.iss;
+  const audience = claims.aud;
+  const expiresAt = claims.exp;
+  const issuedAt = claims.iat;
+  const userId = claims.sub;
+  const role = claims.role;
+  const sessionId = claims.session_id;
+  const clientId = claims.client_id;
+  const email = claims.email;
+
+  if (typeof issuer !== 'string' || !isExpectedSupabaseIssuer(issuer)) {
+    return { ok: false, message: 'Invalid JWT issuer', status: 401 };
+  }
+
+  const audienceValues = typeof audience === 'string' ? [audience] : audience;
+  if (
+    !Array.isArray(audienceValues) ||
+    !audienceValues.every((value) => typeof value === 'string') ||
+    !audienceValues.includes(AUTHENTICATED_AUDIENCE)
+  ) {
+    return { ok: false, message: 'Invalid JWT audience', status: 401 };
+  }
+
+  if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt) || expiresAt <= nowSeconds) {
+    return { ok: false, message: 'JWT expired', status: 401 };
+  }
+
+  if (
+    typeof issuedAt !== 'number' ||
+    !Number.isFinite(issuedAt) ||
+    issuedAt > nowSeconds + CLOCK_SKEW_SECONDS
+  ) {
+    return { ok: false, message: 'Invalid JWT issued-at time', status: 401 };
+  }
+
+  if (typeof userId !== 'string' || !UUID_PATTERN.test(userId)) {
+    return { ok: false, message: 'Invalid JWT subject', status: 401 };
+  }
+
+  if (role !== AUTHENTICATED_AUDIENCE) {
+    return { ok: false, message: 'Forbidden', status: 403 };
+  }
+
+  if (typeof sessionId !== 'string' || !UUID_PATTERN.test(sessionId)) {
+    return { ok: false, message: 'Invalid JWT session', status: 401 };
+  }
+
+  if (
+    clientId !== undefined &&
+    (typeof clientId !== 'string' || clientId.length === 0 || clientId.length > 255)
+  ) {
+    return { ok: false, message: 'Invalid OAuth client identity', status: 401 };
+  }
+
+  if (email !== undefined && typeof email !== 'string') {
+    return { ok: false, message: 'Invalid JWT email', status: 401 };
+  }
+
+  const principal: AuthPrincipal = {
+    userId,
+    email: typeof email === 'string' && email.length > 0 ? email : undefined,
+    authMethod: 'supabase_jwt',
+    assurance: 'claims',
+    clientId: typeof clientId === 'string' ? clientId : undefined,
+    sessionId,
+    claims,
+  };
+
+  return {
+    ok: true,
+    principal,
+    user: {
+      id: userId,
+      email: principal.email,
+      role: AUTHENTICATED_AUDIENCE,
+      app_metadata: _defaultAppMetadata,
+      user_metadata: _defaultUserMetadata,
+      aud: AUTHENTICATED_AUDIENCE,
+      created_at: _defaultCreatedAt,
+    },
+  };
+}
+
+function isExpectedSupabaseIssuer(issuer: string): boolean {
+  const configuredUrl = readOptionalEnv('REMOTE_SUPABASE_URL') ?? readOptionalEnv('SUPABASE_URL');
+  if (!configuredUrl) {
+    return false;
+  }
+
+  try {
+    const configured = new URL(configuredUrl);
+    const actual = new URL(issuer);
+    if (actual.pathname.replace(/\/+$/u, '') !== SUPABASE_AUTH_PATH) {
+      return false;
+    }
+
+    const configuredIssuer = `${configured.origin}${SUPABASE_AUTH_PATH}`;
+    if (actual.toString().replace(/\/+$/u, '') === configuredIssuer) {
+      return true;
+    }
+
+    const localHosts = new Set(['127.0.0.1', 'localhost', 'kong']);
+    return localHosts.has(configured.hostname) && localHosts.has(actual.hostname);
+  } catch (_error) {
+    return false;
+  }
+}
+
 /**
  * Authenticate using User API Key (email:password encoded), used in the openAPI Service and MCP Service. API key in the Authorization header, after `Bearer ` prefix.
  * @param apiKey - The API key
  * @param redis - The Redis client
  * @returns The authentication result
  */
-async function authenticateUserApiKey(apiKey: string, redis: RedisClient): Promise<AuthResult> {
+async function authenticateLegacyUserApiKey(
+  apiKey: string,
+  redis: RedisClient | undefined,
+  redisFactory: () => Promise<RedisClient | undefined>,
+): Promise<AuthResult> {
   const credentials = decodeApiKey(apiKey);
   if (!credentials) {
     return {
@@ -419,6 +626,28 @@ async function authenticateUserApiKey(apiKey: string, redis: RedisClient): Promi
     };
   }
 
+  try {
+    const resolvedRedis = redis ?? (await redisFactory());
+    if (!resolvedRedis) {
+      return {
+        isAuthenticated: false,
+        response: createAuthResponse('Legacy user API key authentication unavailable', 503),
+      };
+    }
+    return await authenticateUserApiKey(credentials, resolvedRedis);
+  } catch (error) {
+    console.error('Legacy user API key Redis initialization failed:', error);
+    return {
+      isAuthenticated: false,
+      response: createAuthResponse('Legacy user API key authentication unavailable', 503),
+    };
+  }
+}
+
+async function authenticateUserApiKey(
+  credentials: Credentials,
+  redis: RedisClient,
+): Promise<AuthResult> {
   const { email = '', password = '' } = credentials;
   const cacheKey = await createUserApiKeyCacheKey(email, password);
   const cachedUserId = await redisGet(redis, cacheKey);
@@ -426,6 +655,12 @@ async function authenticateUserApiKey(apiKey: string, redis: RedisClient): Promi
   if (cachedUserId) {
     return {
       isAuthenticated: true,
+      principal: {
+        userId: String(cachedUserId),
+        email,
+        authMethod: 'legacy_user_api_key',
+        assurance: 'legacy_user_api_key',
+      },
       user: {
         id: String(cachedUserId),
         email: email,
@@ -484,6 +719,12 @@ async function authenticateUserApiKey(apiKey: string, redis: RedisClient): Promi
 
     return {
       isAuthenticated: true,
+      principal: {
+        userId: data.user.id,
+        email: data.user.email,
+        authMethod: 'legacy_user_api_key',
+        assurance: 'legacy_user_api_key',
+      },
       user: {
         id: data.user.id,
         email: data.user.email,
@@ -546,6 +787,11 @@ function authenticateServiceApiKey(providedKey: string, expectedKey?: string): A
 
   return {
     isAuthenticated: true,
+    principal: {
+      userId: 'service',
+      authMethod: 'service_api_key',
+      assurance: 'service_api_key',
+    },
     // Service requests don't have a specific user
     user: {
       id: 'service',

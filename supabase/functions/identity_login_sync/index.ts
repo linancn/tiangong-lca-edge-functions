@@ -28,6 +28,7 @@ Deno.serve(async (req: Request) => {
   const auth = await authenticateRequest(req, {
     authClient: supabaseAuthClient,
     allowedMethods: [AuthMethod.JWT],
+    jwtAssurance: 'fresh_user',
   });
   if (!auth.isAuthenticated || !auth.user)
     return auth.response ?? json(401, { code: 'UNAUTHENTICATED' });

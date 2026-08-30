@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-30'
-lastReviewedCommit: '23c1378'
-lastReviewedNote: 'Reviewed for Edge #348: bounded non-stored Portal-only Responses parameters remain inside the existing provider runtime, proof, documentation, and root-integration routes.'
+lastReviewedAt: '2026-08-31'
+lastReviewedCommit: '512b07ee906e9f65dc95a1fe63011763a4fa1922'
+lastReviewedNote: 'Reviewed for Edge #351: claims-first JWT assurance, explicit fresh-user routes, minimal principals, lazy legacy Redis, and shared Edge/MCP REST credential names are covered by auth-runtime, proof, deploy, and documentation routes.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -118,6 +118,14 @@ routing:
         - supabase/functions/_shared/auth.ts
         - supabase/functions/_shared/cognito_auth.ts
         - supabase/functions/_shared/decode_api_key.ts
+        - supabase/functions/_shared/redis_client.ts
+        - supabase/functions/_shared/command_runtime/actor_context.ts
+        - supabase/functions/identity_login_sync/**
+        - supabase/functions/change_email_cognito/**
+        - supabase/functions/change_password_cognito/**
+        - supabase/functions/sign_up_cognito/**
+        - test/auth_test.ts
+        - test/auth_client_wiring_test.ts
         - scripts/probe-functions-auth.cjs
         - test.example.http
     portal-public-runtime:

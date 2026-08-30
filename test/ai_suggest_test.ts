@@ -41,6 +41,11 @@ function buildHandler(
   supabase: FakeRpcSupabase,
   authResult: AuthResult = {
     isAuthenticated: true,
+    principal: {
+      userId: TEST_USER_ID,
+      authMethod: 'supabase_jwt',
+      assurance: 'claims',
+    },
     user: {
       id: TEST_USER_ID,
       app_metadata: {},

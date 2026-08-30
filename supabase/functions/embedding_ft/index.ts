@@ -93,11 +93,9 @@ Deno.serve(async (req) => {
     return new Response('expected json body', { status: 400 });
   }
 
-  const redis = await getRedisClient();
-
   const authResult = await authenticateRequest(req, {
     authClient: supabaseAuthClient,
-    redis: redis,
+    redisFactory: getRedisClient,
     allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY, AuthMethod.SERVICE_API_KEY],
   });
 

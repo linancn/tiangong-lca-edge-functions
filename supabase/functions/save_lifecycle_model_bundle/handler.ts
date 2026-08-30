@@ -60,7 +60,7 @@ export function createSaveLifecycleModelBundleHandler(
       allowedMethods: [AuthMethod.JWT],
     });
 
-    const userId = authResult.user?.id;
+    const userId = authResult.principal?.userId;
     const accessToken = extractBearerToken(req);
     if (!authResult.isAuthenticated || !userId || !accessToken) {
       return json(

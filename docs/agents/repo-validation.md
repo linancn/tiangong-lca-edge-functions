@@ -34,9 +34,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-30
-lastReviewedCommit: 23c1378
-lastReviewedNote: 'Reviewed for Edge #348: Portal R2 proof now pins non-stored, 256-token, none-reasoning, low-verbosity Responses parameters without changing the generic OpenAI layer.'
+lastReviewedAt: 2026-08-31
+lastReviewedCommit: 512b07ee906e9f65dc95a1fe63011763a4fa1922
+lastReviewedNote: 'Reviewed for Edge #351: auth proof distinguishes claims-first JWT, fresh-user lookup, minimal principal propagation, and lazy legacy Redis using Edge/MCP REST names without changing Portal isolation.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -55,7 +55,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 154 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 69 Node contract tests, and executes 494 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 155 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 72 Node contract tests, and executes 502 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 The current baseline intentionally skips:
 
@@ -68,7 +68,7 @@ If you reactivate or rely on that route family, update the inventory and validat
 | Change type | Minimum local proof | Additional proof when risk is higher | Notes |
 | --- | --- | --- | --- |
 | One function entrypoint or nearby handler | `pnpm lint`; `pnpm check`; targeted `deno check --config supabase/functions/deno.json <changed-entry-or-handler>` | use `test.example.http` or an equivalent request to smoke the changed path | For handler-based functions, validate both the entrypoint and the extracted handler file. |
-| Shared auth modules | `pnpm lint`; `pnpm check`; targeted `deno check` on `_shared/auth.ts` and directly affected consumers | run `pnpm probe:auth --dry-run`; run a local or remote probe if the change affects credential selection | `gateway_invalid_jwt` and `function_auth_failed` are different failure classes. |
+| Shared auth or generic Redis modules | `pnpm lint`; `pnpm check`; `deno test --allow-env --allow-read --config supabase/functions/deno.json test/auth_test.ts test/redis_runtime_env_contract_test.ts`; targeted `deno check` on `_shared/auth.ts`, `_shared/redis_client.ts`, and directly affected consumers | run `pnpm probe:auth --dry-run`; run a local or remote probe if the change affects credential selection | Prove ordinary JWT uses `getClaims` without `getUser`, validates required authority claims, carries `client_id`/`session_id` into the minimal principal, and does not initialize Redis. Prove `fresh_user` performs the online lookup, malformed opaque keys do not initialize Redis, and only a decoded legacy key resolves the generic Redis factory. The generic client reads only `UPSTASH_REDIS_REST_URL/TOKEN`; Portal-prefixed providers and their separate databases remain untouched. `gateway_invalid_jwt` and `function_auth_failed` remain different failure classes. |
 | Command runtime, command handlers, or DB-RPC wrappers | `pnpm lint`; `pnpm check`; targeted `deno check` on changed `_shared/command_runtime/**`, `_shared/commands/**`, `_shared/db_rpc/**`, and at least one direct consumer | run nearby repo tests such as `test/command_runtime_test.ts`, `test/dataset_command_rpc_contract_test.ts`, or `test/review_command_rpc_contract_test.ts` | If the change depends on new SQL or RPC truth, record the `database-engine` follow-up explicitly. |
 | Application-wide database Schema cutover | `pnpm lint`; `pnpm check`; the canonical `pnpm test:deno` permission boundary; `test/schema_boundary_contract_test.ts` must pass | compare every literal Edge RPC with the exact database-engine `api` catalog and run focused behavior tests for every replaced direct relation path before mirroring to Next | Shared clients default to `api`; direct core-table access selects `public`; no Edge Data API call selects `private` or a non-core relation. Preserve authorization, DTO, idempotency, terminal-error, and storage-signing behavior while moving persistence behind façades. |
 | Data Product closure commands, certificate-bound result builds, TaskSummaryV2 feed, or closure-artifact signing | `pnpm lint`; `pnpm check`; `deno test --allow-env --config supabase/functions/deno.json test/data_product_command_test.ts`; `deno test --allow-env --allow-net=127.0.0.1 --config supabase/functions/deno.json test/data_product_command_http_smoke_test.ts`; targeted `deno check` on `app_data_product_commands`, `_shared/commands/data_product/**`, and `_shared/db_rpc/data_product_commands.ts` | against a local database-engine stack, prove owner/manager and cross-user denial, a v2 build does not double-enqueue its persisted job, feed rows expose no payload/locator/signed URL, closure-check reads expose exactly two locator-free availability summaries, and only the requested XLSX or machine-result manifest is signed from a ready unexpired actor-bound descriptor; also prove strict selector forwarding, semantic filenames, the artifact-expiry safety budget, delayed-signing boundary, stable owner-visible `410`, opaque unavailable/unauthorized `404`, sanitized unexpected-RPC/signing `502`, and recursive locator/credential rejection | Database owns scope normalization, Certificate validity, feed ACL, artifact lifecycle, and artifact authorization. Edge must keep request/descriptor schemas strict, expose only the reviewed public projection, call the two-argument RPC, and keep bucket/object paths and all source error details inside the service-only signing step. The local HTTP smoke must traverse the function handler plus real Supabase SDK PostgREST/Storage transports; unit-only `FakeRpc` proof is insufficient for this boundary. Partition selectors are outside this public endpoint. |
@@ -110,6 +110,8 @@ Facts that matter:
 - scripted remote deploys also use `--no-verify-jwt`
 - scripted remote deploys pass `supabase/functions/deno.json` as the Supabase CLI import map
 - runtime auth still happens inside functions, primarily through `supabase/functions/_shared/auth.ts`
+- ordinary Supabase JWT routes use claims/JWKS by default; only the four reviewed identity/profile and email/password bridge routes use explicit `fresh_user`
+- generic Redis belongs only to the retained opaque User API Key path and must stay uninitialized for JWT, OAuth JWT, service key, malformed bearer, and Portal requests
 - `scripts/probe-functions-auth.cjs` is the fastest way to separate gateway rejection from runtime-auth rejection
 
 Useful low-risk commands:
