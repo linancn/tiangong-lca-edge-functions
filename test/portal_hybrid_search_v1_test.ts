@@ -1203,6 +1203,52 @@ Deno.test(
 );
 
 Deno.test(
+  'Portal Hybrid provider failure aborts its concurrent peer before releasing the lease',
+  async () => {
+    const redis = new FakePortalRedis();
+    let embeddingSignal: AbortSignal | undefined;
+    let embeddingAbortObserved = false;
+    let databaseCalls = 0;
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query() {
+            databaseCalls += 1;
+            return Promise.resolve(databasePage());
+          },
+        },
+        {
+          rewriteQuery: () => Promise.reject(new Error('private provider details')),
+          generateEmbedding: (_query: string, signal: AbortSignal) => {
+            embeddingSignal = signal;
+            return new Promise((_resolve, reject) => {
+              signal.addEventListener(
+                'abort',
+                () => {
+                  embeddingAbortObserved = true;
+                  reject(new DOMException('aborted', 'AbortError'));
+                },
+                { once: true },
+              );
+            });
+          },
+        },
+      ),
+    );
+
+    const response = await handler(await signedRequest());
+    assertEquals(response.status, 503);
+    assertEquals(await responseCode(response), 'hybrid_upstream_unavailable');
+    assertEquals(embeddingSignal?.aborted, true);
+    assertEquals(embeddingAbortObserved, true);
+    assertEquals(databaseCalls, 0);
+    assert(redis.calls.includes('circuit_failure'));
+    assert(redis.calls.includes('lease_release'));
+  },
+);
+
+Deno.test(
   'Portal Hybrid absolute deadline starts both providers, aborts them together, and stops database',
   async () => {
     const redis = new FakePortalRedis();

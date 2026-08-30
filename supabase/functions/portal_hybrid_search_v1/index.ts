@@ -314,6 +314,14 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
       timeoutMs = PORTAL_HYBRID_TOTAL_TIMEOUT_MS;
     }
     const deadline = new PortalHybridDeadline(timeoutMs, monotonicNow, startedAt);
+    const operationController = new AbortController();
+    const abortOperations = () => operationController.abort();
+    if (deadline.signal.aborted) {
+      abortOperations();
+    } else {
+      deadline.signal.addEventListener('abort', abortOperations, { once: true });
+    }
+    const operationSignal = operationController.signal;
     const correlationId = resolvePortalCorrelationId(request.headers);
     const event: MutableHybridEventState = {
       kind: null,
@@ -581,18 +589,19 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
                 (options.rewriteQuery ?? rewritePortalHybridSearchQuery)(
                   buildKernelConfig(hybridRequest.kind),
                   hybridRequest.query,
-                  deadline.signal,
+                  operationSignal,
                   providerConfig,
                 ),
                 (options.generateEmbedding ?? generatePortalHybridSearchEmbedding)(
                   hybridRequest.query,
-                  deadline.signal,
+                  operationSignal,
                   providerConfig,
                 ),
               ]),
             );
           } catch (error) {
             event.model = deadline.signal.aborted ? 'aborted' : 'failed';
+            abortOperations();
             const code =
               typeof error === 'object' && error !== null ? Reflect.get(error, 'code') : null;
             return await responseAfterCircuitFailure(
@@ -675,7 +684,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           if (deadline.isExpired()) return timeoutResponse();
           event.database = 'called';
           databasePage = await deadline.run(() =>
-            repository.query(hybridRequest, queryTerms, modelCache.queryEmbedding, deadline.signal),
+            repository.query(hybridRequest, queryTerms, modelCache.queryEmbedding, operationSignal),
           );
         } catch (error) {
           if (isPortalHybridDeadlineError(error) || deadline.isExpired()) {
@@ -783,6 +792,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         // Observability configuration must not alter the response.
       }
     }
+    deadline.signal.removeEventListener('abort', abortOperations);
     deadline.dispose();
 
     let securityEvent: PortalHybridSecurityEvent | null = null;
