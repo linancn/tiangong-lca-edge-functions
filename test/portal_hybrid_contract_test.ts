@@ -9,6 +9,10 @@ import {
   PORTAL_HYBRID_SECURITY_EVENT_SCHEMA,
   sanitizePortalHybridSecurityEvent,
 } from '../supabase/functions/_shared/portal_hybrid_security_event.ts';
+import {
+  buildPortalOpenAIResponsesParameters,
+  PORTAL_OPENAI_MAX_OUTPUT_TOKENS,
+} from '../supabase/functions/_shared/portal_openai_structured.ts';
 
 const PROCESS_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -365,4 +369,50 @@ Deno.test('Portal Hybrid security events have one fixed safe allowlist', () => {
   ]) {
     assertEquals(Object.hasOwn(event, forbidden), false);
   }
+});
+
+Deno.test('Portal OpenAI Responses requests are bounded for low-latency structured output', () => {
+  const schema = {
+    type: 'object',
+    properties: { query: { type: 'string' } },
+    required: ['query'],
+    additionalProperties: false,
+  };
+  const parameters = buildPortalOpenAIResponsesParameters(
+    {
+      schemaName: 'portal_hybrid_query',
+      schema,
+      systemPrompt: 'system prompt',
+      userPrompt: 'user prompt',
+      temperature: 0,
+    },
+    {
+      apiKey: 'sk-private-provider-value',
+      model: 'gpt-5.4-nano',
+    },
+  );
+
+  assertEquals(parameters, {
+    model: 'gpt-5.4-nano',
+    temperature: 0,
+    store: false,
+    max_output_tokens: PORTAL_OPENAI_MAX_OUTPUT_TOKENS,
+    reasoning: { effort: 'none' },
+    input: [
+      { role: 'system', content: 'system prompt' },
+      { role: 'user', content: 'user prompt' },
+    ],
+    text: {
+      verbosity: 'low',
+      format: {
+        type: 'json_schema',
+        name: 'portal_hybrid_query',
+        schema,
+        strict: true,
+      },
+    },
+  });
+  assertEquals(PORTAL_OPENAI_MAX_OUTPUT_TOKENS, 256);
+  assertEquals(Object.hasOwn(parameters, 'service_tier'), false);
+  assertEquals(JSON.stringify(parameters).includes('sk-private-provider-value'), false);
 });

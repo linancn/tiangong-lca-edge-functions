@@ -16,6 +16,7 @@ export interface PortalOpenAIStructuredRequest {
 }
 
 const clients = new Map<string, OpenAI>();
+export const PORTAL_OPENAI_MAX_OUTPUT_TOKENS = 256;
 
 function getPortalOpenAIClient(provider: Readonly<PortalOpenAIProviderConfig>): OpenAI {
   if (!provider.apiKey || !provider.model || provider.apiKey !== provider.apiKey.trim()) {
@@ -90,6 +91,32 @@ function parseJsonOutput(text: string): unknown {
   }
 }
 
+export function buildPortalOpenAIResponsesParameters(
+  request: PortalOpenAIStructuredRequest,
+  provider: Readonly<PortalOpenAIProviderConfig>,
+) {
+  return {
+    model: provider.model,
+    temperature: request.temperature ?? 0,
+    store: false as const,
+    max_output_tokens: PORTAL_OPENAI_MAX_OUTPUT_TOKENS,
+    reasoning: { effort: 'none' as const },
+    input: [
+      { role: 'system' as const, content: request.systemPrompt },
+      { role: 'user' as const, content: request.userPrompt },
+    ],
+    text: {
+      verbosity: 'low' as const,
+      format: {
+        type: 'json_schema' as const,
+        name: request.schemaName,
+        schema: request.schema,
+        strict: true as const,
+      },
+    },
+  };
+}
+
 export async function portalOpenAIStructuredOutput<T>(
   request: PortalOpenAIStructuredRequest,
   provider: Readonly<PortalOpenAIProviderConfig>,
@@ -104,33 +131,17 @@ export async function portalOpenAIStructuredOutput<T>(
       };
     };
   };
-  const temperature = request.temperature ?? 0;
   let response: unknown;
 
   if (client.responses?.create) {
-    const parameters = {
-      model: provider.model,
-      temperature,
-      input: [
-        { role: 'system', content: request.systemPrompt },
-        { role: 'user', content: request.userPrompt },
-      ],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: request.schemaName,
-          schema: request.schema,
-          strict: true,
-        },
-      },
-    };
+    const parameters = buildPortalOpenAIResponsesParameters(request, provider);
     response = request.signal
       ? await client.responses.create(parameters, { signal: request.signal })
       : await client.responses.create(parameters);
   } else if (client.chat?.completions?.create) {
     const parameters = {
       model: provider.model,
-      temperature,
+      temperature: request.temperature ?? 0,
       messages: [
         { role: 'system', content: request.systemPrompt },
         { role: 'user', content: request.userPrompt },
