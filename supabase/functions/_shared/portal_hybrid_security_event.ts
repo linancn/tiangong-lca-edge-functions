@@ -45,20 +45,8 @@ export type PortalHybridSecurityEvent = {
   circuit:
     'not_checked' | 'closed' | 'open' | 'failure_recorded' | 'record_failed' | 'reset_failed';
   model: 'not_called' | 'cache_hit' | 'called' | 'failed' | 'aborted';
-  rewriteOutcome:
-    | 'not_called'
-    | 'cache_hit'
-    | 'called'
-    | 'succeeded'
-    | 'failed'
-    | 'aborted';
-  embeddingOutcome:
-    | 'not_called'
-    | 'cache_hit'
-    | 'called'
-    | 'succeeded'
-    | 'failed'
-    | 'aborted';
+  rewriteOutcome: 'not_called' | 'cache_hit' | 'called' | 'succeeded' | 'failed' | 'aborted';
+  embeddingOutcome: 'not_called' | 'cache_hit' | 'called' | 'succeeded' | 'failed' | 'aborted';
   rewriteLatencyMs: number | null;
   embeddingLatencyMs: number | null;
   database: 'not_called' | 'called' | 'failed' | 'contract_failed';
@@ -172,11 +160,7 @@ function boundedInteger(
     : fallback;
 }
 
-function boundedNullableInteger(
-  value: unknown,
-  minimum: number,
-  maximum: number,
-): number | null {
+function boundedNullableInteger(value: unknown, minimum: number, maximum: number): number | null {
   if (value === null) return null;
   return Number.isSafeInteger(value) && Number(value) >= minimum && Number(value) <= maximum
     ? Number(value)
