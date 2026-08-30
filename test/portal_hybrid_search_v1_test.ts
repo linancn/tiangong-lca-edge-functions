@@ -450,6 +450,10 @@ Deno.test(
     assertEquals(events.length, 1);
     assertEquals(events[0].correlationId, CORRELATION_ID);
     assertEquals(events[0].model, 'called');
+    assertEquals(events[0].rewriteOutcome, 'succeeded');
+    assertEquals(events[0].embeddingOutcome, 'succeeded');
+    assertEquals(typeof events[0].rewriteLatencyMs, 'number');
+    assertEquals(typeof events[0].embeddingLatencyMs, 'number');
     assertEquals(events[0].database, 'called');
     assertEquals(events[0].items, 1);
     assertEquals(events[0].status, response.status);
@@ -1107,6 +1111,10 @@ Deno.test(
     assertEquals(databaseCalls, 1);
     await flushPortalHybridSecurityEvent();
     assertEquals(events[0].model, 'cache_hit');
+    assertEquals(events[0].rewriteOutcome, 'cache_hit');
+    assertEquals(events[0].embeddingOutcome, 'cache_hit');
+    assertEquals(events[0].rewriteLatencyMs, null);
+    assertEquals(events[0].embeddingLatencyMs, null);
   },
 );
 
@@ -1209,6 +1217,7 @@ Deno.test(
     let embeddingSignal: AbortSignal | undefined;
     let embeddingAbortObserved = false;
     let databaseCalls = 0;
+    const events: PortalHybridSecurityEvent[] = [];
     const handler = createPortalHybridSearchHandler(
       handlerOptions(
         redis,
@@ -1233,6 +1242,7 @@ Deno.test(
               );
             });
           },
+          logger: (event: PortalHybridSecurityEvent) => events.push(event),
         },
       ),
     );
@@ -1245,6 +1255,11 @@ Deno.test(
     assertEquals(databaseCalls, 0);
     assert(redis.calls.includes('circuit_failure'));
     assert(redis.calls.includes('lease_release'));
+    await flushPortalHybridSecurityEvent();
+    assertEquals(events[0].rewriteOutcome, 'failed');
+    assertEquals(events[0].embeddingOutcome, 'aborted');
+    assertEquals(typeof events[0].rewriteLatencyMs, 'number');
+    assertEquals(typeof events[0].embeddingLatencyMs, 'number');
   },
 );
 
@@ -1331,6 +1346,10 @@ Deno.test(
     assertEquals(databaseCalls, 0);
     await flushPortalHybridSecurityEvent();
     assertEquals(events[0].model, 'aborted');
+    assertEquals(events[0].rewriteOutcome, 'succeeded');
+    assertEquals(events[0].embeddingOutcome, 'aborted');
+    assertEquals(typeof events[0].rewriteLatencyMs, 'number');
+    assertEquals(typeof events[0].embeddingLatencyMs, 'number');
     assertEquals(events[0].status, response.status);
     assertEquals(events[0].errorCode, 'hybrid_timeout');
   },

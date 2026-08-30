@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-30
-lastReviewedCommit: 3b850d5b9301985b0b65bb2381982aac1d2ef1ba
-lastReviewedNote: 'Reviewed for Edge #340: Portal-only concurrent rewrite/original-query embedding remains behind HMAC, transport, kill-switch, Redis admission and one absolute deadline; generic/login Hybrid and ownership boundaries remain unchanged.'
+lastReviewedCommit: 67b180a
+lastReviewedNote: 'Reviewed for Edge #345: Portal Hybrid records sanitized rewrite/embedding outcomes and bounded per-stage latency without changing the deadline, provider, response, or generic/login Hybrid boundary.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -172,7 +172,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - do not route `portal_hybrid_search_v1` through legacy `hybrid_search_processes`/`hybrid_search_flows`, a service client, or an Edge-side field projection; it remains default-off until the exact Database façade exists, and every guard/circuit/timeout failure returns a fixed signal for the Portal BFF to handle through its separate lexical façade
 - do not return a successful Portal Hybrid response after its absolute application deadline; every awaited guard/cache/model/database/finalization step consumes the same remaining budget, while lease release is detached and bounded so Redis TTL remains the interrupted-cleanup recovery authority
 - on a Portal Hybrid model-cache miss, start the OpenAI rewrite and 1024-dimensional SageMaker embedding of the original bounded query concurrently only after admission; both share one request operation signal inherited from the absolute deadline, either failure aborts its peer before lease release, and database work starts only after both succeed. The rewrite remains the sole interpretation/fulltext source, while the cache stores only its bounded interpretation plus the vector and never the raw query
-- sanitize the final Portal Hybrid event before the last deadline decision, then schedule its allowlisted logger outside the handler promise; use `EdgeRuntime.waitUntil` when available and a handled macrotask fallback locally, so observability cannot delay or change the final response
+- sanitize the final Portal Hybrid event before the last deadline decision, including only fixed rewrite/embedding outcome enums and nullable bounded stage latencies—never query, model name, endpoint, provider error, or credential—then schedule its allowlisted logger outside the handler promise; use `EdgeRuntime.waitUntil` when available and a handled macrotask fallback locally, so observability cannot delay or change the final response
 - do not move repo-level tests into `supabase/functions/**`; this repo keeps Deno tests in `test/**`
 - do not treat GitHub default branch `main` as the daily trunk
 - do not mark delivery complete if root workspace integration is still pending
