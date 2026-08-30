@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-30
-lastReviewedCommit: 67b180a
-lastReviewedNote: 'Reviewed for Edge #345: the Portal Hybrid event now isolates rewrite/embedding outcomes and latency while repo topology, generic kernels, deadline, and ownership remain unchanged.'
+lastReviewedCommit: 23c1378
+lastReviewedNote: 'Reviewed for Edge #348: Portal-only Responses output is non-stored and bounded for latency while repo topology, generic kernels, model identity, deadline, and ownership remain unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -65,7 +65,7 @@ Shared Supabase clients default database operations to `api`. Every direct relat
 | `supabase/functions/_shared/portal_security_event.ts` and `portal_hybrid_security_event.ts` | stable | route-specific allowlisted exactly-once Portal events, correlation IDs, fixed rewrite/embedding outcome and bounded-latency fields, and the R2 bounded background logger boundary |
 | `supabase/functions/_shared/portal_hybrid_contract.ts` and `portal_hybrid_repository.ts` | stable | strict R2 request/public candidate/Edge response DTOs and the publishable-only `api.portal_hybrid_search_v1` transport |
 | `supabase/functions/_shared/portal_hybrid_deadline.ts` | stable | one absolute handler-entry deadline, shared model/database AbortSignal, remaining-time operation caps, and non-blocking bounded cleanup |
-| `supabase/functions/_shared/portal_hybrid_provider.ts`, `portal_hybrid_kernel.ts`, and `portal_openai_structured.ts` | stable | strict Portal-only OpenAI/SageMaker/AWS configuration resolved after the kill switch and passed through provider-explicit kernels with no generic environment reads; existing generic kernels remain byte-for-byte unchanged |
+| `supabase/functions/_shared/portal_hybrid_provider.ts`, `portal_hybrid_kernel.ts`, and `portal_openai_structured.ts` | stable | strict Portal-only OpenAI/SageMaker/AWS configuration plus non-stored, 256-token, none-reasoning, low-verbosity structured Responses parameters resolved after the kill switch; existing generic kernels remain byte-for-byte unchanged |
 | `supabase/functions/_shared/command_runtime/**` | stable | request parsing, actor context, audit payload, and command-handler skeleton |
 | `supabase/functions/_shared/commands/**` | stable | dataset, review, membership, notification, and profile command logic |
 | `supabase/functions/_shared/db_rpc/**` | stable | thin wrappers over database RPC calls; SQL truth still lives in `database-engine` |
@@ -95,7 +95,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 154 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 69 Node contract tests and 493 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
+The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 154 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 69 Node contract tests and 494 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
