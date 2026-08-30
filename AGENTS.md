@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: cd8050fb0edb2fb191f926533aad6df59be52db4
-lastReviewedNote: 'Reviewed for Edge #351: ordinary Supabase JWTs use claims-first verification and minimal principals, fresh-user routes opt into online lookup, and legacy User API Key Redis is lazy and isolated from Portal Redis.'
+lastReviewedCommit: 512b07ee906e9f65dc95a1fe63011763a4fa1922
+lastReviewedNote: 'Reviewed for Edge #351: ordinary Supabase JWTs use claims-first verification and minimal principals, fresh-user routes opt into online lookup, and lazy legacy User API Key Redis uses the shared Edge/MCP REST names while Portal Redis stays isolated.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -95,7 +95,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.24.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 154 enabled function/test roots through one bounded shared Deno graph, runs 72 Node contract tests, and executes 501 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
+- `pnpm check` validates exact runtime versions, checks all 155 enabled function/test roots through one bounded shared Deno graph, runs 72 Node contract tests, and executes 502 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -109,6 +109,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - gateway JWT verification being off does not make runtime auth optional; functions must still authenticate and authorize requests explicitly
 - ordinary Supabase JWT authentication defaults to `getClaims(token)` and exposes a minimal principal; only reviewed identity/profile synchronization and email/password bridge routes may request `jwtAssurance: 'fresh_user'`
 - generic Redis is resolved only after a syntactically valid opaque legacy User API Key is selected; JWT, OAuth JWT, service-key, malformed bearer, and Portal paths must not initialize that client
+- the generic Upstash client reads only `UPSTASH_REDIS_REST_URL/TOKEN`, matching the private Edge Functions `.env` and MCP runtime. Portal continues to read only its `PORTAL_*`/`PORTAL_R0_*` names and never falls back to the generic pair
 
 ## Ownership Boundaries
 
@@ -170,7 +171,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes resolve only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, prove it is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, use only the platform-injected `SUPABASE_URL`, and pass that same key from exact inbound `apikey` matching to their reviewed public `api` RPC. They never use generic or `REMOTE_*` key/URL precedence. Authorization is absent in hosted and pinned-CLI `2.116.0` traffic: local Kong maps the matched publishable key into `sb-api-key` and does not inject Authorization. The exact `http://kong:8000` plus configured `SUPABASE_ANON_KEY` Bearer remains only a narrow older-local-client compatibility path after HMAC
 - do not let signed Portal routes read or fall back to the generic Redis provider or credential variables used by existing Functions; Portal replay, admission, circuit, and cache storage requires the explicit `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` surface and fails closed when it is absent
 - do not change ordinary Supabase JWT routes back to per-request `getUser`; `getClaims` must validate issuer, audience, expiry, issued-at time, authenticated role, UUID subject/session, and optional OAuth `client_id`, while `fresh_user` remains explicit and Cognito compatibility tokens cannot satisfy it
-- do not eagerly construct generic Redis in a handler that accepts JWT or service credentials. The retained legacy User API Key cache uses only `auth:legacy-user-api-key:v2:<sha256>` keys, contains no email or `lca_` prefix, and remains a bounded compatibility path pending retirement
+- do not eagerly construct generic Redis in a handler that accepts JWT or service credentials. The retained legacy User API Key cache uses only `auth:legacy-user-api-key:v2:<sha256>` keys, contains no email or `lca_` prefix, reads only the Edge/MCP REST-named credentials, and remains a bounded compatibility path pending retirement
 - do not let signed Portal Hybrid read or fall back to generic OpenAI, SageMaker, or AWS variables; after the exact-lowercase-true kill switch it resolves the complete `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` configuration and injects it explicitly into shared kernels, while existing login Hybrid and embedding consumers keep their generic defaults
 - do not use one shared Portal deployment SHA; LCIA events read only `PORTAL_LCIA_DEPLOYMENT_SHA` and Hybrid events read only `PORTAL_HYBRID_DEPLOYMENT_SHA`, with invalid or missing values normalized to `unknown`
 - do not route `portal_hybrid_search_v1` through legacy `hybrid_search_processes`/`hybrid_search_flows`, a service client, or an Edge-side field projection; it remains default-off until the exact Database façade exists, and every guard/circuit/timeout failure returns a fixed signal for the Portal BFF to handle through its separate lexical façade

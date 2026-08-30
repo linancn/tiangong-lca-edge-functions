@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-31'
-lastReviewedCommit: 'cd8050fb0edb2fb191f926533aad6df59be52db4'
-lastReviewedNote: 'Reviewed for Edge #351: claims-first JWT assurance, explicit fresh-user routes, minimal principals, and lazy legacy Redis are covered by auth-runtime, proof, deploy, and documentation routes.'
+lastReviewedCommit: '512b07ee906e9f65dc95a1fe63011763a4fa1922'
+lastReviewedNote: 'Reviewed for Edge #351: claims-first JWT assurance, explicit fresh-user routes, minimal principals, lazy legacy Redis, and shared Edge/MCP REST credential names are covered by auth-runtime, proof, deploy, and documentation routes.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

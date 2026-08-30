@@ -78,9 +78,13 @@ export function readPortalRedisRuntimeConfig(
   env: PortalRedisEnvironment = Deno.env,
 ): PortalRedisRuntimeConfig {
   const provider = portalRedisRequiredEnvironmentValue(env, 'PORTAL_REDIS_CLIENT_TYPE');
-  if (provider !== 'upstash' && provider !== 'standard') throw new PortalRedisError();
+  if (provider !== 'upstash' && provider !== 'standard') {
+    throw new PortalRedisError();
+  }
   const namespace = portalRedisRequiredEnvironmentValue(env, 'PORTAL_REDIS_NAMESPACE');
-  if (!PORTAL_REDIS_NAMESPACE_PATTERN.test(namespace)) throw new PortalRedisError();
+  if (!PORTAL_REDIS_NAMESPACE_PATTERN.test(namespace)) {
+    throw new PortalRedisError();
+  }
   const timeoutMs = readPortalRedisTimeoutMs(env);
 
   if (provider === 'upstash') {
@@ -139,7 +143,9 @@ class PortalRedisSdkAdapter implements PortalRedisAdapter {
   ) {}
 
   async setNxEx(key: string, value: string, ttlSeconds: number): Promise<boolean> {
-    if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds < 1) throw new PortalRedisError();
+    if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds < 1) {
+      throw new PortalRedisError();
+    }
     const operation = isUpstashClient(this.client)
       ? this.client.set(key, value, { nx: true, ex: ttlSeconds })
       : this.client.set(key, value, { nx: true, ex: ttlSeconds });
@@ -160,7 +166,9 @@ class PortalRedisSdkAdapter implements PortalRedisAdapter {
   }
 
   async setEx(key: string, value: string, ttlSeconds: number): Promise<void> {
-    if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds < 1) throw new PortalRedisError();
+    if (!Number.isSafeInteger(ttlSeconds) || ttlSeconds < 1) {
+      throw new PortalRedisError();
+    }
     const operation = isUpstashClient(this.client)
       ? this.client.set(key, value, { ex: ttlSeconds })
       : this.client.set(key, value, { ex: ttlSeconds });
@@ -178,7 +186,9 @@ export async function createPortalRedisAdapter(
 ): Promise<PortalRedisAdapter> {
   try {
     if (config.provider === 'upstash') {
-      if (!config.upstashUrl || !config.upstashToken) throw new PortalRedisError();
+      if (!config.upstashUrl || !config.upstashToken) {
+        throw new PortalRedisError();
+      }
       return new PortalRedisSdkAdapter(
         new UpstashRedis({
           url: config.upstashUrl,
@@ -214,8 +224,8 @@ function getRedisClientType(): RedisClientTypeOption {
 function getUpstashClient(): UpstashRedis {
   console.log('Getting Upstash Client');
   return new UpstashRedis({
-    url: Deno.env.get('UPSTASH_REDIS_URL') ?? '',
-    token: Deno.env.get('UPSTASH_REDIS_TOKEN') ?? '',
+    url: Deno.env.get('UPSTASH_REDIS_REST_URL') ?? '',
+    token: Deno.env.get('UPSTASH_REDIS_REST_TOKEN') ?? '',
   });
 }
 
@@ -287,9 +297,9 @@ export {
   getStandardClient,
   getUpstashClient,
   isUpstashClient,
+  type RedisClient,
   redisGet,
   redisSet,
-  type RedisClient,
   type StandardRedisClient,
   type UpstashRedis,
 };
