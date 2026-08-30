@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-30
-lastReviewedCommit: 67b180a
-lastReviewedNote: 'Reviewed for Edge #345: Portal R2 proof now binds sanitized rewrite/embedding outcomes and bounded stage latency to success, cache-hit, peer-failure, and deadline paths.'
+lastReviewedCommit: 23c1378
+lastReviewedNote: 'Reviewed for Edge #348: Portal R2 proof now pins non-stored, 256-token, none-reasoning, low-verbosity Responses parameters without changing the generic OpenAI layer.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -55,7 +55,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 154 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 69 Node contract tests, and executes 493 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 154 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 69 Node contract tests, and executes 494 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 The current baseline intentionally skips:
 
@@ -96,6 +96,7 @@ Changes to `portal_public_transport.ts`, `portal_hybrid_provider.ts`, `portal_hy
 - `PORTAL_SUPABASE_PUBLISHABLE_KEY` is a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry, is paired only with platform-injected `SUPABASE_URL`, matches inbound `apikey` exactly, and is reused unchanged downstream; hosted requires HTTPS and rejects Authorization, while pinned CLI `2.116.0` uses `sb-api-key` and leaves Authorization absent. Exact local `http://kong:8000` retains only the older-client anon Bearer compatibility. Generic/direct-or-helper `REMOTE_*`, legacy-anon fallback, secret/service-role, user, missing, malformed, and cross-project key/URL configurations fail before Redis, model, or database work
 - exact false or unset `PORTAL_HYBRID_ENABLED` returns before Portal Redis, JSON, OpenAI, SageMaker/AWS, or database configuration is read
 - enabled R2 requires the complete strict `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` surface and passes that exact object into both shared model kernels; generic-only, partial, malformed, whitespace-bearing, credential-bearing URL, and insecure remote URL configurations fail before provider or database calls
+- Portal Responses parameters remain `store=false`, `max_output_tokens=256`, `reasoning.effort=none`, and `text.verbosity=low` with the same strict JSON Schema/model/prompts/temperature/AbortSignal; tests must reject API-key capture and any implicit `service_tier`, while Chat fallback and generic/login wrappers remain unchanged
 - `hybrid_search_kernel.ts` and `openai_structured.ts` remain byte-for-byte equal to the `dev` baseline, while existing login Hybrid, embedding, auth, and shared-kernel tests pass unchanged, proving their generic environment precedence and responses were not replaced by Portal values
 - LCIA reads only `PORTAL_LCIA_DEPLOYMENT_SHA`, Hybrid reads only `PORTAL_HYBRID_DEPLOYMENT_SHA`, and a missing/invalid/other-route SHA yields `unknown` rather than a cross-route or retired shared fallback
 
