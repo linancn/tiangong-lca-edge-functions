@@ -6,7 +6,12 @@ import {
   type AiWorkerJobProjection,
   type AiWorkerRpcError,
 } from '../_shared/ai_worker.ts';
-import { authenticateRequest, AuthMethod, type AuthResult } from '../_shared/auth.ts';
+import {
+  authenticateRequest,
+  AuthMethod,
+  type AuthConfig,
+  type AuthResult,
+} from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { getRedisClient, type RedisClient } from '../_shared/redis_client.ts';
 import { createSupabaseServiceClient, supabaseAuthClient } from '../_shared/supabase_client.ts';
@@ -20,11 +25,7 @@ export type AiSuggestHandlerDeps = {
   authClient: SupabaseClient;
   authenticateRequest: (
     req: Request,
-    config: {
-      authClient?: SupabaseClient;
-      redis?: RedisClient;
-      allowedMethods: AuthMethod[];
-    },
+    config: AuthConfig & { allowedMethods: AuthMethod[] },
   ) => Promise<AuthResult>;
   getRedisClient: () => Promise<RedisClient | undefined>;
   supabase: SupabaseClient;
@@ -218,13 +219,12 @@ export function createAiSuggestHandler(
       );
     }
 
-    const redis = await deps.getRedisClient();
     const authResult = await deps.authenticateRequest(req, {
       authClient: deps.authClient,
-      redis,
+      redisFactory: deps.getRedisClient,
       allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
     });
-    if (!authResult.isAuthenticated || !authResult.user?.id) {
+    if (!authResult.isAuthenticated || !authResult.principal?.userId) {
       return (
         authResult.response ??
         json({ ok: false, code: 'AUTH_REQUIRED', message: 'Authentication required' }, 401)
@@ -241,10 +241,10 @@ export function createAiSuggestHandler(
 
     const action = body.action === undefined ? 'enqueue' : body.action;
     if (action === 'enqueue') {
-      return await handleEnqueue(body, authResult.user.id, deps.supabase);
+      return await handleEnqueue(body, authResult.principal.userId, deps.supabase);
     }
     if (action === 'read') {
-      return await handleRead(body, authResult.user.id, deps.supabase);
+      return await handleRead(body, authResult.principal.userId, deps.supabase);
     }
 
     return json(

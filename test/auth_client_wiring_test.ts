@@ -47,7 +47,11 @@ Deno.test(
         seenAuthClients.push(config.authClient!);
         return {
           isAuthenticated: true,
-          user: { id: TEST_USER_ID } as any,
+          principal: {
+            userId: TEST_USER_ID,
+            authMethod: 'supabase_jwt',
+            assurance: 'claims',
+          },
         };
       },
       ensureOwnerOrReviewAdmin: async () => {
@@ -120,7 +124,11 @@ Deno.test(
         seenAuthClients.push(config.authClient!);
         return {
           isAuthenticated: true,
-          user: { id: TEST_USER_ID } as any,
+          principal: {
+            userId: TEST_USER_ID,
+            authMethod: 'supabase_jwt',
+            assurance: 'claims',
+          },
         };
       },
       ensureOwnerOrReviewAdmin: async (supabase) => {
@@ -174,7 +182,11 @@ Deno.test(
         seenAuthClients.push(config.authClient!);
         return {
           isAuthenticated: true,
-          user: { id: TEST_USER_ID } as any,
+          principal: {
+            userId: TEST_USER_ID,
+            authMethod: 'supabase_jwt',
+            assurance: 'claims',
+          },
         };
       },
       queueExportTidasPackage: async (supabase, userId, body, _req) => {

@@ -252,11 +252,9 @@ function isUpstashClient(client: RedisClient): client is UpstashRedis {
 async function redisGet<T = unknown>(client: RedisClient, key: string): Promise<T | null> {
   if (isUpstashClient(client)) {
     const value = await client.get<T>(key);
-    console.log('Upstash Redis Client get value:', value);
     return value as T | null;
   } else {
     const value = await client.get(key);
-    console.log('Standard Redis Client get value:', value);
     return value as T | null;
   }
 }
@@ -271,14 +269,12 @@ async function redisSet(
   if (isUpstashClient(client)) {
     if (options?.ex) {
       await client.set(key, value, { ex: options.ex });
-      console.log('Upstash Redis Client set value:', value);
     } else {
       await client.set(key, value);
     }
   } else {
     if (options?.ex) {
       await client.set(key, String(value), { ex: options.ex });
-      console.log('Standard Redis Client set value:', value);
     } else {
       await client.set(key, String(value));
     }

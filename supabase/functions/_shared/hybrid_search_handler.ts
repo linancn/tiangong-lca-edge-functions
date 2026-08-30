@@ -46,10 +46,9 @@ export interface HybridSearchHandlerDependencies {
 }
 
 async function defaultAuthenticate(request: Request): Promise<HybridSearchAuthResult> {
-  const redis = await getRedisClient();
   return await authenticateRequest(request, {
     authClient: supabaseAuthClient,
-    redis,
+    redisFactory: getRedisClient,
     allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY, AuthMethod.SERVICE_API_KEY],
   });
 }

@@ -46,7 +46,7 @@ export function createExportTidasPackageHandler(
       allowedMethods: [AuthMethod.JWT],
     });
 
-    const userId = authResult.user?.id;
+    const userId = authResult.principal?.userId;
     if (!authResult.isAuthenticated || !userId) {
       return json(
         {
