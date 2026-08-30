@@ -95,7 +95,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - auxiliary package manager/runtime: pnpm `11.24.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 154 enabled function/test roots through one bounded shared Deno graph, runs 69 Node contract tests, and executes 501 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
+- `pnpm check` validates exact runtime versions, checks all 154 enabled function/test roots through one bounded shared Deno graph, runs 72 Node contract tests, and executes 501 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
