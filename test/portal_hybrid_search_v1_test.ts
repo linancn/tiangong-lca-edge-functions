@@ -391,6 +391,7 @@ Deno.test(
     };
     let rewriteSignal: AbortSignal | undefined;
     let embeddingSignal: AbortSignal | undefined;
+    let embeddingInput: string | undefined;
     let rewriteProvider: Readonly<PortalHybridKernelProviderConfig> | undefined;
     let embeddingProvider: Readonly<PortalHybridKernelProviderConfig> | undefined;
     const handler = createPortalHybridSearchHandler(
@@ -406,10 +407,11 @@ Deno.test(
           return REWRITE;
         },
         generateEmbedding: async (
-          _query: string,
+          query: string,
           signal: AbortSignal,
           provider?: Readonly<PortalHybridKernelProviderConfig>,
         ) => {
+          embeddingInput = query;
           embeddingSignal = signal;
           embeddingProvider = provider;
           return VECTOR;
@@ -440,6 +442,7 @@ Deno.test(
     assertEquals(repositoryCalls[0].embedding.length, 1_024);
     assertEquals(repositoryCalls[0].signal, rewriteSignal);
     assertEquals(repositoryCalls[0].signal, embeddingSignal);
+    assertEquals(embeddingInput, REQUEST.query);
     assertEquals(repositoryCalls[0].signal.aborted, false);
     assertEquals(rewriteProvider, PROVIDER_CONFIG);
     assertEquals(embeddingProvider, PROVIDER_CONFIG);
@@ -1156,9 +1159,7 @@ Deno.test(
       },
       {
         rewriteQuery: async () => null as unknown as HybridSearchQuery,
-        generateEmbedding: async () => {
-          throw new Error('must not embed an invalid rewrite');
-        },
+        generateEmbedding: async () => VECTOR,
         code: 'contract_failure',
       },
       {
@@ -1168,17 +1169,13 @@ Deno.test(
             fulltext_query_en: ['steel', 42],
             fulltext_query_zh: [],
           }) as unknown as HybridSearchQuery,
-        generateEmbedding: async () => {
-          throw new Error('must not embed an invalid rewrite');
-        },
+        generateEmbedding: async () => VECTOR,
         code: 'contract_failure',
       },
       {
         rewriteQuery: async () =>
           ({ ...REWRITE, private_provider_field: 'must not pass' }) as HybridSearchQuery,
-        generateEmbedding: async () => {
-          throw new Error('must not embed an invalid rewrite');
-        },
+        generateEmbedding: async () => VECTOR,
         code: 'contract_failure',
       },
     ]) {
@@ -1206,10 +1203,57 @@ Deno.test(
 );
 
 Deno.test(
-  'Portal Hybrid absolute deadline aborts OpenAI and stops SageMaker and database downstream',
+  'Portal Hybrid provider failure aborts its concurrent peer before releasing the lease',
+  async () => {
+    const redis = new FakePortalRedis();
+    let embeddingSignal: AbortSignal | undefined;
+    let embeddingAbortObserved = false;
+    let databaseCalls = 0;
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query() {
+            databaseCalls += 1;
+            return Promise.resolve(databasePage());
+          },
+        },
+        {
+          rewriteQuery: () => Promise.reject(new Error('private provider details')),
+          generateEmbedding: (_query: string, signal: AbortSignal) => {
+            embeddingSignal = signal;
+            return new Promise((_resolve, reject) => {
+              signal.addEventListener(
+                'abort',
+                () => {
+                  embeddingAbortObserved = true;
+                  reject(new DOMException('aborted', 'AbortError'));
+                },
+                { once: true },
+              );
+            });
+          },
+        },
+      ),
+    );
+
+    const response = await handler(await signedRequest());
+    assertEquals(response.status, 503);
+    assertEquals(await responseCode(response), 'hybrid_upstream_unavailable');
+    assertEquals(embeddingSignal?.aborted, true);
+    assertEquals(embeddingAbortObserved, true);
+    assertEquals(databaseCalls, 0);
+    assert(redis.calls.includes('circuit_failure'));
+    assert(redis.calls.includes('lease_release'));
+  },
+);
+
+Deno.test(
+  'Portal Hybrid absolute deadline starts both providers, aborts them together, and stops database',
   async () => {
     const redis = new FakePortalRedis();
     let rewriteSignal: AbortSignal | undefined;
+    let embeddingSignal: AbortSignal | undefined;
     let embeddingCalls = 0;
     let databaseCalls = 0;
     const handler = createPortalHybridSearchHandler(
@@ -1227,9 +1271,10 @@ Deno.test(
             rewriteSignal = signal;
             return neverPromise();
           },
-          generateEmbedding: async () => {
+          generateEmbedding: (_query: string, signal: AbortSignal) => {
             embeddingCalls += 1;
-            return VECTOR;
+            embeddingSignal = signal;
+            return neverPromise();
           },
         },
       ),
@@ -1238,7 +1283,9 @@ Deno.test(
     assertEquals(response.status, 503);
     assertEquals(await responseCode(response), 'hybrid_timeout');
     assertEquals(rewriteSignal?.aborted, true);
-    assertEquals(embeddingCalls, 0);
+    assertEquals(embeddingCalls, 1);
+    assertEquals(embeddingSignal, rewriteSignal);
+    assertEquals(embeddingSignal?.aborted, true);
     assertEquals(databaseCalls, 0);
   },
 );
