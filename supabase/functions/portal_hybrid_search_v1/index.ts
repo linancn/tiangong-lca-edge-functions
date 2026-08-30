@@ -573,26 +573,38 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           event.cache = 'miss';
           if (deadline.isExpired()) return timeoutResponse();
           let rawRewrite: unknown;
+          let embedding: number[];
           event.model = 'called';
           try {
-            rawRewrite = await deadline.run(() =>
-              (options.rewriteQuery ?? rewritePortalHybridSearchQuery)(
-                buildKernelConfig(hybridRequest.kind),
-                hybridRequest.query,
-                deadline.signal,
-                providerConfig,
-              ),
+            [rawRewrite, embedding] = await deadline.run(() =>
+              Promise.all([
+                (options.rewriteQuery ?? rewritePortalHybridSearchQuery)(
+                  buildKernelConfig(hybridRequest.kind),
+                  hybridRequest.query,
+                  deadline.signal,
+                  providerConfig,
+                ),
+                (options.generateEmbedding ?? generatePortalHybridSearchEmbedding)(
+                  hybridRequest.query,
+                  deadline.signal,
+                  providerConfig,
+                ),
+              ]),
             );
           } catch (error) {
             event.model = deadline.signal.aborted ? 'aborted' : 'failed';
+            const code =
+              typeof error === 'object' && error !== null ? Reflect.get(error, 'code') : null;
             return await responseAfterCircuitFailure(
               isPortalHybridDeadlineError(error) || deadline.isExpired()
                 ? timeoutResponse()
-                : errorResponse(
-                    503,
-                    'hybrid_upstream_unavailable',
-                    'Portal Hybrid search unavailable',
-                  ),
+                : code === 'EMBEDDING_VECTOR_MISSING' || code === 'EMBEDDING_DIMENSION_MISMATCH'
+                  ? errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable')
+                  : errorResponse(
+                      503,
+                      'hybrid_upstream_unavailable',
+                      'Portal Hybrid search unavailable',
+                    ),
             );
           }
 
@@ -611,22 +623,10 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
             );
           }
 
-          let embedding: number[];
           try {
-            if (deadline.isExpired()) return timeoutResponse();
-            embedding = await deadline.run(() =>
-              (options.generateEmbedding ?? generatePortalHybridSearchEmbedding)(
-                modelOnly.semantic_query_en,
-                deadline.signal,
-                providerConfig,
-              ),
-            );
             modelCache = buildModelCache(rawRewrite, hybridRequest, embedding);
           } catch (error) {
-            event.model = deadline.signal.aborted ? 'aborted' : 'failed';
-            if (isPortalHybridDeadlineError(error) || deadline.isExpired()) {
-              return await responseAfterCircuitFailure(timeoutResponse());
-            }
+            event.model = 'failed';
             if (error instanceof PortalHybridRepositoryError && error.code === 'contract_failure') {
               return await responseAfterCircuitFailure(
                 errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable'),
