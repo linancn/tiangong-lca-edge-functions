@@ -40,7 +40,7 @@ checkPaths:
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
 lastReviewedCommit: f99b8c5d0ee3658032487d2da2af2d53d139f7fb
-lastReviewedNote: 'Reviewed for Edge #357: the exact Deno import graph is latest-stable and Edge-compatible, Redis 0.41.2 has an explicit dual-provider adapter, and the 155-root/72-Node/502-Deno baseline passes.'
+lastReviewedNote: 'Reviewed for Edge #357: the exact Deno import graph is latest-stable and Edge-compatible, Redis 0.41.2 has an explicit dual-provider adapter, and the 155-root/73-Node/502-Deno baseline passes.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -96,7 +96,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - latest reviewed import graph: AWS SDK `3.1121.0`, OpenAI `7.8.0`, Supabase JSR `2.112.4`, Upstash Redis `1.38.3`, aws-jwt-verify `5.2.1`, Deno Redis `0.41.2`, Zod `4.5.4`, and Prettier `3.9.6`; `pnpm outdated` and exact-Deno `deno outdated --latest` must remain empty
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 155 enabled function/test roots through one bounded shared Deno graph, runs 72 Node contract tests, and executes 502 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
+- `pnpm check` validates exact runtime versions, checks all 155 enabled function/test roots through one bounded shared Deno graph, runs 73 Node contract tests, and executes 502 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
