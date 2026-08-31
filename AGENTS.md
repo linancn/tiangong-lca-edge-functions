@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: f2cbab255467e1e9556526beb8c7b3fa1ca52ffd
-lastReviewedNote: 'Reviewed for Edge #355: legacy User API Key decoding now requires non-empty string email/password fields before lazy Redis selection; malformed object/array bearers keep Redis uninitialized and the 155-root/502-test baseline remains current.'
+lastReviewedCommit: 016d93f9accb3d7cefb358c0009d70d9a2046936
+lastReviewedNote: 'Reviewed for Edge #357: the exact Deno import graph is latest-stable and Edge-compatible, Redis 0.41.2 has an explicit dual-provider adapter, and the 155-root/72-Node/502-Deno baseline passes.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -93,6 +93,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 
 - authoritative runtime/compiler: Deno `2.1.4` with its actual bundled TypeScript `5.6.2`, matching Supabase CLI `2.116.0` and Edge Runtime `1.74.3`; this repository does not install or claim TypeScript 7
 - auxiliary package manager/runtime: pnpm `11.24.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
+- latest reviewed import graph: AWS SDK `3.1121.0`, OpenAI `7.8.0`, Supabase JSR `2.112.4`, Upstash Redis `1.38.3`, aws-jwt-verify `5.2.1`, Deno Redis `0.41.2`, Zod `4.5.4`, and Prettier `3.9.6`; `pnpm outdated` and exact-Deno `deno outdated --latest` must remain empty
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
 - `pnpm check` validates exact runtime versions, checks all 155 enabled function/test roots through one bounded shared Deno graph, runs 72 Node contract tests, and executes 502 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
@@ -110,6 +111,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - ordinary Supabase JWT authentication defaults to `getClaims(token)` and exposes a minimal principal; only reviewed identity/profile synchronization and email/password bridge routes may request `jwtAssurance: 'fresh_user'`
 - generic Redis is resolved only after a syntactically valid opaque legacy User API Key is selected; JWT, OAuth JWT, service-key, malformed bearer, and Portal paths must not initialize that client
 - the generic Upstash client reads only `UPSTASH_REDIS_REST_URL/TOKEN`, matching the private Edge Functions `.env` and MCP runtime. Portal continues to read only its `PORTAL_*`/`PORTAL_R0_*` names and never falls back to the generic pair
+- TIDAS package endpoints use database `worker_jobs`/Worker contracts and do not import the JavaScript TIDAS SDK; TIDAS SDK 0.2 compatibility is owned and tested by its direct consumers rather than duplicated in Edge
 
 ## Ownership Boundaries
 
