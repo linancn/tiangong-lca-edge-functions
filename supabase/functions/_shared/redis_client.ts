@@ -1,5 +1,5 @@
-import { Redis as UpstashRedis } from 'https://esm.sh/@upstash/redis@1.36.3';
-import { connect, type Redis as DenoRedis } from 'jsr:@db/redis@0.40.0';
+import { Redis as UpstashRedis } from 'https://esm.sh/@upstash/redis@1.38.3';
+import { connect, type Redis as DenoRedis } from 'jsr:@db/redis@0.41.2';
 
 /**
  * Support Upstash and Standard Redis Client
@@ -156,11 +156,17 @@ class PortalRedisSdkAdapter implements PortalRedisAdapter {
   }
 
   async eval(script: string, keys: string[], args: string[]): Promise<unknown> {
-    return await withPortalRedisTimeout(this.client.eval(script, keys, args), this.timeoutMs);
+    const operation = isUpstashClient(this.client)
+      ? this.client.eval(script, keys, args)
+      : this.client.eval(script, keys, args);
+    return await withPortalRedisTimeout(operation, this.timeoutMs);
   }
 
   async get(key: string): Promise<string | null> {
-    const result = await withPortalRedisTimeout(this.client.get(key), this.timeoutMs);
+    const operation = isUpstashClient(this.client)
+      ? this.client.get<string>(key)
+      : this.client.get(key);
+    const result = await withPortalRedisTimeout(operation, this.timeoutMs);
     if (result === null || typeof result === 'string') return result;
     throw new PortalRedisError();
   }
