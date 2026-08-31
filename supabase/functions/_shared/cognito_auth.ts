@@ -1,4 +1,4 @@
-import { CognitoJwtVerifier } from 'npm:aws-jwt-verify@5.1.1';
+import { CognitoJwtVerifier } from 'npm:aws-jwt-verify@5.2.1';
 import type { AuthResult } from './auth.ts';
 import { corsHeaders } from './cors.ts';
 

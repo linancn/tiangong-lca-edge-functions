@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: f2cbab255467e1e9556526beb8c7b3fa1ca52ffd
-lastReviewedNote: 'Reviewed for Edge #355: legacy User API Key decoding now requires non-empty string email/password fields before lazy Redis selection; malformed object/array bearers keep Redis uninitialized and the 155-root/502-test baseline remains current.'
+lastReviewedCommit: c313a083c76d893ad28e951387110b725f4d1bce
+lastReviewedNote: 'Reviewed for Edge #361: every Supabase Functions JS type import resolves through the exact 2.112.4 import-map alias, and the executable contract rejects JSR, npm, HTTPS, or any alternative direct scheme.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -93,9 +93,10 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 
 - authoritative runtime/compiler: Deno `2.1.4` with its actual bundled TypeScript `5.6.2`, matching Supabase CLI `2.116.0` and Edge Runtime `1.74.3`; this repository does not install or claim TypeScript 7
 - auxiliary package manager/runtime: pnpm `11.24.0` on Node `24.19.0`, retained for the exact Supabase CLI, Prettier, and Node validation wrappers only
+- latest reviewed import graph: AWS SDK `3.1121.0`, OpenAI `7.8.0`, Supabase JSR `2.112.4`, Upstash Redis `1.38.3`, aws-jwt-verify `5.2.1`, Deno Redis `0.41.2`, Zod `4.5.4`, and Prettier `3.9.6`; every Functions JS type import must use the mapped `@supabase/functions-js/edge-runtime.d.ts` alias, while any direct JSR, npm, HTTPS, or other `@supabase/functions-js` specifier is forbidden; `pnpm outdated` and exact-Deno `deno outdated --latest` must remain empty
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 155 enabled function/test roots through one bounded shared Deno graph, runs 72 Node contract tests, and executes 502 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
+- `pnpm check` validates exact runtime versions, checks all 155 enabled function/test roots through one bounded shared Deno graph, runs 73 Node contract tests, and executes 502 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -110,6 +111,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - ordinary Supabase JWT authentication defaults to `getClaims(token)` and exposes a minimal principal; only reviewed identity/profile synchronization and email/password bridge routes may request `jwtAssurance: 'fresh_user'`
 - generic Redis is resolved only after a syntactically valid opaque legacy User API Key is selected; JWT, OAuth JWT, service-key, malformed bearer, and Portal paths must not initialize that client
 - the generic Upstash client reads only `UPSTASH_REDIS_REST_URL/TOKEN`, matching the private Edge Functions `.env` and MCP runtime. Portal continues to read only its `PORTAL_*`/`PORTAL_R0_*` names and never falls back to the generic pair
+- TIDAS package endpoints use database `worker_jobs`/Worker contracts and do not import the JavaScript TIDAS SDK; TIDAS SDK 0.2 compatibility is owned and tested by its direct consumers rather than duplicated in Edge
 
 ## Ownership Boundaries
 
@@ -164,6 +166,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 ## Hard Boundaries
 
 - do not invent schema truth or migration history in this repo
+- do not bypass `supabase/functions/deno.json` with a direct JSR, npm, HTTPS, or other `@supabase/functions-js` specifier; all Functions JS type imports use the exact mapped alias so local checks and remote bundles resolve 2.112.4
 - do not interpret `--no-verify-jwt` as permission for anonymous business logic
 - do not deploy `portal_r0_hmac_verify_v1` through persistent Dev/Main tooling or let it read any long-lived Portal/generic credential; remote deploy accepts only a live `FUNCTIONS_DEPLOYED` / `ACTIVE_HEALTHY`, nondefault, nonpersistent, no-data Preview branch returned by a read-only `branches list` against the configured Main parent and exactly matching the operator-supplied branch name, Git branch, and optional PR number. It also requires complete `PORTAL_R0_*` configuration, a current-project R0 publishable key, and a `portal:r0:<fixture>:v1` namespace. Local `test` is not a remote deploy target. The function must never call a database, RPC, model, provider, repository, storage, or business kernel
 - do not require an identified R0 branch to remain ready or healthy before cleanup; once Main parent, project ref, nondefault/nonpersistent/no-data flags, branch name, Git branch, optional PR, exact SHA, and cleanup acknowledgement still match, cleanup must attempt the fixed function deletion and surface any real delete failure

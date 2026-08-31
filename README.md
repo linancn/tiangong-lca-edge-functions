@@ -24,8 +24,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: 512b07ee906e9f65dc95a1fe63011763a4fa1922
-lastReviewedNote: 'Reviewed for Edge #351: Supabase JWTs are claims-first, sensitive bridge routes opt into fresh-user lookup, and lazy legacy User API Key Redis uses the shared Edge/MCP REST names with an email-free cache key.'
+lastReviewedCommit: c313a083c76d893ad28e951387110b725f4d1bce
+lastReviewedNote: 'Reviewed for Edge #361: all Supabase Functions JS type imports use the exact 2.112.4 alias and every direct scheme is rejected; auth, Portal Redis, worker_jobs, and OpenAI/Hybrid behavior stay unchanged.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -33,6 +33,8 @@ lastReviewedNote: 'Reviewed for Edge #351: Supabase JWTs are claims-first, sensi
 ## Overview
 
 Supabase Edge Functions for LCA search, embedding, TIDAS package orchestration, solving workflows, and the signed public Portal LCIA and R2 Hybrid projections.
+
+Review note, 2026-08-31: Edge #361 replaces 52 unversioned direct Functions JS type specifiers with the repository alias mapped to exact Supabase Functions JS 2.112.4. The executable scan captures JSR, npm, HTTPS, and any other quoted Functions JS specifier and accepts only that alias. The type-only normalization changes no request, response, auth, Redis, Portal, or deploy configuration behavior.
 
 - Runtime/compiler: Deno 2.1.4 with bundled TypeScript 5.6.2
 - Functions root: `supabase/functions`
@@ -445,12 +447,14 @@ Queued and running jobs return public progress. A completed job includes `data.r
 
 - No LangChain dependency in active path.
 - OpenAI SDK mapping is in `supabase/functions/deno.json`:
-  - `@openai/openai -> npm:openai@6.27.0`
+  - `@openai/openai -> npm:openai@7.8.0`
 - Shared wrappers:
   - `supabase/functions/_shared/openai_structured.ts`
   - `supabase/functions/_shared/openai_chat.ts`
 - Default model fallback in code is `gpt-4.1-mini` when env/model option is not provided.
 - Signed Portal Hybrid uses separate provider-explicit `portal_hybrid_kernel.ts` and `portal_openai_structured.ts` adapters. They read no generic provider variable; the existing wrappers above remain unchanged for every non-Portal consumer.
+
+The reviewed Edge dependency baseline also pins AWS SDK 3.1121.0, Supabase JSR 2.112.4, Upstash Redis 1.38.3, aws-jwt-verify 5.2.1, Deno Redis 0.41.2, Zod 4.5.4, and Prettier 3.9.6. TIDAS package routes enqueue database `worker_jobs`; they do not import the JavaScript TIDAS SDK.
 
 ## Required Development Workflow
 
@@ -470,7 +474,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 72 Node contract tests, and 502 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 502 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

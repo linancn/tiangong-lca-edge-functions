@@ -1,3 +1,7 @@
+# Edge #357 dependency review: the latest runtime import graph changes no endpoint,
+# authentication header, request payload, or response example in this collection.
+# Edge #361 pin review: the Functions JS type-only alias normalization changes no
+# endpoint, authentication header, request payload, or response example.
 # Hybrid Search v2 accepts one lexical_weight and one semantic_weight.
 # Do not restore the retired full_text_weight or extracted_text_weight fields.
 ### @name Flow_Hybrid_Search：Remote

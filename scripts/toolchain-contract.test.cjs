@@ -8,6 +8,25 @@ const test = require('node:test');
 const repositoryRoot = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(repositoryRoot, relativePath), 'utf8');
 const readJson = (relativePath) => JSON.parse(read(relativePath));
+function findFiles(directory) {
+  const files = [];
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const absolutePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...findFiles(absolutePath));
+    } else {
+      files.push(absolutePath);
+    }
+  }
+  return files;
+}
+function collectFunctionsJsSpecifiers(source) {
+  return new Set(
+    [...source.matchAll(/['"]([^'"\r\n]*@supabase\/functions-js[^'"\r\n]*)['"]/gu)].map(
+      (match) => match[1],
+    ),
+  );
+}
 const workflowSources = fs
   .readdirSync(path.join(repositoryRoot, '.github/workflows'))
   .filter((fileName) => fileName.endsWith('.yml'))
@@ -29,13 +48,61 @@ test('keeps Supabase Edge Runtime-compatible Deno authoritative and auxiliary to
   assert.equal(packageJson.config.denoTypeScriptVersion, '5.6.2');
   assert.equal(packageJson.config.supabaseCliVersion, '2.116.0');
   assert.equal(packageJson.config.supabaseEdgeRuntimeVersion, '1.74.3');
-  assert.equal(packageJson.devDependencies.prettier, '3.9.5');
+  assert.equal(packageJson.devDependencies.prettier, '3.9.6');
   assert.equal(packageJson.devDependencies.supabase, '2.116.0');
   assert.equal(packageJson.devDependencies.typescript, undefined);
   assert.equal(packageJson.devDependencies['prettier-plugin-organize-imports'], undefined);
   assert.equal(read('.nvmrc').trim(), '24.19.0');
   assert.equal(read('.tool-versions').trim(), 'deno 2.1.4');
   assert.doesNotMatch(read('.prettierrc.js'), /prettier-plugin-organize-imports/u);
+});
+
+test('pins the latest reviewed Edge-compatible runtime dependency graph', () => {
+  const imports = readJson('supabase/functions/deno.json').imports;
+  assert.deepEqual(imports, {
+    '@aws-sdk/client-cognito-identity-provider':
+      'npm:@aws-sdk/client-cognito-identity-provider@3.1121.0',
+    '@aws-sdk/client-sagemaker-runtime': 'npm:@aws-sdk/client-sagemaker-runtime@3.1121.0',
+    '@openai/openai': 'npm:openai@7.8.0',
+    '@supabase/functions-js/edge-runtime.d.ts':
+      'jsr:@supabase/functions-js@2.112.4/edge-runtime.d.ts',
+    '@supabase/supabase-js@2': 'jsr:@supabase/supabase-js@2.112.4',
+    '@upstash/redis': 'https://esm.sh/@upstash/redis@1.38.3',
+    'aws-jwt-verify': 'npm:aws-jwt-verify@5.2.1',
+    postgres: 'https://deno.land/x/postgresjs@v3.4.8/mod.js',
+    redis: 'jsr:@db/redis@0.41.2',
+    zod: 'npm:/zod@4.5.4',
+  });
+
+  const directSupabaseVersions = new Set();
+  const directFunctionsJsSpecifiers = new Set();
+  for (const root of ['supabase/functions', 'test', 'scripts']) {
+    for (const filePath of findFiles(path.join(repositoryRoot, root))) {
+      if (!filePath.endsWith('.ts')) continue;
+      const source = fs.readFileSync(filePath, 'utf8');
+      for (const match of source.matchAll(/jsr:@supabase\/supabase-js@([^/'"]+)/gu)) {
+        directSupabaseVersions.add(match[1]);
+      }
+      for (const specifier of collectFunctionsJsSpecifiers(source)) {
+        directFunctionsJsSpecifiers.add(specifier);
+      }
+    }
+  }
+  assert.deepEqual([...directSupabaseVersions], ['2.112.4']);
+  for (const bypass of [
+    'jsr:@supabase/functions-js/edge-runtime.d.ts',
+    'jsr:@supabase/functions-js@2.112.4/edge-runtime.d.ts',
+    'npm:@supabase/functions-js@2.112.4',
+    'https://esm.sh/@supabase/functions-js@2.112.4/edge-runtime.d.ts',
+  ]) {
+    assert.deepEqual([...collectFunctionsJsSpecifiers(`import '${bypass}';`)], [bypass]);
+  }
+  assert.deepEqual([...directFunctionsJsSpecifiers], ['@supabase/functions-js/edge-runtime.d.ts']);
+  assert.match(
+    read('supabase/functions/_shared/redis_client.ts'),
+    /@upstash\/redis@1\.38\.3[\s\S]*jsr:@db\/redis@0\.41\.2/u,
+  );
+  assert.match(read('supabase/functions/_shared/cognito_auth.ts'), /npm:aws-jwt-verify@5\.2\.1/u);
 });
 
 test('binds the Supabase CLI image to reviewed Edge Runtime and Deno source evidence', () => {
@@ -85,7 +152,7 @@ test('uses one frozen pnpm graph without npm-owned compiler tooling', () => {
   const lockfile = read('pnpm-lock.yaml');
   const workspace = read('pnpm-workspace.yaml');
 
-  assert.match(lockfile, /^\s{2}prettier@3\.9\.5:/mu);
+  assert.match(lockfile, /^\s{2}prettier@3\.9\.6:/mu);
   assert.match(lockfile, /^\s{2}supabase@2\.116\.0:/mu);
   assert.doesNotMatch(lockfile, /^\s{2}typescript@/mu);
   assert.doesNotMatch(lockfile, /prettier-plugin-organize-imports/u);
