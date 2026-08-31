@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-31'
-lastReviewedCommit: 'f2cbab255467e1e9556526beb8c7b3fa1ca52ffd'
-lastReviewedNote: 'Reviewed for Edge #355: auth-runtime and proof routing cover strict non-empty string legacy credentials, zero Redis initialization for malformed object/array bearers, and the current 155-root/502-test baseline.'
+lastReviewedCommit: 'f99b8c5d0ee3658032487d2da2af2d53d139f7fb'
+lastReviewedNote: 'Reviewed for Edge #357: runtime/config/proof routing covers the latest exact import graph, direct Supabase type imports, Redis 0.41.2 adapter change, and the 155-root/73-Node/502-Deno baseline.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

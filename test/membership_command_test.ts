@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from 'jsr:@std/assert';
-import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.98.0';
+import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.112.4';
 
 import { parseTeamAcceptInvitationCommand } from '../supabase/functions/_shared/commands/membership/accept_invitation.ts';
 import { executeTeamChangeMemberRoleCommand } from '../supabase/functions/_shared/commands/membership/change_role.ts';

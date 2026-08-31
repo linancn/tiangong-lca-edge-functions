@@ -24,8 +24,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: 512b07ee906e9f65dc95a1fe63011763a4fa1922
-lastReviewedNote: 'Reviewed for Edge #351: Supabase JWTs are claims-first, sensitive bridge routes opt into fresh-user lookup, and lazy legacy User API Key Redis uses the shared Edge/MCP REST names with an email-free cache key.'
+lastReviewedCommit: f99b8c5d0ee3658032487d2da2af2d53d139f7fb
+lastReviewedNote: 'Reviewed for Edge #357: the latest exact Deno import graph keeps claims-first auth, isolated Portal Redis, database worker_jobs, and existing OpenAI/Hybrid behavior.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -445,12 +445,14 @@ Queued and running jobs return public progress. A completed job includes `data.r
 
 - No LangChain dependency in active path.
 - OpenAI SDK mapping is in `supabase/functions/deno.json`:
-  - `@openai/openai -> npm:openai@6.27.0`
+  - `@openai/openai -> npm:openai@7.8.0`
 - Shared wrappers:
   - `supabase/functions/_shared/openai_structured.ts`
   - `supabase/functions/_shared/openai_chat.ts`
 - Default model fallback in code is `gpt-4.1-mini` when env/model option is not provided.
 - Signed Portal Hybrid uses separate provider-explicit `portal_hybrid_kernel.ts` and `portal_openai_structured.ts` adapters. They read no generic provider variable; the existing wrappers above remain unchanged for every non-Portal consumer.
+
+The reviewed Edge dependency baseline also pins AWS SDK 3.1121.0, Supabase JSR 2.112.4, Upstash Redis 1.38.3, aws-jwt-verify 5.2.1, Deno Redis 0.41.2, Zod 4.5.4, and Prettier 3.9.6. TIDAS package routes enqueue database `worker_jobs`; they do not import the JavaScript TIDAS SDK.
 
 ## Required Development Workflow
 
@@ -470,7 +472,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 72 Node contract tests, and 502 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 502 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 
