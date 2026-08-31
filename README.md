@@ -24,7 +24,7 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: 016d93f9accb3d7cefb358c0009d70d9a2046936
+lastReviewedCommit: f99b8c5d0ee3658032487d2da2af2d53d139f7fb
 lastReviewedNote: 'Reviewed for Edge #357: the latest exact Deno import graph keeps claims-first auth, isolated Portal Redis, database worker_jobs, and existing OpenAI/Hybrid behavior.'
 ---
 

@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: 016d93f9accb3d7cefb358c0009d70d9a2046936
-lastReviewedNote: 'Reviewed for Edge #357: dependency proof requires an empty outdated audit, exact import/direct-type versions, OpenAI/Redis/Auth targets, and the complete 155-root/72-Node/502-Deno baseline.'
+lastReviewedCommit: f99b8c5d0ee3658032487d2da2af2d53d139f7fb
+lastReviewedNote: 'Reviewed for Edge #357: dependency proof requires empty outdated audits, exact imports, OpenAI/Redis/Auth targets, 155-root/72-Node/502-Deno, and explicit no-drift review of test.example.http.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

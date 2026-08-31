@@ -35,7 +35,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: 016d93f9accb3d7cefb358c0009d70d9a2046936
+lastReviewedCommit: f99b8c5d0ee3658032487d2da2af2d53d139f7fb
 lastReviewedNote: 'Reviewed for Edge #357: the exact latest-stable import graph preserves current route architecture, with an explicit Upstash/Standard Redis adapter for Deno Redis 0.41.2.'
 related:
   - ../../AGENTS.md
