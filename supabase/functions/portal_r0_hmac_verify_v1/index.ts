@@ -1,4 +1,4 @@
-import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { loadPortalR0HmacKeyring, type PortalR0Environment } from '../_shared/portal_r0_hmac.ts';
 import {

@@ -68,17 +68,21 @@ test('pins the latest reviewed Edge-compatible runtime dependency graph', () => 
   });
 
   const directSupabaseVersions = new Set();
+  const directFunctionsJsSpecifiers = new Set();
   for (const root of ['supabase/functions', 'test', 'scripts']) {
     for (const filePath of findFiles(path.join(repositoryRoot, root))) {
       if (!filePath.endsWith('.ts')) continue;
-      for (const match of fs
-        .readFileSync(filePath, 'utf8')
-        .matchAll(/jsr:@supabase\/supabase-js@([^/'"]+)/gu)) {
+      const source = fs.readFileSync(filePath, 'utf8');
+      for (const match of source.matchAll(/jsr:@supabase\/supabase-js@([^/'"]+)/gu)) {
         directSupabaseVersions.add(match[1]);
+      }
+      for (const match of source.matchAll(/['"]((?:jsr:)?@supabase\/functions-js[^'"]*)['"]/gu)) {
+        directFunctionsJsSpecifiers.add(match[1]);
       }
     }
   }
   assert.deepEqual([...directSupabaseVersions], ['2.112.4']);
+  assert.deepEqual([...directFunctionsJsSpecifiers], ['@supabase/functions-js/edge-runtime.d.ts']);
   assert.match(
     read('supabase/functions/_shared/redis_client.ts'),
     /@upstash\/redis@1\.38\.3[\s\S]*jsr:@db\/redis@0\.41\.2/u,
