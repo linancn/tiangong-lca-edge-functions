@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: 512b07ee906e9f65dc95a1fe63011763a4fa1922
-lastReviewedNote: 'Reviewed for Edge #351: ordinary Supabase JWTs use claims-first verification and minimal principals, fresh-user routes opt into online lookup, and lazy legacy User API Key Redis uses the shared Edge/MCP REST names while Portal Redis stays isolated.'
+lastReviewedCommit: f2cbab255467e1e9556526beb8c7b3fa1ca52ffd
+lastReviewedNote: 'Reviewed for Edge #355: legacy User API Key decoding now requires non-empty string email/password fields before lazy Redis selection; malformed object/array bearers keep Redis uninitialized and the 155-root/502-test baseline remains current.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: 512b07ee906e9f65dc95a1fe63011763a4fa1922
-lastReviewedNote: 'Reviewed for Edge #351: the central auth runtime emits minimal principals from claims-first JWT validation; generic lazy Redis uses the shared Edge/MCP REST names while Portal remains prefixed and isolated.'
+lastReviewedCommit: f2cbab255467e1e9556526beb8c7b3fa1ca52ffd
+lastReviewedNote: 'Reviewed for Edge #355: the legacy compatibility decoder requires non-empty string email/password fields before generic lazy Redis can be selected; malformed object/array bearers remain Redis-free.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
