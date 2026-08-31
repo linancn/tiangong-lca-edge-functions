@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: 512b07ee906e9f65dc95a1fe63011763a4fa1922
-lastReviewedNote: 'Reviewed for Edge #351: auth proof distinguishes claims-first JWT, fresh-user lookup, minimal principal propagation, and lazy legacy Redis using Edge/MCP REST names without changing Portal isolation.'
+lastReviewedCommit: f2cbab255467e1e9556526beb8c7b3fa1ca52ffd
+lastReviewedNote: 'Reviewed for Edge #355: shared-auth proof now exercises malformed object/array legacy credentials, requires zero Redis initialization, and retains the 155-root/502-test canonical baseline.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
