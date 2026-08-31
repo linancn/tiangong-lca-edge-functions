@@ -36,6 +36,12 @@ export async function authenticateCognitoToken(token: string): Promise<AuthResul
     // Align to shared AuthResult shape used in _shared/auth.ts
     return {
       isAuthenticated: true,
+      principal: {
+        userId,
+        email,
+        authMethod: 'cognito_jwt',
+        assurance: 'claims',
+      },
       user: {
         id: userId,
         email,

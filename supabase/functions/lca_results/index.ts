@@ -15,11 +15,9 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
-  const redis = await getRedisClient();
-
   const authResult = await authenticateRequest(req, {
     authClient: supabaseAuthClient,
-    redis,
+    redisFactory: getRedisClient,
     allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
   });
 
@@ -27,7 +25,7 @@ Deno.serve(async (req) => {
     return authResult.response!;
   }
 
-  const userId = authResult.user?.id;
+  const userId = authResult.principal?.userId;
   if (!userId) {
     return json({ error: 'unauthorized' }, 401);
   }
