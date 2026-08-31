@@ -20,6 +20,13 @@ function findFiles(directory) {
   }
   return files;
 }
+function collectFunctionsJsSpecifiers(source) {
+  return new Set(
+    [...source.matchAll(/['"]([^'"\r\n]*@supabase\/functions-js[^'"\r\n]*)['"]/gu)].map(
+      (match) => match[1],
+    ),
+  );
+}
 const workflowSources = fs
   .readdirSync(path.join(repositoryRoot, '.github/workflows'))
   .filter((fileName) => fileName.endsWith('.yml'))
@@ -76,12 +83,20 @@ test('pins the latest reviewed Edge-compatible runtime dependency graph', () => 
       for (const match of source.matchAll(/jsr:@supabase\/supabase-js@([^/'"]+)/gu)) {
         directSupabaseVersions.add(match[1]);
       }
-      for (const match of source.matchAll(/['"]((?:jsr:)?@supabase\/functions-js[^'"]*)['"]/gu)) {
-        directFunctionsJsSpecifiers.add(match[1]);
+      for (const specifier of collectFunctionsJsSpecifiers(source)) {
+        directFunctionsJsSpecifiers.add(specifier);
       }
     }
   }
   assert.deepEqual([...directSupabaseVersions], ['2.112.4']);
+  for (const bypass of [
+    'jsr:@supabase/functions-js/edge-runtime.d.ts',
+    'jsr:@supabase/functions-js@2.112.4/edge-runtime.d.ts',
+    'npm:@supabase/functions-js@2.112.4',
+    'https://esm.sh/@supabase/functions-js@2.112.4/edge-runtime.d.ts',
+  ]) {
+    assert.deepEqual([...collectFunctionsJsSpecifiers(`import '${bypass}';`)], [bypass]);
+  }
   assert.deepEqual([...directFunctionsJsSpecifiers], ['@supabase/functions-js/edge-runtime.d.ts']);
   assert.match(
     read('supabase/functions/_shared/redis_client.ts'),
