@@ -1,4 +1,4 @@
-import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { AuthMethod, authenticateRequest, handleCors } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';

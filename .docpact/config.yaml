@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-31'
-lastReviewedCommit: 'f99b8c5d0ee3658032487d2da2af2d53d139f7fb'
-lastReviewedNote: 'Reviewed for Edge #357: runtime/config/proof routing covers the latest exact import graph, direct Supabase type imports, Redis 0.41.2 adapter change, and the 155-root/73-Node/502-Deno baseline.'
+lastReviewedCommit: 'c313a083c76d893ad28e951387110b725f4d1bce'
+lastReviewedNote: 'Reviewed for Edge #361: runtime/config/proof routing requires every Supabase Functions JS type import to resolve through the exact 2.112.4 import-map alias, with JSR, npm, HTTPS, and every alternative direct scheme rejected by the executable contract.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
