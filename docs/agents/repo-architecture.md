@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: a55ab48cb8f67bdb39e586611c55685224d1530a
-lastReviewedNote: 'Reviewed for Edge #361: the exact latest-stable import graph preserves current route architecture and routes all Functions JS type imports through the reviewed 2.112.4 alias.'
+lastReviewedCommit: c313a083c76d893ad28e951387110b725f4d1bce
+lastReviewedNote: 'Reviewed for Edge #361: the exact latest-stable import graph preserves current route architecture, routes all Functions JS type imports through the reviewed 2.112.4 alias, and rejects every alternative direct scheme.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -97,7 +97,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 155 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 73 Node contract tests and 502 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
 
-Edge #357 keeps that runtime architecture while pinning AWS SDK 3.1121.0, OpenAI 7.8.0, Supabase JSR 2.112.4, Upstash Redis 1.38.3, aws-jwt-verify 5.2.1, Deno Redis 0.41.2, Zod 4.5.4, and Prettier 3.9.6. Edge #361 makes every Functions JS type import use the mapped alias and rejects direct unversioned JSR bypasses, so local graph checks and Supabase deployment bundles share exact 2.112.4 resolution. OpenAI Responses and Chat wrapper shapes remain valid on 7.8. Deno Redis 0.41.2 changed `get`/`eval` typing, so the shared adapter branches explicitly between Upstash and Standard clients without weakening Portal Lua, timeout, or error semantics.
+Edge #357 keeps that runtime architecture while pinning AWS SDK 3.1121.0, OpenAI 7.8.0, Supabase JSR 2.112.4, Upstash Redis 1.38.3, aws-jwt-verify 5.2.1, Deno Redis 0.41.2, Zod 4.5.4, and Prettier 3.9.6. Edge #361 makes every Functions JS type import use the mapped alias and rejects JSR, npm, HTTPS, and every alternative direct scheme, so local graph checks and Supabase deployment bundles share exact 2.112.4 resolution. OpenAI Responses and Chat wrapper shapes remain valid on 7.8. Deno Redis 0.41.2 changed `get`/`eval` typing, so the shared adapter branches explicitly between Upstash and Standard clients without weakening Portal Lua, timeout, or error semantics.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 

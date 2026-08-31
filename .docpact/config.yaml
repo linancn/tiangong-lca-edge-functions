@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-08-31'
-lastReviewedCommit: 'a55ab48cb8f67bdb39e586611c55685224d1530a'
-lastReviewedNote: 'Reviewed for Edge #361: runtime/config/proof routing requires every Supabase Functions JS type import to resolve through the exact 2.112.4 import-map alias, with direct unversioned JSR bypasses rejected by the executable contract.'
+lastReviewedCommit: 'c313a083c76d893ad28e951387110b725f4d1bce'
+lastReviewedNote: 'Reviewed for Edge #361: runtime/config/proof routing requires every Supabase Functions JS type import to resolve through the exact 2.112.4 import-map alias, with JSR, npm, HTTPS, and every alternative direct scheme rejected by the executable contract.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

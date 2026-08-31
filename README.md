@@ -24,8 +24,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: a55ab48cb8f67bdb39e586611c55685224d1530a
-lastReviewedNote: 'Reviewed for Edge #361: all Supabase Functions JS type imports use the exact 2.112.4 import-map alias; auth, Portal Redis, worker_jobs, and OpenAI/Hybrid behavior stay unchanged.'
+lastReviewedCommit: c313a083c76d893ad28e951387110b725f4d1bce
+lastReviewedNote: 'Reviewed for Edge #361: all Supabase Functions JS type imports use the exact 2.112.4 alias and every direct scheme is rejected; auth, Portal Redis, worker_jobs, and OpenAI/Hybrid behavior stay unchanged.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -34,7 +34,7 @@ lastReviewedNote: 'Reviewed for Edge #361: all Supabase Functions JS type import
 
 Supabase Edge Functions for LCA search, embedding, TIDAS package orchestration, solving workflows, and the signed public Portal LCIA and R2 Hybrid projections.
 
-Review note, 2026-08-31: Edge #361 replaces 52 unversioned direct Functions JS type specifiers with the repository alias mapped to exact Supabase Functions JS 2.112.4. An executable scan rejects future direct bypasses. The type-only normalization changes no request, response, auth, Redis, Portal, or deploy configuration behavior.
+Review note, 2026-08-31: Edge #361 replaces 52 unversioned direct Functions JS type specifiers with the repository alias mapped to exact Supabase Functions JS 2.112.4. The executable scan captures JSR, npm, HTTPS, and any other quoted Functions JS specifier and accepts only that alias. The type-only normalization changes no request, response, auth, Redis, Portal, or deploy configuration behavior.
 
 - Runtime/compiler: Deno 2.1.4 with bundled TypeScript 5.6.2
 - Functions root: `supabase/functions`

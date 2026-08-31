@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: a55ab48cb8f67bdb39e586611c55685224d1530a
-lastReviewedNote: 'Reviewed for Edge #361: dependency proof rejects direct unversioned Functions JS imports, requires the exact 2.112.4 alias, and retains the 155-root/73-Node/502-Deno baseline plus no-drift request review.'
+lastReviewedCommit: c313a083c76d893ad28e951387110b725f4d1bce
+lastReviewedNote: 'Reviewed for Edge #361: dependency proof detects and rejects every direct Functions JS scheme, requires the exact 2.112.4 alias, and retains the 155-root/73-Node/502-Deno baseline plus no-drift request review.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -59,7 +59,7 @@ pnpm check
 
 Review note, 2026-08-31: Edge #357 upgrades every direct runtime/import dependency to the latest stable version verified for exact Deno 2.1.4, including OpenAI 7.8 and Supabase JSR 2.112.4. Validation requires empty `pnpm outdated` and exact-Deno `deno outdated --latest`, one import-map/direct-import contract, targeted OpenAI/Redis/Supabase/Auth checks, Redis 0.41.2's dual-provider signature adaptation, the canonical full gate, and no Portal credential/config mutation. Official OpenAI documentation continues to define `client.responses.create` as the primary JavaScript API; Chat fallback remains covered.
 
-Review note, 2026-08-31: Edge #361 closes the Functions JS pin gap found during Production promote review. The dependency contract must scan every TypeScript source/test/script specifier, accept only `@supabase/functions-js/edge-runtime.d.ts`, and resolve that alias to exact 2.112.4 in `supabase/functions/deno.json`. A direct `jsr:@supabase/functions-js/...` specifier is a failing bypass. The rewrite is type-only; request examples and runtime behavior remain unchanged, and Portal Functions are not remotely deployed by this fix.
+Review note, 2026-08-31: Edge #361 closes the Functions JS pin gap found during Production promote review. The dependency contract must scan every TypeScript source/test/script quoted specifier containing `@supabase/functions-js`, detect synthetic JSR, versioned JSR, npm, and HTTPS bypasses, accept only `@supabase/functions-js/edge-runtime.d.ts`, and resolve that alias to exact 2.112.4 in `supabase/functions/deno.json`. The rewrite is type-only; request examples and runtime behavior remain unchanged, and Portal Functions are not remotely deployed by this fix.
 
 The current baseline intentionally skips:
 
