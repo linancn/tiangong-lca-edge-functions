@@ -24,8 +24,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-08-31
-lastReviewedCommit: f99b8c5d0ee3658032487d2da2af2d53d139f7fb
-lastReviewedNote: 'Reviewed for Edge #357: the latest exact Deno import graph keeps claims-first auth, isolated Portal Redis, database worker_jobs, and existing OpenAI/Hybrid behavior.'
+lastReviewedCommit: a55ab48cb8f67bdb39e586611c55685224d1530a
+lastReviewedNote: 'Reviewed for Edge #361: all Supabase Functions JS type imports use the exact 2.112.4 import-map alias; auth, Portal Redis, worker_jobs, and OpenAI/Hybrid behavior stay unchanged.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -33,6 +33,8 @@ lastReviewedNote: 'Reviewed for Edge #357: the latest exact Deno import graph ke
 ## Overview
 
 Supabase Edge Functions for LCA search, embedding, TIDAS package orchestration, solving workflows, and the signed public Portal LCIA and R2 Hybrid projections.
+
+Review note, 2026-08-31: Edge #361 replaces 52 unversioned direct Functions JS type specifiers with the repository alias mapped to exact Supabase Functions JS 2.112.4. An executable scan rejects future direct bypasses. The type-only normalization changes no request, response, auth, Redis, Portal, or deploy configuration behavior.
 
 - Runtime/compiler: Deno 2.1.4 with bundled TypeScript 5.6.2
 - Functions root: `supabase/functions`
