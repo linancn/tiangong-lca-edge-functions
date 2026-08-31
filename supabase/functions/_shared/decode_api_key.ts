@@ -8,13 +8,18 @@ function decodeApiKey(apiKey: string): Credentials | null {
 
   try {
     const jsonString = atob(apiKey);
-    const credentials = JSON.parse(jsonString) as Credentials;
+    const parsed: unknown = JSON.parse(jsonString);
 
-    if (!credentials.email || !credentials.password) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+    const email = Reflect.get(parsed, 'email');
+    const password = Reflect.get(parsed, 'password');
+    if (typeof email !== 'string' || !email || typeof password !== 'string' || !password) {
       return null;
     }
 
-    return credentials as Credentials;
+    return { email, password };
   } catch (_error) {
     return null;
   }

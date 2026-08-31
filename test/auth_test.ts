@@ -477,14 +477,20 @@ Deno.test('service and malformed opaque credentials never initialize legacy Redi
     assertEquals(serviceResult.isAuthenticated, true);
     assertEquals(serviceResult.principal?.authMethod, 'service_api_key');
 
-    const malformedResult = await module.authenticateRequest(
-      new Request('https://example.com', {
-        headers: { Authorization: 'Bearer definitely-not-base64-json' },
-      }),
-      { allowedMethods: [module.AuthMethod.USER_API_KEY], redisFactory },
-    );
-    assertEquals(malformedResult.isAuthenticated, false);
-    assertEquals(malformedResult.response?.status, 401);
+    for (const malformedBearer of [
+      'definitely-not-base64-json',
+      btoa(JSON.stringify({ email: {}, password: {} })),
+      btoa(JSON.stringify({ email: TEST_USER_EMAIL, password: [] })),
+    ]) {
+      const malformedResult = await module.authenticateRequest(
+        new Request('https://example.com', {
+          headers: { Authorization: `Bearer ${malformedBearer}` },
+        }),
+        { allowedMethods: [module.AuthMethod.USER_API_KEY], redisFactory },
+      );
+      assertEquals(malformedResult.isAuthenticated, false);
+      assertEquals(malformedResult.response?.status, 401);
+    }
     assertEquals(redisFactoryCalls, 0);
   });
 });
