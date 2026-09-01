@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-01'
-lastReviewedCommit: 'a266257d2a2f37fbd9d1b68bbc484557d308203c'
-lastReviewedNote: 'Reviewed after synchronizing Edge #363, #369, and #373: non-Portal auth changes remain intact while one Hybrid-only atomic replay/recovery/budget/concurrency/lease/circuit admission call preserves Portal deadline, provider ordering, telemetry, and isolated ownership.'
+lastReviewedCommit: 'da2ff14b6e7fcf5919af2d6576de02da1aeece74'
+lastReviewedNote: 'Reviewed for Edge #379: the final external identity-provider account bridge, dependency, environment, and routing paths are removed; `fresh_user` is exclusive to `identity_login_sync`, and the governed graph has 152 roots while SageMaker/service/Portal ownership remains unchanged.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -119,9 +119,6 @@ routing:
         - supabase/functions/_shared/redis_client.ts
         - supabase/functions/_shared/command_runtime/actor_context.ts
         - supabase/functions/identity_login_sync/**
-        - supabase/functions/change_email_cognito/**
-        - supabase/functions/change_password_cognito/**
-        - supabase/functions/sign_up_cognito/**
         - test/auth_test.ts
         - test/auth_client_wiring_test.ts
         - scripts/probe-functions-auth.cjs

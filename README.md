@@ -24,8 +24,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-09-01
-lastReviewedCommit: a266257d2a2f37fbd9d1b68bbc484557d308203c
-lastReviewedNote: 'Reviewed after synchronizing Edge #363, #369, and #373: non-Portal auth guidance remains current while Portal documents the one-call Hybrid replay/recovery/admission/circuit contract and unchanged deadline/provider guarantees.'
+lastReviewedCommit: da2ff14b6e7fcf5919af2d6576de02da1aeece74
+lastReviewedNote: 'Reviewed for Edge #379: external account-bridge functions, identity-provider dependency/env, and hosted cleanup guidance are removed; the canonical graph has 152 roots and SageMaker/Portal setup remains unchanged.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -103,13 +103,13 @@ Core entries:
 - `PORTAL_OPENAI_API_KEY`, `PORTAL_OPENAI_CHAT_MODEL`, optional `PORTAL_OPENAI_BASE_URL`, `PORTAL_SAGEMAKER_ENDPOINT_NAME`, `PORTAL_AWS_ACCESS_KEY_ID`, `PORTAL_AWS_SECRET_ACCESS_KEY`, and optional `PORTAL_AWS_SESSION_TOKEN` form one strict Portal-only R2 provider configuration.
 - `PORTAL_LCIA_DEPLOYMENT_SHA` and `PORTAL_HYBRID_DEPLOYMENT_SHA` independently bind each route's allowlisted security event to its exact deployed commit.
 - `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`, optional `OPENAI_BASE_URL`, `SAGEMAKER_ENDPOINT_NAME`, and generic AWS credentials remain the unchanged provider surface for existing login Hybrid, embedding, and other non-Portal consumers.
-- Feature-specific entries such as Cognito, TIDAS storage, national-carbon cache, and `embedding_ft` timeout knobs are grouped in `supabase/.env.example`.
+- Feature-specific entries such as TIDAS storage, national-carbon cache, and `embedding_ft` timeout knobs are grouped in `supabase/.env.example`.
 
 Credential contract:
 
 - `REMOTE_SERVICE_API_KEY` / `SERVICE_API_KEY` are custom function-level shared secrets. They are not Supabase client credentials.
-- Ordinary Supabase JWT validation uses `getClaims(token)`, validates issuer/audience/expiry/issued-at/role/subject/session and optional OAuth `client_id`, then exposes a minimal principal. Identity synchronization and the three Cognito email/password bridge operations explicitly opt into `fresh_user`, which adds the online `getUser(token)` check.
-- Asymmetric Supabase signing keys allow `getClaims` to use cached JWKS without putting Auth in the per-request hot path. Non-JWT bearers fail without password exchange, Cognito validation, or generic Redis I/O.
+- Ordinary Supabase JWT validation uses `getClaims(token)`, validates issuer/audience/expiry/issued-at/role/subject/session and optional OAuth `client_id`, then exposes a minimal principal. Only `identity_login_sync` explicitly opts into `fresh_user`, which adds the online `getUser(token)` check.
+- Asymmetric Supabase signing keys allow `getClaims` to use cached JWKS without putting Auth in the per-request hot path. Non-JWT bearers fail without password exchange, an external identity-provider validation path, or generic Redis I/O.
 - Supabase secret keys are reserved for privileged Supabase execution paths and must never be exposed to browser clients.
 - Keep `REMOTE_SUPABASE_URL`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, and `REMOTE_SUPABASE_SECRET_KEY` from the same Supabase project. A mismatched or stale secret key causes local RPC calls to fail with `Invalid API key` after request authentication succeeds.
 - The Portal HMAC secret is independent of `REMOTE_SERVICE_API_KEY`, Supabase JWT secrets, and every Supabase client key. Keep dev/Preview and main/Production keyrings, Supabase projects, EdgeOne deployments, and `portal:<environment>:v1` namespaces distinct. The user-approved initial deployment shares one Upstash database/token across R0, Dev, and Production; this is a recorded residual risk and never a permission boundary. Only the verifier holds an optional previous HMAC key during rotation.
@@ -483,7 +483,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 504 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 152-root Deno graph, 73 Node contract tests, and 505 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 
