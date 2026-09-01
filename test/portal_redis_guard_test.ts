@@ -15,6 +15,7 @@ import {
   minimumPortalLeaseTtlSeconds,
   MINIMUM_LEASE_TTL_SECONDS,
   PORTAL_ATOMIC_GUARD_LUA,
+  PORTAL_HYBRID_ATOMIC_BEGIN_LUA,
   PORTAL_HYBRID_CACHE_TTL_SECONDS,
   PORTAL_HYBRID_CIRCUIT_CHECK_LUA,
   PORTAL_HYBRID_CIRCUIT_FAILURE_LUA,
@@ -27,6 +28,7 @@ import {
   readPortalLciaGuardLimits,
   readPortalResponseCache,
   redisEvalAtomicGuard,
+  redisEvalAtomicHybridBegin,
   recordPortalHybridCircuitFailure,
   recordPortalHybridCircuitSuccess,
   registerPortalNonce,
@@ -322,6 +324,81 @@ Deno.test('Portal route guard admits only one concurrent caller at limit one', a
     'concurrency_exhausted',
   ]);
 });
+
+Deno.test(
+  'Portal Hybrid atomic begin preserves replay, admission, circuit, and isolated key contracts',
+  async () => {
+    const calls: Array<{ script: string; keys: string[]; args: string[] }> = [];
+    const responses: unknown[] = [
+      [0, 9, 99, 1, 2, 0],
+      [3, 0, 0, 0, 0, 0],
+      [1, 0, 90, 2, 0, 0],
+      [2, 8, 98, 0, 0, 0],
+      [4, 7, 97, 1, 0, 65_000],
+      [0, 9, 99, 1, 0, 0, 0],
+    ];
+    const redis: PortalRedisAdapter = {
+      namespace: 'portal:test:v1',
+      setNxEx: () => Promise.resolve(true),
+      eval: (script, keys, args) => {
+        calls.push({ script, keys, args });
+        return Promise.resolve(responses.shift());
+      },
+      get: () => Promise.resolve(null),
+      setEx: () => Promise.resolve(),
+      close: () => Promise.resolve(),
+    };
+    const input = {
+      route: 'portal_hybrid_search_v1',
+      keyId: 'portal-key',
+      nonce: 'AQIDBAUGBwgJCgsMDQ4PEA',
+      limits: LIMITS,
+      nowMillis: 5_000,
+    };
+
+    const admitted = await redisEvalAtomicHybridBegin(input, redis);
+    assertEquals(admitted.status, 'admitted');
+    assertEquals(admitted.recoveredLeaseCount, 2);
+    assertEquals((await redisEvalAtomicHybridBegin(input, redis)).status, 'replay_rejected');
+    assertEquals((await redisEvalAtomicHybridBegin(input, redis)).status, 'budget_exhausted');
+    assertEquals((await redisEvalAtomicHybridBegin(input, redis)).status, 'concurrency_exhausted');
+    const circuit = await redisEvalAtomicHybridBegin(input, redis);
+    assertEquals(circuit.status, 'circuit_open');
+    if (circuit.status !== 'circuit_open') throw new Error('expected open circuit');
+    assertEquals(circuit.retryAfterSeconds, 60);
+    await assertRejects(() => redisEvalAtomicHybridBegin(input, redis));
+
+    assertEquals(
+      calls.every((call) => call.script === PORTAL_HYBRID_ATOMIC_BEGIN_LUA),
+      true,
+    );
+    assertEquals(calls[0].keys, [
+      'portal:test:v1:replay:portal-key:AQIDBAUGBwgJCgsMDQ4PEA',
+      'portal:test:v1:budget:portal_hybrid_search_v1:minute:0',
+      'portal:test:v1:budget:portal_hybrid_search_v1:daily:0',
+      'portal:test:v1:lease:portal_hybrid_search_v1',
+      'portal:test:v1:circuit:portal_hybrid_search_v1:open_until',
+    ]);
+    assertEquals(calls[0].args.length, 11);
+    assertEquals(calls[0].args[10], String(REPLAY_TTL_SECONDS));
+    assertEquals(
+      calls[0].keys.some((key) => key.includes('cache')),
+      false,
+    );
+    assert(
+      PORTAL_HYBRID_ATOMIC_BEGIN_LUA.indexOf("redis.call('SET'") <
+        PORTAL_HYBRID_ATOMIC_BEGIN_LUA.indexOf("redis.call('ZREMRANGEBYSCORE'"),
+    );
+    assert(
+      PORTAL_HYBRID_ATOMIC_BEGIN_LUA.indexOf("redis.call('ZREMRANGEBYSCORE'") <
+        PORTAL_HYBRID_ATOMIC_BEGIN_LUA.indexOf("redis.call('INCRBY'"),
+    );
+    assert(
+      PORTAL_HYBRID_ATOMIC_BEGIN_LUA.indexOf("redis.call('INCRBY'") <
+        PORTAL_HYBRID_ATOMIC_BEGIN_LUA.indexOf("redis.call('GET', KEYS[5]"),
+    );
+  },
+);
 
 Deno.test('Portal concurrency lease recovers after TTL without explicit release', async () => {
   const redis = new MemoryPortalRedis('portal:test:v1');

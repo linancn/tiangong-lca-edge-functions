@@ -713,7 +713,6 @@ Deno.test('export_tidas_package API exposes queued worker job before artifacts e
     supabase.missingTables.add('lca_package_jobs');
     const exportAuthCalls: AuthMethod[][] = [];
     const jobsAuthCalls: AuthMethod[][] = [];
-    let jobsRedisCalls = 0;
 
     const exportHandler = createExportTidasPackageHandler({
       authClient: {} as SupabaseClient,
@@ -731,10 +730,6 @@ Deno.test('export_tidas_package API exposes queued worker job before artifacts e
       authenticateRequest: async (_req, config) => {
         jobsAuthCalls.push([...config.allowedMethods]);
         return createAuthResult();
-      },
-      getRedisClient: async () => {
-        jobsRedisCalls += 1;
-        return undefined;
       },
     });
 
@@ -801,8 +796,7 @@ Deno.test('export_tidas_package API exposes queued worker job before artifacts e
     assertEquals(jobLookup.request_cache.export_artifact_id, null);
     assertEquals(jobLookup.request_cache.report_artifact_id, null);
     assertEquals(jobLookup.artifacts.length, 0);
-    assertEquals(jobsRedisCalls, 0);
-    assertEquals(jobsAuthCalls, [[AuthMethod.JWT, AuthMethod.USER_API_KEY]]);
+    assertEquals(jobsAuthCalls, [[AuthMethod.JWT]]);
 
     const workerIdLookupResponse = await jobsHandler(
       new Request('https://example.com/functions/v1/tidas_package_jobs', {
@@ -831,8 +825,6 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
     supabase.missingTables.add('lca_package_jobs');
     const importAuthCalls: AuthMethod[][] = [];
     const jobsAuthCalls: AuthMethod[][] = [];
-    let importRedisCalls = 0;
-    let jobsRedisCalls = 0;
 
     const importHandler = createImportTidasPackageHandler({
       authClient: {} as SupabaseClient,
@@ -840,10 +832,6 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       authenticateRequest: async (_req, config) => {
         importAuthCalls.push([...config.allowedMethods]);
         return createAuthResult();
-      },
-      getRedisClient: async () => {
-        importRedisCalls += 1;
-        return undefined;
       },
     });
 
@@ -853,10 +841,6 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
       authenticateRequest: async (_req, config) => {
         jobsAuthCalls.push([...config.allowedMethods]);
         return createAuthResult();
-      },
-      getRedisClient: async () => {
-        jobsRedisCalls += 1;
-        return undefined;
       },
     });
 
@@ -897,8 +881,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
     assertEquals(prepared.upload.filename, 'Demo_Package.zip');
     assertEquals(prepared.upload.byte_size, EMPTY_ZIP_BYTES.byteLength);
     assertEquals(prepared.upload.content_type, 'application/zip');
-    assertEquals(importRedisCalls, 0);
-    assertEquals(importAuthCalls, [[AuthMethod.USER_API_KEY, AuthMethod.JWT]]);
+    assertEquals(importAuthCalls, [[AuthMethod.JWT]]);
     assertEquals(supabase.getRows('lca_package_jobs').length, 0);
     assertEquals(supabase.getRows('lca_package_artifacts').length, 1);
 
@@ -1035,8 +1018,7 @@ Deno.test('import_tidas_package API completes prepare, enqueue, and job lookup f
     );
     assertEquals(jobLookup.artifacts_by_kind.import_source.download_status, 'available');
     assertEquals(jobLookup.artifacts_by_kind.import_source.download_error_code, null);
-    assertEquals(jobsRedisCalls, 0);
-    assertEquals(jobsAuthCalls, [[AuthMethod.JWT, AuthMethod.USER_API_KEY]]);
+    assertEquals(jobsAuthCalls, [[AuthMethod.JWT]]);
   });
 });
 
@@ -1050,7 +1032,6 @@ Deno.test(
         authClient: {} as SupabaseClient,
         supabase: supabase as unknown as SupabaseClient,
         authenticateRequest: async () => createAuthResult(),
-        getRedisClient: async () => undefined,
       });
 
       const prepareResponse = await handler(
@@ -1128,7 +1109,6 @@ Deno.test(
         authClient: {} as SupabaseClient,
         supabase: supabase as unknown as SupabaseClient,
         authenticateRequest: async () => createAuthResult(),
-        getRedisClient: async () => undefined,
       });
 
       const prepareResponse = await handler(
@@ -1234,7 +1214,6 @@ Deno.test(
         authClient: {} as SupabaseClient,
         supabase: supabase as unknown as SupabaseClient,
         authenticateRequest: async () => createAuthResult(),
-        getRedisClient: async () => undefined,
       });
 
       const response = await handler(
@@ -1300,7 +1279,6 @@ Deno.test(
         authClient: {} as SupabaseClient,
         supabase: supabase as unknown as SupabaseClient,
         authenticateRequest: async () => createAuthResult(),
-        getRedisClient: async () => undefined,
       });
 
       const response = await handler(
@@ -1353,7 +1331,6 @@ Deno.test('import_tidas_package rejects enqueue for deleted source artifacts', a
       authClient: {} as SupabaseClient,
       supabase: supabase as unknown as SupabaseClient,
       authenticateRequest: async () => createAuthResult(),
-      getRedisClient: async () => undefined,
     });
 
     const response = await handler(
@@ -1385,12 +1362,11 @@ Deno.test('import_tidas_package rejects enqueue for deleted source artifacts', a
   });
 });
 
-Deno.test('import_tidas_package delegates legacy Redis resolution to shared auth', async () => {
+Deno.test('import_tidas_package uses JWT-only auth and rejects opaque legacy bearers', async () => {
   await withPackageStorageEnv(async () => {
     const { createImportTidasPackageHandler } = await loadTidasHandlers();
     const supabase = new FakeSupabase();
     const authCalls: AuthMethod[][] = [];
-    let redisCalls = 0;
 
     const handler = createImportTidasPackageHandler({
       authClient: {} as SupabaseClient,
@@ -1401,10 +1377,6 @@ Deno.test('import_tidas_package delegates legacy Redis resolution to shared auth
           isAuthenticated: false,
           response: new Response('Unauthorized', { status: 401 }),
         };
-      },
-      getRedisClient: async () => {
-        redisCalls += 1;
-        return undefined;
       },
     });
 
@@ -1432,11 +1404,7 @@ Deno.test('import_tidas_package delegates legacy Redis resolution to shared auth
     );
     assertEquals(apiKeyResponse.status, 401);
 
-    assertEquals(redisCalls, 0);
-    assertEquals(authCalls, [
-      [AuthMethod.USER_API_KEY, AuthMethod.JWT],
-      [AuthMethod.USER_API_KEY, AuthMethod.JWT],
-    ]);
+    assertEquals(authCalls, [[AuthMethod.JWT], [AuthMethod.JWT]]);
     assertEquals(supabase.getRows('lca_package_jobs').length, 0);
   });
 });
@@ -1448,7 +1416,6 @@ Deno.test('tidas_package_jobs rejects missing job identifiers', async () => {
       authClient: {} as SupabaseClient,
       supabase: new FakeSupabase() as unknown as SupabaseClient,
       authenticateRequest: async () => createAuthResult(),
-      getRedisClient: async () => undefined,
     });
 
     const response = await handler(

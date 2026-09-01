@@ -97,6 +97,9 @@ Deno.test(
       './supabase/functions/portal_hybrid_search_v1/index.ts',
     ];
     const source = (await Promise.all(files.map((file) => Deno.readTextFile(file)))).join('\n');
+    const handlerSource = await Deno.readTextFile(
+      './supabase/functions/portal_hybrid_search_v1/index.ts',
+    );
     for (const forbidden of [
       'createSupabaseServiceClient',
       'supabaseServiceClient',
@@ -124,6 +127,14 @@ Deno.test(
     assertStringIncludes(source, 'abortSignal: signal');
     assertStringIncludes(source, '{ signal: request.signal }');
     assertStringIncludes(source, 'new PortalHybridDeadline(timeoutMs, monotonicNow, startedAt)');
+    assertStringIncludes(handlerSource, 'redisEvalAtomicHybridBegin');
+    for (const supersededCall of [
+      'registerPortalNonce(',
+      'redisEvalAtomicGuard(',
+      'checkPortalHybridCircuit(',
+    ]) {
+      assertEquals(handlerSource.includes(supersededCall), false, supersededCall);
+    }
     assertStringIncludes(source, 'const PORTAL_HYBRID_TOTAL_TIMEOUT_MS = 6_000;');
     assertStringIncludes(source, 'await deadline.run');
     assertStringIncludes(source, 'deadline.detach');
