@@ -39,7 +39,6 @@ import {
   type ParsedSnapshotProcessFilter,
 } from '../_shared/lca_snapshot_scope.ts';
 import { verifySnapshotMatchesDataScope } from '../_shared/lca_snapshot_scope_db.ts';
-import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient, supabaseClient } from '../_shared/supabase_client.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -144,8 +143,7 @@ Deno.serve(async (req) => {
 
   const authResult = await authenticateRequest(req, {
     authClient: supabaseAuthClient,
-    redisFactory: getRedisClient,
-    allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
+    allowedMethods: [AuthMethod.JWT],
   });
 
   if (!authResult.isAuthenticated) {

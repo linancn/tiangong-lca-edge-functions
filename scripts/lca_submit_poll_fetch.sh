@@ -8,7 +8,6 @@ fi
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:54321/functions/v1}"
 USER_JWT="${USER_JWT:-}"
-USER_API_KEY="${USER_API_KEY:-}"
 SCOPE="${SCOPE:-prod}"
 DEMAND_MODE="${DEMAND_MODE:-single}"
 PROCESS_INDEX="${PROCESS_INDEX:-0}"
@@ -18,19 +17,13 @@ TIMEOUT_SEC="${TIMEOUT_SEC:-120}"
 POLL_INTERVAL_SEC="${POLL_INTERVAL_SEC:-1}"
 IDEMPOTENCY_KEY="${IDEMPOTENCY_KEY:-lca-smoke-$(date -u +%Y%m%dT%H%M%SZ)-$RANDOM}"
 
-if [[ -z "${USER_JWT}" && -z "${USER_API_KEY}" ]]; then
-  echo "error: either USER_JWT or USER_API_KEY is required"
+if [[ -z "${USER_JWT}" ]]; then
+  echo "error: USER_JWT is required"
   echo "example(jwt): USER_JWT=... PROCESS_INDEX=0 ./scripts/lca_submit_poll_fetch.sh"
-  echo "example(api_key): USER_API_KEY=... PROCESS_INDEX=0 ./scripts/lca_submit_poll_fetch.sh"
   exit 1
 fi
 
-if [[ -n "${USER_JWT}" && -n "${USER_API_KEY}" ]]; then
-  echo "error: set only one of USER_JWT or USER_API_KEY"
-  exit 1
-fi
-
-AUTH_BEARER="${USER_JWT:-$USER_API_KEY}"
+AUTH_BEARER="${USER_JWT}"
 
 if [[ "${DEMAND_MODE}" != "single" && "${DEMAND_MODE}" != "all_unit" ]]; then
   echo "error: DEMAND_MODE must be single|all_unit"

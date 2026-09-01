@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-01'
-lastReviewedCommit: 'a869113662a4a9aa75cf6eb1ddb8d4975d95a82b'
-lastReviewedNote: 'Reviewed for Edge #373 feedback: the Hybrid atomic begin documents and tests the existing nonce/replay then expired-lease-recovery then budget/concurrency/lease then circuit order; ownership, routing, and provider isolation are unchanged.'
+lastReviewedCommit: 'a266257d2a2f37fbd9d1b68bbc484557d308203c'
+lastReviewedNote: 'Reviewed after synchronizing Edge #363, #369, and #373: non-Portal auth changes remain intact while one Hybrid-only atomic replay/recovery/budget/concurrency/lease/circuit admission call preserves Portal deadline, provider ordering, telemetry, and isolated ownership.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -116,8 +116,6 @@ routing:
     auth-runtime:
       paths:
         - supabase/functions/_shared/auth.ts
-        - supabase/functions/_shared/cognito_auth.ts
-        - supabase/functions/_shared/decode_api_key.ts
         - supabase/functions/_shared/redis_client.ts
         - supabase/functions/_shared/command_runtime/actor_context.ts
         - supabase/functions/identity_login_sync/**

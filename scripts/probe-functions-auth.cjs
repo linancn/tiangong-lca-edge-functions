@@ -58,8 +58,6 @@ async function main() {
   console.log(
     `Credentials: USER_JWT=${formatCredentialPresence(
       credentials.userJwt,
-    )} USER_API_KEY=${formatCredentialPresence(
-      credentials.userApiKey,
     )} SERVICE_API_KEY=${formatCredentialPresence(credentials.serviceApiKey)}`,
   );
   console.log(
@@ -96,7 +94,6 @@ async function main() {
           generatedAt: new Date().toISOString(),
           credentials: {
             hasUserJwt: Boolean(credentials.userJwt),
-            hasUserApiKey: Boolean(credentials.userApiKey),
             hasServiceApiKey: Boolean(credentials.serviceApiKey),
           },
           results,
@@ -201,7 +198,6 @@ Environment variables:
   REMOTE_ENDPOINT           Existing repo env alias for a remote functions base URL.
   LOCAL_ENDPOINT            Existing repo env alias for a local functions base URL.
   USER_JWT                  Browser/user JWT used for JWT-protected functions.
-  USER_API_KEY              Optional user API key for functions that support it.
   REMOTE_SERVICE_API_KEY    Optional service key for SERVICE_API_KEY routes.
   SERVICE_API_KEY           Fallback service key env name.
 
@@ -287,7 +283,6 @@ function resolveBaseUrl(options) {
 function resolveCredentials() {
   return {
     userJwt: readEnv('USER_JWT'),
-    userApiKey: readEnv('USER_API_KEY'),
     serviceApiKey: readEnv('REMOTE_SERVICE_API_KEY') ?? readEnv('SERVICE_API_KEY'),
   };
 }
@@ -399,13 +394,11 @@ function inferAuthMethods(source) {
   }
 
   if (discoveredMethods.size > 0) {
-    return ['JWT', 'USER_API_KEY', 'SERVICE_API_KEY'].filter((method) =>
-      discoveredMethods.has(method),
-    );
+    return ['JWT', 'SERVICE_API_KEY'].filter((method) => discoveredMethods.has(method));
   }
 
   if (source.includes('authenticateRequest(')) {
-    return ['JWT', 'USER_API_KEY', 'SERVICE_API_KEY'];
+    return ['JWT', 'SERVICE_API_KEY'];
   }
 
   return [];
@@ -443,8 +436,6 @@ function buildProbeVariants(definition, credentials) {
   for (const method of definition.authMethods) {
     if (method === 'JWT' && credentials.userJwt) {
       variants.push({ type: 'JWT', label: 'jwt' });
-    } else if (method === 'USER_API_KEY' && credentials.userApiKey) {
-      variants.push({ type: 'USER_API_KEY', label: 'user-api-key' });
     } else if (method === 'SERVICE_API_KEY' && credentials.serviceApiKey) {
       variants.push({ type: 'SERVICE_API_KEY', label: 'service-api-key' });
     }
@@ -453,9 +444,6 @@ function buildProbeVariants(definition, credentials) {
   const missing = definition.authMethods.filter((method) => {
     if (method === 'JWT') {
       return !credentials.userJwt;
-    }
-    if (method === 'USER_API_KEY') {
-      return !credentials.userApiKey;
     }
     if (method === 'SERVICE_API_KEY') {
       return !credentials.serviceApiKey;
@@ -533,8 +521,6 @@ async function runProbe(definition, variant, context) {
 
   if (variant.type === 'JWT') {
     headers.Authorization = `Bearer ${context.credentials.userJwt}`;
-  } else if (variant.type === 'USER_API_KEY') {
-    headers.Authorization = `Bearer ${context.credentials.userApiKey}`;
   } else if (variant.type === 'SERVICE_API_KEY') {
     headers.apikey = context.credentials.serviceApiKey;
   }

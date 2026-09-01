@@ -6,7 +6,6 @@ import {
   type AuthConfig,
   type AuthResult,
 } from '../_shared/auth.ts';
-import { getRedisClient, type RedisClient } from '../_shared/redis_client.ts';
 import { createSupabaseServiceClient, supabaseAuthClient } from '../_shared/supabase_client.ts';
 import {
   enqueueImportTidasPackage,
@@ -21,7 +20,6 @@ export type ImportTidasPackageHandlerDeps = {
     req: Request,
     config: AuthConfig & { allowedMethods: AuthMethod[] },
   ) => Promise<AuthResult>;
-  getRedisClient: () => Promise<RedisClient | undefined>;
   supabase: SupabaseClient;
 };
 
@@ -39,7 +37,6 @@ export function createImportTidasPackageHandler(
   deps: ImportTidasPackageHandlerDeps = {
     authClient: supabaseAuthClient,
     authenticateRequest,
-    getRedisClient,
     supabase: getDefaultSupabaseClient(),
   },
 ): (req: Request) => Promise<Response> {
@@ -61,8 +58,7 @@ export function createImportTidasPackageHandler(
 
     const authResult = await deps.authenticateRequest(req, {
       authClient: deps.authClient,
-      redisFactory: deps.getRedisClient,
-      allowedMethods: [AuthMethod.USER_API_KEY, AuthMethod.JWT],
+      allowedMethods: [AuthMethod.JWT],
     });
 
     if (!authResult.isAuthenticated || !authResult.principal?.userId) {
