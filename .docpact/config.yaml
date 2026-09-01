@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-01'
-lastReviewedCommit: '1a5a4b90b75e8bfbd35499ce75e5f7b2ec1dd32e'
-lastReviewedNote: 'Reviewed for Edge #364 promote feedback: Portal Hybrid operator guidance and its executable contract require migrating the retained 8000 timeout to 6000 before deploying the tighter runtime ceiling; ownership, routing, and provider isolation remain unchanged.'
+lastReviewedCommit: 'a720bc0d701a537f8ea3ec6dfdb8df4fae0dd790'
+lastReviewedNote: 'Reviewed for Edge #369 feedback: concurrent cache work is consumed only after circuit-first and valid-request decisions, so optimization preserves circuit-open and invalid-request precedence without changing ownership, routing, or provider isolation.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

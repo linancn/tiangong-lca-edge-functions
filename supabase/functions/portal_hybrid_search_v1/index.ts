@@ -527,6 +527,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
       }
 
       let leaseId: string | undefined;
+      let pendingModelCacheWrite: Promise<void> | null = null;
       const recordFailure = async (): Promise<boolean> => {
         try {
           await deadline.run(() =>
@@ -579,12 +580,25 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
 
         if (deadline.isExpired()) return timeoutResponse();
 
-        const circuit = await deadline.run(() =>
-          checkPortalHybridCircuit(
-            { route: PORTAL_HYBRID_FUNCTION_NAME, nowMillis: wallNow() },
-            redis,
-          ),
+        const circuitOperation = checkPortalHybridCircuit(
+          { route: PORTAL_HYBRID_FUNCTION_NAME, nowMillis: wallNow() },
+          redis,
         );
+        const cacheOperation = readPortalResponseCache(
+          { route: PORTAL_HYBRID_FUNCTION_NAME, bodyHash: verification.bodyHash },
+          redis,
+        ).then(
+          (value) => ({ ok: true as const, value }),
+          (error) => ({ ok: false as const, error }),
+        );
+        let circuit;
+        try {
+          circuit = await deadline.run(() => circuitOperation);
+        } catch (error) {
+          if (isPortalHybridDeadlineError(error)) return timeoutResponse();
+          event.guardOutcome = 'unavailable';
+          return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
+        }
         if (circuit.status === 'open') {
           event.circuit = 'open';
           return errorResponse(503, 'circuit_open', 'Portal Hybrid circuit is open');
@@ -604,21 +618,19 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         const hybridRequest = parsedRequest.data;
         event.kind = hybridRequest.kind;
 
-        let modelCache: PortalHybridModelCache;
         let cached: string | null;
         try {
-          cached = await deadline.run(() =>
-            readPortalResponseCache(
-              { route: PORTAL_HYBRID_FUNCTION_NAME, bodyHash: verification.bodyHash },
-              redis,
-            ),
-          );
+          const cacheResult = await deadline.run(() => cacheOperation);
+          if (!cacheResult.ok) throw cacheResult.error;
+          cached = cacheResult.value;
         } catch (error) {
           if (isPortalHybridDeadlineError(error)) return timeoutResponse();
           event.cache = 'invalid';
           event.guardOutcome = 'unavailable';
           return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
         }
+
+        let modelCache: PortalHybridModelCache;
         if (cached !== null) {
           let parsedCache;
           try {
@@ -719,8 +731,8 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
             );
           }
 
-          try {
-            await deadline.run(() =>
+          pendingModelCacheWrite = deadline
+            .run(() =>
               writePortalResponseCache(
                 {
                   route: PORTAL_HYBRID_FUNCTION_NAME,
@@ -730,11 +742,11 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
                 },
                 redis,
               ),
-            );
-          } catch (error) {
-            if (isPortalHybridDeadlineError(error)) return timeoutResponse();
-            event.cache = 'write_failed';
-          }
+            )
+            .catch((error) => {
+              if (isPortalHybridDeadlineError(error)) throw error;
+              event.cache = 'write_failed';
+            });
         }
 
         if (deadline.isExpired()) {
@@ -749,9 +761,12 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         try {
           if (deadline.isExpired()) return timeoutResponse();
           event.database = 'called';
-          databasePage = await deadline.run(() =>
+          const databaseOperation = deadline.run(() =>
             repository.query(hybridRequest, queryTerms, modelCache.queryEmbedding, operationSignal),
           );
+          databasePage = pendingModelCacheWrite
+            ? (await Promise.all([databaseOperation, pendingModelCacheWrite]))[0]
+            : await databaseOperation;
         } catch (error) {
           if (isPortalHybridDeadlineError(error) || deadline.isExpired()) {
             event.database = 'failed';
@@ -814,9 +829,12 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         }
         return errorResponse(503, 'internal_error', 'Portal Hybrid search unavailable');
       } finally {
-        if (leaseId || ownsRedis) {
+        if (pendingModelCacheWrite || leaseId || ownsRedis) {
           deadline.detach(
             async () => {
+              if (pendingModelCacheWrite) {
+                await pendingModelCacheWrite.catch(() => undefined);
+              }
               if (leaseId) {
                 await releasePortalConcurrencyLease(
                   { route: PORTAL_HYBRID_FUNCTION_NAME, leaseId },

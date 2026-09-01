@@ -357,6 +357,14 @@ async function flushPortalHybridSecurityEvent(): Promise<void> {
   await Promise.resolve();
 }
 
+async function flushUntil(predicate: () => boolean, label: string): Promise<void> {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    if (predicate()) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error(`Timed out waiting for ${label}`);
+}
+
 async function raceWithTimeout<T, U>(
   operation: Promise<T>,
   timeoutMs: number,
@@ -1013,6 +1021,146 @@ Deno.test(
 );
 
 Deno.test(
+  'Portal Hybrid overlaps circuit and cache reads while circuit-open remains authoritative',
+  async () => {
+    const redis = new FakePortalRedis();
+    const cache: PortalHybridModelCache = {
+      schemaVersion: 'portal.hybrid-model-cache.v1',
+      interpretation: {
+        source: 'model_generated',
+        advisory: true,
+        semanticQuery: 'steel production',
+        terms: [{ language: 'en', value: 'steel' }],
+      },
+      queryTerms: ['steel'],
+      queryEmbedding: VECTOR,
+    };
+    let resolveCircuit: ((value: unknown) => void) | undefined;
+    let resolveCache: ((value: string | null) => void) | undefined;
+    redis.circuitCheckOperation = () =>
+      new Promise((resolve) => {
+        resolveCircuit = resolve;
+      });
+    redis.cacheGetOperation = () =>
+      new Promise((resolve) => {
+        resolveCache = resolve;
+      });
+    let modelCalls = 0;
+    let databaseCalls = 0;
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query() {
+            databaseCalls += 1;
+            return Promise.resolve(databasePage());
+          },
+        },
+        {
+          rewriteQuery: async () => {
+            modelCalls += 1;
+            return REWRITE;
+          },
+        },
+      ),
+    );
+
+    const responsePromise = handler(await signedRequest());
+    await flushUntil(
+      () => resolveCircuit !== undefined && resolveCache !== undefined,
+      'parallel circuit and cache reads',
+    );
+    assertEquals(redis.calls.slice(0, 4), ['nonce', 'guard', 'circuit_check', 'cache_get']);
+    assertEquals(modelCalls, 0);
+    assertEquals(databaseCalls, 0);
+
+    resolveCache?.(JSON.stringify(cache));
+    await Promise.resolve();
+    assertEquals(modelCalls, 0);
+    assertEquals(databaseCalls, 0);
+
+    resolveCircuit?.([1, NOW_SECONDS * 1_000 + 60_000]);
+    const response = await responsePromise;
+    assertEquals(response.status, 503);
+    assertEquals(await responseCode(response), 'circuit_open');
+    assertEquals(modelCalls, 0);
+    assertEquals(databaseCalls, 0);
+
+    const openRedis = new FakePortalRedis();
+    openRedis.circuitOpen = true;
+    openRedis.cacheReadFails = true;
+    const openResponse = await createPortalHybridSearchHandler(
+      handlerOptions(openRedis, {
+        query() {
+          databaseCalls += 1;
+          return Promise.resolve(databasePage());
+        },
+      }),
+    )(await signedRequest());
+    assertEquals(openResponse.status, 503);
+    assertEquals(await responseCode(openResponse), 'circuit_open');
+    assertEquals(databaseCalls, 0);
+
+    const stalledCacheRedis = new FakePortalRedis();
+    stalledCacheRedis.circuitOpen = true;
+    stalledCacheRedis.cacheGetOperation = () => neverPromise();
+    const stalledCacheResult = await raceWithTimeout(
+      createPortalHybridSearchHandler(
+        handlerOptions(stalledCacheRedis, {
+          query() {
+            databaseCalls += 1;
+            return Promise.resolve(databasePage());
+          },
+        }),
+      )(await signedRequest()),
+      50,
+      'timed_out',
+    );
+    assert(stalledCacheResult instanceof Response);
+    assertEquals(stalledCacheResult.status, 503);
+    assertEquals(await responseCode(stalledCacheResult), 'circuit_open');
+    assertEquals(databaseCalls, 0);
+  },
+);
+
+Deno.test('Portal Hybrid overlaps model-cache write with the public Database query', async () => {
+  const redis = new FakePortalRedis();
+  let resolveCacheWrite: (() => void) | undefined;
+  redis.cacheSetOperation = () =>
+    new Promise((resolve) => {
+      resolveCacheWrite = resolve;
+    });
+  let resolveDatabase: ((value: PortalPublicHybridCandidatePage) => void) | undefined;
+  let databaseCalls = 0;
+  const handler = createPortalHybridSearchHandler(
+    handlerOptions(redis, {
+      query() {
+        databaseCalls += 1;
+        return new Promise((resolve) => {
+          resolveDatabase = resolve;
+        });
+      },
+    }),
+  );
+
+  const responsePromise = handler(await signedRequest());
+  await flushUntil(
+    () => resolveCacheWrite !== undefined && resolveDatabase !== undefined,
+    'parallel cache write and Database query',
+  );
+  assertEquals(databaseCalls, 1);
+  assert(redis.calls.includes('cache_set'));
+
+  resolveDatabase?.(databasePage());
+  assertEquals(await raceWithTimeout(responsePromise, 10, 'pending'), 'pending');
+  resolveCacheWrite?.();
+
+  const response = await responsePromise;
+  assertEquals(response.status, 200);
+  assertEquals(response.headers.get('x-portal-cache'), 'miss');
+});
+
+Deno.test(
   'Portal Hybrid cache-write and circuit-reset errors remain bounded best effort',
   async () => {
     const redis = new FakePortalRedis();
@@ -1045,6 +1193,7 @@ Deno.test(
       JSON.stringify({ ...REQUEST, kind: 'flow', filters: { processSubtype: 'unit' } }),
     ]) {
       const redis = new FakePortalRedis();
+      redis.cacheReadFails = true;
       let modelCalls = 0;
       let databaseCalls = 0;
       const handler = createPortalHybridSearchHandler(
