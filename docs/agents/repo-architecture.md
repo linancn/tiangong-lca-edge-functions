@@ -36,7 +36,7 @@ checkPaths:
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-01
 lastReviewedCommit: f42e313fae3c84291e4fff9ba7ef6f3467fd4e0d
-lastReviewedNote: 'Reviewed for Edge #369 promote feedback: the shared deadline inspects concurrent cache-write and Database outcomes before rejection event sanitization, retaining provider ordering and bounded cleanup.'
+lastReviewedNote: 'Reviewed while integrating Edge #363 and #369: shared auth is Supabase JWT/service-only and Redis is Portal-only, while concurrent provider ordering, deadline, telemetry, and cleanup semantics remain intact.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -95,9 +95,9 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 155 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 73 Node contract tests and 506 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
+The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 155 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 73 Node contract tests and 503 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
 
-Edge #357 keeps that runtime architecture while pinning AWS SDK 3.1121.0, OpenAI 7.8.0, Supabase JSR 2.112.4, Upstash Redis 1.38.3, aws-jwt-verify 5.2.1, Deno Redis 0.41.2, Zod 4.5.4, and Prettier 3.9.6. Edge #361 makes every Functions JS type import use the mapped alias and rejects JSR, npm, HTTPS, and every alternative direct scheme, so local graph checks and Supabase deployment bundles share exact 2.112.4 resolution. OpenAI Responses and Chat wrapper shapes remain valid on 7.8. Deno Redis 0.41.2 changed `get`/`eval` typing, so the shared adapter branches explicitly between Upstash and Standard clients without weakening Portal Lua, timeout, or error semantics.
+Edge #357 keeps that runtime architecture while pinning AWS SDK 3.1121.0, OpenAI 7.8.0, Supabase JSR 2.112.4, Upstash Redis 1.38.3, Deno Redis 0.41.2, Zod 4.5.4, and Prettier 3.9.6. Edge #361 makes every Functions JS type import use the mapped alias and rejects JSR, npm, HTTPS, and every alternative direct scheme, so local graph checks and Supabase deployment bundles share exact 2.112.4 resolution. Edge #363 removes the unused Cognito verifier package; Redis packages remain only for Portal. OpenAI Responses and Chat wrapper shapes remain valid on 7.8. Deno Redis 0.41.2 changed `get`/`eval` typing, so the Portal adapter branches explicitly between Upstash and Standard clients without weakening Lua, timeout, or error semantics.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
@@ -108,22 +108,16 @@ Both paths use `--no-verify-jwt`.
 
 Scripted remote deploys also pass `supabase/functions/deno.json` as the Supabase CLI import map. Keep shared npm/jsr import mappings there so local `deno check` and server-side Supabase bundling use the same resolution contract.
 
-The real auth boundary is therefore inside runtime code, primarily:
-
-- `supabase/functions/_shared/auth.ts`
-- `supabase/functions/_shared/cognito_auth.ts`
-- `supabase/functions/_shared/decode_api_key.ts`
+The real auth boundary is therefore inside `supabase/functions/_shared/auth.ts`.
 
 Supported runtime auth modes currently include:
 
 - Supabase `JWT`, which defaults to verified claims/JWKS and returns `userId`, optional email, auth method, optional OAuth `clientId`, session ID, and verified claims in a minimal principal
-- explicit `fresh_user` Supabase JWT assurance for identity/profile synchronization plus the Cognito email/password bridge routes; it verifies claims first and then performs the online user lookup
-- legacy `USER_API_KEY`, which remains a base64 email/password compatibility bearer and resolves generic Redis only after the opaque bearer decodes successfully
+- explicit `fresh_user` Supabase JWT assurance for identity/profile synchronization plus the independently owned Cognito account-sync bridge routes; it verifies claims first and then performs the online user lookup
 - `SERVICE_API_KEY`
-- retained Cognito JWT compatibility, which is a separate principal method and cannot satisfy `fresh_user`
 - Portal-only `portal-hmac-v1`, which is not a user identity or a substitute for route budgets
 
-JWT, OAuth JWT, service-key, malformed opaque bearer, and Portal traffic never construct the generic Redis client. The legacy cache uses the email-free `auth:legacy-user-api-key:v2:<sha256(email NUL password)>` namespace and no longer writes an `lca_` key. Its Upstash adapter reads only `UPSTASH_REDIS_REST_URL/TOKEN`, the shared Edge/MCP operator source. Portal Redis remains entirely separate under `PORTAL_*`/`PORTAL_R0_*`. Downstream authorization consumes `AuthResult.principal`; the full Supabase `User` object is retained only for explicit `fresh_user` compatibility work.
+Non-JWT bearer values are sent only to Supabase claims verification and fail closed; there is no password exchange, Cognito bearer classifier, or generic Redis auth path. Redis remains entirely Portal-owned under `PORTAL_*`/`PORTAL_R0_*`. Downstream authorization consumes `AuthResult.principal`; the full Supabase `User` object is retained only for explicit `fresh_user` account-sync work.
 
 `scripts/probe-functions-auth.cjs` exists because gateway rejection and runtime-auth rejection are different operational failures.
 
@@ -167,9 +161,9 @@ The generic deploy scripts reject R0. Both dedicated commands verify Main parent
 
 After HMAC succeeds, transport validation reads only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, proves the modern key is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, binds database transport only to platform-injected `SUPABASE_URL`, requires an exact constant-time inbound `apikey` match, and rejects every Cookie. Hosted transport is HTTPS and rejects every Authorization. Pinned CLI `2.116.0` maps the matched publishable key into `sb-api-key` and does not inject Authorization; exact local `SUPABASE_URL=http://kong:8000` retains only the older-client exact `SUPABASE_ANON_KEY` Bearer compatibility after the trusted publishable key matches. User, service, and other Bearers fail before Redis. The same once-resolved dedicated key is passed to the public repository; generic and `REMOTE_*` key/URL precedence or indirect helper import is not available.
 
-Redis atomically registers the nonce for 120 seconds and runs one Lua admission operation for minute/day budgets plus a TTL-backed concurrency lease. The Portal adapter reads only `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` provider credentials and never falls back to the generic Redis surface consumed by existing Functions. The lease defaults to 30 seconds, is at least 20 seconds, and must cover Redis plus upstream timeouts with five seconds of recovery margin. Missing configuration, timeout, malformed response, or provider outage fails closed before JSON, cache, or database work. The lease is released in `finally`; its TTL recovers an interrupted isolate and Lua reports only the recovered count. Public-result cache keys contain only the request body hash and expire in at most 60 seconds. This bound ensures direct same-origin BFF traffic rechecks a revoked publication within the visibility SLA; Redis does not decide visibility or authorization.
+Redis atomically registers the nonce for 120 seconds and runs one Lua admission operation for minute/day budgets plus a TTL-backed concurrency lease. The Portal adapter reads only `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` provider credentials and has no unprefixed fallback. The lease defaults to 30 seconds, is at least 20 seconds, and must cover Redis plus upstream timeouts with five seconds of recovery margin. Missing configuration, timeout, malformed response, or provider outage fails closed before JSON, cache, or database work. The lease is released in `finally`; its TTL recovers an interrupted isolate and Lua reports only the recovered count. Public-result cache keys contain only the request body hash and expire in at most 60 seconds. This bound ensures direct same-origin BFF traffic rechecks a revoked publication within the visibility SLA; Redis does not decide visibility or authorization.
 
-Upstash's exported `UPSTASH_REDIS_REST_URL/TOKEN` names are the runtime contract for generic Edge/MCP Redis and the operator-source format for the Portal live fixture. The fixture accepts only those two keys from a mode-0600 file and maps them into a single child process as `PORTAL_UPSTASH_REDIS_URL/TOKEN`; long-lived Portal/EdgeOne application secrets remain Portal-prefixed and never fall back to the generic pair. It derives one runtime-compatible test namespace by losslessly base36-encoding a CSPRNG UUIDv4 receipt printed before child startup. Concurrent runs therefore share no replay, budget, lease, cache, startup-cleanup, or final-cleanup key. Interrupted cleanup requires that retained non-secret run ID and deletes only the exact derived keys. Portal application code never loads the credential file.
+The disposable Portal live-fixture runner may accept an external operator's Upstash exports under `UPSTASH_REDIS_REST_URL/TOKEN`, then maps them into one isolated child process as `PORTAL_UPSTASH_REDIS_URL/TOKEN`; these source names are not Edge runtime secrets. Long-lived Portal/EdgeOne application secrets remain Portal-prefixed with no fallback. The fixture derives one runtime-compatible test namespace by losslessly base36-encoding a CSPRNG UUIDv4 receipt printed before child startup. Concurrent runs therefore share no replay, budget, lease, cache, startup-cleanup, or final-cleanup key. Interrupted cleanup requires that retained non-secret run ID and deletes only the exact derived keys. Portal application code never loads the credential file.
 
 The route then calls only `api.portal_get_published_lcia_values_v1` with explicit `Content-Profile: api` and the strictly validated dedicated publishable credential. It rejects `sb_secret_*`, JWT credentials, non-project keys, credential-bearing/non-HTTPS remote URLs, user context, service clients, artifacts, and locators. A successful response is the exact bounded `portal.published-lcia-page.v1` DTO. A missing publication is unavailable with zero rows, never numeric zero.
 

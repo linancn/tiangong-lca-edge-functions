@@ -4,17 +4,8 @@ import type {
   UserAppMetadata,
   UserMetadata,
 } from 'jsr:@supabase/supabase-js@2.112.4';
-// import { Redis } from '@upstash/redis';
-import { authenticateCognitoToken } from './cognito_auth.ts';
 import { corsHeaders } from './cors.ts';
-import decodeApiKey, { type Credentials } from './decode_api_key.ts';
-import {
-  getRedisClient as getDefaultRedisClient,
-  type RedisClient,
-  redisGet,
-  redisSet,
-} from './redis_client.ts';
-import { createSupabaseAuthClient, getSupabaseUrl } from './supabase_client.ts';
+import { getSupabaseUrl } from './supabase_client.ts';
 
 const _defaultAppMetadata: UserAppMetadata = {
   provider: '',
@@ -25,9 +16,7 @@ const _defaultUserMetadata: UserMetadata = {
 };
 
 const _defaultAud = '';
-
 const _defaultCreatedAt = '';
-const textEncoder = new TextEncoder();
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AUTHENTICATED_AUDIENCE = 'authenticated';
 const SUPABASE_AUTH_PATH = '/auth/v1';
@@ -67,8 +56,6 @@ export function isSupabasePublishableApiKey(
   return apiKey.startsWith('sb_publishable_');
 }
 
-const JWT_PATTERN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-
 function extractBearerToken(authHeader: string | null): string | undefined {
   if (!authHeader) {
     return undefined;
@@ -76,10 +63,6 @@ function extractBearerToken(authHeader: string | null): string | undefined {
 
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   return token.length > 0 ? token : undefined;
-}
-
-function isJwtLikeToken(token: string): boolean {
-  return JWT_PATTERN.test(token);
 }
 
 function createAuthResponse(message: string, status: number): Response {
@@ -115,15 +98,6 @@ function getErrorStatus(error: unknown, fallback: number): number {
   return fallback;
 }
 
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-async function createUserApiKeyCacheKey(email: string, password: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', textEncoder.encode(`${email}\0${password}`));
-  return `auth:legacy-user-api-key:v2:${bytesToHex(new Uint8Array(digest))}`;
-}
-
 export interface AuthedUser extends User {
   role?: string;
 }
@@ -141,14 +115,13 @@ export interface AuthResult {
 
 export type JwtAssurance = 'claims' | 'fresh_user';
 
-export type AuthPrincipalMethod =
-  'supabase_jwt' | 'cognito_jwt' | 'legacy_user_api_key' | 'service_api_key';
+export type AuthPrincipalMethod = 'supabase_jwt' | 'service_api_key';
 
 export interface AuthPrincipal {
   userId: string;
   email?: string;
   authMethod: AuthPrincipalMethod;
-  assurance: JwtAssurance | 'legacy_user_api_key' | 'service_api_key';
+  assurance: JwtAssurance | 'service_api_key';
   clientId?: string;
   sessionId?: string;
   claims?: Readonly<Record<string, unknown>>;
@@ -160,10 +133,6 @@ export interface AuthPrincipal {
 export interface AuthConfig {
   /** Supabase auth client instance used for JWT validation */
   authClient?: SupabaseClient;
-  /** Redis client instance for caching */
-  redis?: RedisClient;
-  /** Lazily resolve Redis only after an opaque legacy user key has decoded successfully. */
-  redisFactory?: () => Promise<RedisClient | undefined>;
   /** Whether to require authentication (default: true) */
   requireAuth?: boolean;
   /** Allowed authentication methods */
@@ -180,8 +149,6 @@ export interface AuthConfig {
 export enum AuthMethod {
   /** Supabase JWT token via Authorization header, used in TianGong LCA Web App. */
   JWT = 'jwt',
-  /** User API key via Authorization header, used in openAPI Service and MCP Service. */
-  USER_API_KEY = 'user_api_key',
   /** Service API key via apiKey header, used in database webhooks, backend services, etc. */
   SERVICE_API_KEY = 'service_api_key',
 }
@@ -189,11 +156,10 @@ export enum AuthMethod {
 /**
  * Unified authentication middleware for Supabase Edge Functions
  *
- * This middleware provides a centralized authentication solution supporting multiple auth methods:
+ * This middleware provides a centralized authentication solution supporting reviewed auth methods:
  *
  * 1. **Supabase JWT**: Standard Supabase authentication via Authorization header
- * 2. **User API Key**: Base64 encoded credentials via Authorization header
- * 3. **Service API Key**: Special API key for backend services via apiKey header
+ * 2. **Service API Key**: Special API key for backend services via apiKey header
  *
  * @example
  * ```typescript
@@ -201,13 +167,6 @@ export enum AuthMethod {
  * const authResult = await authenticateRequest(req, {
  *   authClient: supabaseAuthClient,
  *   allowedMethods: [AuthMethod.JWT]
- * });
- *
- * // With User API key support and Redis caching
- * const authResult = await authenticateRequest(req, {
- *   authClient: supabaseAuthClient,
- *   redis: redisClient,
- *   allowedMethods: [AuthMethod.USER_API_KEY]
  * });
  *
  * // For service requests
@@ -222,11 +181,9 @@ export async function authenticateRequest(
 ): Promise<AuthResult> {
   const {
     authClient,
-    redis,
     requireAuth = true,
-    allowedMethods = [AuthMethod.JWT, AuthMethod.USER_API_KEY, AuthMethod.SERVICE_API_KEY],
+    allowedMethods = [AuthMethod.JWT, AuthMethod.SERVICE_API_KEY],
     serviceApiKey,
-    redisFactory = getDefaultRedisClient,
     jwtAssurance = 'claims',
   } = config;
 
@@ -244,7 +201,6 @@ export async function authenticateRequest(
 
   const authHeader = req.headers.get('Authorization');
   const bearerToken = extractBearerToken(authHeader);
-  const bearerLooksLikeJwt = bearerToken ? isJwtLikeToken(bearerToken) : false;
   const apiKey = req.headers.get('apikey');
 
   // Collect all possible authentication results
@@ -261,19 +217,8 @@ export async function authenticateRequest(
     authResults.push({ method: AuthMethod.SERVICE_API_KEY, result });
   }
 
-  // Check User API key
-  if (allowedMethods.includes(AuthMethod.USER_API_KEY) && bearerToken && !bearerLooksLikeJwt) {
-    console.log('Checking User API key authentication');
-    const result = authenticateLegacyUserApiKey(bearerToken, redis, redisFactory);
-    authResults.push({ method: AuthMethod.USER_API_KEY, result });
-  }
-
   // Check Supabase JWT
-  if (
-    allowedMethods.includes(AuthMethod.JWT) &&
-    bearerToken &&
-    (bearerLooksLikeJwt || !allowedMethods.includes(AuthMethod.USER_API_KEY))
-  ) {
+  if (allowedMethods.includes(AuthMethod.JWT) && bearerToken) {
     if (!authClient) {
       authResults.push({
         method: AuthMethod.JWT,
@@ -362,26 +307,6 @@ function authClientNotConfiguredResult(): AuthResult {
 }
 
 /**
- * Determine if a bearer token is from Cognito or Supabase
- * @param bearerKey - The bearer token to analyze
- * @returns Token type: 'cognito' or 'supabase'
- */
-function getTokenType(bearerKey: string): 'cognito' | 'supabase' {
-  if (isJwtLikeToken(bearerKey)) {
-    try {
-      const payload = JSON.parse(atob(bearerKey.split('.')[1]));
-      if (payload.iss && payload.iss.includes('cognito')) {
-        return 'cognito';
-      }
-    } catch (_error) {
-      // If parsing fails, we assume it's not a Cognito token
-      return 'supabase';
-    }
-  }
-  return 'supabase';
-}
-
-/**
  * Authenticate using Supabase JWT token, used in TianGong LCA Web App. JWT token in the Authorization header, after `Bearer ` prefix.
  * @param token - The JWT token
  * @param supabase - The Supabase client, created with `Publishable key`
@@ -392,17 +317,6 @@ async function authenticateSupabaseJWT(
   supabase: SupabaseClient,
   assurance: JwtAssurance,
 ): Promise<AuthResult> {
-  if (getTokenType(token) === 'cognito') {
-    if (assurance === 'fresh_user') {
-      return {
-        isAuthenticated: false,
-        response: createAuthResponse('Fresh user assurance requires a Supabase session', 401),
-      };
-    }
-    console.log('Detected Cognito token, delegating to Cognito authentication');
-    return await authenticateCognitoToken(token);
-  }
-
   try {
     const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
     if (claimsError) {
@@ -602,160 +516,6 @@ function isExpectedSupabaseIssuer(issuer: string): boolean {
   } catch (_error) {
     return false;
   }
-}
-
-/**
- * Authenticate using User API Key (email:password encoded), used in the openAPI Service and MCP Service. API key in the Authorization header, after `Bearer ` prefix.
- * @param apiKey - The API key
- * @param redis - The Redis client
- * @returns The authentication result
- */
-async function authenticateLegacyUserApiKey(
-  apiKey: string,
-  redis: RedisClient | undefined,
-  redisFactory: () => Promise<RedisClient | undefined>,
-): Promise<AuthResult> {
-  const credentials = decodeApiKey(apiKey);
-  if (!credentials) {
-    return {
-      isAuthenticated: false,
-      response: new Response(JSON.stringify({ error: 'The Credentials from user are invalid.' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }),
-    };
-  }
-
-  try {
-    const resolvedRedis = redis ?? (await redisFactory());
-    if (!resolvedRedis) {
-      return {
-        isAuthenticated: false,
-        response: createAuthResponse('Legacy user API key authentication unavailable', 503),
-      };
-    }
-    return await authenticateUserApiKey(credentials, resolvedRedis);
-  } catch (error) {
-    console.error('Legacy user API key Redis initialization failed:', error);
-    return {
-      isAuthenticated: false,
-      response: createAuthResponse('Legacy user API key authentication unavailable', 503),
-    };
-  }
-}
-
-async function authenticateUserApiKey(
-  credentials: Credentials,
-  redis: RedisClient,
-): Promise<AuthResult> {
-  const { email = '', password = '' } = credentials;
-  const cacheKey = await createUserApiKeyCacheKey(email, password);
-  const cachedUserId = await redisGet(redis, cacheKey);
-
-  if (cachedUserId) {
-    return {
-      isAuthenticated: true,
-      principal: {
-        userId: String(cachedUserId),
-        email,
-        authMethod: 'legacy_user_api_key',
-        assurance: 'legacy_user_api_key',
-      },
-      user: {
-        id: String(cachedUserId),
-        email: email,
-        app_metadata: _defaultAppMetadata,
-        user_metadata: _defaultUserMetadata,
-        aud: _defaultAud,
-        created_at: _defaultCreatedAt,
-      },
-    };
-  }
-
-  const authClient = createAuthClientForUserApiKey();
-  if (!authClient) {
-    return {
-      isAuthenticated: false,
-      response: createAuthResponse('Auth client not configured', 500),
-    };
-  }
-
-  try {
-    const { data, error } = await authClient.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
-
-    if (error) {
-      console.error('Supabase user API key sign-in failed:', error);
-      const status = getErrorStatus(error, 401);
-      return {
-        isAuthenticated: false,
-        response: createAuthResponse(
-          status >= 500
-            ? getErrorMessage(error, 'User API key authentication failed')
-            : 'Unauthorized',
-          status,
-        ),
-      };
-    }
-
-    if (!data.user) {
-      return {
-        isAuthenticated: false,
-        response: createAuthResponse('Unauthorized', 401),
-      };
-    }
-
-    if (data.user.role !== 'authenticated') {
-      return {
-        isAuthenticated: false,
-        response: createAuthResponse('You are not an authenticated user.', 401),
-      };
-    }
-
-    // Cache the user ID for 1 hour.
-    await redisSet(redis, cacheKey, data.user.id, { ex: 3600 });
-
-    return {
-      isAuthenticated: true,
-      principal: {
-        userId: data.user.id,
-        email: data.user.email,
-        authMethod: 'legacy_user_api_key',
-        assurance: 'legacy_user_api_key',
-      },
-      user: {
-        id: data.user.id,
-        email: data.user.email,
-        app_metadata: _defaultAppMetadata,
-        user_metadata: _defaultUserMetadata,
-        aud: _defaultAud,
-        created_at: _defaultCreatedAt,
-      },
-    };
-  } catch (error) {
-    console.error('Supabase user API key sign-in threw:', error);
-    return {
-      isAuthenticated: false,
-      response: createAuthResponse(
-        getErrorMessage(error, 'User API key authentication failed'),
-        500,
-      ),
-    };
-  }
-}
-
-function createAuthClientForUserApiKey(): SupabaseClient | null {
-  const supabaseUrl =
-    readOptionalEnv('REMOTE_SUPABASE_URL') ?? readOptionalEnv('SUPABASE_URL') ?? '';
-  const publishableApiKey = readPublishableApiKey() ?? '';
-
-  if (!supabaseUrl || !publishableApiKey) {
-    return null;
-  }
-
-  return createSupabaseAuthClient();
 }
 
 /**

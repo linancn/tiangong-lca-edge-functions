@@ -26,7 +26,6 @@ import {
   type ParsedSnapshotProcessFilter,
 } from '../_shared/lca_snapshot_scope.ts';
 import { verifySnapshotMatchesDataScope } from '../_shared/lca_snapshot_scope_db.ts';
-import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient, supabaseClient } from '../_shared/supabase_client.ts';
 import { isWorkerJobsCutoverEnabled } from '../_shared/worker_jobs_cutover.ts';
 
@@ -122,8 +121,7 @@ Deno.serve(async (req) => {
 
   const authResult = await authenticateRequest(req, {
     authClient: supabaseAuthClient,
-    redisFactory: getRedisClient,
-    allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
+    allowedMethods: [AuthMethod.JWT],
   });
 
   if (!authResult.isAuthenticated) {

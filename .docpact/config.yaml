@@ -2,7 +2,7 @@ version: 1
 layout: repo
 lastReviewedAt: '2026-09-01'
 lastReviewedCommit: 'f42e313fae3c84291e4fff9ba7ef6f3467fd4e0d'
-lastReviewedNote: 'Reviewed for Edge #369 promote feedback: concurrent cache-write and Database outcomes settle before rejection telemetry is sanitized, preserving the allowlisted event contract without changing ownership, routing, or provider isolation.'
+lastReviewedNote: 'Reviewed while integrating Edge #363 and #369: non-Portal legacy auth/Redis routes are removed while Portal deadline, provider ordering, settled telemetry, and isolated ownership remain governed.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -116,8 +116,6 @@ routing:
     auth-runtime:
       paths:
         - supabase/functions/_shared/auth.ts
-        - supabase/functions/_shared/cognito_auth.ts
-        - supabase/functions/_shared/decode_api_key.ts
         - supabase/functions/_shared/redis_client.ts
         - supabase/functions/_shared/command_runtime/actor_context.ts
         - supabase/functions/identity_login_sync/**

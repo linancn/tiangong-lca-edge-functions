@@ -6,7 +6,6 @@
     "@supabase/functions-js/edge-runtime.d.ts": "jsr:@supabase/functions-js@2.112.4/edge-runtime.d.ts",
     "@supabase/supabase-js@2": "jsr:@supabase/supabase-js@2.112.4",
     "@upstash/redis": "https://esm.sh/@upstash/redis@1.38.3",
-    "aws-jwt-verify": "npm:aws-jwt-verify@5.2.1",
     "postgres": "https://deno.land/x/postgresjs@v3.4.8/mod.js",
     "redis": "jsr:@db/redis@0.41.2",
     "zod": "npm:/zod@4.5.4"

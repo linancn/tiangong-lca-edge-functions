@@ -38,7 +38,7 @@ Deno.test(
 
 Deno.test('resolveHybridSearchRpcContext rejects my data without a Supabase JWT context', () => {
   const error = assertThrows(
-    () => resolveHybridSearchRpcContext('Bearer user-api-key-token', 'my'),
+    () => resolveHybridSearchRpcContext('Bearer oauth-access-token', 'my'),
     HybridSearchRpcContextError,
   );
 

@@ -6,7 +6,6 @@ import {
   type AuthConfig,
   type AuthResult,
 } from '../_shared/auth.ts';
-import { getRedisClient, type RedisClient } from '../_shared/redis_client.ts';
 import { createSupabaseServiceClient, supabaseAuthClient } from '../_shared/supabase_client.ts';
 import { json, lookupTidasPackageJob, TidasPackageError } from '../_shared/tidas_package.ts';
 
@@ -20,7 +19,6 @@ export type TidasPackageJobsHandlerDeps = {
     req: Request,
     config: AuthConfig & { allowedMethods: AuthMethod[] },
   ) => Promise<AuthResult>;
-  getRedisClient: () => Promise<RedisClient | undefined>;
   supabase: SupabaseClient;
 };
 
@@ -71,7 +69,6 @@ export function createTidasPackageJobsHandler(
   deps: TidasPackageJobsHandlerDeps = {
     authClient: supabaseAuthClient,
     authenticateRequest,
-    getRedisClient,
     supabase: getDefaultSupabaseClient(),
   },
 ): (req: Request) => Promise<Response> {
@@ -93,8 +90,7 @@ export function createTidasPackageJobsHandler(
 
     const authResult = await deps.authenticateRequest(req, {
       authClient: deps.authClient,
-      redisFactory: deps.getRedisClient,
-      allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY],
+      allowedMethods: [AuthMethod.JWT],
     });
 
     if (!authResult.isAuthenticated || !authResult.principal?.userId) {

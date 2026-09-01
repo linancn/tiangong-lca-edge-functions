@@ -16,7 +16,6 @@ import {
   HybridSearchRpcContextError,
   type HybridSearchRpcClientContext,
 } from './hybrid_search_rpc_context.ts';
-import { getRedisClient } from './redis_client.ts';
 import { supabaseAuthClient } from './supabase_client.ts';
 
 export interface HybridSearchRouteConfig {
@@ -48,8 +47,7 @@ export interface HybridSearchHandlerDependencies {
 async function defaultAuthenticate(request: Request): Promise<HybridSearchAuthResult> {
   return await authenticateRequest(request, {
     authClient: supabaseAuthClient,
-    redisFactory: getRedisClient,
-    allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY, AuthMethod.SERVICE_API_KEY],
+    allowedMethods: [AuthMethod.JWT, AuthMethod.SERVICE_API_KEY],
   });
 }
 

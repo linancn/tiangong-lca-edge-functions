@@ -3,7 +3,6 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { authenticateRequest, AuthMethod } from '../_shared/auth.ts';
 import { corsHeaders } from '../_shared/cors.ts';
 import { openaiChat } from '../_shared/openai_chat.ts';
-import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient } from '../_shared/supabase_client.ts';
 
 const JSON_BLOCK_PATTERN = /```(?:json)?\s*([\s\S]*?)```/i;
@@ -115,8 +114,7 @@ Deno.serve(async (req) => {
 
   const authResult = await authenticateRequest(req, {
     authClient: supabaseAuthClient,
-    redisFactory: getRedisClient,
-    allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY, AuthMethod.SERVICE_API_KEY],
+    allowedMethods: [AuthMethod.JWT, AuthMethod.SERVICE_API_KEY],
   });
 
   if (!authResult.isAuthenticated) {
