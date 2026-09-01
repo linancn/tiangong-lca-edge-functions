@@ -38,9 +38,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-08-31
-lastReviewedCommit: c313a083c76d893ad28e951387110b725f4d1bce
-lastReviewedNote: 'Reviewed for Edge #361: every Supabase Functions JS type import resolves through the exact 2.112.4 import-map alias, and the executable contract rejects JSR, npm, HTTPS, or any alternative direct scheme.'
+lastReviewedAt: 2026-09-01
+lastReviewedCommit: fcd6fdc60152180ba564f1fed89dc641f6e3e143
+lastReviewedNote: 'Reviewed for Edge #364: Portal Hybrid now has a code- and deploy-contract 6000 ms inner deadline with 2000 ms of BFF headroom; auth, provider isolation, budgets, fallback, and branch boundaries remain unchanged.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -178,7 +178,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - do not let signed Portal Hybrid read or fall back to generic OpenAI, SageMaker, or AWS variables; after the exact-lowercase-true kill switch it resolves the complete `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` configuration and injects it explicitly into shared kernels, while existing login Hybrid and embedding consumers keep their generic defaults
 - do not use one shared Portal deployment SHA; LCIA events read only `PORTAL_LCIA_DEPLOYMENT_SHA` and Hybrid events read only `PORTAL_HYBRID_DEPLOYMENT_SHA`, with invalid or missing values normalized to `unknown`
 - do not route `portal_hybrid_search_v1` through legacy `hybrid_search_processes`/`hybrid_search_flows`, a service client, or an Edge-side field projection; it remains default-off until the exact Database façade exists, and every guard/circuit/timeout failure returns a fixed signal for the Portal BFF to handle through its separate lexical façade
-- do not return a successful Portal Hybrid response after its absolute application deadline; every awaited guard/cache/model/database/finalization step consumes the same remaining budget, while lease release is detached and bounded so Redis TTL remains the interrupted-cleanup recovery authority
+- do not return a successful Portal Hybrid response after its absolute 6-second Edge application deadline; the checked-in default and maximum must retain at least two seconds of headroom before the Portal BFF's 8-second deadline, every awaited guard/cache/model/database/finalization step consumes the same remaining budget, and lease release remains detached and bounded so Redis TTL is the interrupted-cleanup recovery authority
 - on a Portal Hybrid model-cache miss, start the OpenAI rewrite and 1024-dimensional SageMaker embedding of the original bounded query concurrently only after admission; both share one request operation signal inherited from the absolute deadline, either failure aborts its peer before lease release, and database work starts only after both succeed. The rewrite remains the sole interpretation/fulltext source, while the cache stores only its bounded interpretation plus the vector and never the raw query
 - keep the Portal-only Responses rewrite non-stored, explicitly `reasoning.effort=none`, `text.verbosity=low`, and capped at 256 total output tokens under the same strict JSON Schema and AbortSignal; do not apply these settings to generic/login OpenAI wrappers or opt into priority/flex service tiers implicitly
 - sanitize the final Portal Hybrid event before the last deadline decision, including only fixed rewrite/embedding outcome enums and nullable bounded stage latencies—never query, model name, endpoint, provider error, or credential—then schedule its allowlisted logger outside the handler promise; use `EdgeRuntime.waitUntil` when available and a handled macrotask fallback locally, so observability cannot delay or change the final response

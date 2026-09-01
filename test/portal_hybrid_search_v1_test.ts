@@ -26,6 +26,7 @@ import {
   PORTAL_HYBRID_CIRCUIT_CHECK_LUA,
   PORTAL_HYBRID_CIRCUIT_FAILURE_LUA,
   PORTAL_HYBRID_CIRCUIT_SUCCESS_LUA,
+  PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
 } from '../supabase/functions/_shared/portal_redis_guard.ts';
 import type { PortalRedisAdapter } from '../supabase/functions/_shared/redis_client.ts';
 import {
@@ -632,7 +633,9 @@ Deno.test(
 
     const configRedis = new FakePortalRedis();
     const configResponse = await createPortalHybridSearchHandler(
-      handlerOptions(configRedis, repository, { timeoutMs: 8_001 }),
+      handlerOptions(configRedis, repository, {
+        timeoutMs: PORTAL_HYBRID_TOTAL_TIMEOUT_MS + 1,
+      }),
     )(await signedRequest());
     assertEquals(configResponse.status, 503);
     assertEquals(await responseCode(configResponse), 'guard_unavailable');

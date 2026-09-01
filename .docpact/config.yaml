@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-31'
-lastReviewedCommit: 'c313a083c76d893ad28e951387110b725f4d1bce'
-lastReviewedNote: 'Reviewed for Edge #361: runtime/config/proof routing requires every Supabase Functions JS type import to resolve through the exact 2.112.4 import-map alias, with JSR, npm, HTTPS, and every alternative direct scheme rejected by the executable contract.'
+lastReviewedAt: '2026-09-01'
+lastReviewedCommit: 'fcd6fdc60152180ba564f1fed89dc641f6e3e143'
+lastReviewedNote: 'Reviewed for Edge #364: the Portal Hybrid runtime, deploy template, proof routes, and retained docs fix the inner deadline at 6000 ms with 2000 ms of BFF headroom; ownership, routing, and provider-isolation semantics remain unchanged.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
