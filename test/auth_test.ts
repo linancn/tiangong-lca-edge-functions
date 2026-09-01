@@ -357,12 +357,12 @@ Deno.test(
   },
 );
 
-Deno.test('Cognito-like bearer tokens are rejected through Supabase verification', async () => {
+Deno.test('foreign-issuer bearer tokens are rejected through Supabase verification', async () => {
   const module = await importAuthModule();
   let getClaimsCalls = 0;
   const result = await module.authenticateRequest(
     new Request('https://example.com', {
-      headers: { Authorization: 'Bearer header.cognito-payload.signature' },
+      headers: { Authorization: 'Bearer header.foreign-issuer.signature' },
     }),
     {
       authClient: {

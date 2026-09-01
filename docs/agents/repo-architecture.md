@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-01
-lastReviewedCommit: 5fca6c08124cc93a6b833306d4c5164982d1a16c
-lastReviewedNote: 'Reviewed for Edge #377: shared claims-first auth canonicalizes known invalid-token failures to HTTP 401 and preserves retryable claims-fetch failures without changing principal, assurance, service, Portal, or downstream ownership.'
+lastReviewedCommit: da2ff14b6e7fcf5919af2d6576de02da1aeece74
+lastReviewedNote: 'Reviewed for Edge #379: the last external account-bridge routes and identity-provider client are removed; claims-first Supabase and `identity_login_sync`-only fresh assurance preserve SageMaker, service, Portal, and downstream ownership.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -95,9 +95,9 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 155 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 73 Node contract tests and 505 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
+The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 152 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 73 Node contract tests and 505 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
 
-Edge #357 keeps that runtime architecture while pinning AWS SDK 3.1121.0, OpenAI 7.8.0, Supabase JSR 2.112.4, Upstash Redis 1.38.3, Deno Redis 0.41.2, Zod 4.5.4, and Prettier 3.9.6. Edge #361 makes every Functions JS type import use the mapped alias and rejects JSR, npm, HTTPS, and every alternative direct scheme, so local graph checks and Supabase deployment bundles share exact 2.112.4 resolution. Edge #363 removes the unused Cognito verifier package; Redis packages remain only for Portal. OpenAI Responses and Chat wrapper shapes remain valid on 7.8. Deno Redis 0.41.2 changed `get`/`eval` typing, so the Portal adapter branches explicitly between Upstash and Standard clients without weakening Lua, timeout, or error semantics.
+Edge #379 removes the final identity-provider client, leaving AWS SDK 3.1121.0 only for SageMaker Runtime. OpenAI 7.8.0, Supabase JSR 2.112.4, Upstash Redis 1.38.3, Deno Redis 0.41.2, Zod 4.5.4, and Prettier 3.9.6 remain exact. Edge #361 makes every Functions JS type import use the mapped alias and rejects JSR, npm, HTTPS, and every alternative direct scheme, so local graph checks and Supabase deployment bundles share exact 2.112.4 resolution. Redis packages remain only for Portal. OpenAI Responses and Chat wrapper shapes remain valid on 7.8. Deno Redis 0.41.2 changed `get`/`eval` typing, so the Portal adapter branches explicitly between Upstash and Standard clients without weakening Lua, timeout, or error semantics.
 
 The repo intentionally keeps gateway JWT verification off in its standard operator paths:
 
@@ -113,11 +113,11 @@ The real auth boundary is therefore inside `supabase/functions/_shared/auth.ts`.
 Supported runtime auth modes currently include:
 
 - Supabase `JWT`, which defaults to verified claims/JWKS and returns `userId`, optional email, auth method, optional OAuth `clientId`, session ID, and verified claims in a minimal principal
-- explicit `fresh_user` Supabase JWT assurance for identity/profile synchronization plus the independently owned Cognito account-sync bridge routes; it verifies claims first and then performs the online user lookup
+- explicit `fresh_user` Supabase JWT assurance for `identity_login_sync`; it verifies claims first and then performs the online user lookup
 - `SERVICE_API_KEY`
 - Portal-only `portal-hmac-v1`, which is not a user identity or a substitute for route budgets
 
-Non-JWT bearer values are sent only to Supabase claims verification and known invalid-token failures normalize to HTTP 401; status-0/network failures become 503, throttling remains 429, and upstream 5xx stays retryable. There is no password exchange, Cognito bearer classifier, or generic Redis auth path. Redis remains entirely Portal-owned under `PORTAL_*`/`PORTAL_R0_*`. Downstream authorization consumes `AuthResult.principal`; the full Supabase `User` object is retained only for explicit `fresh_user` account-sync work.
+Non-JWT bearer values are sent only to Supabase claims verification and known invalid-token failures normalize to HTTP 401; status-0/network failures become 503, throttling remains 429, and upstream 5xx stays retryable. There is no password exchange, external bearer classifier, or generic Redis auth path. Redis remains entirely Portal-owned under `PORTAL_*`/`PORTAL_R0_*`. Downstream authorization consumes `AuthResult.principal`; the full Supabase `User` object is retained only for explicit `identity_login_sync` fresh assurance.
 
 `scripts/probe-functions-auth.cjs` exists because gateway rejection and runtime-auth rejection are different operational failures.
 
