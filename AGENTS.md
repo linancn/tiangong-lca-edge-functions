@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-01
-lastReviewedCommit: 1a5a4b90b75e8bfbd35499ce75e5f7b2ec1dd32e
-lastReviewedNote: 'Reviewed for Edge #364 promote feedback: the required timeout-before-deploy migration preserves the 6000 ms inner deadline without changing auth, provider isolation, budgets, fallback, or branch boundaries.'
+lastReviewedCommit: f42e313fae3c84291e4fff9ba7ef6f3467fd4e0d
+lastReviewedNote: 'Reviewed for Edge #369 promote feedback: Database rejection waits for the concurrent cache-write outcome before event sanitization, preserving auth, rejection order, provider isolation, budgets, fallback, privacy, and branch boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -96,7 +96,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - latest reviewed import graph: AWS SDK `3.1121.0`, OpenAI `7.8.0`, Supabase JSR `2.112.4`, Upstash Redis `1.38.3`, aws-jwt-verify `5.2.1`, Deno Redis `0.41.2`, Zod `4.5.4`, and Prettier `3.9.6`; every Functions JS type import must use the mapped `@supabase/functions-js/edge-runtime.d.ts` alias, while any direct JSR, npm, HTTPS, or other `@supabase/functions-js` specifier is forbidden; `pnpm outdated` and exact-Deno `deno outdated --latest` must remain empty
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 155 enabled function/test roots through one bounded shared Deno graph, runs 73 Node contract tests, and executes 503 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
+- `pnpm check` validates exact runtime versions, checks all 155 enabled function/test roots through one bounded shared Deno graph, runs 73 Node contract tests, and executes 506 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
@@ -179,7 +179,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - do not use one shared Portal deployment SHA; LCIA events read only `PORTAL_LCIA_DEPLOYMENT_SHA` and Hybrid events read only `PORTAL_HYBRID_DEPLOYMENT_SHA`, with invalid or missing values normalized to `unknown`
 - do not route `portal_hybrid_search_v1` through legacy `hybrid_search_processes`/`hybrid_search_flows`, a service client, or an Edge-side field projection; it remains default-off until the exact Database façade exists, and every guard/circuit/timeout failure returns a fixed signal for the Portal BFF to handle through its separate lexical façade
 - do not return a successful Portal Hybrid response after its absolute 6-second Edge application deadline; the checked-in default and maximum must retain at least two seconds of headroom before the Portal BFF's 8-second deadline, every awaited guard/cache/model/database/finalization step consumes the same remaining budget, and lease release remains detached and bounded so Redis TTL is the interrupted-cleanup recovery authority
-- on a Portal Hybrid model-cache miss, start the OpenAI rewrite and 1024-dimensional SageMaker embedding of the original bounded query concurrently only after admission; both share one request operation signal inherited from the absolute deadline, either failure aborts its peer before lease release, and database work starts only after both succeed. The rewrite remains the sole interpretation/fulltext source, while the cache stores only its bounded interpretation plus the vector and never the raw query
+- after Portal Hybrid admission, start the independent circuit and model-cache reads concurrently, await circuit first so open returns without waiting for cache, and validate JSON/schema before consuming the cache result so invalid-request precedence is preserved; on a valid model-cache miss, start the OpenAI rewrite and 1024-dimensional SageMaker embedding of the original bounded query concurrently, then overlap the validated model-cache write with the public Database query and settle both outcomes before finalizing any Database rejection so cache-write telemetry is accurate. All operations share the absolute deadline, either provider failure aborts its peer before lease release, providers never start before circuit acceptance, and the rewrite remains the sole interpretation/fulltext source while the cache stores only its bounded interpretation plus the vector and never the raw query
 - keep the Portal-only Responses rewrite non-stored, explicitly `reasoning.effort=none`, `text.verbosity=low`, and capped at 256 total output tokens under the same strict JSON Schema and AbortSignal; do not apply these settings to generic/login OpenAI wrappers or opt into priority/flex service tiers implicitly
 - sanitize the final Portal Hybrid event before the last deadline decision, including only fixed rewrite/embedding outcome enums and nullable bounded stage latencies—never query, model name, endpoint, provider error, or credential—then schedule its allowlisted logger outside the handler promise; use `EdgeRuntime.waitUntil` when available and a handled macrotask fallback locally, so observability cannot delay or change the final response
 - do not move repo-level tests into `supabase/functions/**`; this repo keeps Deno tests in `test/**`
