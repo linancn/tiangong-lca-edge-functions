@@ -387,6 +387,10 @@ Deno.test(
     );
     assert(
       PORTAL_HYBRID_ATOMIC_BEGIN_LUA.indexOf("redis.call('SET'") <
+        PORTAL_HYBRID_ATOMIC_BEGIN_LUA.indexOf("redis.call('ZREMRANGEBYSCORE'"),
+    );
+    assert(
+      PORTAL_HYBRID_ATOMIC_BEGIN_LUA.indexOf("redis.call('ZREMRANGEBYSCORE'") <
         PORTAL_HYBRID_ATOMIC_BEGIN_LUA.indexOf("redis.call('INCRBY'"),
     );
     assert(

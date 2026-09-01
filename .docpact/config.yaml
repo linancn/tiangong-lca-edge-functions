@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-01'
-lastReviewedCommit: '8015ac515bb8a0cbdb2e7ee09d157cc709898e80'
-lastReviewedNote: 'Reviewed for Edge #373: one Hybrid-only atomic Redis begin owns nonce/replay/budget/concurrency/lease-recovery/circuit admission while cache remains a separate valid-request read; ownership, routing, and provider isolation are unchanged.'
+lastReviewedCommit: 'a869113662a4a9aa75cf6eb1ddb8d4975d95a82b'
+lastReviewedNote: 'Reviewed for Edge #373 feedback: the Hybrid atomic begin documents and tests the existing nonce/replay then expired-lease-recovery then budget/concurrency/lease then circuit order; ownership, routing, and provider isolation are unchanged.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
