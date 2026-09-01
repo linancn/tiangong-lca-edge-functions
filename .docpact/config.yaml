@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-01'
-lastReviewedCommit: 'f42e313fae3c84291e4fff9ba7ef6f3467fd4e0d'
-lastReviewedNote: 'Reviewed while integrating Edge #363 and #369: non-Portal legacy auth/Redis routes are removed while Portal deadline, provider ordering, settled telemetry, and isolated ownership remain governed.'
+lastReviewedCommit: 'a266257d2a2f37fbd9d1b68bbc484557d308203c'
+lastReviewedNote: 'Reviewed after synchronizing Edge #363, #369, and #373: non-Portal auth changes remain intact while one Hybrid-only atomic replay/recovery/budget/concurrency/lease/circuit admission call preserves Portal deadline, provider ordering, telemetry, and isolated ownership.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
