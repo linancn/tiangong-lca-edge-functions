@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-08-31'
-lastReviewedCommit: 'c313a083c76d893ad28e951387110b725f4d1bce'
-lastReviewedNote: 'Reviewed for Edge #363: auth/runtime/proof routing covers broker-era JWT/service-only Edge authentication, removal of generic auth Redis, and preservation of isolated Portal and Cognito bridge ownership.'
+lastReviewedAt: '2026-09-01'
+lastReviewedCommit: 'f42e313fae3c84291e4fff9ba7ef6f3467fd4e0d'
+lastReviewedNote: 'Reviewed while integrating Edge #363 and #369: non-Portal legacy auth/Redis routes are removed while Portal deadline, provider ordering, settled telemetry, and isolated ownership remain governed.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

@@ -23,9 +23,9 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-08-31
-lastReviewedCommit: c313a083c76d893ad28e951387110b725f4d1bce
-lastReviewedNote: 'Reviewed for Edge #363: public/operator guidance is JWT/service-only for non-Portal routes; legacy user API-key/Cognito bearer and generic auth Redis setup are removed while Portal stays isolated.'
+lastReviewedAt: 2026-09-01
+lastReviewedCommit: f42e313fae3c84291e4fff9ba7ef6f3467fd4e0d
+lastReviewedNote: 'Reviewed while integrating Edge #363 and #369: operator guidance removes legacy bearer/generic auth Redis setup while retaining Portal timeout, settled telemetry, and provider-ordering guarantees.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -99,7 +99,7 @@ Core entries:
 - `PORTAL_HMAC_KEY_ID_CURRENT` / `PORTAL_HMAC_SECRET_CURRENT` and the optional previous pair for Portal-only request verification.
 - `PORTAL_SUPABASE_PUBLISHABLE_KEY` for both signed Portal routes. It must be a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` JSON registry and is paired only with platform-injected `SUPABASE_URL`; there is no generic or `REMOTE_*` key/URL fallback.
 - `PORTAL_REDIS_CLIENT_TYPE`, `PORTAL_REDIS_NAMESPACE`, `PORTAL_REDIS_TIMEOUT_MS`, and the bounded `PORTAL_LCIA_*` guard/cache/timeout settings for the signed public LCIA route. Hosted projects use the Portal-only `PORTAL_UPSTASH_REDIS_URL` / `PORTAL_UPSTASH_REDIS_TOKEN`; local/CI may use `PORTAL_REDIS_URL` plus optional `PORTAL_REDIS_PASSWORD`. Portal routes have no generic Redis fallback. The concurrency lease defaults to 30 seconds, never drops below 20 seconds, and must cover Redis plus upstream timeouts with a five-second recovery margin. The R1 LCIA response cache defaults to and is capped at 60 seconds.
-- `PORTAL_HYBRID_ENABLED=false` plus independent `PORTAL_HYBRID_*` minute/day/concurrency/lease/cache/timeout/circuit settings for the R2 signed Hybrid route. Only exact lowercase `true` enables model or database work. The model cache is capped at 60 seconds and stores no raw query or database candidate.
+- `PORTAL_HYBRID_ENABLED=false` plus independent `PORTAL_HYBRID_*` minute/day/concurrency/lease/cache/timeout/circuit settings for the R2 signed Hybrid route. Only exact lowercase `true` enables model or database work. `PORTAL_HYBRID_TIMEOUT_MS` defaults to and is capped at 6000 ms so the Edge response retains two seconds of headroom before the Portal BFF's 8000 ms deadline. The model cache is capped at 60 seconds and stores no raw query or database candidate.
 - `PORTAL_OPENAI_API_KEY`, `PORTAL_OPENAI_CHAT_MODEL`, optional `PORTAL_OPENAI_BASE_URL`, `PORTAL_SAGEMAKER_ENDPOINT_NAME`, `PORTAL_AWS_ACCESS_KEY_ID`, `PORTAL_AWS_SECRET_ACCESS_KEY`, and optional `PORTAL_AWS_SESSION_TOKEN` form one strict Portal-only R2 provider configuration.
 - `PORTAL_LCIA_DEPLOYMENT_SHA` and `PORTAL_HYBRID_DEPLOYMENT_SHA` independently bind each route's allowlisted security event to its exact deployed commit.
 - `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`, optional `OPENAI_BASE_URL`, `SAGEMAKER_ENDPOINT_NAME`, and generic AWS credentials remain the unchanged provider surface for existing login Hybrid, embedding, and other non-Portal consumers.
@@ -199,6 +199,20 @@ Authenticate the Supabase CLI when needed:
 ```bash
 pnpm exec supabase login
 ```
+
+Before deploying the Portal Hybrid 6000 ms deadline to an existing enabled project, migrate the non-sensitive timeout Secret first. The earlier operator contract allowed `8000`; the new runtime intentionally rejects any value above `6000`. The safe order is timeout configuration, then the one-function deploy, then the exact deployment-SHA update:
+
+```bash
+pnpm exec supabase secrets set PORTAL_HYBRID_TIMEOUT_MS=6000 \
+  --project-ref submidrhbtknjxfympna
+pnpm deploy:dev portal_hybrid_search_v1
+
+pnpm exec supabase secrets set PORTAL_HYBRID_TIMEOUT_MS=6000 \
+  --project-ref qgzvkongdjqiiamzbbts
+pnpm deploy:main portal_hybrid_search_v1
+```
+
+Do not deploy the new ceiling while the target still holds `8000`: that mismatch fails closed as `guard_unavailable`. Set `PORTAL_HYBRID_DEPLOYMENT_SHA` to the exact eligible deployed merge only after the corresponding deploy succeeds.
 
 Deploy to the persistent `dev` project (`submidrhbtknjxfympna`) from the Git `dev` line or a reviewed PR branch:
 
@@ -353,7 +367,7 @@ The strict request is:
 
 The query is trim-nonempty, at most 512 Unicode code points and 2048 UTF-8 bytes, and contains no C0/C1 controls. String filters are first trimmed and lowercased, then limited to 128 code points/1024 bytes each; the fully transformed serialized filter object is at most 4096 bytes. This order ensures Unicode lowercase expansion is included in every bound. `processSubtype` is Process-only. Extra fields—including cursor, sort, state, actor, team, `data_source`, model, weights, threshold, embedding, visitor hash, or notes—fail as `invalid_request`. There is no Hybrid cursor; use the lexical GET page for additional results.
 
-The route reuses the existing deterministic query-rewrite and 1024-dimensional SageMaker kernels under one absolute deadline that starts at handler entry. After HMAC, transport, enablement and Redis admission, a model-cache miss starts the provider-explicit OpenAI rewrite and SageMaker embedding of the original bounded query concurrently. Both receive one request operation signal inherited from the deadline; either provider failure aborts its surviving peer before response/lease release, database work waits for both, and rewrite output alone supplies interpretation/fulltext terms. The Portal-only Responses request keeps the same model, prompts, strict JSON Schema, temperature and AbortSignal while setting `store=false`, `reasoning.effort=none`, `text.verbosity=low`, and `max_output_tokens=256`; it does not request a priority/flex service tier and does not change the generic/login OpenAI wrappers. Raw body/HMAC work and every awaited Redis, model, database, cache-write, circuit-record/reset, and final-response operation are capped to the same remaining budget. A late operation cannot start downstream database work or produce HTTP 200. Lease release and owned Redis close are bounded detached cleanup and never delay the response; the lease TTL recovers any unfinished release. After sanitizing the final security event, the handler performs its last deadline decision and schedules the logger in a later macrotask. Supabase tracks the bounded delivery with `EdgeRuntime.waitUntil`; local/test runtimes use a handled fallback outside the handler promise. Synchronously blocking, throwing, rejecting, and never-settling loggers cannot change or delay the response, and the event status/error code matches the response actually returned. The event records only fixed rewrite/embedding outcomes plus nullable bounded stage latency: success marks both `succeeded`, a cache hit marks both `cache_hit`, provider failure distinguishes `failed` from its `aborted` peer, and deadline expiry marks pending stages `aborted`. It contains no query, model name, endpoint, provider error, identifier, or credential. Its hash-key Redis cache holds only bounded model-generated interpretation plus embedding, never the raw query or database candidates, and expires in at most 60 seconds. Every success still calls publishable-only `api.portal_hybrid_search_v1(p_kind,p_query_terms,p_query_embedding,p_filters,p_limit)` with explicit `Content-Profile: api`.
+The route reuses the existing deterministic query-rewrite and 1024-dimensional SageMaker kernels under one absolute 6000 ms Edge deadline that starts at handler entry and retains two seconds of headroom before the Portal BFF's 8000 ms deadline. After HMAC, transport, enablement and Redis admission, the independent circuit and model-cache reads start concurrently. The handler awaits circuit first, returns immediately when it is open without waiting for a stalled cache read, validates JSON/schema after a closed circuit, and only then consumes the already-started cache result; this preserves `circuit_open` and `invalid_request` precedence during cache faults. A valid model-cache miss then starts the provider-explicit OpenAI rewrite and SageMaker embedding of the original bounded query concurrently. Both receive one request operation signal inherited from the deadline; either provider failure aborts its surviving peer before response/lease release, database work waits for both, and rewrite output alone supplies interpretation/fulltext terms. The validated model-cache write starts concurrently with the public Database query so their network latency no longer accumulates serially; both remain capped by the same deadline, cache-write failure remains best effort, and both outcomes settle before a Database rejection event is sanitized so `write_failed` cannot be lost. The Portal-only Responses request keeps the same model, prompts, strict JSON Schema, temperature and AbortSignal while setting `store=false`, `reasoning.effort=none`, `text.verbosity=low`, and `max_output_tokens=256`; it does not request a priority/flex service tier and does not change the generic/login OpenAI wrappers. Raw body/HMAC work and every awaited Redis, model, database, cache-write, circuit-record/reset, and final-response operation are capped to the same remaining budget. A late operation cannot start downstream database work or produce HTTP 200. Lease release and owned Redis close are bounded detached cleanup and never delay the response; the lease TTL recovers any unfinished release. After sanitizing the final security event, the handler performs its last deadline decision and schedules the logger in a later macrotask. Supabase tracks the bounded delivery with `EdgeRuntime.waitUntil`; local/test runtimes use a handled fallback outside the handler promise. Synchronously blocking, throwing, rejecting, and never-settling loggers cannot change or delay the response, and the event status/error code matches the response actually returned. The event records only fixed rewrite/embedding outcomes plus nullable bounded stage latency: success marks both `succeeded`, a cache hit marks both `cache_hit`, provider failure distinguishes `failed` from its `aborted` peer, and deadline expiry marks pending stages `aborted`. It contains no query, model name, endpoint, provider error, identifier, or credential. Its hash-key Redis cache holds only bounded model-generated interpretation plus embedding, never the raw query or database candidates, and expires in at most 60 seconds. Every success still calls publishable-only `api.portal_hybrid_search_v1(p_kind,p_query_terms,p_query_embedding,p_filters,p_limit)` with explicit `Content-Profile: api`.
 
 A success is exact `portal.hybrid-search-page.v1`: the Database fingerprint and up to 20 unique R1 public cards, each with exhaustive reference, functional-unit, technology, source/license, and public-quality context, plus `interpretation.source=model_generated`, `advisory=true`, one semantic query, and at most 12 bounded language-tagged terms. Match evidence uses only algorithm `portal-hybrid-rank-v1`, score, actual lexical/semantic ranks, and non-negative canonical semantic distance; reason codes must correspond to present evidence. Missing/malformed context, raw JSON/search text, embeddings, owner/team/model/review fields, locators, and duplicate identities fail the contract.
 
@@ -436,7 +450,7 @@ The response is HTTP `202` with `data.jobId`. Poll through the same function:
 { "action": "read", "jobId": "<worker job uuid>" }
 ```
 
-Queued and running jobs return public progress. A completed job includes `data.result` with schema `ai.tidas_suggestion.result.v1`; `complete` and `partial` are both advisory results that the user may inspect and accept field by field. Requests require a JWT or User API key, `tidasData` is capped at 2 MiB, and Process/Flow root shape is checked before enqueue. The response never includes the queued payload, lease, internal diagnostics, or provider details.
+Queued and running jobs return public progress. A completed job includes `data.result` with schema `ai.tidas_suggestion.result.v1`; `complete` and `partial` are both advisory results that the user may inspect and accept field by field. Requests require a verified Supabase JWT, `tidasData` is capped at 2 MiB, and Process/Flow root shape is checked before enqueue. The response never includes the queued payload, lease, internal diagnostics, or provider details.
 
 ## OpenAI Integration Baseline
 
@@ -469,7 +483,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 502 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 506 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

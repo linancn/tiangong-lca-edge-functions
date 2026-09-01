@@ -467,7 +467,12 @@ Deno.test(
 Deno.test(
   'Portal Hybrid guard, timeout, cache, and circuit budgets are independently bounded',
   () => {
+    assertEquals(PORTAL_HYBRID_TOTAL_TIMEOUT_MS, 6_000);
     assertEquals(readPortalHybridTotalTimeoutMs(environment({})), PORTAL_HYBRID_TOTAL_TIMEOUT_MS);
+    assertEquals(
+      readPortalHybridTotalTimeoutMs(environment({ PORTAL_HYBRID_TIMEOUT_MS: '6000' })),
+      PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
+    );
     assertEquals(readPortalHybridGuardLimits(environment({})), {
       minuteBudget: 60,
       dailyBudget: 5_000,
@@ -482,7 +487,7 @@ Deno.test(
     });
 
     assertThrows(() =>
-      readPortalHybridTotalTimeoutMs(environment({ PORTAL_HYBRID_TIMEOUT_MS: '8001' })),
+      readPortalHybridTotalTimeoutMs(environment({ PORTAL_HYBRID_TIMEOUT_MS: '6001' })),
     );
     assertThrows(() =>
       readPortalHybridGuardLimits(environment({ PORTAL_HYBRID_CACHE_TTL_SECONDS: '61' })),
