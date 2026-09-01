@@ -35,7 +35,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-02
-lastReviewedCommit: 8344bec0ef03479f175741419e88807751203290
+lastReviewedCommit: 8344bec678a074298b71178715d3a0d24aa85e38
 lastReviewedNote: 'Reviewed for Edge #382: documentation proof must show direct MCP-to-Edge Supabase JWT re-verification and zero broker/User API-key guidance while Portal-prefixed Redis and explicit service auth remain unchanged.'
 related:
   - ../../AGENTS.md
