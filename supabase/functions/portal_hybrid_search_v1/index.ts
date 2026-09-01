@@ -580,34 +580,28 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
 
         if (deadline.isExpired()) return timeoutResponse();
 
+        const circuitOperation = checkPortalHybridCircuit(
+          { route: PORTAL_HYBRID_FUNCTION_NAME, nowMillis: wallNow() },
+          redis,
+        );
+        const cacheOperation = readPortalResponseCache(
+          { route: PORTAL_HYBRID_FUNCTION_NAME, bodyHash: verification.bodyHash },
+          redis,
+        ).then(
+          (value) => ({ ok: true as const, value }),
+          (error) => ({ ok: false as const, error }),
+        );
         let circuit;
-        let cached: string | null;
         try {
-          const [circuitResult, cacheResult] = await deadline.run(() =>
-            Promise.allSettled([
-              checkPortalHybridCircuit(
-                { route: PORTAL_HYBRID_FUNCTION_NAME, nowMillis: wallNow() },
-                redis,
-              ),
-              readPortalResponseCache(
-                { route: PORTAL_HYBRID_FUNCTION_NAME, bodyHash: verification.bodyHash },
-                redis,
-              ),
-            ]),
-          );
-          if (circuitResult.status === 'rejected') throw circuitResult.reason;
-          circuit = circuitResult.value;
-          if (circuit.status === 'open') {
-            event.circuit = 'open';
-            return errorResponse(503, 'circuit_open', 'Portal Hybrid circuit is open');
-          }
-          if (cacheResult.status === 'rejected') throw cacheResult.reason;
-          cached = cacheResult.value;
+          circuit = await deadline.run(() => circuitOperation);
         } catch (error) {
           if (isPortalHybridDeadlineError(error)) return timeoutResponse();
-          event.cache = 'invalid';
           event.guardOutcome = 'unavailable';
           return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
+        }
+        if (circuit.status === 'open') {
+          event.circuit = 'open';
+          return errorResponse(503, 'circuit_open', 'Portal Hybrid circuit is open');
         }
         event.circuit = 'closed';
 
@@ -623,6 +617,18 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         }
         const hybridRequest = parsedRequest.data;
         event.kind = hybridRequest.kind;
+
+        let cached: string | null;
+        try {
+          const cacheResult = await deadline.run(() => cacheOperation);
+          if (!cacheResult.ok) throw cacheResult.error;
+          cached = cacheResult.value;
+        } catch (error) {
+          if (isPortalHybridDeadlineError(error)) return timeoutResponse();
+          event.cache = 'invalid';
+          event.guardOutcome = 'unavailable';
+          return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
+        }
 
         let modelCache: PortalHybridModelCache;
         if (cached !== null) {

@@ -1100,6 +1100,26 @@ Deno.test(
     assertEquals(openResponse.status, 503);
     assertEquals(await responseCode(openResponse), 'circuit_open');
     assertEquals(databaseCalls, 0);
+
+    const stalledCacheRedis = new FakePortalRedis();
+    stalledCacheRedis.circuitOpen = true;
+    stalledCacheRedis.cacheGetOperation = () => neverPromise();
+    const stalledCacheResult = await raceWithTimeout(
+      createPortalHybridSearchHandler(
+        handlerOptions(stalledCacheRedis, {
+          query() {
+            databaseCalls += 1;
+            return Promise.resolve(databasePage());
+          },
+        }),
+      )(await signedRequest()),
+      50,
+      'timed_out',
+    );
+    assert(stalledCacheResult instanceof Response);
+    assertEquals(stalledCacheResult.status, 503);
+    assertEquals(await responseCode(stalledCacheResult), 'circuit_open');
+    assertEquals(databaseCalls, 0);
   },
 );
 
@@ -1173,6 +1193,7 @@ Deno.test(
       JSON.stringify({ ...REQUEST, kind: 'flow', filters: { processSubtype: 'unit' } }),
     ]) {
       const redis = new FakePortalRedis();
+      redis.cacheReadFails = true;
       let modelCalls = 0;
       let databaseCalls = 0;
       const handler = createPortalHybridSearchHandler(
