@@ -764,9 +764,17 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           const databaseOperation = deadline.run(() =>
             repository.query(hybridRequest, queryTerms, modelCache.queryEmbedding, operationSignal),
           );
-          databasePage = pendingModelCacheWrite
-            ? (await Promise.all([databaseOperation, pendingModelCacheWrite]))[0]
-            : await databaseOperation;
+          if (pendingModelCacheWrite) {
+            const [databaseResult, cacheWriteResult] = await Promise.allSettled([
+              databaseOperation,
+              pendingModelCacheWrite,
+            ]);
+            if (cacheWriteResult.status === 'rejected') throw cacheWriteResult.reason;
+            if (databaseResult.status === 'rejected') throw databaseResult.reason;
+            databasePage = databaseResult.value;
+          } else {
+            databasePage = await databaseOperation;
+          }
         } catch (error) {
           if (isPortalHybridDeadlineError(error) || deadline.isExpired()) {
             event.database = 'failed';
