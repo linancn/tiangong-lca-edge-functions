@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-01'
-lastReviewedCommit: 'a720bc0d701a537f8ea3ec6dfdb8df4fae0dd790'
-lastReviewedNote: 'Reviewed for Edge #369 feedback: concurrent cache work is consumed only after circuit-first and valid-request decisions, so optimization preserves circuit-open and invalid-request precedence without changing ownership, routing, or provider isolation.'
+lastReviewedCommit: 'f42e313fae3c84291e4fff9ba7ef6f3467fd4e0d'
+lastReviewedNote: 'Reviewed for Edge #369 promote feedback: concurrent cache-write and Database outcomes settle before rejection telemetry is sanitized, preserving the allowlisted event contract without changing ownership, routing, or provider isolation.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

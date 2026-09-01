@@ -1161,6 +1161,43 @@ Deno.test('Portal Hybrid overlaps model-cache write with the public Database que
 });
 
 Deno.test(
+  'Portal Hybrid captures cache-write failure before sanitizing a Database rejection event',
+  async () => {
+    const redis = new FakePortalRedis();
+    let rejectCacheWrite: ((reason?: unknown) => void) | undefined;
+    redis.cacheSetOperation = () =>
+      new Promise((_resolve, reject) => {
+        rejectCacheWrite = reject;
+      });
+    const events: PortalHybridSecurityEvent[] = [];
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query() {
+            return Promise.reject(new Error('private Database details'));
+          },
+        },
+        { logger: (event: PortalHybridSecurityEvent) => events.push(event) },
+      ),
+    );
+
+    const responsePromise = handler(await signedRequest());
+    await flushUntil(() => rejectCacheWrite !== undefined, 'pending model-cache write');
+    assertEquals(await raceWithTimeout(responsePromise, 10, 'pending'), 'pending');
+    rejectCacheWrite?.(new Error('private Redis cache details'));
+
+    const response = await responsePromise;
+    assertEquals(response.status, 503);
+    assertEquals(await responseCode(response), 'hybrid_upstream_unavailable');
+    await flushPortalHybridSecurityEvent();
+    assertEquals(events.length, 1);
+    assertEquals(events[0].cache, 'write_failed');
+    assertEquals(events[0].database, 'failed');
+  },
+);
+
+Deno.test(
   'Portal Hybrid cache-write and circuit-reset errors remain bounded best effort',
   async () => {
     const redis = new FakePortalRedis();
