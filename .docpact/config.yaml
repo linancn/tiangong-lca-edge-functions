@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-01'
-lastReviewedCommit: 'f42e313fae3c84291e4fff9ba7ef6f3467fd4e0d'
-lastReviewedNote: 'Reviewed for Edge #369 promote feedback: concurrent cache-write and Database outcomes settle before rejection telemetry is sanitized, preserving the allowlisted event contract without changing ownership, routing, or provider isolation.'
+lastReviewedCommit: '8015ac515bb8a0cbdb2e7ee09d157cc709898e80'
+lastReviewedNote: 'Reviewed for Edge #373: one Hybrid-only atomic Redis begin owns nonce/replay/budget/concurrency/lease-recovery/circuit admission while cache remains a separate valid-request read; ownership, routing, and provider isolation are unchanged.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

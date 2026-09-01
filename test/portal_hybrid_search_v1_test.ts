@@ -22,8 +22,7 @@ import {
   type PortalHmacKeyring,
 } from '../supabase/functions/_shared/portal_hmac.ts';
 import {
-  PORTAL_ATOMIC_GUARD_LUA,
-  PORTAL_HYBRID_CIRCUIT_CHECK_LUA,
+  PORTAL_HYBRID_ATOMIC_BEGIN_LUA,
   PORTAL_HYBRID_CIRCUIT_FAILURE_LUA,
   PORTAL_HYBRID_CIRCUIT_SUCCESS_LUA,
   PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
@@ -175,10 +174,10 @@ class FakePortalRedis implements PortalRedisAdapter {
   circuitOpen = false;
   cached: string | null = null;
   cacheWriteFails = false;
-  circuitCheckOperation?: () => Promise<unknown>;
   circuitSuccessOperation?: () => Promise<unknown>;
   cacheGetOperation?: () => Promise<string | null>;
   cacheSetOperation?: () => Promise<void>;
+  hybridBeginOperation?: () => Promise<unknown>;
   leaseReleaseOperation?: () => Promise<unknown>;
   readonly calls: string[] = [];
   readonly cacheWrites: string[] = [];
@@ -190,21 +189,22 @@ class FakePortalRedis implements PortalRedisAdapter {
   }
 
   eval(script: string, _keys: string[], args: string[]): Promise<unknown> {
-    if (script === PORTAL_ATOMIC_GUARD_LUA) {
-      this.calls.push('guard');
+    if (script === PORTAL_HYBRID_ATOMIC_BEGIN_LUA) {
+      this.calls.push('hybrid_begin');
       if (this.admissionOutage) {
         return Promise.reject(new Error('private redis provider details'));
       }
-      if (this.guardStatus === 'budget_exhausted') return Promise.resolve([1, 0, 0, 1, 0]);
-      if (this.guardStatus === 'concurrency_exhausted') {
-        return Promise.resolve([2, 1, 1, 0, 0]);
+      if (this.hybridBeginOperation) return this.hybridBeginOperation();
+      if (this.replay) return Promise.resolve([3, 0, 0, 0, 0, 0]);
+      if (this.guardStatus === 'budget_exhausted') {
+        return Promise.resolve([1, 0, 0, 1, 0, 0]);
       }
-      return Promise.resolve([0, 9, 99, 1, 0]);
-    }
-    if (script === PORTAL_HYBRID_CIRCUIT_CHECK_LUA) {
-      this.calls.push('circuit_check');
-      if (this.circuitCheckOperation) return this.circuitCheckOperation();
-      return Promise.resolve(this.circuitOpen ? [1, Number(args[0]) + 60_000] : [0, 0]);
+      if (this.guardStatus === 'concurrency_exhausted') {
+        return Promise.resolve([2, 1, 1, 0, 0, 0]);
+      }
+      return Promise.resolve(
+        this.circuitOpen ? [4, 9, 99, 1, 0, Number(args[0]) + 60_000] : [0, 9, 99, 1, 0, 0],
+      );
     }
     if (script === PORTAL_HYBRID_CIRCUIT_FAILURE_LUA) {
       this.calls.push('circuit_failure');
@@ -974,17 +974,11 @@ Deno.test(
 );
 
 Deno.test(
-  'Portal Hybrid circuit or cache deadline stops before every model and database call',
+  'Portal Hybrid atomic begin or cache deadline stops before every model and database call',
   async () => {
-    for (const stage of ['circuit', 'cache'] as const) {
+    for (const stage of ['begin', 'cache'] as const) {
       const redis = new FakePortalRedis();
-      let rejectLateCircuit: ((reason?: unknown) => void) | undefined;
-      if (stage === 'circuit') {
-        redis.circuitCheckOperation = () =>
-          new Promise((_resolve, reject) => {
-            rejectLateCircuit = reject;
-          });
-      }
+      if (stage === 'begin') redis.hybridBeginOperation = () => neverPromise();
       if (stage === 'cache') redis.cacheGetOperation = () => neverPromise();
       let modelCalls = 0;
       let databaseCalls = 0;
@@ -1011,81 +1005,15 @@ Deno.test(
       assertEquals(await responseCode(response), 'hybrid_timeout');
       assertEquals(modelCalls, 0, stage);
       assertEquals(databaseCalls, 0, stage);
-      assert(redis.calls.includes(stage === 'circuit' ? 'circuit_check' : 'cache_get'));
-      if (stage === 'circuit') {
-        rejectLateCircuit?.(new Error('late private circuit rejection'));
-        await Promise.resolve();
-      }
+      assert(redis.calls.includes(stage === 'begin' ? 'hybrid_begin' : 'cache_get'));
     }
   },
 );
 
 Deno.test(
-  'Portal Hybrid overlaps circuit and cache reads while circuit-open remains authoritative',
+  'Portal Hybrid atomic begin preserves circuit-open and invalid-request precedence',
   async () => {
-    const redis = new FakePortalRedis();
-    const cache: PortalHybridModelCache = {
-      schemaVersion: 'portal.hybrid-model-cache.v1',
-      interpretation: {
-        source: 'model_generated',
-        advisory: true,
-        semanticQuery: 'steel production',
-        terms: [{ language: 'en', value: 'steel' }],
-      },
-      queryTerms: ['steel'],
-      queryEmbedding: VECTOR,
-    };
-    let resolveCircuit: ((value: unknown) => void) | undefined;
-    let resolveCache: ((value: string | null) => void) | undefined;
-    redis.circuitCheckOperation = () =>
-      new Promise((resolve) => {
-        resolveCircuit = resolve;
-      });
-    redis.cacheGetOperation = () =>
-      new Promise((resolve) => {
-        resolveCache = resolve;
-      });
-    let modelCalls = 0;
     let databaseCalls = 0;
-    const handler = createPortalHybridSearchHandler(
-      handlerOptions(
-        redis,
-        {
-          query() {
-            databaseCalls += 1;
-            return Promise.resolve(databasePage());
-          },
-        },
-        {
-          rewriteQuery: async () => {
-            modelCalls += 1;
-            return REWRITE;
-          },
-        },
-      ),
-    );
-
-    const responsePromise = handler(await signedRequest());
-    await flushUntil(
-      () => resolveCircuit !== undefined && resolveCache !== undefined,
-      'parallel circuit and cache reads',
-    );
-    assertEquals(redis.calls.slice(0, 4), ['nonce', 'guard', 'circuit_check', 'cache_get']);
-    assertEquals(modelCalls, 0);
-    assertEquals(databaseCalls, 0);
-
-    resolveCache?.(JSON.stringify(cache));
-    await Promise.resolve();
-    assertEquals(modelCalls, 0);
-    assertEquals(databaseCalls, 0);
-
-    resolveCircuit?.([1, NOW_SECONDS * 1_000 + 60_000]);
-    const response = await responsePromise;
-    assertEquals(response.status, 503);
-    assertEquals(await responseCode(response), 'circuit_open');
-    assertEquals(modelCalls, 0);
-    assertEquals(databaseCalls, 0);
-
     const openRedis = new FakePortalRedis();
     openRedis.circuitOpen = true;
     openRedis.cacheReadFails = true;
@@ -1099,26 +1027,22 @@ Deno.test(
     )(await signedRequest());
     assertEquals(openResponse.status, 503);
     assertEquals(await responseCode(openResponse), 'circuit_open');
+    assertEquals(openRedis.calls.includes('cache_get'), false);
     assertEquals(databaseCalls, 0);
 
-    const stalledCacheRedis = new FakePortalRedis();
-    stalledCacheRedis.circuitOpen = true;
-    stalledCacheRedis.cacheGetOperation = () => neverPromise();
-    const stalledCacheResult = await raceWithTimeout(
-      createPortalHybridSearchHandler(
-        handlerOptions(stalledCacheRedis, {
-          query() {
-            databaseCalls += 1;
-            return Promise.resolve(databasePage());
-          },
-        }),
-      )(await signedRequest()),
-      50,
-      'timed_out',
-    );
-    assert(stalledCacheResult instanceof Response);
-    assertEquals(stalledCacheResult.status, 503);
-    assertEquals(await responseCode(stalledCacheResult), 'circuit_open');
+    const invalidRedis = new FakePortalRedis();
+    invalidRedis.cacheReadFails = true;
+    const invalidResponse = await createPortalHybridSearchHandler(
+      handlerOptions(invalidRedis, {
+        query() {
+          databaseCalls += 1;
+          return Promise.resolve(databasePage());
+        },
+      }),
+    )(await signedRequest({ rawBody: '{bad json' }));
+    assertEquals(invalidResponse.status, 400);
+    assertEquals(await responseCode(invalidResponse), 'invalid_request');
+    assertEquals(invalidRedis.calls, ['hybrid_begin', 'lease_release']);
     assertEquals(databaseCalls, 0);
   },
 );
@@ -1253,7 +1177,8 @@ Deno.test(
       const response = await handler(await signedRequest({ rawBody }));
       assertEquals(response.status, 400);
       assertEquals(await responseCode(response), 'invalid_request');
-      assert(redis.calls.includes('guard'));
+      assert(redis.calls.includes('hybrid_begin'));
+      assertEquals(redis.calls.includes('cache_get'), false);
       assertEquals(modelCalls, 0);
       assertEquals(databaseCalls, 0);
     }
