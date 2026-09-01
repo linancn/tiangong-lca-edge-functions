@@ -35,7 +35,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-02
-lastReviewedCommit: 8344bec0ef03479f175741419e88807751203290
+lastReviewedCommit: 8344bec678a074298b71178715d3a0d24aa85e38
 lastReviewedNote: 'Reviewed for Edge #382: direct Supabase OAuth JWTs are re-verified at the Edge boundary, with no MCP broker state or User API-key exchange; Portal, service, and provider ownership is unchanged.'
 related:
   - ../../AGENTS.md
