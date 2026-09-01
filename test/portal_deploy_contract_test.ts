@@ -14,6 +14,32 @@ Deno.test(
   },
 );
 
+Deno.test('Portal Hybrid operator contract migrates the timeout before each deploy', async () => {
+  const readme = await Deno.readTextFile('./README.md');
+  for (const [secretCommand, deployCommand] of [
+    [
+      `pnpm exec supabase secrets set PORTAL_HYBRID_TIMEOUT_MS=6000 \\
+  --project-ref submidrhbtknjxfympna`,
+      'pnpm deploy:dev portal_hybrid_search_v1',
+    ],
+    [
+      `pnpm exec supabase secrets set PORTAL_HYBRID_TIMEOUT_MS=6000 \\
+  --project-ref qgzvkongdjqiiamzbbts`,
+      'pnpm deploy:main portal_hybrid_search_v1',
+    ],
+  ] as const) {
+    const secretIndex = readme.indexOf(secretCommand);
+    const deployIndex = readme.indexOf(deployCommand);
+    assertEquals(secretIndex >= 0, true);
+    assertEquals(deployIndex > secretIndex, true);
+  }
+  assertStringIncludes(readme, 'Do not deploy the new ceiling while the target still holds `8000`');
+  assertStringIncludes(
+    readme,
+    'Set `PORTAL_HYBRID_DEPLOYMENT_SHA` to the exact eligible deployed merge only after the corresponding deploy succeeds.',
+  );
+});
+
 Deno.test(
   'Portal LCIA runtime contains no service-role client or legacy SERVICE_API_KEY path',
   async () => {
@@ -98,6 +124,7 @@ Deno.test(
     assertStringIncludes(source, 'abortSignal: signal');
     assertStringIncludes(source, '{ signal: request.signal }');
     assertStringIncludes(source, 'new PortalHybridDeadline(timeoutMs, monotonicNow, startedAt)');
+    assertStringIncludes(source, 'const PORTAL_HYBRID_TOTAL_TIMEOUT_MS = 6_000;');
     assertStringIncludes(source, 'await deadline.run');
     assertStringIncludes(source, 'deadline.detach');
     assertStringIncludes(
@@ -191,7 +218,7 @@ Deno.test(
       'PORTAL_HYBRID_MAX_CONCURRENCY=4',
       'PORTAL_HYBRID_LEASE_TTL_SECONDS=30',
       'PORTAL_HYBRID_CACHE_TTL_SECONDS=60',
-      'PORTAL_HYBRID_TIMEOUT_MS=8000',
+      'PORTAL_HYBRID_TIMEOUT_MS=6000',
       'PORTAL_HYBRID_CIRCUIT_FAILURE_THRESHOLD=5',
       'PORTAL_HYBRID_CIRCUIT_WINDOW_SECONDS=60',
       'PORTAL_HYBRID_CIRCUIT_OPEN_SECONDS=60',

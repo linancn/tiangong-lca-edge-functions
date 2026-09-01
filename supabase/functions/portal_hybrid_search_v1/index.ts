@@ -309,7 +309,11 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
     let timeoutConfigurationValid = true;
     try {
       timeoutMs = options.timeoutMs ?? readPortalHybridTotalTimeoutMs();
-      if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 8_000) {
+      if (
+        !Number.isSafeInteger(timeoutMs) ||
+        timeoutMs < 100 ||
+        timeoutMs > PORTAL_HYBRID_TOTAL_TIMEOUT_MS
+      ) {
         timeoutConfigurationValid = false;
         timeoutMs = PORTAL_HYBRID_TOTAL_TIMEOUT_MS;
       }
