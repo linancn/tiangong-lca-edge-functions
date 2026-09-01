@@ -409,7 +409,7 @@ pnpm probe:auth --base-url "$EDGE_BASE_URL"
 
 - 默认跳过仓库中标记为 disabled 的 `antchain_*` 和 legacy 非 `*_ft` embedding / webhook 入口
 - 默认跳过仅供本地辅助使用的 `embedding_ft_local`
-- 对其余函数至少发一轮无鉴权最小请求，并在有对应凭据时继续发 JWT / user API key / service API key 探测
+- 对其余函数至少发一轮无鉴权最小请求，并在有对应凭据时继续发 Supabase JWT / service API key 探测；不存在 user API key 探测或交换路径
 - 结果会区分：
   - `gateway_invalid_jwt`：大概率是请求在进入函数前就被平台层拦住
   - `function_auth_failed`：请求已进入函数，但函数内鉴权拒绝了该凭据
@@ -581,7 +581,7 @@ The retired review-submit Gate, coordinator, and job endpoints are no longer dep
 
 ## LCI/LCIA Release Function Call Patterns
 
-- `app_lca_release_commands`: authenticated `POST` command endpoint. It accepts a user JWT session and delegates authorization/state changes to the database-owned release RPCs. A User API key is first exchanged for a session by the public CLI; the API key and Supabase service-role key are never included in command payloads.
+- `app_lca_release_commands`: authenticated `POST` command endpoint. It accepts a verified Supabase access JWT and delegates authorization/state changes to the database-owned release RPCs. The public CLI obtains that JWT through its client-local OAuth session; an approved headless orchestrator may inject a separately verified short-lived actor token. There is no User API-key exchange, and the Supabase service-role key is never included in command payloads.
   - lifecycle actions: `prepare`, `create_artifact_uploads`, `finalize_artifacts`, `approve`, `publish`, `readback_verify`, `unpublish`
   - authenticated reads: `get_release`, `get_current`, `get_calculation_bundle`, `create_artifact_download`
   - exactly four ZIPs are accepted: Unit Process and standalone LifecycleModel+Result, each in TIDAS and ILCD. Maximum size is 50 MiB per ZIP.
@@ -594,4 +594,4 @@ The retired review-submit Gate, coordinator, and job endpoints are no longer dep
   - `mode=artifact_download&artifactId=<uuid>` returns a 15-minute signed download URL only after the database authorizes the artifact projection. The response includes a server-derived `downloadFilename`, and the signed URL sets the same semantic filename in `Content-Disposition`; internal storage locators are omitted.
   - standard Supabase browser clients may send the matching project publishable key (or configured legacy anon key) as both `apikey` and Bearer Authorization; this remains a public read and is not treated as an authenticated actor. Other Authorization credentials must authenticate normally.
 
-Set `LCA_RELEASE_STORAGE_BUCKET` only when release artifacts should not use the normal `S3_BUCKET`/`lca_results` private bucket. The release CLI/project needs only the public API URL, publishable key, and a User API key for a `data_product_manager`; it must never receive `REMOTE_SUPABASE_SECRET_KEY`.
+Set `LCA_RELEASE_STORAGE_BUCKET` only when release artifacts should not use the normal `S3_BUCKET`/`lca_results` private bucket. The interactive release CLI needs only the public API URL, publishable key, public OAuth client ID, and its private client-local OAuth session for a `data_product_manager`; it must never receive `REMOTE_SUPABASE_SECRET_KEY`.

@@ -34,9 +34,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-09-01
-lastReviewedCommit: da2ff14b6e7fcf5919af2d6576de02da1aeece74
-lastReviewedNote: 'Reviewed for Edge #379: the last external account-bridge routes and identity-provider client are removed; claims-first Supabase and `identity_login_sync`-only fresh assurance preserve SageMaker, service, Portal, and downstream ownership.'
+lastReviewedAt: 2026-09-02
+lastReviewedCommit: 8344bec0ef03479f175741419e88807751203290
+lastReviewedNote: 'Reviewed for Edge #382: direct Supabase OAuth JWTs are re-verified at the Edge boundary, with no MCP broker state or User API-key exchange; Portal, service, and provider ownership is unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -117,7 +117,7 @@ Supported runtime auth modes currently include:
 - `SERVICE_API_KEY`
 - Portal-only `portal-hmac-v1`, which is not a user identity or a substitute for route budgets
 
-Non-JWT bearer values are sent only to Supabase claims verification and known invalid-token failures normalize to HTTP 401; status-0/network failures become 503, throttling remains 429, and upstream 5xx stays retryable. There is no password exchange, external bearer classifier, or generic Redis auth path. Redis remains entirely Portal-owned under `PORTAL_*`/`PORTAL_R0_*`. Downstream authorization consumes `AuthResult.principal`; the full Supabase `User` object is retained only for explicit `identity_login_sync` fresh assurance.
+Non-JWT bearer values are sent only to Supabase claims verification and known invalid-token failures normalize to HTTP 401; status-0/network failures become 503, throttling remains 429, and upstream 5xx stays retryable. There is no password exchange, external bearer classifier, or generic Redis auth path. Redis remains entirely Portal-owned under `PORTAL_*`/`PORTAL_R0_*`. A remote MCP request carries the same Supabase access JWT that its resource server already verified; Edge treats MCP as another untrusted caller, runs `getClaims()` again, and forwards the verified actor and optional `client_id` to database authorization. Neither boundary stores an OAuth session or uses Redis for authentication. Downstream authorization consumes `AuthResult.principal`; the full Supabase `User` object is retained only for explicit `identity_login_sync` fresh assurance.
 
 `scripts/probe-functions-auth.cjs` exists because gateway rejection and runtime-auth rejection are different operational failures.
 
@@ -259,7 +259,7 @@ The default TIDAS package path uses the four `svc_tidas_package_*` façades for 
 
 ### LCI/LCIA release control plane
 
-`app_lca_release_commands` is the authenticated control-plane boundary for deterministic LCI/LCIA releases. It accepts JWT sessions only; a caller that starts with a TianGong User API key must exchange that key for a user session before invoking the function. Database RPCs re-evaluate the current account's `data_product_manager` role for prepare, approval, publish, readback verification, unpublish, private reads, and Calculation Bundle reads.
+`app_lca_release_commands` is the authenticated control-plane boundary for deterministic LCI/LCIA releases. It accepts only a verified Supabase user access JWT. Interactive CLI callers obtain that JWT through their client-local OAuth session; an approved headless orchestrator may inject a separately verified short-lived actor token. There is no TianGong User API-key exchange. Database RPCs re-evaluate the current account's `data_product_manager` role for prepare, approval, publish, readback verification, unpublish, private reads, and Calculation Bundle reads.
 
 The artifact path deliberately has two identities. Actor-bound RPCs authorize the requested release and bind its exact publish-plan hash. The Edge service client then creates retryable signed uploads under a server-derived private object key; upsert is confined to that content-addressed release/plan/profile/format/hash identity. It downloads each of the four TIDAS/ILCD profile ZIPs, verifies byte size and SHA-256, repeats the actor-bound role check, and invokes the service-only finalize RPC. Release clients never receive the Supabase secret/service-role key and cannot select a storage bucket or object key.
 

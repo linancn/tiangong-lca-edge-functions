@@ -38,9 +38,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-09-01
-lastReviewedCommit: da2ff14b6e7fcf5919af2d6576de02da1aeece74
-lastReviewedNote: 'Reviewed for Edge #379: the external account bridge and identity-provider dependency are absent; foreign-issuer bearer inputs fail through Supabase claims verification while SageMaker, service auth, and Portal remain unchanged.'
+lastReviewedAt: 2026-09-02
+lastReviewedCommit: 8344bec0ef03479f175741419e88807751203290
+lastReviewedNote: 'Reviewed for Edge #382: MCP forwards the direct Supabase OAuth access JWT for independent claims verification; no MCP OAuth state, Redis broker, or User API-key exchange remains in Edge guidance.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -110,7 +110,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - gateway JWT verification being off does not make runtime auth optional; functions must still authenticate and authorize requests explicitly
 - ordinary Supabase JWT authentication defaults to `getClaims(token)` and exposes a minimal principal; only `identity_login_sync` may request `jwtAssurance: 'fresh_user'`
 - non-Portal user requests accept only verified Supabase JWT/OAuth claims; service routes may additionally accept their explicit service key. Password-encoded and foreign-issuer bearers have no classifier, cache, or fallback I/O
-- Redis in this repository is Portal-only under `PORTAL_*`/`PORTAL_R0_*`. The independently deployed MCP broker continues to own its separate OAuth state store
+- Redis in this repository is Portal-only under `PORTAL_*`/`PORTAL_R0_*`. The independently deployed MCP resource server keeps no OAuth state store: it forwards the verified inbound Supabase access JWT, and Edge independently verifies that JWT with `getClaims()`
 - TIDAS package endpoints use database `worker_jobs`/Worker contracts and do not import the JavaScript TIDAS SDK; TIDAS SDK 0.2 compatibility is owned and tested by its direct consumers rather than duplicated in Edge
 
 ## Ownership Boundaries
@@ -172,7 +172,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 - do not require an identified R0 branch to remain ready or healthy before cleanup; once Main parent, project ref, nondefault/nonpersistent/no-data flags, branch name, Git branch, optional PR, exact SHA, and cleanup acknowledgement still match, cleanup must attempt the fixed function deletion and surface any real delete failure
 - do not delete the user-approved shared Upstash database, scan or delete broad prefixes, touch Dev/Main namespaces, or rotate the shared token for one R0 cleanup; remove only the exact receipt-bound fixture keys and disposable Preview secret copies, verify absence, and preserve the shared resource
 - do not let Portal runtime use `SERVICE_API_KEY`, a Supabase secret/service-role key, a user JWT/Cookie context, or a database/storage locator; signed Portal routes resolve only `PORTAL_SUPABASE_PUBLISHABLE_KEY`, prove it is present in the platform-owned current-project `SUPABASE_PUBLISHABLE_KEYS` registry, use only the platform-injected `SUPABASE_URL`, and pass that same key from exact inbound `apikey` matching to their reviewed public `api` RPC. They never use generic or `REMOTE_*` key/URL precedence. Authorization is absent in hosted and pinned-CLI `2.116.0` traffic: local Kong maps the matched publishable key into `sb-api-key` and does not inject Authorization. The exact `http://kong:8000` plus configured `SUPABASE_ANON_KEY` Bearer remains only a narrow older-local-client compatibility path after HMAC
-- do not let signed Portal routes read unprefixed or external broker Redis credentials; Portal replay, admission, circuit, and cache storage requires the explicit `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` surface and fails closed when it is absent
+- do not let signed Portal routes read unprefixed or unrelated Redis credentials; Portal replay, admission, circuit, and cache storage requires the explicit `PORTAL_REDIS_*` / `PORTAL_UPSTASH_REDIS_*` surface and fails closed when it is absent
 - do not change ordinary Supabase JWT routes back to per-request `getUser`; `getClaims` must validate issuer, audience, expiry, issued-at time, authenticated role, UUID subject/session, and optional OAuth `client_id`, while `fresh_user` remains explicit and exclusive to `identity_login_sync`
 - do not reintroduce `USER_API_KEY`, an external bearer classifier, password sign-in, generic Redis auth state, or a non-JWT fallback into shared Edge authentication
 - do not let signed Portal Hybrid read or fall back to generic OpenAI, SageMaker, or AWS variables; after the exact-lowercase-true kill switch it resolves the complete `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` configuration and injects it explicitly into shared kernels, while existing login Hybrid and embedding consumers keep their generic defaults
