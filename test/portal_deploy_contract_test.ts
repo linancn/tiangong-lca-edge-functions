@@ -98,6 +98,7 @@ Deno.test(
     assertStringIncludes(source, 'abortSignal: signal');
     assertStringIncludes(source, '{ signal: request.signal }');
     assertStringIncludes(source, 'new PortalHybridDeadline(timeoutMs, monotonicNow, startedAt)');
+    assertStringIncludes(source, 'const PORTAL_HYBRID_TOTAL_TIMEOUT_MS = 6_000;');
     assertStringIncludes(source, 'await deadline.run');
     assertStringIncludes(source, 'deadline.detach');
     assertStringIncludes(
@@ -191,7 +192,7 @@ Deno.test(
       'PORTAL_HYBRID_MAX_CONCURRENCY=4',
       'PORTAL_HYBRID_LEASE_TTL_SECONDS=30',
       'PORTAL_HYBRID_CACHE_TTL_SECONDS=60',
-      'PORTAL_HYBRID_TIMEOUT_MS=8000',
+      'PORTAL_HYBRID_TIMEOUT_MS=6000',
       'PORTAL_HYBRID_CIRCUIT_FAILURE_THRESHOLD=5',
       'PORTAL_HYBRID_CIRCUIT_WINDOW_SECONDS=60',
       'PORTAL_HYBRID_CIRCUIT_OPEN_SECONDS=60',
