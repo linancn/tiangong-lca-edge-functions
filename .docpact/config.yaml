@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-01'
-lastReviewedCommit: 'fcd6fdc60152180ba564f1fed89dc641f6e3e143'
-lastReviewedNote: 'Reviewed for Edge #364: the Portal Hybrid runtime, deploy template, proof routes, and retained docs fix the inner deadline at 6000 ms with 2000 ms of BFF headroom; ownership, routing, and provider-isolation semantics remain unchanged.'
+lastReviewedCommit: '1a5a4b90b75e8bfbd35499ce75e5f7b2ec1dd32e'
+lastReviewedNote: 'Reviewed for Edge #364 promote feedback: Portal Hybrid operator guidance and its executable contract require migrating the retained 8000 timeout to 6000 before deploying the tighter runtime ceiling; ownership, routing, and provider isolation remain unchanged.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

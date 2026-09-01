@@ -24,8 +24,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-09-01
-lastReviewedCommit: fcd6fdc60152180ba564f1fed89dc641f6e3e143
-lastReviewedNote: 'Reviewed for Edge #364: operator guidance and the env template now fix Portal Hybrid at a 6000 ms Edge deadline with 2000 ms of BFF headroom; auth, Redis, provider, and public response contracts remain unchanged.'
+lastReviewedCommit: 1a5a4b90b75e8bfbd35499ce75e5f7b2ec1dd32e
+lastReviewedNote: 'Reviewed for Edge #364 promote feedback: operator guidance now sets the non-sensitive 6000 timeout before Dev/Main Function deployment and updates the deployment SHA only after success, preventing a retained-8000 fail-closed window.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -203,6 +203,20 @@ Authenticate the Supabase CLI when needed:
 ```bash
 pnpm exec supabase login
 ```
+
+Before deploying the Portal Hybrid 6000 ms deadline to an existing enabled project, migrate the non-sensitive timeout Secret first. The earlier operator contract allowed `8000`; the new runtime intentionally rejects any value above `6000`. The safe order is timeout configuration, then the one-function deploy, then the exact deployment-SHA update:
+
+```bash
+pnpm exec supabase secrets set PORTAL_HYBRID_TIMEOUT_MS=6000 \
+  --project-ref submidrhbtknjxfympna
+pnpm deploy:dev portal_hybrid_search_v1
+
+pnpm exec supabase secrets set PORTAL_HYBRID_TIMEOUT_MS=6000 \
+  --project-ref qgzvkongdjqiiamzbbts
+pnpm deploy:main portal_hybrid_search_v1
+```
+
+Do not deploy the new ceiling while the target still holds `8000`: that mismatch fails closed as `guard_unavailable`. Set `PORTAL_HYBRID_DEPLOYMENT_SHA` to the exact eligible deployed merge only after the corresponding deploy succeeds.
 
 Deploy to the persistent `dev` project (`submidrhbtknjxfympna`) from the Git `dev` line or a reviewed PR branch:
 
@@ -474,7 +488,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 502 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 503 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 
