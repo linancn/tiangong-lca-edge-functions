@@ -18,7 +18,6 @@ import {
   type ClassifiedEmbeddingJobError,
 } from '../_shared/embedding_queue_runtime.ts';
 import { extractEmbeddingVector } from '../_shared/embedding_vector.ts';
-import { getRedisClient } from '../_shared/redis_client.ts';
 import { supabaseAuthClient } from '../_shared/supabase_client.ts';
 
 const SAGEMAKER_ENDPOINT_NAME = Deno.env.get('SAGEMAKER_ENDPOINT_NAME');
@@ -95,8 +94,7 @@ Deno.serve(async (req) => {
 
   const authResult = await authenticateRequest(req, {
     authClient: supabaseAuthClient,
-    redisFactory: getRedisClient,
-    allowedMethods: [AuthMethod.JWT, AuthMethod.USER_API_KEY, AuthMethod.SERVICE_API_KEY],
+    allowedMethods: [AuthMethod.JWT, AuthMethod.SERVICE_API_KEY],
   });
 
   if (!authResult.isAuthenticated) {

@@ -62,7 +62,6 @@ function buildHandler(
       authMethods?.push(config.allowedMethods);
       return Promise.resolve(authResult);
     },
-    getRedisClient: () => Promise.resolve(undefined),
     supabase: supabase as never,
   });
 }
@@ -78,7 +77,7 @@ Deno.test('ai_suggest requires a user identity and excludes service-key auth', a
   const response = await handler(request({ action: 'enqueue' }));
 
   assertEquals(response.status, 401);
-  assertEquals(methods, [[AuthMethod.JWT, AuthMethod.USER_API_KEY]]);
+  assertEquals(methods, [[AuthMethod.JWT]]);
 });
 
 Deno.test('ai_suggest rejects unsupported methods and invalid actions', async () => {

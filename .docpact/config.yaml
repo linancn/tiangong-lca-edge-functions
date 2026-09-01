@@ -2,7 +2,7 @@ version: 1
 layout: repo
 lastReviewedAt: '2026-08-31'
 lastReviewedCommit: 'c313a083c76d893ad28e951387110b725f4d1bce'
-lastReviewedNote: 'Reviewed for Edge #361: runtime/config/proof routing requires every Supabase Functions JS type import to resolve through the exact 2.112.4 import-map alias, with JSR, npm, HTTPS, and every alternative direct scheme rejected by the executable contract.'
+lastReviewedNote: 'Reviewed for Edge #363: auth/runtime/proof routing covers broker-era JWT/service-only Edge authentication, removal of generic auth Redis, and preservation of isolated Portal and Cognito bridge ownership.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -116,8 +116,6 @@ routing:
     auth-runtime:
       paths:
         - supabase/functions/_shared/auth.ts
-        - supabase/functions/_shared/cognito_auth.ts
-        - supabase/functions/_shared/decode_api_key.ts
         - supabase/functions/_shared/redis_client.ts
         - supabase/functions/_shared/command_runtime/actor_context.ts
         - supabase/functions/identity_login_sync/**
