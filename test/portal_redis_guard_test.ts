@@ -9,6 +9,7 @@ import {
 import {
   checkPortalHybridCircuit,
   DEFAULT_HYBRID_CIRCUIT_FAILURE_THRESHOLD,
+  DEFAULT_HYBRID_LEASE_TTL_SECONDS,
   DEFAULT_HYBRID_CIRCUIT_OPEN_SECONDS,
   DEFAULT_HYBRID_CIRCUIT_WINDOW_SECONDS,
   DEFAULT_LEASE_TTL_SECONDS,
@@ -544,17 +545,17 @@ Deno.test(
 Deno.test(
   'Portal Hybrid guard, timeout, cache, and circuit budgets are independently bounded',
   () => {
-    assertEquals(PORTAL_HYBRID_TOTAL_TIMEOUT_MS, 6_000);
+    assertEquals(PORTAL_HYBRID_TOTAL_TIMEOUT_MS, 25_000);
     assertEquals(readPortalHybridTotalTimeoutMs(environment({})), PORTAL_HYBRID_TOTAL_TIMEOUT_MS);
     assertEquals(
-      readPortalHybridTotalTimeoutMs(environment({ PORTAL_HYBRID_TIMEOUT_MS: '6000' })),
+      readPortalHybridTotalTimeoutMs(environment({ PORTAL_HYBRID_TIMEOUT_MS: '25000' })),
       PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
     );
     assertEquals(readPortalHybridGuardLimits(environment({})), {
       minuteBudget: 60,
       dailyBudget: 5_000,
       maxConcurrency: 4,
-      leaseTtlSeconds: DEFAULT_LEASE_TTL_SECONDS,
+      leaseTtlSeconds: DEFAULT_HYBRID_LEASE_TTL_SECONDS,
       cacheTtlSeconds: PORTAL_HYBRID_CACHE_TTL_SECONDS,
     });
     assertEquals(readPortalHybridCircuitLimits(environment({})), {
@@ -564,7 +565,7 @@ Deno.test(
     });
 
     assertThrows(() =>
-      readPortalHybridTotalTimeoutMs(environment({ PORTAL_HYBRID_TIMEOUT_MS: '6001' })),
+      readPortalHybridTotalTimeoutMs(environment({ PORTAL_HYBRID_TIMEOUT_MS: '25001' })),
     );
     assertThrows(() =>
       readPortalHybridGuardLimits(environment({ PORTAL_HYBRID_CACHE_TTL_SECONDS: '61' })),
@@ -583,6 +584,27 @@ Deno.test(
         },
         { redisTimeoutMs: 500, upstreamTimeoutMs: 8_000 },
       ),
+    );
+    assertEquals(
+      minimumPortalLeaseTtlSeconds({ redisTimeoutMs: 500, upstreamTimeoutMs: 25_000 }),
+      31,
+    );
+    assertThrows(() =>
+      readPortalHybridGuardLimits(
+        environment({
+          PORTAL_HYBRID_TIMEOUT_MS: '25000',
+          PORTAL_HYBRID_LEASE_TTL_SECONDS: '30',
+        }),
+      ),
+    );
+    assertEquals(
+      readPortalHybridGuardLimits(
+        environment({
+          PORTAL_HYBRID_TIMEOUT_MS: '25000',
+          PORTAL_HYBRID_LEASE_TTL_SECONDS: '35',
+        }),
+      ).leaseTtlSeconds,
+      35,
     );
   },
 );
