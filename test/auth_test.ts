@@ -114,7 +114,7 @@ Deno.test(
             auth: {
               getClaims: async () => ({
                 data: null,
-                error: { message: 'JWT rejected', status: 401 },
+                error: { message: 'JWT rejected', status: 400 },
               }),
             },
           } as any,
@@ -170,6 +170,39 @@ Deno.test(
     );
   },
 );
+
+Deno.test('claims verification preserves retryable infrastructure failures', async () => {
+  const module = await importAuthModule();
+  for (const [upstreamStatus, expectedStatus] of [
+    [0, 503],
+    [429, 429],
+    [503, 503],
+  ] as const) {
+    let getClaimsCalls = 0;
+    const result = await module.authenticateRequest(
+      new Request('https://example.com', {
+        headers: { Authorization: 'Bearer header.payload.signature' },
+      }),
+      {
+        authClient: {
+          auth: {
+            getClaims: async () => {
+              getClaimsCalls += 1;
+              return {
+                data: null,
+                error: { message: 'Retryable claims failure', status: upstreamStatus },
+              };
+            },
+          },
+        } as any,
+        allowedMethods: [module.AuthMethod.JWT],
+      },
+    );
+    assertEquals(result.isAuthenticated, false);
+    assertEquals(result.response?.status, expectedStatus);
+    assertEquals(getClaimsCalls, 1);
+  }
+});
 
 Deno.test('bearer tokens use only Supabase JWT verification', async () => {
   await withEnv(
@@ -336,7 +369,7 @@ Deno.test('Cognito-like bearer tokens are rejected through Supabase verification
         auth: {
           getClaims: async () => {
             getClaimsCalls += 1;
-            return { data: null, error: { message: 'Invalid JWT issuer', status: 401 } };
+            return { data: null, error: { message: 'Invalid JWT issuer', status: 400 } };
           },
         },
       } as any,
@@ -457,7 +490,7 @@ Deno.test(
             auth: {
               getClaims: async () => {
                 getClaimsCalls += 1;
-                return { data: null, error: { message: 'Invalid JWT', status: 401 } };
+                return { data: null, error: { message: 'Invalid JWT', status: 400 } };
               },
             },
           } as any,

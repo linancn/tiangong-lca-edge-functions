@@ -98,6 +98,18 @@ function getErrorStatus(error: unknown, fallback: number): number {
   return fallback;
 }
 
+function getClaimsFailureStatus(error: unknown): number {
+  if (error && typeof error === 'object' && 'status' in error) {
+    const status = Reflect.get(error, 'status');
+    if (status === 400 || status === 401 || status === 403) return 401;
+    if (status === 429) return 429;
+    if (typeof status === 'number' && Number.isInteger(status) && status >= 500 && status <= 599) {
+      return status;
+    }
+  }
+  return 503;
+}
+
 export interface AuthedUser extends User {
   role?: string;
 }
@@ -325,7 +337,7 @@ async function authenticateSupabaseJWT(
         isAuthenticated: false,
         response: createAuthResponse(
           getErrorMessage(claimsError, 'JWT authentication failed'),
-          getErrorStatus(claimsError, 401),
+          getClaimsFailureStatus(claimsError),
         ),
       };
     }

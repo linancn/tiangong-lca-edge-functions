@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-01'
-lastReviewedCommit: 'a266257d2a2f37fbd9d1b68bbc484557d308203c'
-lastReviewedNote: 'Reviewed after synchronizing Edge #363, #369, and #373: non-Portal auth changes remain intact while one Hybrid-only atomic replay/recovery/budget/concurrency/lease/circuit admission call preserves Portal deadline, provider ordering, telemetry, and isolated ownership.'
+lastReviewedCommit: '5fca6c08124cc93a6b833306d4c5164982d1a16c'
+lastReviewedNote: 'Reviewed for Edge #377: known invalid Supabase claims-verification failures normalize to HTTP 401 while status-0/network, throttling, and server failures retain retryable infrastructure semantics; the governed gate now has 505 Deno tests and Portal/routing ownership remains unchanged.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

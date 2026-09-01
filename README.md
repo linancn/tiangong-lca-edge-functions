@@ -24,8 +24,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-09-01
-lastReviewedCommit: a266257d2a2f37fbd9d1b68bbc484557d308203c
-lastReviewedNote: 'Reviewed after synchronizing Edge #363, #369, and #373: non-Portal auth guidance remains current while Portal documents the one-call Hybrid replay/recovery/admission/circuit contract and unchanged deadline/provider guarantees.'
+lastReviewedCommit: 5fca6c08124cc93a6b833306d4c5164982d1a16c
+lastReviewedNote: 'Reviewed for Edge #377: the canonical gate count advances to 505 Deno tests after invalid-bearer and retryable claims-failure coverage; setup, deploy, and Portal guidance remain unchanged.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -483,7 +483,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 504 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 505 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

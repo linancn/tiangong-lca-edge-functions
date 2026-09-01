@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-01
-lastReviewedCommit: a266257d2a2f37fbd9d1b68bbc484557d308203c
-lastReviewedNote: 'Reviewed after synchronizing Edge #363, #369, and #373: claims-first Supabase/service auth remains intact while the Hybrid atomic begin preserves replay/recovery/admission/circuit order, timeout, telemetry, privacy, and provider isolation.'
+lastReviewedCommit: 5fca6c08124cc93a6b833306d4c5164982d1a16c
+lastReviewedNote: 'Reviewed for Edge #377: invalid opaque and Cognito-shaped bearer inputs receive canonical HTTP 401 without fallback I/O, while claims-fetch network, throttling, and server failures stay retryable; service auth and Portal remain unchanged.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -96,7 +96,7 @@ Keep these entry-level facts in `AGENTS.md`. Use `README.md` and `docs/agents/re
 - latest reviewed import graph: AWS SDK `3.1121.0`, OpenAI `7.8.0`, Supabase JSR `2.112.4`, Upstash Redis `1.38.3`, Deno Redis `0.41.2`, Zod `4.5.4`, and Prettier `3.9.6`; every Functions JS type import must use the mapped `@supabase/functions-js/edge-runtime.d.ts` alias, while any direct JSR, npm, HTTPS, or other `@supabase/functions-js` specifier is forbidden; `pnpm outdated` and exact-Deno `deno outdated --latest` must remain empty
 - local serve command: `pnpm start`
 - baseline local validation: non-mutating `pnpm lint` and canonical `pnpm check`
-- `pnpm check` validates exact runtime versions, checks all 155 enabled function/test roots through one bounded shared Deno graph, runs 73 Node contract tests, and executes 504 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
+- `pnpm check` validates exact runtime versions, checks all 155 enabled function/test roots through one bounded shared Deno graph, runs 73 Node contract tests, and executes 505 default Deno behavior tests plus one opt-in live Upstash test that remains ignored without explicit credentials
 - schema-boundary regression: `test/schema_boundary_contract_test.ts`
 - formatting fix command: `pnpm format`
 - remote deploy entrypoints:
