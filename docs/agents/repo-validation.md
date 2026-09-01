@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-01
-lastReviewedCommit: fcd6fdc60152180ba564f1fed89dc641f6e3e143
-lastReviewedNote: 'Reviewed for Edge #364: Hybrid validation now proves the 6000 ms runtime/default/deploy ceiling and rejects a 6001 ms inner deadline while retaining the full 155-root/73-Node/502-Deno proof bar.'
+lastReviewedCommit: 1a5a4b90b75e8bfbd35499ce75e5f7b2ec1dd32e
+lastReviewedNote: 'Reviewed for Edge #364 promote feedback: validation now requires and records the 6000 timeout migration before the Function deploy, while retaining the runtime ceiling test and full 155-root/73-Node/503-Deno proof bar.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -55,7 +55,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 155 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 73 Node contract tests, and executes 502 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 155 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 73 Node contract tests, and executes 503 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 Review note, 2026-08-31: Edge #357 upgrades every direct runtime/import dependency to the latest stable version verified for exact Deno 2.1.4, including OpenAI 7.8 and Supabase JSR 2.112.4. Validation requires empty `pnpm outdated` and exact-Deno `deno outdated --latest`, one import-map/direct-import contract, targeted OpenAI/Redis/Supabase/Auth checks, Redis 0.41.2's dual-provider signature adaptation, the canonical full gate, and no Portal credential/config mutation. Official OpenAI documentation continues to define `client.responses.create` as the primary JavaScript API; Chat fallback remains covered.
 
@@ -144,10 +144,11 @@ Remote deploy proof is separate from local type-check proof.
 
 If the task includes a real deploy, record:
 
-1. which command ran
-2. which target environment was used
-3. which function names were deployed
-4. which smoke proof was run after deploy, if any
+1. which configuration command ran before deploy when the runtime tightens a bounded environment value; Portal Hybrid's 6000 ms ceiling requires `PORTAL_HYBRID_TIMEOUT_MS=6000` before the Function deploy so a retained 8000 value cannot create a fail-closed availability window
+2. which deploy command ran
+3. which target environment was used
+4. which function names were deployed
+5. which smoke proof was run after deploy, if any
 
 If no deploy happened, say so explicitly in the PR note.
 
