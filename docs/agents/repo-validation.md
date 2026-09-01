@@ -34,9 +34,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-09-01
-lastReviewedCommit: da2ff14b6e7fcf5919af2d6576de02da1aeece74
-lastReviewedNote: 'Reviewed for Edge #379: source, dependency, environment, routing, and hosted-inventory proof must show the external account bridge absent; the complete 152-root runtime gate and provider-neutral foreign-issuer denial remain mandatory.'
+lastReviewedAt: 2026-09-02
+lastReviewedCommit: 8344bec0ef03479f175741419e88807751203290
+lastReviewedNote: 'Reviewed for Edge #382: documentation proof must show direct MCP-to-Edge Supabase JWT re-verification and zero broker/User API-key guidance while Portal-prefixed Redis and explicit service auth remain unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
