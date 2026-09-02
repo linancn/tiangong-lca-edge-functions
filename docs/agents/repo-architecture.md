@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-02
-lastReviewedCommit: f1fe0430812689298a040de04e9c8084c1b70c74
-lastReviewedNote: 'Reviewed for Edge #376 after the OAuth-only cutover: the Portal-only 25-second deadline and 35-second lease preserve direct OAuth, service, HMAC, Redis, provider, telemetry, and database ownership.'
+lastReviewedCommit: bfc3b31cbdaedc98626f7a19f583c5d49b1866a2
+lastReviewedNote: 'Reviewed for Edge #396: Edge validates and transports exact Process model ownership while database-engine remains authoritative for persistence and null legacy fallback.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -144,6 +144,8 @@ The shared layers that matter most are:
 `admin_review_quality_diagnostic` is a JWT-authenticated Review Admin route with only `start` and `read` actions. The browser cannot submit Review IDs, Process IDs, or another scope; database RPCs derive the current pending-review scope, enforce Review Admin membership, reuse one active run, and project one or the latest report. Edge returns `clear`, `findings`, `not_evaluable`, and worker `failed` states as information and never translates them into assignment, approval, or rejection guards.
 
 The retired review-submit Gate, coordinator, and job endpoints are not part of the deployed Edge surface. `app_worker_jobs` remains the authenticated task-center API for user-visible jobs; the operator-visible Review Admin diagnostic is read through its dedicated route rather than through generic task-center access.
+
+Process create, create-version, and save-draft commands accept `modelVersion` only alongside `modelId`, validate the `NN.NN.NNN` form, and forward it unchanged as `p_model_version`. Omission remains the database-owned legacy fallback to the Process version; Edge never infers a LifecycleModel version or substitutes the latest Model.
 
 `app_data_product_commands` is the JWT-only command boundary for Data Product scope-closure checks and result-build requests. It forwards only user scope intent to actor-bound database RPCs; the database derives snapshot, policy, certificate, and artifact-lifecycle bindings. The shared data-product repository preserves the database-owned versioned check/issues/feed projections while explicitly allowlisting the closure-check public DTO, decoding its fixed-order artifact summaries, and recursively rejecting private locator or credential fields. For downloads, the strict public request requires exactly `closure_report_xlsx` or `closure_issue_manifest`, forwards that selector to the database's two-argument actor RPC, and signs only a matching ready, unexpired descriptor. Partition selectors are not part of this public endpoint. Signed URLs are capped at 900 seconds, reserve a clock-skew/signing safety budget before artifact expiry, and use the database-provided semantic filename. Owner-visible expiry maps to a stable `410`, while unavailable, unauthorized, deleted, unready, and integrity-invalid artifacts remain one opaque `404`. Unexpected RPC/PostgREST failures and every Storage signing throw, rejection, malformed result, or SDK error collapse to fixed locator-free `502` responses. The service client may see the private bucket/path solely for the signing step and never returns either field or source error details to the browser. Task feed visibility is database-owned ACL, not a consequence of task-center category or presenter metadata.
 

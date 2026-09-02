@@ -9,6 +9,7 @@ import {
 const TEST_USER_ID = '11111111-1111-4111-8111-111111111111';
 const TEST_DATASET_ID = '22222222-2222-4222-8222-222222222222';
 const TEST_MODEL_ID = '33333333-3333-4333-8333-333333333333';
+const TEST_MODEL_VERSION = '01.01.021';
 
 class FakeRpcSupabase {
   rpcCalls: Array<{ fn: string; args: unknown }> = [];
@@ -58,6 +59,7 @@ Deno.test(
         sourceVersion: '01.00.000',
         jsonOrdered: { foo: 'bar' },
         modelId: TEST_MODEL_ID,
+        modelVersion: TEST_MODEL_VERSION,
         ruleVerification: false,
       },
       buildActor(supabase),
@@ -73,6 +75,7 @@ Deno.test(
           p_source_version: '01.00.000',
           p_json_ordered: { foo: 'bar' },
           p_model_id: TEST_MODEL_ID,
+          p_model_version: TEST_MODEL_VERSION,
           p_rule_verification: false,
           p_audit: {
             command: 'dataset_create_version',
@@ -83,6 +86,7 @@ Deno.test(
             payload: {
               sourceVersion: '01.00.000',
               modelId: TEST_MODEL_ID,
+              modelVersion: TEST_MODEL_VERSION,
             },
           },
         },
@@ -144,6 +148,28 @@ Deno.test('executeCreateVersionCommand rejects modelId for non-process datasets'
     ok: false,
     code: 'MODEL_ID_NOT_ALLOWED',
     message: 'modelId is only allowed for process dataset version creates',
+    status: 400,
+  });
+  assertEquals(supabase.rpcCalls, []);
+});
+
+Deno.test('executeCreateVersionCommand rejects modelVersion without modelId', async () => {
+  const supabase = new FakeRpcSupabase();
+  const result = await executeCreateVersionCommand(
+    {
+      table: 'processes',
+      id: TEST_DATASET_ID,
+      sourceVersion: '01.00.000',
+      jsonOrdered: { foo: 'bar' },
+      modelVersion: TEST_MODEL_VERSION,
+    },
+    buildActor(supabase),
+  );
+
+  assertEquals(result, {
+    ok: false,
+    code: 'MODEL_ID_REQUIRED_FOR_MODEL_VERSION',
+    message: 'modelId is required when modelVersion is provided',
     status: 400,
   });
   assertEquals(supabase.rpcCalls, []);
