@@ -125,6 +125,36 @@ Deno.test('Portal V2 groups preserve every exact version and rank by their best 
   }
 });
 
+Deno.test(
+  'Portal V2 orders dataset representatives by their best score and deterministic id tie-break',
+  () => {
+    const page = versionedCandidatePage();
+    const second = structuredClone(page.items[0]);
+    second.key.id = '22222222-2222-4222-8222-222222222222';
+    second.match.score = 0.8;
+    page.items.push(second);
+    page.versionGroups.push({
+      key: second.key,
+      matches: [{ key: second.key, match: second.match }],
+    });
+    page.candidateCount = 3;
+    page.datasetCount = 2;
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, true);
+
+    second.match.score = page.items[0].match.score;
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, true);
+    page.items.reverse();
+    page.versionGroups.reverse();
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, false);
+
+    second.match.score = 1;
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, true);
+    page.items.reverse();
+    page.versionGroups.reverse();
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, false);
+  },
+);
+
 function candidatePage() {
   return {
     schemaVersion: 'portal.public-hybrid-candidate-page.v1',

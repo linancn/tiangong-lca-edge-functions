@@ -1,5 +1,6 @@
 import { assertEquals, assertFalse } from 'jsr:@std/assert';
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.112.4';
+import { authenticateRequest, AuthMethod } from '../supabase/functions/_shared/auth.ts';
 
 import {
   createHybridSearchHandler,
@@ -26,13 +27,91 @@ const VERSIONED_CONFIG: HybridSearchRouteConfig = {
   versionedRpcName: 'hybrid_search_process_versions_v1',
 };
 const VERSION_ID = '11111111-1111-4111-8111-111111111111';
+const VERIFIED_JWT_AUTH = {
+  isAuthenticated: true,
+  principal: {
+    userId: VERSION_ID,
+    authMethod: 'supabase_jwt',
+    assurance: 'claims',
+  },
+} as const;
+
+Deno.test(
+  'matched mode rejects a service-key success with an unverified JWT-shaped bearer',
+  async () => {
+    const calls: string[] = [];
+    const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
+      authenticate: async (request) => {
+        const result = await authenticateRequest(request, {
+          serviceApiKey: 'hybrid-test-service-key',
+          allowedMethods: [AuthMethod.JWT, AuthMethod.SERVICE_API_KEY],
+          authClient: {
+            auth: {
+              getClaims: () => Promise.resolve({ data: null, error: { message: 'JWT rejected' } }),
+            },
+          } as unknown as SupabaseClient,
+        });
+        assertEquals(result.principal?.authMethod, 'service_api_key');
+        return result;
+      },
+      createRpcClient: () => {
+        calls.push('client');
+        return {
+          client: {} as SupabaseClient,
+          userContextKind: 'jwt',
+          bearerToken: 'forged.jwt.signature',
+        };
+      },
+      rewriteQuery: async () => {
+        calls.push('rewrite');
+        return { semantic_query_en: 'copper', fulltext_query_en: [], fulltext_query_zh: [] };
+      },
+      generateEmbedding: async () => {
+        calls.push('embedding');
+        return VECTOR;
+      },
+    });
+    const response = await handler(
+      new Request('http://localhost/search', {
+        method: 'POST',
+        headers: {
+          apikey: 'hybrid-test-service-key',
+          Authorization: 'Bearer forged.jwt.signature',
+        },
+        body: JSON.stringify({ query: 'copper', version_scope: 'matched' }),
+      }),
+    );
+    assertEquals(response.status, 403);
+    assertEquals((await response.json()).code, 'HYBRID_SEARCH_USER_CONTEXT_REQUIRED');
+    assertEquals(calls, []);
+  },
+);
+
+Deno.test(
+  'matched mode fails closed when authentication supplies no verified principal',
+  async () => {
+    const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
+      authenticate: async () => ({ isAuthenticated: true }),
+      createRpcClient: () => {
+        throw new Error('must reject before creating a client');
+      },
+    });
+    const response = await handler(
+      new Request('http://localhost/search', {
+        method: 'POST',
+        body: JSON.stringify({ query: 'copper', version_scope: 'matched' }),
+      }),
+    );
+    assertEquals(response.status, 403);
+  },
+);
 
 Deno.test(
   'matched-version mode rejects service context before any paid or database work',
   async () => {
     let calls = 0;
     const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
-      authenticate: async () => ({ isAuthenticated: true }),
+      authenticate: async () => VERIFIED_JWT_AUTH,
       createRpcClient: () => ({
         client: {} as SupabaseClient,
         userContextKind: 'service',
@@ -74,7 +153,7 @@ Deno.test(
       resolveRewrite = resolve;
     });
     const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
-      authenticate: async () => ({ isAuthenticated: true }),
+      authenticate: async () => VERIFIED_JWT_AUTH,
       rewriteQuery: () => {
         calls.push('rewrite');
         return rewriting;
@@ -140,7 +219,7 @@ Deno.test(
     const names: string[] = [];
     const bodies: Array<Record<string, unknown>> = [];
     const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
-      authenticate: async () => ({ isAuthenticated: true }),
+      authenticate: async () => VERIFIED_JWT_AUTH,
       rewriteQuery: async () => ({
         semantic_query_en: 'copper',
         fulltext_query_en: ['copper'],
@@ -214,7 +293,7 @@ Deno.test(
     for (const missingEnglish of [false, true]) {
       let embeddingCalls = 0;
       const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
-        authenticate: async () => ({ isAuthenticated: true }),
+        authenticate: async () => VERIFIED_JWT_AUTH,
         rewriteQuery: async () => ({
           semantic_query_en: missingEnglish ? '' : 'copper',
           fulltext_query_en: ['copper'],
