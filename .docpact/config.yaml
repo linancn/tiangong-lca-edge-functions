@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-02'
-lastReviewedCommit: '6deff8a2fe000e5823c4154fa75c2cdc972187ca'
-lastReviewedNote: 'Reviewed for Edge #400 phase 1: Portal uses validated English rewrite before embedding, retains all-language original full-text terms, and isolates v2 model caches without changing public auth, guard budgets, timeouts or generic model kernels.'
+lastReviewedCommit: '194003fab5109ab3ca8e48e7ff7a27c902d88538'
+lastReviewedNote: 'Reviewed for Edge #400: explicit Portal V2 and JWT-backed matched-version protocols preserve exact identity, bounded group continuation, English-vector cache isolation and existing security/timeout boundaries.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

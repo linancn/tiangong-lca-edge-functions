@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-02
-lastReviewedCommit: '6deff8a2fe000e5823c4154fa75c2cdc972187ca'
-lastReviewedNote: 'Reviewed for Edge #400 phase 1: Portal uses validated English rewrite before embedding, retains all-language original full-text terms, and isolates v2 model caches without changing public auth, guard budgets, timeouts or generic model kernels.'
+lastReviewedCommit: '194003fab5109ab3ca8e48e7ff7a27c902d88538'
+lastReviewedNote: 'Reviewed for Edge #400: explicit Portal V2 and JWT-backed matched-version protocols preserve exact identity, bounded group continuation, English-vector cache isolation and existing security/timeout boundaries.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -55,7 +55,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 152 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 73 Node contract tests, and executes 512 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 152 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots in one shared graph, runs 73 Node contract tests, and executes 526 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 Review note, 2026-08-31: Edge #357 upgrades every direct runtime/import dependency to the latest stable version verified for exact Deno 2.1.4, including OpenAI 7.8 and Supabase JSR 2.112.4. Validation requires empty `pnpm outdated` and exact-Deno `deno outdated --latest`, one import-map/direct-import contract, targeted OpenAI/Redis/Supabase/Auth checks, Redis 0.41.2's dual-provider signature adaptation, the canonical full gate, and no Portal credential/config mutation. Official OpenAI documentation continues to define `client.responses.create` as the primary JavaScript API; Chat fallback remains covered.
 
@@ -107,6 +107,8 @@ Changes to `portal_public_transport.ts`, `portal_hybrid_provider.ts`, `portal_hy
 The minimum targeted command remains the union of the two Portal rows above plus `test/hybrid_search_handler_test.ts`, `test/hybrid_query_utils_test.ts`, `test/auth_test.ts`, `test/supabase_client_test.ts`, `test/embedding_vector_test.ts`, and targeted `deno check` for both Portal entrypoints and the three Portal-only provider/kernel modules. Live provider calls, secret mutation, Function deployment, and enabling Hybrid are separate controlled gates and are not implied by local proof.
 
 ## Auth And Probe Notes
+
+Version-aware search additionally proves explicit V1/V2 negotiation, representative/member kind/id/version equality, bounded unique member coverage, best-member ordering and no cross-version evidence transfer. Continuation and filter changes reuse English model inputs but always call the public Database API; expired continuation makes no provider/DB call and does not record a circuit failure. Matched Next mode requires JWT context before paid work, preserves the 200 budget through threshold fallback and never acknowledges id-only output. Alias-pressure fixtures must retain the original query plus both English and Chinese aliases after OR expansion.
 
 Facts that matter:
 
