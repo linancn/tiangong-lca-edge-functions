@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-02'
-lastReviewedCommit: 'bfc3b31cbdaedc98626f7a19f583c5d49b1866a2'
-lastReviewedNote: 'Reviewed for Edge #396: command runtime, dataset policy, DB-RPC, tests, and documentation cover the additive exact Process modelId/modelVersion ownership contract and legacy omission path.'
+lastReviewedCommit: '6deff8a2fe000e5823c4154fa75c2cdc972187ca'
+lastReviewedNote: 'Reviewed for Edge #400 phase 1: Portal uses validated English rewrite before embedding, retains all-language original full-text terms, and isolates v2 model caches without changing public auth, guard budgets, timeouts or generic model kernels.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
