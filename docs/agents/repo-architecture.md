@@ -35,7 +35,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-02
-lastReviewedCommit: '194003fab5109ab3ca8e48e7ff7a27c902d88538'
+lastReviewedCommit: 5f225c74d739910ccbd9157b59442281ca98ad03
 lastReviewedNote: 'Reviewed for Edge #400: explicit Portal V2 and JWT-backed matched-version protocols preserve exact identity, bounded group continuation, English-vector cache isolation and existing security/timeout boundaries.'
 related:
   - ../../AGENTS.md
@@ -185,7 +185,7 @@ One absolute 25-second Edge deadline starts at handler entry, retaining five sec
 
 Portal wire V2 adds query-bound group continuation to the existing signed endpoint without changing HMAC, admission, 25-second deadline or publication authority. It consumes only the public V2 Database page: at most 20 best-version representatives plus all exact `versionGroups` members from the two 200-candidate branches. Cache namespace `portal_hybrid_english_query_v3` binds only query/kind/provider identity and retains the existing 60-second model-only lifetime; every page rechecks Database visibility. A missing continuation cache is an explicit restart, not another model call or a silent change of retrieval identity. V1 requests still use the V1 Database/response.
 
-Process/Flow optionally negotiate `version_scope=matched`. That path requires a JWT before models, uses only the new exact-version RPCs with a fixed 200 budget and returns an explicit `versionScope=matched` acknowledgement even for empty data. Legacy mode, foundation routes, source embedding models and generic provider configuration remain compatible. The new bounded term selector preserves any-language raw query plus interleaved English/Chinese aliases; the legacy term selector is unchanged.
+Process/Flow optionally negotiate `version_scope=matched`. That path requires the verified authentication principal's `authMethod=supabase_jwt` before client creation or models; a service-key success plus an unverified JWT-shaped header is not user authentication. It uses only the new exact-version RPCs with a fixed 200 budget and returns an explicit `versionScope=matched` acknowledgement even for empty data. Legacy mode, foundation routes, source embedding models and generic provider configuration remain compatible. The new bounded term selector preserves any-language raw query plus interleaved English/Chinese aliases; the legacy term selector is unchanged. Portal V2 validates both within-group version ordering and cross-group representative order (score descending, dataset UUID ascending, version descending) before returning ranked results.
 
 These routes cluster around:
 

@@ -24,7 +24,7 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-09-02
-lastReviewedCommit: '194003fab5109ab3ca8e48e7ff7a27c902d88538'
+lastReviewedCommit: 5f225c74d739910ccbd9157b59442281ca98ad03
 lastReviewedNote: 'Reviewed for Edge #400: explicit Portal V2 and JWT-backed matched-version protocols preserve exact identity, bounded group continuation, English-vector cache isolation and existing security/timeout boundaries.'
 ---
 
