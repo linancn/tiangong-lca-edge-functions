@@ -175,12 +175,14 @@ class FakePortalRedis implements PortalRedisAdapter {
   cached: string | null = null;
   cacheWriteFails = false;
   circuitSuccessOperation?: () => Promise<unknown>;
-  cacheGetOperation?: () => Promise<string | null>;
+  cacheGetOperation?: (key: string) => Promise<string | null>;
   cacheSetOperation?: () => Promise<void>;
   hybridBeginOperation?: () => Promise<unknown>;
   leaseReleaseOperation?: () => Promise<unknown>;
   readonly calls: string[] = [];
   readonly cacheWrites: string[] = [];
+  readonly cacheReadKeys: string[] = [];
+  readonly cacheWriteKeys: string[] = [];
 
   setNxEx(): Promise<boolean> {
     this.calls.push('nonce');
@@ -220,15 +222,17 @@ class FakePortalRedis implements PortalRedisAdapter {
     return Promise.resolve(1);
   }
 
-  get(): Promise<string | null> {
+  get(key: string): Promise<string | null> {
     this.calls.push('cache_get');
-    if (this.cacheGetOperation) return this.cacheGetOperation();
+    this.cacheReadKeys.push(key);
+    if (this.cacheGetOperation) return this.cacheGetOperation(key);
     if (this.cacheReadFails) return Promise.reject(new Error('private redis provider details'));
     return Promise.resolve(this.cached);
   }
 
-  setEx(_key: string, value: string): Promise<void> {
+  setEx(key: string, value: string): Promise<void> {
     this.calls.push('cache_set');
+    this.cacheWriteKeys.push(key);
     if (this.cacheSetOperation) return this.cacheSetOperation();
     if (this.cacheWriteFails) return Promise.reject(new Error('private redis provider details'));
     this.cacheWrites.push(value);
@@ -451,7 +455,7 @@ Deno.test(
     assertEquals(repositoryCalls[0].embedding.length, 1_024);
     assertEquals(repositoryCalls[0].signal, rewriteSignal);
     assertEquals(repositoryCalls[0].signal, embeddingSignal);
-    assertEquals(embeddingInput, REQUEST.query);
+    assertEquals(embeddingInput, REWRITE.semantic_query_en);
     assertEquals(repositoryCalls[0].signal.aborted, false);
     assertEquals(rewriteProvider, PROVIDER_CONFIG);
     assertEquals(embeddingProvider, PROVIDER_CONFIG);
@@ -476,6 +480,129 @@ Deno.test(
     assertEquals(redis.cacheWrites[0].includes(PROCESS_ID), false);
     assertEquals(redis.cacheWrites[0].includes(REQUEST.query), false);
     assert(redis.calls.includes('lease_release'));
+  },
+);
+
+Deno.test('Portal Hybrid waits for the rewritten English query before embedding', async () => {
+  const redis = new FakePortalRedis();
+  const rewrite = Promise.withResolvers<HybridSearchQuery>();
+  let rewriteStarted = false;
+  let embeddingCalls = 0;
+  let embeddingInput = '';
+  let rewriteSignal: AbortSignal | undefined;
+  let embeddingSignal: AbortSignal | undefined;
+  let databaseCalls = 0;
+  const handler = createPortalHybridSearchHandler(
+    handlerOptions(
+      redis,
+      {
+        query() {
+          databaseCalls += 1;
+          return Promise.resolve(databasePage());
+        },
+      },
+      {
+        rewriteQuery: (_config: unknown, _query: string, signal: AbortSignal) => {
+          rewriteStarted = true;
+          rewriteSignal = signal;
+          return rewrite.promise;
+        },
+        generateEmbedding: async (query: string, signal: AbortSignal) => {
+          embeddingCalls += 1;
+          embeddingInput = query;
+          embeddingSignal = signal;
+          return VECTOR;
+        },
+      },
+    ),
+  );
+  const pending = handler(await signedRequest({ payload: { ...REQUEST, query: '钢铁生产' } }));
+  await flushUntil(() => rewriteStarted, 'rewrite starts');
+  const callsWhileRewritePending = { embedding: embeddingCalls, database: databaseCalls };
+  rewrite.resolve(REWRITE);
+  const response = await pending;
+  assertEquals(callsWhileRewritePending, { embedding: 0, database: 0 });
+  assertEquals(response.status, 200);
+  assertEquals(embeddingCalls, 1);
+  assertEquals(embeddingInput, REWRITE.semantic_query_en);
+  assertEquals(embeddingSignal, rewriteSignal);
+  assertEquals(databaseCalls, 1);
+});
+
+Deno.test('Portal Hybrid English pipeline cannot reuse the legacy raw-query cache', async () => {
+  const redis = new FakePortalRedis();
+  const request = await signedRequest();
+  const legacyKey = `${redis.namespace}:cache:portal_hybrid_search_v1:${request.headers.get('x-portal-body-sha256')}`;
+  const legacyCache = JSON.stringify({
+    schemaVersion: 'portal.hybrid-model-cache.v1',
+    interpretation: {
+      source: 'model_generated',
+      advisory: true,
+      semanticQuery: REWRITE.semantic_query_en,
+      terms: [{ language: 'en', value: 'steel production' }],
+    },
+    queryTerms: ['steel production'],
+    queryEmbedding: VECTOR,
+  });
+  redis.cacheGetOperation = (key) => Promise.resolve(key === legacyKey ? legacyCache : null);
+  let rewriteCalls = 0;
+  const handler = createPortalHybridSearchHandler(
+    handlerOptions(
+      redis,
+      { query: () => Promise.resolve(databasePage()) },
+      {
+        rewriteQuery: async () => {
+          rewriteCalls += 1;
+          return REWRITE;
+        },
+      },
+    ),
+  );
+  const response = await handler(request);
+  assertEquals(response.status, 200);
+  assertEquals(rewriteCalls, 1);
+  assertEquals(redis.cacheReadKeys.length, 1);
+  assertEquals(redis.cacheReadKeys.includes(legacyKey), false);
+  assertEquals(redis.cacheWriteKeys, redis.cacheReadKeys);
+  assertEquals(JSON.parse(redis.cacheWrites[0]).schemaVersion, 'portal.hybrid-model-cache.v2');
+});
+
+Deno.test(
+  'Portal Hybrid preserves original full-text queries beyond English and Chinese',
+  async () => {
+    for (const query of ['электроэнергия', 'الطاقة الكهربائية', '製鋼工程', 'STEEL PRODUCTION']) {
+      const redis = new FakePortalRedis();
+      let terms: string[] = [];
+      let embeddingInput = '';
+      const handler = createPortalHybridSearchHandler(
+        handlerOptions(
+          redis,
+          {
+            query(_request, queryTerms) {
+              terms = queryTerms;
+              return Promise.resolve(databasePage());
+            },
+          },
+          {
+            generateEmbedding: async (text: string) => {
+              embeddingInput = text;
+              return VECTOR;
+            },
+          },
+        ),
+      );
+      const response = await handler(await signedRequest({ payload: { ...REQUEST, query } }));
+      assertEquals(response.status, 200);
+      assertEquals(terms[0], query);
+      assert(terms.includes(REWRITE.semantic_query_en));
+      assert(terms.length <= 12);
+      assertEquals(new Set(terms.map((term) => term.toLowerCase())).size, terms.length);
+      assertEquals(embeddingInput, REWRITE.semantic_query_en);
+      assertEquals(
+        redis.cacheWrites.some((value) => value.includes(query)),
+        false,
+      );
+    }
   },
 );
 
@@ -1190,7 +1317,7 @@ Deno.test(
   async () => {
     const redis = new FakePortalRedis();
     const cache: PortalHybridModelCache = {
-      schemaVersion: 'portal.hybrid-model-cache.v1',
+      schemaVersion: 'portal.hybrid-model-cache.v2',
       interpretation: {
         source: 'model_generated',
         advisory: true,
@@ -1285,6 +1412,20 @@ Deno.test(
         code: 'contract_failure',
       },
       {
+        rewriteQuery: async () => ({ ...REWRITE, semantic_query_en: ' ' }),
+        generateEmbedding: () => {
+          throw new Error('embedding must not run for an empty rewrite');
+        },
+        code: 'contract_failure',
+      },
+      {
+        rewriteQuery: async () => ({ ...REWRITE, semantic_query_en: 'a'.repeat(513) }),
+        generateEmbedding: () => {
+          throw new Error('embedding must not run for an invalid rewrite');
+        },
+        code: 'contract_failure',
+      },
+      {
         rewriteQuery: async () =>
           ({
             semantic_query_en: 'steel',
@@ -1324,61 +1465,58 @@ Deno.test(
   },
 );
 
-Deno.test(
-  'Portal Hybrid provider failure aborts its concurrent peer before releasing the lease',
-  async () => {
-    const redis = new FakePortalRedis();
-    let embeddingSignal: AbortSignal | undefined;
-    let embeddingAbortObserved = false;
-    let databaseCalls = 0;
-    const events: PortalHybridSecurityEvent[] = [];
-    const handler = createPortalHybridSearchHandler(
-      handlerOptions(
-        redis,
-        {
-          query() {
-            databaseCalls += 1;
-            return Promise.resolve(databasePage());
-          },
+Deno.test('Portal Hybrid rewrite failure stops embedding before releasing the lease', async () => {
+  const redis = new FakePortalRedis();
+  let embeddingSignal: AbortSignal | undefined;
+  let embeddingAbortObserved = false;
+  let databaseCalls = 0;
+  const events: PortalHybridSecurityEvent[] = [];
+  const handler = createPortalHybridSearchHandler(
+    handlerOptions(
+      redis,
+      {
+        query() {
+          databaseCalls += 1;
+          return Promise.resolve(databasePage());
         },
-        {
-          rewriteQuery: () => Promise.reject(new Error('private provider details')),
-          generateEmbedding: (_query: string, signal: AbortSignal) => {
-            embeddingSignal = signal;
-            return new Promise((_resolve, reject) => {
-              signal.addEventListener(
-                'abort',
-                () => {
-                  embeddingAbortObserved = true;
-                  reject(new DOMException('aborted', 'AbortError'));
-                },
-                { once: true },
-              );
-            });
-          },
-          logger: (event: PortalHybridSecurityEvent) => events.push(event),
+      },
+      {
+        rewriteQuery: () => Promise.reject(new Error('private provider details')),
+        generateEmbedding: (_query: string, signal: AbortSignal) => {
+          embeddingSignal = signal;
+          return new Promise((_resolve, reject) => {
+            signal.addEventListener(
+              'abort',
+              () => {
+                embeddingAbortObserved = true;
+                reject(new DOMException('aborted', 'AbortError'));
+              },
+              { once: true },
+            );
+          });
         },
-      ),
-    );
+        logger: (event: PortalHybridSecurityEvent) => events.push(event),
+      },
+    ),
+  );
 
-    const response = await handler(await signedRequest());
-    assertEquals(response.status, 503);
-    assertEquals(await responseCode(response), 'hybrid_upstream_unavailable');
-    assertEquals(embeddingSignal?.aborted, true);
-    assertEquals(embeddingAbortObserved, true);
-    assertEquals(databaseCalls, 0);
-    assert(redis.calls.includes('circuit_failure'));
-    assert(redis.calls.includes('lease_release'));
-    await flushPortalHybridSecurityEvent();
-    assertEquals(events[0].rewriteOutcome, 'failed');
-    assertEquals(events[0].embeddingOutcome, 'aborted');
-    assertEquals(typeof events[0].rewriteLatencyMs, 'number');
-    assertEquals(typeof events[0].embeddingLatencyMs, 'number');
-  },
-);
+  const response = await handler(await signedRequest());
+  assertEquals(response.status, 503);
+  assertEquals(await responseCode(response), 'hybrid_upstream_unavailable');
+  assertEquals(embeddingSignal, undefined);
+  assertEquals(embeddingAbortObserved, false);
+  assertEquals(databaseCalls, 0);
+  assert(redis.calls.includes('circuit_failure'));
+  assert(redis.calls.includes('lease_release'));
+  await flushPortalHybridSecurityEvent();
+  assertEquals(events[0].rewriteOutcome, 'failed');
+  assertEquals(events[0].embeddingOutcome, 'not_called');
+  assertEquals(typeof events[0].rewriteLatencyMs, 'number');
+  assertEquals(events[0].embeddingLatencyMs, null);
+});
 
 Deno.test(
-  'Portal Hybrid absolute deadline starts both providers, aborts them together, and stops database',
+  'Portal Hybrid rewrite deadline aborts rewrite without starting embedding or database',
   async () => {
     const redis = new FakePortalRedis();
     let rewriteSignal: AbortSignal | undefined;
@@ -1412,9 +1550,8 @@ Deno.test(
     assertEquals(response.status, 503);
     assertEquals(await responseCode(response), 'hybrid_timeout');
     assertEquals(rewriteSignal?.aborted, true);
-    assertEquals(embeddingCalls, 1);
-    assertEquals(embeddingSignal, rewriteSignal);
-    assertEquals(embeddingSignal?.aborted, true);
+    assertEquals(embeddingCalls, 0);
+    assertEquals(embeddingSignal, undefined);
     assertEquals(databaseCalls, 0);
   },
 );

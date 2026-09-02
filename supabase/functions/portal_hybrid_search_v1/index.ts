@@ -8,6 +8,7 @@ import {
 } from '../_shared/hybrid_query_utils.ts';
 import {
   portalHybridModelCacheSchema,
+  portalHybridQuerySchema,
   portalHybridSearchPageSchema,
   portalHybridSearchRequestSchema,
   type PortalHybridInterpretation,
@@ -87,6 +88,9 @@ export const PORTAL_HYBRID_FUNCTION_NAME = 'portal_hybrid_search_v1';
 export const PORTAL_HYBRID_FUNCTION_PATH = `/functions/v1/${PORTAL_HYBRID_FUNCTION_NAME}`;
 export const PORTAL_HYBRID_RUNTIME_PATH = `/${PORTAL_HYBRID_FUNCTION_NAME}`;
 export const PORTAL_HYBRID_MAX_REQUEST_BYTES = 32 * 1024;
+// A separate keyspace prevents still-live raw-query vectors from being reused
+// after the query pipeline changes to rewrite -> English embedding.
+const PORTAL_HYBRID_MODEL_CACHE_ROUTE = 'portal_hybrid_english_v2';
 
 type PortalHybridHandlerOptions = {
   keyring?: PortalHmacKeyring;
@@ -247,7 +251,7 @@ function buildModelCache(
   }
   const queryTerms = buildHybridFulltextQueryTerms(modelOnly).slice(0, 12);
   const candidate = {
-    schemaVersion: 'portal.hybrid-model-cache.v1' as const,
+    schemaVersion: 'portal.hybrid-model-cache.v2' as const,
     interpretation: {
       source: 'model_generated' as const,
       advisory: true as const,
@@ -272,9 +276,20 @@ function retrievalTermsFromModelCache(cache: PortalHybridModelCache, query: stri
       .filter((term) => term.language === 'zh-CN')
       .map((term) => term.value),
   };
-  return buildHybridFulltextQueryTerms(
-    sanitizeHybridQueryOutput(normalizedModelQuery, query),
-  ).slice(0, 12);
+  // The model supplies en/zh aliases, but the user's authored query may use any
+  // language. Always retain it for full-text recall without caching/logging it.
+  const seen = new Set<string>();
+  return [
+    query.trim(),
+    ...buildHybridFulltextQueryTerms(sanitizeHybridQueryOutput(normalizedModelQuery, query)),
+  ]
+    .filter((term) => {
+      const key = term.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 12);
 }
 
 async function responseErrorCode(response: Response): Promise<PortalHybridErrorCode | null> {
@@ -604,7 +619,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         try {
           cached = await deadline.run(() =>
             readPortalResponseCache(
-              { route: PORTAL_HYBRID_FUNCTION_NAME, bodyHash: verification.bodyHash },
+              { route: PORTAL_HYBRID_MODEL_CACHE_ROUTE, bodyHash: verification.bodyHash },
               redis,
             ),
           );
@@ -641,24 +656,33 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           let embedding: number[];
           event.model = 'called';
           try {
-            [rawRewrite, embedding] = await deadline.run(() =>
-              Promise.all([
-                runProviderStage('rewrite', () =>
-                  (options.rewriteQuery ?? rewritePortalHybridSearchQuery)(
-                    buildKernelConfig(hybridRequest.kind),
-                    hybridRequest.query,
-                    operationSignal,
-                    providerConfig,
-                  ),
+            rawRewrite = await deadline.run(() =>
+              runProviderStage('rewrite', () =>
+                (options.rewriteQuery ?? rewritePortalHybridSearchQuery)(
+                  buildKernelConfig(hybridRequest.kind),
+                  hybridRequest.query,
+                  operationSignal,
+                  providerConfig,
                 ),
-                runProviderStage('embedding', () =>
-                  (options.generateEmbedding ?? generatePortalHybridSearchEmbedding)(
-                    hybridRequest.query,
-                    operationSignal,
-                    providerConfig,
-                  ),
+              ),
+            );
+            if (!isHybridSearchQuery(rawRewrite) || !rawRewrite.semantic_query_en.trim()) {
+              event.rewriteOutcome = 'failed';
+              throw new PortalHybridRepositoryError('contract_failure');
+            }
+            const semanticQuery = sanitizeHybridQueryOutput(rawRewrite, '').semantic_query_en;
+            if (!portalHybridQuerySchema.safeParse(semanticQuery).success) {
+              event.rewriteOutcome = 'failed';
+              throw new PortalHybridRepositoryError('contract_failure');
+            }
+            embedding = await deadline.run(() =>
+              runProviderStage('embedding', () =>
+                (options.generateEmbedding ?? generatePortalHybridSearchEmbedding)(
+                  semanticQuery,
+                  operationSignal,
+                  providerConfig,
                 ),
-              ]),
+              ),
             );
           } catch (error) {
             event.model = deadline.signal.aborted ? 'aborted' : 'failed';
@@ -669,28 +693,15 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
             return await responseAfterCircuitFailure(
               isPortalHybridDeadlineError(error) || deadline.isExpired()
                 ? timeoutResponse()
-                : code === 'EMBEDDING_VECTOR_MISSING' || code === 'EMBEDDING_DIMENSION_MISMATCH'
+                : code === 'contract_failure' ||
+                    code === 'EMBEDDING_VECTOR_MISSING' ||
+                    code === 'EMBEDDING_DIMENSION_MISMATCH'
                   ? errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable')
                   : errorResponse(
                       503,
                       'hybrid_upstream_unavailable',
                       'Portal Hybrid search unavailable',
                     ),
-            );
-          }
-
-          if (!isHybridSearchQuery(rawRewrite)) {
-            event.model = 'failed';
-            return await responseAfterCircuitFailure(
-              errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable'),
-            );
-          }
-
-          const modelOnly = sanitizeHybridQueryOutput(rawRewrite, '');
-          if (!modelOnly.semantic_query_en) {
-            event.model = 'failed';
-            return await responseAfterCircuitFailure(
-              errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable'),
             );
           }
 
@@ -720,7 +731,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
             .run(() =>
               writePortalResponseCache(
                 {
-                  route: PORTAL_HYBRID_FUNCTION_NAME,
+                  route: PORTAL_HYBRID_MODEL_CACHE_ROUTE,
                   bodyHash: verification.bodyHash,
                   value: JSON.stringify(modelCache),
                   ttlSeconds: guardLimits.cacheTtlSeconds,

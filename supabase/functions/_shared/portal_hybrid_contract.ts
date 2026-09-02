@@ -331,7 +331,7 @@ export type PortalHybridSearchPage = z.infer<typeof portalHybridSearchPageSchema
 
 export const portalHybridModelCacheSchema = z
   .object({
-    schemaVersion: z.literal('portal.hybrid-model-cache.v1'),
+    schemaVersion: z.literal('portal.hybrid-model-cache.v2'),
     interpretation: portalHybridInterpretationSchema,
     queryTerms: z
       .array(interpretationTextSchema)
