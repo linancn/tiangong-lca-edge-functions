@@ -2,8 +2,47 @@ import { assertEquals } from 'jsr:@std/assert';
 
 import {
   buildHybridFulltextQueryTerms,
+  buildBoundedHybridFulltextQueryTerms,
   sanitizeHybridQueryOutput,
 } from '../supabase/functions/_shared/hybrid_query_utils.ts';
+
+Deno.test('bounded Hybrid terms reserve the original language and balance expanded aliases', () => {
+  const query = {
+    semantic_query_en: 'copper',
+    fulltext_query_en: Array.from({ length: 6 }, (_, i) => 'english-' + i + ' or alias-' + i),
+    fulltext_query_zh: Array.from({ length: 6 }, (_, i) => '中文' + i + ' or 别名' + i),
+  };
+  const terms = buildBoundedHybridFulltextQueryTerms(query, 'производство меди');
+  assertEquals(terms.length, 12);
+  assertEquals(terms[0], 'производство меди');
+  assertEquals(terms.filter((term) => /^(english|alias)-/.test(term)).length, 6);
+  assertEquals(terms.filter((term) => /^(中文|别名)/.test(term)).length, 5);
+});
+
+Deno.test('bounded Hybrid terms deduplicate case but keep useful whitespace variants', () => {
+  assertEquals(
+    buildBoundedHybridFulltextQueryTerms(
+      {
+        semantic_query_en: 'copper production',
+        fulltext_query_en: ['COPPER', 'copper production'],
+        fulltext_query_zh: ['铜'],
+      },
+      'copper',
+    ),
+    ['copper', '铜', 'copper production'],
+  );
+  assertEquals(
+    buildBoundedHybridFulltextQueryTerms(
+      {
+        semantic_query_en: 'copper production',
+        fulltext_query_en: ['copper production'],
+        fulltext_query_zh: [],
+      },
+      'copper  production',
+    ),
+    ['copper  production', 'copper production'],
+  );
+});
 
 Deno.test('sanitizeHybridQueryOutput preserves raw English query as fulltext fallback', () => {
   const sanitized = sanitizeHybridQueryOutput(

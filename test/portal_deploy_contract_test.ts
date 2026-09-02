@@ -131,6 +131,7 @@ Deno.test(
       );
     }
     assertStringIncludes(source, '/rest/v1/rpc/portal_hybrid_search_v1');
+    assertStringIncludes(source, '/rest/v1/rpc/portal_hybrid_search_v2');
     assertStringIncludes(source, "'Content-Profile': 'api'");
     assertStringIncludes(source, 'readPortalPublishableCredential');
     assertStringIncludes(source, 'verifyPortalHmacRequest');

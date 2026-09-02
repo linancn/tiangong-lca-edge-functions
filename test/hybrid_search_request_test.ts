@@ -1,5 +1,18 @@
 import { assertEquals, assertInstanceOf, assertThrows } from 'jsr:@std/assert';
 
+Deno.test('matched-version requests use an explicit 200-candidate opt-in', () => {
+  const parsed = parseHybridSearchClientRequest({ query: 'steel', version_scope: 'matched' });
+  assertEquals(parsed.versionScope, 'matched');
+  assertEquals(parsed.rpcOptions.match_count, 200);
+  assertEquals(parseHybridSearchClientRequest({ query: 'steel' }).versionScope, 'latest');
+  for (const request of [
+    { query: 'steel', version_scope: 'all' },
+    { query: 'steel', version_scope: 'matched', match_count: 5000 },
+    { query: 'steel', version_scope: 'matched', match_count: 20 },
+  ])
+    assertThrows(() => parseHybridSearchClientRequest(request), HybridSearchRequestError);
+});
+
 import {
   buildHybridSearchRpcRequest,
   HybridSearchRequestError,

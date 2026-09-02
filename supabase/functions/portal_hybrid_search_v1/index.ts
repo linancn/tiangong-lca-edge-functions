@@ -3,18 +3,18 @@ import '@supabase/functions-js/edge-runtime.d.ts';
 import { extractEmbeddingVector } from '../_shared/embedding_vector.ts';
 import {
   buildHybridFulltextQueryTerms,
-  sanitizeHybridQueryOutput,
+  buildBoundedHybridFulltextQueryTerms,
   type HybridSearchQuery,
+  sanitizeHybridQueryOutput,
 } from '../_shared/hybrid_query_utils.ts';
 import {
+  type PortalHybridInterpretation,
+  type PortalHybridModelCache,
   portalHybridModelCacheSchema,
   portalHybridQuerySchema,
   portalHybridSearchPageSchema,
-  portalHybridSearchRequestSchema,
-  type PortalHybridInterpretation,
-  type PortalHybridModelCache,
-  type PortalHybridSearchPage,
   type PortalHybridSearchRequest,
+  portalHybridSearchRequestSchema,
 } from '../_shared/portal_hybrid_contract.ts';
 import {
   isPortalHybridDeadlineError,
@@ -23,30 +23,32 @@ import {
 } from '../_shared/portal_hybrid_deadline.ts';
 import {
   generatePortalHybridSearchEmbedding,
-  rewritePortalHybridSearchQuery,
   type PortalHybridKernelConfig,
   type PortalHybridKernelProviderConfig,
+  rewritePortalHybridSearchQuery,
 } from '../_shared/portal_hybrid_kernel.ts';
 import {
   defaultPortalHybridSecurityLogger,
   normalizePortalHybridErrorCode,
+  type PortalHybridErrorCode,
   portalHybridHmacOutcome,
+  type PortalHybridSecurityEvent,
+  type PortalHybridSecurityLogger,
   portalHybridTransportOutcome,
   resolvePortalCorrelationId,
   sanitizePortalHybridSecurityEvent,
   schedulePortalHybridSecurityEvent,
-  type PortalHybridErrorCode,
-  type PortalHybridSecurityEvent,
-  type PortalHybridSecurityLogger,
 } from '../_shared/portal_hybrid_security_event.ts';
 import {
   createPortalHybridRepository,
-  PortalHybridRepositoryError,
   PORTAL_HYBRID_MAX_RESPONSE_BYTES,
   type PortalHybridRepository,
+  PortalHybridRepositoryError,
 } from '../_shared/portal_hybrid_repository.ts';
 import { readPortalHybridProviderConfig } from '../_shared/portal_hybrid_provider.ts';
 import {
+  computePortalBodyHash,
+  encodeBase64Url,
   loadPortalHmacKeyring,
   PortalHmacError,
   type PortalHmacKeyring,
@@ -54,6 +56,9 @@ import {
 } from '../_shared/portal_hmac.ts';
 import {
   PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
+  type PortalGuardTiming,
+  type PortalHybridCircuitLimits,
+  type PortalRouteGuardLimits,
   readPortalHybridCircuitLimits,
   readPortalHybridGuardLimits,
   readPortalHybridTotalTimeoutMs,
@@ -62,9 +67,6 @@ import {
   recordPortalHybridCircuitSuccess,
   redisEvalAtomicHybridBegin,
   releasePortalConcurrencyLease,
-  type PortalGuardTiming,
-  type PortalHybridCircuitLimits,
-  type PortalRouteGuardLimits,
   validatePortalHybridGuardLimits,
   writePortalResponseCache,
 } from '../_shared/portal_redis_guard.ts';
@@ -201,7 +203,9 @@ function buildKernelConfig(kind: PortalHybridSearchRequest['kind']): PortalHybri
 }
 
 function isHybridSearchQuery(value: unknown): value is HybridSearchQuery {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false;
+  }
   const record = value as Record<string, unknown>;
   const keys = Object.keys(record).sort();
   return (
@@ -262,7 +266,9 @@ function buildModelCache(
     queryEmbedding: extractEmbeddingVector(embedding),
   };
   const parsed = portalHybridModelCacheSchema.safeParse(candidate);
-  if (!parsed.success) throw new PortalHybridRepositoryError('contract_failure');
+  if (!parsed.success) {
+    throw new PortalHybridRepositoryError('contract_failure');
+  }
   return parsed.data;
 }
 
@@ -278,18 +284,10 @@ function retrievalTermsFromModelCache(cache: PortalHybridModelCache, query: stri
   };
   // The model supplies en/zh aliases, but the user's authored query may use any
   // language. Always retain it for full-text recall without caching/logging it.
-  const seen = new Set<string>();
-  return [
-    query.trim(),
-    ...buildHybridFulltextQueryTerms(sanitizeHybridQueryOutput(normalizedModelQuery, query)),
-  ]
-    .filter((term) => {
-      const key = term.trim().toLowerCase();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, 12);
+  return buildBoundedHybridFulltextQueryTerms(
+    sanitizeHybridQueryOutput(normalizedModelQuery, query),
+    query,
+  );
 }
 
 async function responseErrorCode(response: Response): Promise<PortalHybridErrorCode | null> {
@@ -340,7 +338,9 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
     if (deadline.signal.aborted) {
       abortOperations();
     } else {
-      deadline.signal.addEventListener('abort', abortOperations, { once: true });
+      deadline.signal.addEventListener('abort', abortOperations, {
+        once: true,
+      });
     }
     const operationSignal = operationController.signal;
     const correlationId = resolvePortalCorrelationId(request.headers);
@@ -495,7 +495,9 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         repository =
           options.repository ??
           options.repositoryFactory?.(trustedPublishableKey) ??
-          createPortalHybridRepository({ publishableKey: trustedPublishableKey });
+          createPortalHybridRepository({
+            publishableKey: trustedPublishableKey,
+          });
       } catch (_error) {
         return errorResponse(
           503,
@@ -545,7 +547,11 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         try {
           await deadline.run(() =>
             recordPortalHybridCircuitFailure(
-              { route: PORTAL_HYBRID_FUNCTION_NAME, limits: circuitLimits, nowMillis: wallNow() },
+              {
+                route: PORTAL_HYBRID_FUNCTION_NAME,
+                limits: circuitLimits,
+                nowMillis: wallNow(),
+              },
               redis,
             ),
           );
@@ -614,14 +620,35 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         }
         const hybridRequest = parsedRequest.data;
         event.kind = hybridRequest.kind;
+        const versioned = hybridRequest.schemaVersion === 'portal.hybrid-search-request.v2';
+        // V2 continuation/filter/page changes reuse only the model inputs.
+        // Raw request signing/replay protection remains bound to the full body.
+        const modelCacheRoute = versioned
+          ? 'portal_hybrid_english_query_v3'
+          : PORTAL_HYBRID_MODEL_CACHE_ROUTE;
+        const modelCacheHash = versioned
+          ? encodeBase64Url(
+              await deadline.run(() =>
+                computePortalBodyHash(
+                  new TextEncoder().encode(
+                    JSON.stringify({
+                      kind: hybridRequest.kind,
+                      query: hybridRequest.query,
+                      model: providerConfig.openAi.model,
+                      modelEndpoint: providerConfig.openAi.baseUrl,
+                      embeddingEndpoint: providerConfig.sageMaker.endpointName,
+                      embeddingRegion: providerConfig.sageMaker.region,
+                    }),
+                  ),
+                ),
+              ),
+            )
+          : verification.bodyHash;
 
         let cached: string | null;
         try {
           cached = await deadline.run(() =>
-            readPortalResponseCache(
-              { route: PORTAL_HYBRID_MODEL_CACHE_ROUTE, bodyHash: verification.bodyHash },
-              redis,
-            ),
+            readPortalResponseCache({ route: modelCacheRoute, bodyHash: modelCacheHash }, redis),
           );
         } catch (error) {
           if (isPortalHybridDeadlineError(error)) return timeoutResponse();
@@ -651,6 +678,18 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           modelCache = parsedCache.data;
         } else {
           event.cache = 'miss';
+          if (
+            hybridRequest.schemaVersion === 'portal.hybrid-search-request.v2' &&
+            hybridRequest.cursor !== null
+          ) {
+            // A cursor is tied to the original rewrite/vector. Do not spend on
+            // a different rewrite or silently replace existing results after expiry.
+            return errorResponse(
+              400,
+              'invalid_request',
+              'Search continuation expired. Start a new search.',
+            );
+          }
           if (deadline.isExpired()) return timeoutResponse();
           let rawRewrite: unknown;
           let embedding: number[];
@@ -731,8 +770,8 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
             .run(() =>
               writePortalResponseCache(
                 {
-                  route: PORTAL_HYBRID_MODEL_CACHE_ROUTE,
-                  bodyHash: verification.bodyHash,
+                  route: modelCacheRoute,
+                  bodyHash: modelCacheHash,
                   value: JSON.stringify(modelCache),
                   ttlSeconds: guardLimits.cacheTtlSeconds,
                 },
@@ -765,8 +804,12 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
               databaseOperation,
               pendingModelCacheWrite,
             ]);
-            if (cacheWriteResult.status === 'rejected') throw cacheWriteResult.reason;
-            if (databaseResult.status === 'rejected') throw databaseResult.reason;
+            if (cacheWriteResult.status === 'rejected') {
+              throw cacheWriteResult.reason;
+            }
+            if (databaseResult.status === 'rejected') {
+              throw databaseResult.reason;
+            }
             databasePage = databaseResult.value;
           } else {
             databasePage = await databaseOperation;
@@ -790,15 +833,27 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           );
         }
 
-        const edgePage: PortalHybridSearchPage = {
-          schemaVersion: 'portal.hybrid-search-page.v1',
-          kind: databasePage.kind,
-          queryFingerprint: databasePage.queryFingerprint,
-          interpretation: modelCache.interpretation,
-          items: databasePage.items,
-        };
+        const edgePage =
+          databasePage.schemaVersion === 'portal.public-hybrid-candidate-page.v2'
+            ? {
+                ...databasePage,
+                schemaVersion: 'portal.hybrid-search-page.v2',
+                interpretation: modelCache.interpretation,
+              }
+            : {
+                schemaVersion: 'portal.hybrid-search-page.v1',
+                kind: databasePage.kind,
+                queryFingerprint: databasePage.queryFingerprint,
+                interpretation: modelCache.interpretation,
+                items: databasePage.items,
+              };
         const parsedPage = portalHybridSearchPageSchema.safeParse(edgePage);
-        if (!parsedPage.success || parsedPage.data.kind !== hybridRequest.kind) {
+        if (
+          !parsedPage.success ||
+          parsedPage.data.kind !== hybridRequest.kind ||
+          (parsedPage.data.schemaVersion === 'portal.hybrid-search-page.v2') !== versioned ||
+          parsedPage.data.items.length > hybridRequest.limit
+        ) {
           event.database = 'contract_failed';
           return await responseAfterCircuitFailure(
             errorResponse(503, 'contract_failure', 'Portal Hybrid contract unavailable'),
@@ -814,7 +869,12 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
 
         try {
           await deadline.run(() =>
-            recordPortalHybridCircuitSuccess({ route: PORTAL_HYBRID_FUNCTION_NAME }, redis),
+            recordPortalHybridCircuitSuccess(
+              {
+                route: PORTAL_HYBRID_FUNCTION_NAME,
+              },
+              redis,
+            ),
           );
         } catch (error) {
           if (isPortalHybridDeadlineError(error)) return timeoutResponse();

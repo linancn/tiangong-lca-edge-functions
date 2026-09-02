@@ -41,6 +41,259 @@ import {
 } from '../supabase/functions/portal_hybrid_search_v1/index.ts';
 
 const NOW_SECONDS = 1_800_000_000;
+
+function versionedDatabasePage(): Extract<
+  PortalPublicHybridCandidatePage,
+  {
+    schemaVersion: 'portal.public-hybrid-candidate-page.v2';
+  }
+> {
+  const legacy = databasePage();
+  const item = {
+    ...legacy.items[0],
+    match: { ...legacy.items[0].match, algorithmVersion: 'portal-hybrid-rank-v2' as const },
+  };
+  return {
+    schemaVersion: 'portal.public-hybrid-candidate-page.v2',
+    kind: legacy.kind,
+    queryFingerprint: legacy.queryFingerprint,
+    items: [item],
+    candidateCount: 2,
+    datasetCount: 1,
+    versionGroups: [
+      {
+        key: item.key,
+        matches: [
+          { key: item.key, match: item.match },
+          {
+            key: { ...item.key, version: '00.99.999' },
+            match: {
+              kind: 'hybrid',
+              algorithmVersion: 'portal-hybrid-rank-v2',
+              score: 0.1,
+              reasonCodes: ['lexical_public_projection'],
+              evidence: { lexicalRank: 2, semanticRank: null, semanticDistance: null },
+            },
+          },
+        ],
+      },
+    ],
+    nextCursor: null,
+  };
+}
+
+Deno.test(
+  'Portal V2 repository uses the additive API and refuses legacy or mixed contracts',
+  async () => {
+    let capturedUrl = '';
+    let capturedBody: Record<string, unknown> = {};
+    const request: PortalHybridSearchRequest = {
+      ...REQUEST,
+      schemaVersion: 'portal.hybrid-search-request.v2',
+      cursor: 'opaque_page_2',
+    };
+    const repository = createPortalHybridRepository({
+      supabaseUrl: 'https://example.supabase.co',
+      publishableKey: TRUSTED_PUBLISHABLE_KEY,
+      fetchImpl: (url, init) => {
+        capturedUrl = String(url);
+        const requestInit = init as RequestInit;
+        capturedBody = JSON.parse(String(requestInit?.body));
+        const headers = new Headers(requestInit?.headers);
+        assertEquals(headers.get('authorization'), null);
+        assertEquals(headers.get('apikey'), TRUSTED_PUBLISHABLE_KEY);
+        return Promise.resolve(Response.json(versionedDatabasePage()));
+      },
+    });
+    const page = await repository.query(request, ['steel'], VECTOR, new AbortController().signal);
+    assertEquals(page, versionedDatabasePage());
+    assertEquals(capturedUrl, 'https://example.supabase.co/rest/v1/rpc/portal_hybrid_search_v2');
+    assertEquals(capturedBody.p_cursor, 'opaque_page_2');
+    assertEquals(Object.keys(capturedBody).sort(), [
+      'p_cursor',
+      'p_filters',
+      'p_kind',
+      'p_limit',
+      'p_query_embedding',
+      'p_query_terms',
+    ]);
+    const oldRepository = createPortalHybridRepository({
+      supabaseUrl: 'https://example.supabase.co',
+      publishableKey: TRUSTED_PUBLISHABLE_KEY,
+      fetchImpl: () => Promise.resolve(Response.json(databasePage())),
+    });
+    await assertRejects(
+      () => oldRepository.query(request, ['steel'], VECTOR, new AbortController().signal),
+      PortalHybridRepositoryError,
+    );
+    await assertRejects(
+      () => repository.query(REQUEST, ['steel'], VECTOR, new AbortController().signal),
+      PortalHybridRepositoryError,
+    );
+  },
+);
+
+Deno.test(
+  'Portal V2 keeps English model work cached across continuation and filter changes',
+  async () => {
+    const redis = new FakePortalRedis();
+    const cachedByKey = new Map<string, string>();
+    redis.cacheGetOperation = (key) => Promise.resolve(cachedByKey.get(key) ?? null);
+    let rewriteCalls = 0;
+    let embeddingCalls = 0;
+    const requests: PortalHybridSearchRequest[] = [];
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query: (request) => {
+            requests.push(request);
+            return Promise.resolve(versionedDatabasePage());
+          },
+        },
+        {
+          rewriteQuery: async () => {
+            rewriteCalls += 1;
+            return REWRITE;
+          },
+          generateEmbedding: async (input: string) => {
+            assertEquals(input, REWRITE.semantic_query_en);
+            embeddingCalls += 1;
+            return VECTOR;
+          },
+        },
+      ),
+    );
+    const firstRequest = {
+      ...REQUEST,
+      schemaVersion: 'portal.hybrid-search-request.v2',
+      cursor: null,
+    };
+    const first = await handler(await signedRequest({ payload: firstRequest }));
+    assertEquals(first.status, 200);
+    const firstPage = await first.json();
+    assertEquals(firstPage.schemaVersion, 'portal.hybrid-search-page.v2');
+    assertEquals(firstPage.versionGroups[0].matches.length, 2);
+    assertEquals(redis.cacheWrites.length, 1);
+    cachedByKey.set(redis.cacheWriteKeys[0], redis.cacheWrites[0]);
+
+    const continued = await handler(
+      await signedRequest({
+        payload: { ...firstRequest, cursor: 'opaque_page_2' },
+      }),
+    );
+    assertEquals(continued.status, 200);
+    const filtered = await handler(
+      await signedRequest({
+        payload: { ...firstRequest, filters: { geography: 'fr' }, limit: 20 },
+      }),
+    );
+    assertEquals(filtered.status, 200);
+    assertEquals(rewriteCalls, 1);
+    assertEquals(embeddingCalls, 1);
+    assertEquals(requests.length, 3);
+    assertEquals(new Set(redis.cacheReadKeys).size, 1);
+    assertEquals(redis.cacheWriteKeys, [redis.cacheReadKeys[0]]);
+    assertEquals(JSON.stringify(redis.cacheWrites).includes(REQUEST.query), false);
+
+    const changed = await handler(
+      await signedRequest({
+        payload: { ...firstRequest, query: 'another private query', cursor: 'opaque_page_2' },
+      }),
+    );
+    assertEquals(changed.status, 400);
+    assertEquals(await responseCode(changed), 'invalid_request');
+    assertEquals(rewriteCalls, 1);
+    assertEquals(requests.length, 3);
+    assertEquals(new Set(redis.cacheReadKeys).size, 2);
+  },
+);
+
+Deno.test(
+  'Portal V2 expired continuation makes zero provider/DB calls and does not trip the circuit',
+  async () => {
+    const redis = new FakePortalRedis();
+    let calls = 0;
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query: () => {
+            calls += 1;
+            return Promise.resolve(versionedDatabasePage());
+          },
+        },
+        {
+          rewriteQuery: async () => {
+            calls += 1;
+            return REWRITE;
+          },
+          generateEmbedding: async () => {
+            calls += 1;
+            return VECTOR;
+          },
+        },
+      ),
+    );
+    const response = await handler(
+      await signedRequest({
+        payload: {
+          ...REQUEST,
+          schemaVersion: 'portal.hybrid-search-request.v2',
+          cursor: 'expired_cursor',
+        },
+      }),
+    );
+    assertEquals(response.status, 400);
+    assertEquals(await responseCode(response), 'invalid_request');
+    assertEquals(calls, 0);
+    assertEquals(redis.calls.includes('circuit_failure'), false);
+    await flushPortalHybridSecurityEvent();
+    assertEquals(redis.calls.includes('lease_release'), true);
+  },
+);
+
+Deno.test(
+  'Portal V2 still rejects guard failures and bad HMAC before cost or database work',
+  async () => {
+    for (const mode of ['hmac', 'budget', 'redis'] as const) {
+      const redis = new FakePortalRedis();
+      if (mode === 'budget') redis.guardStatus = 'budget_exhausted';
+      if (mode === 'redis') redis.admissionOutage = true;
+      let calls = 0;
+      const handler = createPortalHybridSearchHandler(
+        handlerOptions(
+          redis,
+          {
+            query: () => {
+              calls += 1;
+              return Promise.resolve(versionedDatabasePage());
+            },
+          },
+          {
+            rewriteQuery: async () => {
+              calls += 1;
+              return REWRITE;
+            },
+            generateEmbedding: async () => {
+              calls += 1;
+              return VECTOR;
+            },
+          },
+        ),
+      );
+      const response = await handler(
+        await signedRequest({
+          payload: { ...REQUEST, schemaVersion: 'portal.hybrid-search-request.v2', cursor: null },
+          badSignature: mode === 'hmac',
+        }),
+      );
+      assertEquals(response.status, mode === 'hmac' ? 401 : mode === 'budget' ? 429 : 503);
+      assertEquals(calls, 0);
+      assertEquals(redis.cacheReadKeys, []);
+    }
+  },
+);
 const SECRET = Uint8Array.from({ length: 32 }, (_value, index) => index + 17);
 const KEYRING: PortalHmacKeyring = {
   current: { keyId: 'portal-hybrid-current', secret: SECRET },
