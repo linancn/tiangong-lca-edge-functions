@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-02
-lastReviewedCommit: f1fe0430812689298a040de04e9c8084c1b70c74
-lastReviewedNote: 'Reviewed for Edge #376 after the OAuth-only cutover: proof gates the bounded 25-second Hybrid deadline, 35-second lease, code-first rollout, semantic completion, and unchanged Portal/auth/privacy contracts.'
+lastReviewedCommit: bfc3b31cbdaedc98626f7a19f583c5d49b1866a2
+lastReviewedNote: 'Reviewed for Edge #396: proof covers all three dataset write paths, exact pair forwarding, version-only rejection, legacy omission, and unchanged OAuth/auth/provider contracts.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

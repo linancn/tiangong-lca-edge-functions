@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-02
-lastReviewedCommit: f1fe0430812689298a040de04e9c8084c1b70c74
-lastReviewedNote: 'Reviewed for Edge #376 after the OAuth-only cutover: Portal Hybrid uses a bounded 25-second correctness-first deadline and isolated 35-second lease while every non-Portal auth/runtime change remains intact.'
+lastReviewedCommit: bfc3b31cbdaedc98626f7a19f583c5d49b1866a2
+lastReviewedNote: 'Reviewed for Edge #396: dataset commands accept and forward an optional exact modelId/modelVersion pair, reject version-only input, and preserve existing auth, provider, and branch boundaries.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
