@@ -1,5 +1,6 @@
 import { assertEquals, assertFalse } from 'jsr:@std/assert';
 import type { SupabaseClient } from 'jsr:@supabase/supabase-js@2.112.4';
+import { authenticateRequest, AuthMethod } from '../supabase/functions/_shared/auth.ts';
 
 import {
   createHybridSearchHandler,
@@ -16,6 +17,312 @@ const CONTACT_CONFIG: HybridSearchRouteConfig = {
 };
 
 const VECTOR = Array.from({ length: 1024 }, () => 0.001);
+
+const VERSIONED_CONFIG: HybridSearchRouteConfig = {
+  functionName: 'process_hybrid_search',
+  entityKind: 'process',
+  entityLabel: 'Process',
+  entityPlural: 'processes',
+  rpcName: 'hybrid_search_processes',
+  versionedRpcName: 'hybrid_search_process_versions_v1',
+};
+const VERSION_ID = '11111111-1111-4111-8111-111111111111';
+const VERIFIED_JWT_AUTH = {
+  isAuthenticated: true,
+  principal: {
+    userId: VERSION_ID,
+    authMethod: 'supabase_jwt',
+    assurance: 'claims',
+  },
+} as const;
+
+Deno.test(
+  'matched mode rejects a service-key success with an unverified JWT-shaped bearer',
+  async () => {
+    const calls: string[] = [];
+    const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
+      authenticate: async (request) => {
+        const result = await authenticateRequest(request, {
+          serviceApiKey: 'hybrid-test-service-key',
+          allowedMethods: [AuthMethod.JWT, AuthMethod.SERVICE_API_KEY],
+          authClient: {
+            auth: {
+              getClaims: () => Promise.resolve({ data: null, error: { message: 'JWT rejected' } }),
+            },
+          } as unknown as SupabaseClient,
+        });
+        assertEquals(result.principal?.authMethod, 'service_api_key');
+        return result;
+      },
+      createRpcClient: () => {
+        calls.push('client');
+        return {
+          client: {} as SupabaseClient,
+          userContextKind: 'jwt',
+          bearerToken: 'forged.jwt.signature',
+        };
+      },
+      rewriteQuery: async () => {
+        calls.push('rewrite');
+        return { semantic_query_en: 'copper', fulltext_query_en: [], fulltext_query_zh: [] };
+      },
+      generateEmbedding: async () => {
+        calls.push('embedding');
+        return VECTOR;
+      },
+    });
+    const response = await handler(
+      new Request('http://localhost/search', {
+        method: 'POST',
+        headers: {
+          apikey: 'hybrid-test-service-key',
+          Authorization: 'Bearer forged.jwt.signature',
+        },
+        body: JSON.stringify({ query: 'copper', version_scope: 'matched' }),
+      }),
+    );
+    assertEquals(response.status, 403);
+    assertEquals((await response.json()).code, 'HYBRID_SEARCH_USER_CONTEXT_REQUIRED');
+    assertEquals(calls, []);
+  },
+);
+
+Deno.test(
+  'matched mode fails closed when authentication supplies no verified principal',
+  async () => {
+    const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
+      authenticate: async () => ({ isAuthenticated: true }),
+      createRpcClient: () => {
+        throw new Error('must reject before creating a client');
+      },
+    });
+    const response = await handler(
+      new Request('http://localhost/search', {
+        method: 'POST',
+        body: JSON.stringify({ query: 'copper', version_scope: 'matched' }),
+      }),
+    );
+    assertEquals(response.status, 403);
+  },
+);
+
+Deno.test(
+  'matched-version mode rejects service context before any paid or database work',
+  async () => {
+    let calls = 0;
+    const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
+      authenticate: async () => VERIFIED_JWT_AUTH,
+      createRpcClient: () => ({
+        client: {} as SupabaseClient,
+        userContextKind: 'service',
+      }),
+      rewriteQuery: async () => {
+        calls += 1;
+        return { semantic_query_en: 'copper', fulltext_query_en: [], fulltext_query_zh: [] };
+      },
+    });
+    const response = await handler(
+      new Request('http://localhost/search', {
+        method: 'POST',
+        body: JSON.stringify({ query: 'copper', version_scope: 'matched' }),
+      }),
+    );
+    assertEquals(response.status, 403);
+    assertEquals(calls, 0);
+  },
+);
+
+Deno.test(
+  'matched-version Hybrid keeps English embedding, original-language terms and exact result versions',
+  async () => {
+    const calls: string[] = [];
+    const rows = [
+      { id: VERSION_ID, version: '01.00.000' },
+      { id: VERSION_ID, version: '01.00.001' },
+    ];
+    let resolveRewrite!: (value: {
+      semantic_query_en: string;
+      fulltext_query_en: string[];
+      fulltext_query_zh: string[];
+    }) => void;
+    const rewriting = new Promise<{
+      semantic_query_en: string;
+      fulltext_query_en: string[];
+      fulltext_query_zh: string[];
+    }>((resolve) => {
+      resolveRewrite = resolve;
+    });
+    const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
+      authenticate: async () => VERIFIED_JWT_AUTH,
+      rewriteQuery: () => {
+        calls.push('rewrite');
+        return rewriting;
+      },
+      generateEmbedding: async (text) => {
+        assertEquals(text, 'copper production');
+        calls.push('embedding');
+        return VECTOR;
+      },
+      createRpcClient: (authorization, scope) => {
+        assertEquals(authorization, 'Bearer actor.jwt.signature');
+        assertEquals(scope, 'my');
+        return {
+          client: {
+            rpc: (name: string, body: Record<string, unknown>) => {
+              calls.push('rpc');
+              assertEquals(name, 'hybrid_search_process_versions_v1');
+              assertEquals(body.match_count, 200);
+              assertEquals((body.query_terms as string[])[0], 'производство меди');
+              assertEquals(Object.hasOwn(body, 'state_code_filter'), false);
+              assertEquals(Object.hasOwn(body, 'team_id_filter'), false);
+              return Promise.resolve({ data: rows, error: null });
+            },
+          } as unknown as SupabaseClient,
+          userContextKind: 'jwt',
+          bearerToken: 'actor.jwt.signature',
+        };
+      },
+      logger: { log: () => undefined, error: () => undefined },
+    });
+    const responsePromise = handler(
+      new Request('http://localhost/process_hybrid_search', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer actor.jwt.signature',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: 'производство меди',
+          data_source: 'my',
+          version_scope: 'matched',
+        }),
+      }),
+    );
+    for (let attempt = 0; attempt < 20 && calls.length === 0; attempt++)
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    assertEquals(calls, ['rewrite']);
+    resolveRewrite({
+      semantic_query_en: 'copper production',
+      fulltext_query_en: ['copper'],
+      fulltext_query_zh: ['铜'],
+    });
+    const response = await responsePromise;
+    assertEquals(response.status, 200);
+    assertEquals(await response.json(), { data: rows, versionScope: 'matched' });
+    assertEquals(calls, ['rewrite', 'embedding', 'rpc']);
+  },
+);
+
+Deno.test(
+  'matched-version empty fallback stays on the additive API and acknowledges empty results',
+  async () => {
+    const names: string[] = [];
+    const bodies: Array<Record<string, unknown>> = [];
+    const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
+      authenticate: async () => VERIFIED_JWT_AUTH,
+      rewriteQuery: async () => ({
+        semantic_query_en: 'copper',
+        fulltext_query_en: ['copper'],
+        fulltext_query_zh: [],
+      }),
+      generateEmbedding: async () => VECTOR,
+      createRpcClient: () => ({
+        client: {
+          rpc: (name: string, body: Record<string, unknown>) => {
+            names.push(name);
+            bodies.push(body);
+            return Promise.resolve({ data: [], error: null });
+          },
+        } as unknown as SupabaseClient,
+        userContextKind: 'jwt',
+        bearerToken: 'actor.jwt.signature',
+      }),
+      logger: { log: () => undefined, error: () => undefined },
+    });
+    const response = await handler(
+      new Request('http://localhost/process_hybrid_search', {
+        method: 'POST',
+        body: JSON.stringify({ query: 'copper', version_scope: 'matched' }),
+      }),
+    );
+    assertEquals(response.status, 200);
+    assertEquals(await response.json(), { data: [], versionScope: 'matched' });
+    assertEquals(names, ['hybrid_search_process_versions_v1', 'hybrid_search_process_versions_v1']);
+    assertEquals(
+      bodies.map((body) => body.match_threshold),
+      [0.5, 0],
+    );
+    assertEquals(
+      bodies.map((body) => body.match_count),
+      [200, 200],
+    );
+  },
+);
+
+Deno.test(
+  'matched-version mode rejects unsupported routes and bounds before model calls',
+  async () => {
+    for (const [config, extra] of [
+      [CONTACT_CONFIG, {}],
+      [VERSIONED_CONFIG, { page_size: 101 }],
+      [VERSIONED_CONFIG, { match_count: 5000 }],
+    ] as const) {
+      let calls = 0;
+      const handler = createHybridSearchHandler(config, {
+        authenticate: async () => ({ isAuthenticated: true }),
+        rewriteQuery: async () => {
+          calls++;
+          return { semantic_query_en: 'copper', fulltext_query_en: [], fulltext_query_zh: [] };
+        },
+      });
+      const response = await handler(
+        new Request('http://localhost/search', {
+          method: 'POST',
+          body: JSON.stringify({ query: 'copper', version_scope: 'matched', ...extra }),
+        }),
+      );
+      assertEquals(response.status, 400);
+      assertEquals(calls, 0);
+    }
+  },
+);
+
+Deno.test(
+  'matched-version mode refuses id-only rows and never embeds a missing English rewrite',
+  async () => {
+    for (const missingEnglish of [false, true]) {
+      let embeddingCalls = 0;
+      const handler = createHybridSearchHandler(VERSIONED_CONFIG, {
+        authenticate: async () => VERIFIED_JWT_AUTH,
+        rewriteQuery: async () => ({
+          semantic_query_en: missingEnglish ? '' : 'copper',
+          fulltext_query_en: ['copper'],
+          fulltext_query_zh: [],
+        }),
+        generateEmbedding: async () => {
+          embeddingCalls++;
+          return VECTOR;
+        },
+        createRpcClient: () => ({
+          client: {
+            rpc: () => Promise.resolve({ data: [{ id: VERSION_ID }], error: null }),
+          } as unknown as SupabaseClient,
+          userContextKind: 'jwt',
+          bearerToken: 'actor.jwt.signature',
+        }),
+        logger: { log: () => undefined, error: () => undefined },
+      });
+      const response = await handler(
+        new Request('http://localhost/search', {
+          method: 'POST',
+          body: JSON.stringify({ query: '铜', version_scope: 'matched' }),
+        }),
+      );
+      assertEquals(response.status, 500);
+      assertEquals(embeddingCalls, missingEnglish ? 0 : 1);
+    }
+  },
+);
 
 Deno.test(
   'shared Hybrid handler calls the configured RPC and performs one empty-threshold fallback',

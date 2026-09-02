@@ -16,6 +16,145 @@ import {
 
 const PROCESS_ID = '11111111-1111-4111-8111-111111111111';
 
+function versionedCandidatePage() {
+  const original = candidatePage();
+  const item = {
+    ...original.items[0],
+    match: { ...original.items[0].match, algorithmVersion: 'portal-hybrid-rank-v2' },
+  };
+  return {
+    ...original,
+    schemaVersion: 'portal.public-hybrid-candidate-page.v2',
+    items: [item],
+    candidateCount: 2,
+    datasetCount: 1,
+    versionGroups: [
+      {
+        key: item.key,
+        matches: [
+          { key: item.key, match: item.match },
+          {
+            key: { ...item.key, version: '00.99.999' },
+            match: {
+              ...item.match,
+              score: 0.8,
+              reasonCodes: ['lexical_public_projection'],
+              evidence: { lexicalRank: 2, semanticRank: null, semanticDistance: null },
+            },
+          },
+        ],
+      },
+    ],
+    nextCursor: null,
+  };
+}
+
+Deno.test('Portal V2 requests explicitly opt into bounded opaque continuation only', () => {
+  const request = {
+    schemaVersion: 'portal.hybrid-search-request.v2',
+    kind: 'process',
+    query: 'steel',
+    filters: {},
+    limit: 10,
+    cursor: null,
+  };
+  assertEquals(portalHybridSearchRequestSchema.safeParse(request).success, true);
+  assertEquals(
+    portalHybridSearchRequestSchema.safeParse({ ...request, cursor: 'next_page_2' }).success,
+    true,
+  );
+  for (const cursor of ['', '?raw_query=steel', 'x'.repeat(4_097), 20, {}]) {
+    assertEquals(portalHybridSearchRequestSchema.safeParse({ ...request, cursor }).success, false);
+  }
+  for (const field of [
+    'state',
+    'state_code',
+    'actor',
+    'team',
+    'data_source',
+    'embedding',
+    'threshold',
+    'sort',
+  ]) {
+    assertEquals(
+      portalHybridSearchRequestSchema.safeParse({ ...request, [field]: 'override' }).success,
+      false,
+    );
+  }
+});
+
+Deno.test('Portal V2 groups preserve every exact version and rank by their best member', () => {
+  const page = versionedCandidatePage();
+  assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, true);
+  const mutations: Array<(value: typeof page) => void> = [
+    (value) => {
+      value.versionGroups = [];
+    },
+    (value) => {
+      value.candidateCount = 1;
+    },
+    (value) => {
+      value.datasetCount = 3;
+    },
+    (value) => {
+      value.versionGroups[0].key = { ...value.versionGroups[0].key, version: '99.99.999' };
+    },
+    (value) => {
+      value.versionGroups[0].matches[1].key.id = '22222222-2222-4222-8222-222222222222';
+    },
+    (value) => {
+      value.versionGroups[0].matches[1].key.version = '01.00.000';
+    },
+    (value) => {
+      value.versionGroups[0].matches[1].match.score = 1;
+    },
+    (value) => {
+      value.versionGroups[0].matches[1].match.evidence.lexicalRank = 201;
+    },
+    (value) => {
+      Object.assign(value.versionGroups[0].matches[1], { state_code: 20 });
+    },
+    (value) => {
+      value.versionGroups[0].matches[1].match.reasonCodes = ['semantic_public_projection'];
+    },
+  ];
+  for (const mutate of mutations) {
+    const value = structuredClone(page);
+    mutate(value);
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(value).success, false);
+  }
+});
+
+Deno.test(
+  'Portal V2 orders dataset representatives by their best score and deterministic id tie-break',
+  () => {
+    const page = versionedCandidatePage();
+    const second = structuredClone(page.items[0]);
+    second.key.id = '22222222-2222-4222-8222-222222222222';
+    second.match.score = 0.8;
+    page.items.push(second);
+    page.versionGroups.push({
+      key: second.key,
+      matches: [{ key: second.key, match: second.match }],
+    });
+    page.candidateCount = 3;
+    page.datasetCount = 2;
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, true);
+
+    second.match.score = page.items[0].match.score;
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, true);
+    page.items.reverse();
+    page.versionGroups.reverse();
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, false);
+
+    second.match.score = 1;
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, true);
+    page.items.reverse();
+    page.versionGroups.reverse();
+    assertEquals(portalPublicHybridCandidatePageSchema.safeParse(page).success, false);
+  },
+);
+
 function candidatePage() {
   return {
     schemaVersion: 'portal.public-hybrid-candidate-page.v1',
