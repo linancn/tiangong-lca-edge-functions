@@ -150,6 +150,7 @@ const createRequest = {
   id: '11111111-1111-4111-8111-111111111111',
   jsonOrdered: { foo: 'bar' },
   modelId: '33333333-3333-4333-8333-333333333333',
+  modelVersion: '01.01.021',
 };
 
 const createVersionRequest = {
@@ -158,6 +159,7 @@ const createVersionRequest = {
   sourceVersion: '01.00.000',
   jsonOrdered: { foo: 'bar' },
   modelId: '33333333-3333-4333-8333-333333333333',
+  modelVersion: '01.01.021',
   ruleVerification: false,
 };
 
@@ -245,6 +247,7 @@ Deno.test(
           p_source_version: createVersionRequest.sourceVersion,
           p_json_ordered: createVersionRequest.jsonOrdered,
           p_model_id: createVersionRequest.modelId,
+          p_model_version: createVersionRequest.modelVersion,
           p_rule_verification: false,
           p_audit: auditPayload,
         },

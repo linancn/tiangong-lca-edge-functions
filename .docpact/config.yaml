@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-02'
-lastReviewedCommit: 'f1fe0430812689298a040de04e9c8084c1b70c74'
-lastReviewedNote: 'Reviewed for Edge #376 after the OAuth-only cutover: Portal runtime, deploy, proof, documentation, and environment routes cover the bounded 25-second deadline and 35-second isolated lease change.'
+lastReviewedCommit: 'bfc3b31cbdaedc98626f7a19f583c5d49b1866a2'
+lastReviewedNote: 'Reviewed for Edge #396: command runtime, dataset policy, DB-RPC, tests, and documentation cover the additive exact Process modelId/modelVersion ownership contract and legacy omission path.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
