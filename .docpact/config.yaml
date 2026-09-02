@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-02'
-lastReviewedCommit: '8344bec678a074298b71178715d3a0d24aa85e38'
-lastReviewedNote: 'Reviewed for Edge #382: direct Supabase OAuth JWTs cross MCP into Edge for independent claims verification; the retired MCP Redis broker and User API-key exchange are absent while Portal/service identities remain separately owned.'
+lastReviewedCommit: 'f1fe0430812689298a040de04e9c8084c1b70c74'
+lastReviewedNote: 'Reviewed for Edge #376 after the OAuth-only cutover: Portal runtime, deploy, proof, documentation, and environment routes cover the bounded 25-second deadline and 35-second isolated lease change.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
