@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: "2026-09-02"
-lastReviewedCommit: "bfc3b31cbdaedc98626f7a19f583c5d49b1866a2"
+lastReviewedAt: '2026-09-02'
+lastReviewedCommit: 'bfc3b31cbdaedc98626f7a19f583c5d49b1866a2'
 lastReviewedNote: 'Reviewed for Edge #396: command runtime, dataset policy, DB-RPC, tests, and documentation cover the additive exact Process modelId/modelVersion ownership contract and legacy omission path.'
 
 # Keep deterministic governance facts here.
