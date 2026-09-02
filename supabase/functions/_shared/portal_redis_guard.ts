@@ -15,10 +15,11 @@ const NONCE_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 const BODY_HASH_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const MINIMUM_LEASE_TTL_SECONDS = 20;
 const DEFAULT_LEASE_TTL_SECONDS = 30;
+const DEFAULT_HYBRID_LEASE_TTL_SECONDS = 35;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 8_000;
 const PORTAL_LCIA_RESPONSE_CACHE_TTL_SECONDS = 60;
 const PORTAL_HYBRID_CACHE_TTL_SECONDS = 60;
-const PORTAL_HYBRID_TOTAL_TIMEOUT_MS = 6_000;
+const PORTAL_HYBRID_TOTAL_TIMEOUT_MS = 25_000;
 const DEFAULT_HYBRID_CIRCUIT_FAILURE_THRESHOLD = 5;
 const DEFAULT_HYBRID_CIRCUIT_WINDOW_SECONDS = 60;
 const DEFAULT_HYBRID_CIRCUIT_OPEN_SECONDS = 60;
@@ -92,6 +93,49 @@ export const PORTAL_HYBRID_CIRCUIT_SUCCESS_LUA = `
 return redis.call('DEL', KEYS[1])
 `;
 
+export const PORTAL_HYBRID_ATOMIC_BEGIN_LUA = `
+local now_ms = tonumber(ARGV[1])
+local lease_expires_ms = tonumber(ARGV[2])
+local lease_id = ARGV[3]
+local minute_limit = tonumber(ARGV[4])
+local daily_limit = tonumber(ARGV[5])
+local concurrency_limit = tonumber(ARGV[6])
+local minute_ttl = tonumber(ARGV[7])
+local daily_ttl = tonumber(ARGV[8])
+local lease_set_ttl = tonumber(ARGV[9])
+local cost = tonumber(ARGV[10])
+local replay_ttl = tonumber(ARGV[11])
+
+local nonce_registered = redis.call('SET', KEYS[1], '1', 'NX', 'EX', replay_ttl)
+if not nonce_registered then return {3, 0, 0, 0, 0, 0} end
+
+local recovered_lease_count = tonumber(redis.call('ZREMRANGEBYSCORE', KEYS[4], '-inf', now_ms))
+local concurrency = tonumber(redis.call('ZCARD', KEYS[4]))
+local minute_current = tonumber(redis.call('GET', KEYS[2]) or '0')
+local daily_current = tonumber(redis.call('GET', KEYS[3]) or '0')
+
+if minute_current + cost > minute_limit or daily_current + cost > daily_limit then
+  return {1, minute_limit - minute_current, daily_limit - daily_current, concurrency_limit - concurrency, recovered_lease_count, 0}
+end
+if concurrency >= concurrency_limit then
+  return {2, minute_limit - minute_current, daily_limit - daily_current, 0, recovered_lease_count, 0}
+end
+
+local minute_after = tonumber(redis.call('INCRBY', KEYS[2], cost))
+if minute_after == cost then redis.call('EXPIRE', KEYS[2], minute_ttl) end
+local daily_after = tonumber(redis.call('INCRBY', KEYS[3], cost))
+if daily_after == cost then redis.call('EXPIRE', KEYS[3], daily_ttl) end
+redis.call('ZADD', KEYS[4], lease_expires_ms, lease_id)
+redis.call('EXPIRE', KEYS[4], lease_set_ttl)
+
+local open_until_ms = tonumber(redis.call('GET', KEYS[5]) or '0')
+if open_until_ms > now_ms then
+  return {4, minute_limit - minute_after, daily_limit - daily_after, concurrency_limit - concurrency - 1, recovered_lease_count, open_until_ms}
+end
+if open_until_ms > 0 then redis.call('DEL', KEYS[5]) end
+return {0, minute_limit - minute_after, daily_limit - daily_after, concurrency_limit - concurrency - 1, recovered_lease_count, 0}
+`;
+
 export type PortalRouteGuardLimits = {
   minuteBudget: number;
   dailyBudget: number;
@@ -136,6 +180,18 @@ export type PortalGuardAdmission =
       remainingConcurrency: number;
       recoveredLeaseCount: number;
     };
+
+export type PortalHybridAtomicBegin =
+  | { status: 'replay_rejected'; recoveredLeaseCount: 0 }
+  | (Omit<PortalGuardAdmission, 'status'> & { status: 'budget_exhausted' })
+  | (Omit<PortalGuardAdmission, 'status'> & { status: 'concurrency_exhausted' })
+  | (Omit<Extract<PortalGuardAdmission, { status: 'admitted' }>, 'status'> & {
+      status: 'circuit_open';
+      retryAfterSeconds: number;
+    })
+  | (Omit<Extract<PortalGuardAdmission, { status: 'admitted' }>, 'status'> & {
+      status: 'admitted';
+    });
 
 function environmentValue(env: PortalRedisEnvironment, name: string): string | undefined {
   const value = env.get(name)?.trim();
@@ -237,7 +293,7 @@ export function readPortalHybridGuardLimits(
       leaseTtlSeconds: boundedEnvironmentInteger(
         env,
         'PORTAL_HYBRID_LEASE_TTL_SECONDS',
-        DEFAULT_LEASE_TTL_SECONDS,
+        DEFAULT_HYBRID_LEASE_TTL_SECONDS,
         MINIMUM_LEASE_TTL_SECONDS,
         300,
       ),
@@ -438,6 +494,118 @@ export async function redisEvalAtomicGuard(
   });
 }
 
+export async function redisEvalAtomicHybridBegin(
+  input: {
+    route: string;
+    keyId: string;
+    nonce: string;
+    limits: PortalRouteGuardLimits;
+    nowMillis?: number;
+    cost?: number;
+  },
+  adapter?: PortalRedisAdapter,
+): Promise<PortalHybridAtomicBegin> {
+  if (
+    !ROUTE_PATTERN.test(input.route) ||
+    !KEY_ID_PATTERN.test(input.keyId) ||
+    !NONCE_PATTERN.test(input.nonce)
+  ) {
+    throw new PortalRedisError();
+  }
+  const nowMillis = input.nowMillis ?? Date.now();
+  const cost = input.cost ?? 1;
+  const integerWithin = (value: number, minimum: number, maximum: number) =>
+    Number.isSafeInteger(value) && value >= minimum && value <= maximum;
+  if (
+    !Number.isSafeInteger(nowMillis) ||
+    nowMillis < 0 ||
+    !integerWithin(cost, 1, 1_000_000) ||
+    !integerWithin(input.limits.minuteBudget, 1, 1_000_000) ||
+    !integerWithin(input.limits.dailyBudget, 1, 100_000_000) ||
+    !integerWithin(input.limits.maxConcurrency, 1, 10_000) ||
+    !integerWithin(input.limits.leaseTtlSeconds, MINIMUM_LEASE_TTL_SECONDS, 300) ||
+    !integerWithin(input.limits.cacheTtlSeconds, 1, PORTAL_HYBRID_CACHE_TTL_SECONDS)
+  ) {
+    throw new PortalRedisError();
+  }
+
+  const leaseId = randomLeaseId();
+  const leaseExpiresMillis = nowMillis + input.limits.leaseTtlSeconds * 1000;
+  const minuteWindow = Math.floor(nowMillis / 60_000);
+  const dailyWindow = Math.floor(nowMillis / 86_400_000);
+
+  return await usePortalRedisAdapter(adapter, async (resolved) => {
+    const prefix = resolved.namespace;
+    const circuitKeys = portalHybridCircuitKeys(resolved, input.route);
+    const result = await resolved.eval(
+      PORTAL_HYBRID_ATOMIC_BEGIN_LUA,
+      [
+        `${prefix}:replay:${input.keyId}:${input.nonce}`,
+        `${prefix}:budget:${input.route}:minute:${minuteWindow}`,
+        `${prefix}:budget:${input.route}:daily:${dailyWindow}`,
+        `${prefix}:lease:${input.route}`,
+        circuitKeys.openUntil,
+      ],
+      [
+        String(nowMillis),
+        String(leaseExpiresMillis),
+        leaseId,
+        String(input.limits.minuteBudget),
+        String(input.limits.dailyBudget),
+        String(input.limits.maxConcurrency),
+        String(MINUTE_COUNTER_TTL_SECONDS),
+        String(DAILY_COUNTER_TTL_SECONDS),
+        String(input.limits.leaseTtlSeconds + 1),
+        String(cost),
+        String(REPLAY_TTL_SECONDS),
+      ],
+    );
+    if (!Array.isArray(result) || result.length !== 6) throw new PortalRedisError();
+    const values = result.map(finiteInteger);
+    if (values.some((value) => value === null)) throw new PortalRedisError();
+    const [
+      code,
+      remainingMinute,
+      remainingDaily,
+      remainingConcurrency,
+      recoveredLeaseCount,
+      openUntilMillis,
+    ] = values as number[];
+    if (recoveredLeaseCount < 0) throw new PortalRedisError();
+    const common = {
+      remainingMinute: Math.max(0, remainingMinute),
+      remainingDaily: Math.max(0, remainingDaily),
+      remainingConcurrency: Math.max(0, remainingConcurrency),
+      recoveredLeaseCount,
+    };
+    if (code === 3 && recoveredLeaseCount === 0 && openUntilMillis === 0) {
+      return { status: 'replay_rejected', recoveredLeaseCount: 0 };
+    }
+    if (code === 1 && openUntilMillis === 0) {
+      return { status: 'budget_exhausted', ...common };
+    }
+    if (code === 2 && openUntilMillis === 0) {
+      return { status: 'concurrency_exhausted', ...common };
+    }
+    if (code === 4 && openUntilMillis > nowMillis) {
+      return {
+        status: 'circuit_open',
+        leaseId,
+        retryAfterSeconds: Math.max(1, Math.ceil((openUntilMillis - nowMillis) / 1000)),
+        ...common,
+      };
+    }
+    if (code === 0 && openUntilMillis === 0) {
+      return {
+        status: 'admitted',
+        leaseId,
+        ...common,
+      };
+    }
+    throw new PortalRedisError();
+  });
+}
+
 export async function registerPortalNonce(
   input: { keyId: string; nonce: string },
   adapter?: PortalRedisAdapter,
@@ -607,6 +775,7 @@ export async function writePortalResponseCache(
 
 export {
   DEFAULT_HYBRID_CIRCUIT_FAILURE_THRESHOLD,
+  DEFAULT_HYBRID_LEASE_TTL_SECONDS,
   DEFAULT_HYBRID_CIRCUIT_OPEN_SECONDS,
   DEFAULT_HYBRID_CIRCUIT_WINDOW_SECONDS,
   DEFAULT_LEASE_TTL_SECONDS,

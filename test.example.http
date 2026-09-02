@@ -9,26 +9,26 @@
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/flow_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'x-region: {{$dotenv X_REGION}}' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{"query": "氯氰菊酯", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Flow_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{"query": "氯氰菊酯", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Flow_Hybrid_Search：Local（长文本错误示例）
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
   --data @payload_error.json
 
 ### @name Flow_Hybrid_Search：Local（长文本正确示例）
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
   --data @payload_correct.json
 
 ### @name Process_Hybrid_Search：Remote
@@ -36,13 +36,13 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flow_hybrid_search
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/process_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'x-region: {{$dotenv X_REGION}}' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{"query": "硅酸盐水泥", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Process_Hybrid_Search：Local
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_hybrid_search' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{"query": "硅酸盐水泥", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name lifecyclemodel_Hybrid_Search：Remote
@@ -50,42 +50,42 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/process_hybrid_sea
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/lifecyclemodel_hybrid_search' \
     --header 'Content-Type: application/json' \
     --header 'x-region: {{$dotenv X_REGION}}' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{"query": "烧结砖", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name lifecyclemodel_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lifecyclemodel_hybrid_search' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{"query": "烧结砖", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Contact_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/contact_hybrid_search' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{"query": "aluminium association", "data_source": "tg", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name FlowProperty_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/flowproperty_hybrid_search' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{"query": "net calorific value", "data_source": "tg", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Source_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/source_hybrid_search' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{"query": "IPCC inventory guidelines", "data_source": "tg", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name UnitGroup_Hybrid_Search：Local
 
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/unitgroup_hybrid_search' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{"query": "units of mass", "data_source": "tg", "lexical_weight": 0.5, "semantic_weight": 0.5}'
 
 ### @name Dataset_Verify_Remote：Local
@@ -187,7 +187,7 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/app_worker_jobs' \
 ### @name AI_Suggest：Remote
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/ai_suggest' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{
   "tidasData": {
     "processDataSet": {
@@ -260,10 +260,10 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
       "print_level": 0
     }'
 
-### @name LCA_Solve：Local (USER_API_KEY)
+### @name LCA_Solve：Local (USER_JWT)
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_solve' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --header 'X-Idempotency-Key: local-debug-api-key-001' \
     --data '{
       "scope": "prod",
@@ -356,10 +356,10 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/lca_results' \
 ============================================================
 TIDAS Package Import
 ============================================================
-### @name TIDAS_Import_Prepare_Upload：Local (USER_API_KEY)
+### @name TIDAS_Import_Prepare_Upload：Local (USER_JWT)
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/import_tidas_package' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --header 'X-Idempotency-Key: tidas-import-local-prepare-001' \
     --data '{
       "action": "prepare_upload",
@@ -368,10 +368,10 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/import_tidas_packa
       "content_type": "application/zip"
     }'
 
-### @name TIDAS_Import_Prepare_Upload：Remote (USER_API_KEY)
+### @name TIDAS_Import_Prepare_Upload：Remote (USER_JWT)
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/import_tidas_package' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --header 'X-Idempotency-Key: tidas-import-remote-prepare-001' \
     --data '{
       "action": "prepare_upload",
@@ -392,10 +392,10 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/import_tidas_packa
       "content_type": "application/zip"
     }'
 
-### @name TIDAS_Import_Enqueue：Local (USER_API_KEY)
+### @name TIDAS_Import_Enqueue：Local (USER_JWT)
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/import_tidas_package' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{
       "action": "enqueue",
       "job_id": "{{$dotenv TIDAS_IMPORT_JOB_ID}}",
@@ -406,10 +406,10 @@ curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/import_tidas_packa
       "content_type": "application/zip"
     }'
 
-### @name TIDAS_Import_Enqueue：Remote (USER_API_KEY)
+### @name TIDAS_Import_Enqueue：Remote (USER_JWT)
 curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/import_tidas_package' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{
       "action": "enqueue",
       "job_id": "{{$dotenv TIDAS_IMPORT_JOB_ID}}",
@@ -420,18 +420,18 @@ curl -i --location --request POST '{{$dotenv REMOTE_ENDPOINT}}/import_tidas_pack
       "content_type": "application/zip"
     }'
 
-### @name TIDAS_Package_Job_Status：Local (path param, USER_API_KEY)
+### @name TIDAS_Package_Job_Status：Local (path param, USER_JWT)
 curl -i --location --request GET '{{$dotenv LOCAL_ENDPOINT}}/tidas_package_jobs/{{$dotenv TIDAS_IMPORT_JOB_ID}}' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}'
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}'
 
-### @name TIDAS_Package_Job_Status：Remote (query param, USER_API_KEY)
+### @name TIDAS_Package_Job_Status：Remote (query param, USER_JWT)
 curl -i --location --request GET '{{$dotenv REMOTE_ENDPOINT}}/tidas_package_jobs?job_id={{$dotenv TIDAS_IMPORT_JOB_ID}}' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}'
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}'
 
-### @name TIDAS_Package_Job_Status：Local (POST body, USER_API_KEY)
+### @name TIDAS_Package_Job_Status：Local (POST body, USER_JWT)
 curl -i --location --request POST '{{$dotenv LOCAL_ENDPOINT}}/tidas_package_jobs' \
     --header 'Content-Type: application/json' \
-    --header 'Authorization: Bearer {{$dotenv USER_API_KEY}}' \
+    --header 'Authorization: Bearer {{$dotenv USER_JWT}}' \
     --data '{
       "job_id": "{{$dotenv TIDAS_IMPORT_JOB_ID}}"
     }'

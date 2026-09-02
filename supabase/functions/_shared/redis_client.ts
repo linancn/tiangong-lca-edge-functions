@@ -1,16 +1,7 @@
 import { Redis as UpstashRedis } from 'https://esm.sh/@upstash/redis@1.38.3';
 import { connect, type Redis as DenoRedis } from 'jsr:@db/redis@0.41.2';
 
-/**
- * Support Upstash and Standard Redis Client
- * Upstash is used in TianGong LCA Web App(Cloud)
- * Standard Redis Client is used in TianGong LCA Web App(Local)
- * Set the REDIS_CLIENT_TYPE environment variable to 'upstash' or 'standard' to use the corresponding client
- * If REDIS_CLIENT_TYPE is not set, the default is 'upstash'
- */
-type RedisClientTypeOption = 'upstash' | 'standard';
-type StandardRedisClient = DenoRedis;
-type RedisClient = UpstashRedis | StandardRedisClient;
+type RedisClient = UpstashRedis | DenoRedis;
 
 export type PortalRedisProvider = 'upstash' | 'standard';
 
@@ -222,90 +213,7 @@ export async function createPortalRedisAdapter(
   }
 }
 
-function getRedisClientType(): RedisClientTypeOption {
-  const clientType = Deno.env.get('REDIS_CLIENT_TYPE');
-  return clientType === 'standard' ? 'standard' : 'upstash';
-}
-
-function getUpstashClient(): UpstashRedis {
-  console.log('Getting Upstash Client');
-  return new UpstashRedis({
-    url: Deno.env.get('UPSTASH_REDIS_REST_URL') ?? '',
-    token: Deno.env.get('UPSTASH_REDIS_REST_TOKEN') ?? '',
-  });
-}
-
-async function getStandardClient(): Promise<StandardRedisClient> {
-  console.log('Getting Standard Redis Client');
-  const redisUrl = Deno.env.get('REDIS_URL') ?? 'redis://127.0.0.1:6379';
-  const url = new URL(redisUrl);
-  const client = await connect({
-    hostname: url.hostname,
-    port: url.port ? Number(url.port) : 6379,
-    password: Deno.env.get('REDIS_PASSWORD') ?? (url.password || undefined),
-    tls: url.protocol === 'rediss:',
-  });
-
-  return client;
-}
-
-async function getRedisClient(): Promise<RedisClient> {
-  const clientType = getRedisClientType();
-
-  if (clientType === 'upstash') {
-    return getUpstashClient();
-  } else {
-    return await getStandardClient();
-  }
-}
-
 // Type guard to check if client is Upstash
 function isUpstashClient(client: RedisClient): client is UpstashRedis {
   return 'get' in client && typeof client.get === 'function' && !('sendCommand' in client);
 }
-
-// Helper function for type-safe get operation
-async function redisGet<T = unknown>(client: RedisClient, key: string): Promise<T | null> {
-  if (isUpstashClient(client)) {
-    const value = await client.get<T>(key);
-    return value as T | null;
-  } else {
-    const value = await client.get(key);
-    return value as T | null;
-  }
-}
-
-// Helper function for type-safe set operation
-async function redisSet(
-  client: RedisClient,
-  key: string,
-  value: unknown,
-  options?: { ex?: number },
-): Promise<void> {
-  if (isUpstashClient(client)) {
-    if (options?.ex) {
-      await client.set(key, value, { ex: options.ex });
-    } else {
-      await client.set(key, value);
-    }
-  } else {
-    if (options?.ex) {
-      await client.set(key, String(value), { ex: options.ex });
-    } else {
-      await client.set(key, String(value));
-    }
-  }
-}
-
-export {
-  getRedisClient,
-  getRedisClientType,
-  getStandardClient,
-  getUpstashClient,
-  isUpstashClient,
-  type RedisClient,
-  redisGet,
-  redisSet,
-  type StandardRedisClient,
-  type UpstashRedis,
-};

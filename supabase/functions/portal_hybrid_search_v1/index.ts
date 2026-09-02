@@ -52,7 +52,6 @@ import {
   verifyPortalHmacRequest,
 } from '../_shared/portal_hmac.ts';
 import {
-  checkPortalHybridCircuit,
   PORTAL_HYBRID_TOTAL_TIMEOUT_MS,
   readPortalHybridCircuitLimits,
   readPortalHybridGuardLimits,
@@ -60,8 +59,7 @@ import {
   readPortalResponseCache,
   recordPortalHybridCircuitFailure,
   recordPortalHybridCircuitSuccess,
-  redisEvalAtomicGuard,
-  registerPortalNonce,
+  redisEvalAtomicHybridBegin,
   releasePortalConcurrencyLease,
   type PortalGuardTiming,
   type PortalHybridCircuitLimits,
@@ -527,6 +525,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
       }
 
       let leaseId: string | undefined;
+      let pendingModelCacheWrite: Promise<void> | null = null;
       const recordFailure = async (): Promise<boolean> => {
         try {
           await deadline.run(() =>
@@ -546,50 +545,47 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         (await recordFailure()) && !deadline.isExpired() ? response : timeoutResponse();
 
       try {
-        const nonceRegistered = await deadline.run(() =>
-          registerPortalNonce({ keyId: verification.keyId, nonce: verification.nonce }, redis),
-        );
-        if (!nonceRegistered) {
+        let begin;
+        try {
+          begin = await deadline.run(() =>
+            redisEvalAtomicHybridBegin(
+              {
+                route: PORTAL_HYBRID_FUNCTION_NAME,
+                keyId: verification.keyId,
+                nonce: verification.nonce,
+                limits: guardLimits,
+                nowMillis: wallNow(),
+              },
+              redis,
+            ),
+          );
+        } catch (error) {
+          if (isPortalHybridDeadlineError(error)) return timeoutResponse();
+          event.guardOutcome = 'unavailable';
+          return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
+        }
+        event.recoveredLeaseCount = begin.recoveredLeaseCount;
+        if (begin.status === 'replay_rejected') {
           event.guardOutcome = 'replay_rejected';
           return errorResponse(403, 'replay_rejected', 'Portal request replay rejected');
         }
-
-        const guard = await deadline.run(() =>
-          redisEvalAtomicGuard(
-            {
-              route: PORTAL_HYBRID_FUNCTION_NAME,
-              limits: guardLimits,
-              nowMillis: wallNow(),
-            },
-            redis,
-          ),
-        );
-        event.recoveredLeaseCount = guard.recoveredLeaseCount;
-        if (guard.status === 'budget_exhausted') {
+        if (begin.status === 'budget_exhausted') {
           event.guardOutcome = 'budget_exhausted';
           return errorResponse(429, 'budget_exhausted', 'Portal route budget exhausted');
         }
-        if (guard.status === 'concurrency_exhausted') {
+        if (begin.status === 'concurrency_exhausted') {
           event.guardOutcome = 'concurrency_exhausted';
           return errorResponse(429, 'concurrency_exhausted', 'Portal route concurrency exhausted');
         }
-        if (!('leaseId' in guard)) throw new PortalRedisError();
-        leaseId = guard.leaseId;
+        leaseId = begin.leaseId;
         event.guardOutcome = 'admitted';
-
-        if (deadline.isExpired()) return timeoutResponse();
-
-        const circuit = await deadline.run(() =>
-          checkPortalHybridCircuit(
-            { route: PORTAL_HYBRID_FUNCTION_NAME, nowMillis: wallNow() },
-            redis,
-          ),
-        );
-        if (circuit.status === 'open') {
+        if (begin.status === 'circuit_open') {
           event.circuit = 'open';
           return errorResponse(503, 'circuit_open', 'Portal Hybrid circuit is open');
         }
         event.circuit = 'closed';
+
+        if (deadline.isExpired()) return timeoutResponse();
 
         let payload: unknown;
         try {
@@ -604,7 +600,6 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         const hybridRequest = parsedRequest.data;
         event.kind = hybridRequest.kind;
 
-        let modelCache: PortalHybridModelCache;
         let cached: string | null;
         try {
           cached = await deadline.run(() =>
@@ -619,6 +614,8 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
           event.guardOutcome = 'unavailable';
           return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
         }
+
+        let modelCache: PortalHybridModelCache;
         if (cached !== null) {
           let parsedCache;
           try {
@@ -719,8 +716,8 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
             );
           }
 
-          try {
-            await deadline.run(() =>
+          pendingModelCacheWrite = deadline
+            .run(() =>
               writePortalResponseCache(
                 {
                   route: PORTAL_HYBRID_FUNCTION_NAME,
@@ -730,11 +727,11 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
                 },
                 redis,
               ),
-            );
-          } catch (error) {
-            if (isPortalHybridDeadlineError(error)) return timeoutResponse();
-            event.cache = 'write_failed';
-          }
+            )
+            .catch((error) => {
+              if (isPortalHybridDeadlineError(error)) throw error;
+              event.cache = 'write_failed';
+            });
         }
 
         if (deadline.isExpired()) {
@@ -749,9 +746,20 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         try {
           if (deadline.isExpired()) return timeoutResponse();
           event.database = 'called';
-          databasePage = await deadline.run(() =>
+          const databaseOperation = deadline.run(() =>
             repository.query(hybridRequest, queryTerms, modelCache.queryEmbedding, operationSignal),
           );
+          if (pendingModelCacheWrite) {
+            const [databaseResult, cacheWriteResult] = await Promise.allSettled([
+              databaseOperation,
+              pendingModelCacheWrite,
+            ]);
+            if (cacheWriteResult.status === 'rejected') throw cacheWriteResult.reason;
+            if (databaseResult.status === 'rejected') throw databaseResult.reason;
+            databasePage = databaseResult.value;
+          } else {
+            databasePage = await databaseOperation;
+          }
         } catch (error) {
           if (isPortalHybridDeadlineError(error) || deadline.isExpired()) {
             event.database = 'failed';
@@ -814,9 +822,12 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         }
         return errorResponse(503, 'internal_error', 'Portal Hybrid search unavailable');
       } finally {
-        if (leaseId || ownsRedis) {
+        if (pendingModelCacheWrite || leaseId || ownsRedis) {
           deadline.detach(
             async () => {
+              if (pendingModelCacheWrite) {
+                await pendingModelCacheWrite.catch(() => undefined);
+              }
               if (leaseId) {
                 await releasePortalConcurrencyLease(
                   { route: PORTAL_HYBRID_FUNCTION_NAME, leaseId },
