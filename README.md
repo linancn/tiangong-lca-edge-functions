@@ -23,9 +23,9 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-09-01
-lastReviewedCommit: a266257d2a2f37fbd9d1b68bbc484557d308203c
-lastReviewedNote: 'Reviewed after synchronizing Edge #363, #369, and #373: non-Portal auth guidance remains current while Portal documents the one-call Hybrid replay/recovery/admission/circuit contract and unchanged deadline/provider guarantees.'
+lastReviewedAt: 2026-09-02
+lastReviewedCommit: f1fe0430812689298a040de04e9c8084c1b70c74
+lastReviewedNote: 'Reviewed for Edge #376 after the OAuth-only cutover: Portal Hybrid documents the bounded 25-second deadline, 35-second lease, code-first rollout, and correctness-first production proof.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -99,17 +99,17 @@ Core entries:
 - `PORTAL_HMAC_KEY_ID_CURRENT` / `PORTAL_HMAC_SECRET_CURRENT` and the optional previous pair for Portal-only request verification.
 - `PORTAL_SUPABASE_PUBLISHABLE_KEY` for both signed Portal routes. It must be a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` JSON registry and is paired only with platform-injected `SUPABASE_URL`; there is no generic or `REMOTE_*` key/URL fallback.
 - `PORTAL_REDIS_CLIENT_TYPE`, `PORTAL_REDIS_NAMESPACE`, `PORTAL_REDIS_TIMEOUT_MS`, and the bounded `PORTAL_LCIA_*` guard/cache/timeout settings for the signed public LCIA route. Hosted projects use the Portal-only `PORTAL_UPSTASH_REDIS_URL` / `PORTAL_UPSTASH_REDIS_TOKEN`; local/CI may use `PORTAL_REDIS_URL` plus optional `PORTAL_REDIS_PASSWORD`. Portal routes have no generic Redis fallback. The concurrency lease defaults to 30 seconds, never drops below 20 seconds, and must cover Redis plus upstream timeouts with a five-second recovery margin. The R1 LCIA response cache defaults to and is capped at 60 seconds.
-- `PORTAL_HYBRID_ENABLED=false` plus independent `PORTAL_HYBRID_*` minute/day/concurrency/lease/cache/timeout/circuit settings for the R2 signed Hybrid route. Only exact lowercase `true` enables model or database work. `PORTAL_HYBRID_TIMEOUT_MS` defaults to and is capped at 6000 ms so the Edge response retains two seconds of headroom before the Portal BFF's 8000 ms deadline. The model cache is capped at 60 seconds and stores no raw query or database candidate.
+- `PORTAL_HYBRID_ENABLED=false` plus independent `PORTAL_HYBRID_*` minute/day/concurrency/lease/cache/timeout/circuit settings for the R2 signed Hybrid route. Only exact lowercase `true` enables model or database work. `PORTAL_HYBRID_TIMEOUT_MS` defaults to and is capped at 25000 ms, leaving five seconds before the Portal BFF's 30000 ms deadline. Its dedicated lease defaults to 35 seconds, covering the 500 ms Redis budget, operation deadline, and five-second recovery margin. The model cache is capped at 60 seconds and stores no raw query or database candidate.
 - `PORTAL_OPENAI_API_KEY`, `PORTAL_OPENAI_CHAT_MODEL`, optional `PORTAL_OPENAI_BASE_URL`, `PORTAL_SAGEMAKER_ENDPOINT_NAME`, `PORTAL_AWS_ACCESS_KEY_ID`, `PORTAL_AWS_SECRET_ACCESS_KEY`, and optional `PORTAL_AWS_SESSION_TOKEN` form one strict Portal-only R2 provider configuration.
 - `PORTAL_LCIA_DEPLOYMENT_SHA` and `PORTAL_HYBRID_DEPLOYMENT_SHA` independently bind each route's allowlisted security event to its exact deployed commit.
 - `OPENAI_API_KEY`, `OPENAI_CHAT_MODEL`, optional `OPENAI_BASE_URL`, `SAGEMAKER_ENDPOINT_NAME`, and generic AWS credentials remain the unchanged provider surface for existing login Hybrid, embedding, and other non-Portal consumers.
-- Feature-specific entries such as Cognito, TIDAS storage, national-carbon cache, and `embedding_ft` timeout knobs are grouped in `supabase/.env.example`.
+- Feature-specific entries such as TIDAS storage, national-carbon cache, and `embedding_ft` timeout knobs are grouped in `supabase/.env.example`.
 
 Credential contract:
 
 - `REMOTE_SERVICE_API_KEY` / `SERVICE_API_KEY` are custom function-level shared secrets. They are not Supabase client credentials.
-- Ordinary Supabase JWT validation uses `getClaims(token)`, validates issuer/audience/expiry/issued-at/role/subject/session and optional OAuth `client_id`, then exposes a minimal principal. Identity synchronization and the three Cognito email/password bridge operations explicitly opt into `fresh_user`, which adds the online `getUser(token)` check.
-- Asymmetric Supabase signing keys allow `getClaims` to use cached JWKS without putting Auth in the per-request hot path. Non-JWT bearers fail without password exchange, Cognito validation, or generic Redis I/O.
+- Ordinary Supabase JWT validation uses `getClaims(token)`, validates issuer/audience/expiry/issued-at/role/subject/session and optional OAuth `client_id`, then exposes a minimal principal. Only `identity_login_sync` explicitly opts into `fresh_user`, which adds the online `getUser(token)` check.
+- Asymmetric Supabase signing keys allow `getClaims` to use cached JWKS without putting Auth in the per-request hot path. Non-JWT bearers fail without password exchange, an external identity-provider validation path, or generic Redis I/O.
 - Supabase secret keys are reserved for privileged Supabase execution paths and must never be exposed to browser clients.
 - Keep `REMOTE_SUPABASE_URL`, `REMOTE_SUPABASE_PUBLISHABLE_KEY`, and `REMOTE_SUPABASE_SECRET_KEY` from the same Supabase project. A mismatched or stale secret key causes local RPC calls to fail with `Invalid API key` after request authentication succeeds.
 - The Portal HMAC secret is independent of `REMOTE_SERVICE_API_KEY`, Supabase JWT secrets, and every Supabase client key. Keep dev/Preview and main/Production keyrings, Supabase projects, EdgeOne deployments, and `portal:<environment>:v1` namespaces distinct. The user-approved initial deployment shares one Upstash database/token across R0, Dev, and Production; this is a recorded residual risk and never a permission boundary. Only the verifier holds an optional previous HMAC key during rotation.
@@ -200,19 +200,23 @@ Authenticate the Supabase CLI when needed:
 pnpm exec supabase login
 ```
 
-Before deploying the Portal Hybrid 6000 ms deadline to an existing enabled project, migrate the non-sensitive timeout Secret first. The earlier operator contract allowed `8000`; the new runtime intentionally rejects any value above `6000`. The safe order is timeout configuration, then the one-function deploy, then the exact deployment-SHA update:
+The existing runtime rejects any timeout above 6000 ms. Expanding to the bounded 25000 ms correctness-first deadline therefore uses code-first rollout: deploy the compatible function while the target still has 6000, expand the Hybrid lease to 35 seconds, set the timeout to 25000, and only then write the exact deployment SHA:
 
 ```bash
-pnpm exec supabase secrets set PORTAL_HYBRID_TIMEOUT_MS=6000 \
-  --project-ref submidrhbtknjxfympna
 pnpm deploy:dev portal_hybrid_search_v1
+pnpm exec supabase secrets set PORTAL_HYBRID_LEASE_TTL_SECONDS=35 \
+  --project-ref submidrhbtknjxfympna
+pnpm exec supabase secrets set PORTAL_HYBRID_TIMEOUT_MS=25000 \
+  --project-ref submidrhbtknjxfympna
 
-pnpm exec supabase secrets set PORTAL_HYBRID_TIMEOUT_MS=6000 \
-  --project-ref qgzvkongdjqiiamzbbts
 pnpm deploy:main portal_hybrid_search_v1
+pnpm exec supabase secrets set PORTAL_HYBRID_LEASE_TTL_SECONDS=35 \
+  --project-ref qgzvkongdjqiiamzbbts
+pnpm exec supabase secrets set PORTAL_HYBRID_TIMEOUT_MS=25000 \
+  --project-ref qgzvkongdjqiiamzbbts
 ```
 
-Do not deploy the new ceiling while the target still holds `8000`: that mismatch fails closed as `guard_unavailable`. Set `PORTAL_HYBRID_DEPLOYMENT_SHA` to the exact eligible deployed merge only after the corresponding deploy succeeds.
+Do not set `25000` while the target still runs code capped at `6000`: that mismatch fails closed as `guard_unavailable`. Set `PORTAL_HYBRID_DEPLOYMENT_SHA` to the exact eligible deployed merge only after the corresponding deploy and both configuration updates succeed.
 
 Deploy to the persistent `dev` project (`submidrhbtknjxfympna`) from the Git `dev` line or a reviewed PR branch:
 
@@ -367,7 +371,7 @@ The strict request is:
 
 The query is trim-nonempty, at most 512 Unicode code points and 2048 UTF-8 bytes, and contains no C0/C1 controls. String filters are first trimmed and lowercased, then limited to 128 code points/1024 bytes each; the fully transformed serialized filter object is at most 4096 bytes. This order ensures Unicode lowercase expansion is included in every bound. `processSubtype` is Process-only. Extra fields—including cursor, sort, state, actor, team, `data_source`, model, weights, threshold, embedding, visitor hash, or notes—fail as `invalid_request`. There is no Hybrid cursor; use the lexical GET page for additional results.
 
-The route reuses the existing deterministic query-rewrite and 1024-dimensional SageMaker kernels under one absolute 6000 ms Edge deadline that starts at handler entry and retains two seconds of headroom before the Portal BFF's 8000 ms deadline. After HMAC, transport and enablement, one Hybrid-only Lua call performs nonce `SET NX EX 120`/replay rejection, expired-lease recovery, minute/day budget checks, concurrency/TTL lease acquisition and circuit check in the same logical order as the former guard. Replay never reaches recovery or counters; recovery happens before concurrency as in the existing atomic guard; budget/concurrency rejection precedes circuit; an admitted open circuit retains a lease that existing cleanup releases. Only an admitted closed result may proceed to JSON/schema validation and the separate hash-only model-cache read, preserving `invalid_request` before cache faults. A valid model-cache miss then starts the provider-explicit OpenAI rewrite and SageMaker embedding of the original bounded query concurrently. Both receive one request operation signal inherited from the deadline; either provider failure aborts its surviving peer before response/lease release, database work waits for both, and rewrite output alone supplies interpretation/fulltext terms. The validated model-cache write starts concurrently with the public Database query so their network latency no longer accumulates serially; both remain capped by the same deadline, cache-write failure remains best effort, and both outcomes settle before a Database rejection event is sanitized so `write_failed` cannot be lost. The Portal-only Responses request keeps the same model, prompts, strict JSON Schema, temperature and AbortSignal while setting `store=false`, `reasoning.effort=none`, `text.verbosity=low`, and `max_output_tokens=256`; it does not request a priority/flex service tier and does not change the generic/login OpenAI wrappers. Raw body/HMAC work and every awaited Redis, model, database, cache-write, circuit-record/reset, and final-response operation are capped to the same remaining budget. A late operation cannot start downstream database work or produce HTTP 200. Lease release and owned Redis close are bounded detached cleanup and never delay the response; the lease TTL recovers any unfinished release. After sanitizing the final security event, the handler performs its last deadline decision and schedules the logger in a later macrotask. Supabase tracks the bounded delivery with `EdgeRuntime.waitUntil`; local/test runtimes use a handled fallback outside the handler promise. Synchronously blocking, throwing, rejecting, and never-settling loggers cannot change or delay the response, and the event status/error code matches the response actually returned. The event records only fixed rewrite/embedding outcomes plus nullable bounded stage latency: success marks both `succeeded`, a cache hit marks both `cache_hit`, provider failure distinguishes `failed` from its `aborted` peer, and deadline expiry marks pending stages `aborted`. It contains no query, model name, endpoint, provider error, identifier, or credential. Its hash-key Redis cache holds only bounded model-generated interpretation plus embedding, never the raw query or database candidates, and expires in at most 60 seconds. Every success still calls publishable-only `api.portal_hybrid_search_v1(p_kind,p_query_terms,p_query_embedding,p_filters,p_limit)` with explicit `Content-Profile: api`.
+The route reuses the existing deterministic query-rewrite and 1024-dimensional SageMaker kernels under one absolute 25000 ms Edge deadline that starts at handler entry and retains five seconds of headroom before the Portal BFF's 30000 ms deadline. The Hybrid-only lease is 35 seconds so Redis plus the operation and five-second cleanup recovery remain covered. After HMAC, transport and enablement, one Hybrid-only Lua call performs nonce `SET NX EX 120`/replay rejection, expired-lease recovery, minute/day budget checks, concurrency/TTL lease acquisition and circuit check in the same logical order as the former guard. Replay never reaches recovery or counters; recovery happens before concurrency as in the existing atomic guard; budget/concurrency rejection precedes circuit; an admitted open circuit retains a lease that existing cleanup releases. Only an admitted closed result may proceed to JSON/schema validation and the separate hash-only model-cache read, preserving `invalid_request` before cache faults. A valid model-cache miss then starts the provider-explicit OpenAI rewrite and SageMaker embedding of the original bounded query concurrently. Both receive one request operation signal inherited from the deadline; either provider failure aborts its surviving peer before response/lease release, database work waits for both, and rewrite output alone supplies interpretation/fulltext terms. The validated model-cache write starts concurrently with the public Database query so their network latency no longer accumulates serially; both remain capped by the same deadline, cache-write failure remains best effort, and both outcomes settle before a Database rejection event is sanitized so `write_failed` cannot be lost. The Portal-only Responses request keeps the same model, prompts, strict JSON Schema, temperature and AbortSignal while setting `store=false`, `reasoning.effort=none`, `text.verbosity=low`, and `max_output_tokens=256`; it does not request a priority/flex service tier and does not change the generic/login OpenAI wrappers. Raw body/HMAC work and every awaited Redis, model, database, cache-write, circuit-record/reset, and final-response operation are capped to the same remaining budget. A late operation cannot start downstream database work or produce HTTP 200. Lease release and owned Redis close are bounded detached cleanup and never delay the response; the lease TTL recovers any unfinished release. After sanitizing the final security event, the handler performs its last deadline decision and schedules the logger in a later macrotask. Supabase tracks the bounded delivery with `EdgeRuntime.waitUntil`; local/test runtimes use a handled fallback outside the handler promise. Synchronously blocking, throwing, rejecting, and never-settling loggers cannot change or delay the response, and the event status/error code matches the response actually returned. The event records only fixed rewrite/embedding outcomes plus nullable bounded stage latency: success marks both `succeeded`, a cache hit marks both `cache_hit`, provider failure distinguishes `failed` from its `aborted` peer, and deadline expiry marks pending stages `aborted`. It contains no query, model name, endpoint, provider error, identifier, or credential. Its hash-key Redis cache holds only bounded model-generated interpretation plus embedding, never the raw query or database candidates, and expires in at most 60 seconds. Every success still calls publishable-only `api.portal_hybrid_search_v1(p_kind,p_query_terms,p_query_embedding,p_filters,p_limit)` with explicit `Content-Profile: api`. Correct semantic completion is the release criterion; elapsed time remains observable for subsequent optimization.
 
 A success is exact `portal.hybrid-search-page.v1`: the Database fingerprint and up to 20 unique R1 public cards, each with exhaustive reference, functional-unit, technology, source/license, and public-quality context, plus `interpretation.source=model_generated`, `advisory=true`, one semantic query, and at most 12 bounded language-tagged terms. Match evidence uses only algorithm `portal-hybrid-rank-v1`, score, actual lexical/semantic ranks, and non-negative canonical semantic distance; reason codes must correspond to present evidence. Missing/malformed context, raw JSON/search text, embeddings, owner/team/model/review fields, locators, and duplicate identities fail the contract.
 
@@ -409,7 +413,7 @@ pnpm probe:auth --base-url "$EDGE_BASE_URL"
 
 - 默认跳过仓库中标记为 disabled 的 `antchain_*` 和 legacy 非 `*_ft` embedding / webhook 入口
 - 默认跳过仅供本地辅助使用的 `embedding_ft_local`
-- 对其余函数至少发一轮无鉴权最小请求，并在有对应凭据时继续发 JWT / user API key / service API key 探测
+- 对其余函数至少发一轮无鉴权最小请求，并在有对应凭据时继续发 Supabase JWT / service API key 探测；不存在 user API key 探测或交换路径
 - 结果会区分：
   - `gateway_invalid_jwt`：大概率是请求在进入函数前就被平台层拦住
   - `function_auth_failed`：请求已进入函数，但函数内鉴权拒绝了该凭据
@@ -483,7 +487,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 504 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 152-root Deno graph, 73 Node contract tests, and 505 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 
@@ -581,7 +585,7 @@ The retired review-submit Gate, coordinator, and job endpoints are no longer dep
 
 ## LCI/LCIA Release Function Call Patterns
 
-- `app_lca_release_commands`: authenticated `POST` command endpoint. It accepts a user JWT session and delegates authorization/state changes to the database-owned release RPCs. A User API key is first exchanged for a session by the public CLI; the API key and Supabase service-role key are never included in command payloads.
+- `app_lca_release_commands`: authenticated `POST` command endpoint. It accepts a verified Supabase access JWT and delegates authorization/state changes to the database-owned release RPCs. The public CLI obtains that JWT through its client-local OAuth session; an approved headless orchestrator may inject a separately verified short-lived actor token. There is no User API-key exchange, and the Supabase service-role key is never included in command payloads.
   - lifecycle actions: `prepare`, `create_artifact_uploads`, `finalize_artifacts`, `approve`, `publish`, `readback_verify`, `unpublish`
   - authenticated reads: `get_release`, `get_current`, `get_calculation_bundle`, `create_artifact_download`
   - exactly four ZIPs are accepted: Unit Process and standalone LifecycleModel+Result, each in TIDAS and ILCD. Maximum size is 50 MiB per ZIP.
@@ -594,4 +598,4 @@ The retired review-submit Gate, coordinator, and job endpoints are no longer dep
   - `mode=artifact_download&artifactId=<uuid>` returns a 15-minute signed download URL only after the database authorizes the artifact projection. The response includes a server-derived `downloadFilename`, and the signed URL sets the same semantic filename in `Content-Disposition`; internal storage locators are omitted.
   - standard Supabase browser clients may send the matching project publishable key (or configured legacy anon key) as both `apikey` and Bearer Authorization; this remains a public read and is not treated as an authenticated actor. Other Authorization credentials must authenticate normally.
 
-Set `LCA_RELEASE_STORAGE_BUCKET` only when release artifacts should not use the normal `S3_BUCKET`/`lca_results` private bucket. The release CLI/project needs only the public API URL, publishable key, and a User API key for a `data_product_manager`; it must never receive `REMOTE_SUPABASE_SECRET_KEY`.
+Set `LCA_RELEASE_STORAGE_BUCKET` only when release artifacts should not use the normal `S3_BUCKET`/`lca_results` private bucket. The interactive release CLI needs only the public API URL, publishable key, public OAuth client ID, and its private client-local OAuth session for a `data_product_manager`; it must never receive `REMOTE_SUPABASE_SECRET_KEY`.

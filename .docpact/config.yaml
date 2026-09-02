@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-09-01'
-lastReviewedCommit: 'a266257d2a2f37fbd9d1b68bbc484557d308203c'
-lastReviewedNote: 'Reviewed after synchronizing Edge #363, #369, and #373: non-Portal auth changes remain intact while one Hybrid-only atomic replay/recovery/budget/concurrency/lease/circuit admission call preserves Portal deadline, provider ordering, telemetry, and isolated ownership.'
+lastReviewedAt: '2026-09-02'
+lastReviewedCommit: 'f1fe0430812689298a040de04e9c8084c1b70c74'
+lastReviewedNote: 'Reviewed for Edge #376 after the OAuth-only cutover: Portal runtime, deploy, proof, documentation, and environment routes cover the bounded 25-second deadline and 35-second isolated lease change.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
@@ -119,9 +119,6 @@ routing:
         - supabase/functions/_shared/redis_client.ts
         - supabase/functions/_shared/command_runtime/actor_context.ts
         - supabase/functions/identity_login_sync/**
-        - supabase/functions/change_email_cognito/**
-        - supabase/functions/change_password_cognito/**
-        - supabase/functions/sign_up_cognito/**
         - test/auth_test.ts
         - test/auth_client_wiring_test.ts
         - scripts/probe-functions-auth.cjs
