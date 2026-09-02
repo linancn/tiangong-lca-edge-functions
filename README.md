@@ -23,8 +23,8 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-09-01
-lastReviewedCommit: 1a5a4b90b75e8bfbd35499ce75e5f7b2ec1dd32e
+lastReviewedAt: 2026-09-02
+lastReviewedCommit: 0a8f93972287baeb21e6b1864fd9aab99f5c2c4e
 lastReviewedNote: 'Reviewed for Edge #364 promote feedback: operator guidance now sets the non-sensitive 6000 timeout before Dev/Main Function deployment and updates the deployment SHA only after success, preventing a retained-8000 fail-closed window.'
 ---
 

@@ -1,7 +1,7 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-09-01'
-lastReviewedCommit: '1a5a4b90b75e8bfbd35499ce75e5f7b2ec1dd32e'
+lastReviewedAt: '2026-09-02'
+lastReviewedCommit: '0a8f93972287baeb21e6b1864fd9aab99f5c2c4e'
 lastReviewedNote: 'Reviewed for Edge #364 promote feedback: Portal Hybrid operator guidance and its executable contract require migrating the retained 8000 timeout to 6000 before deploying the tighter runtime ceiling; ownership, routing, and provider isolation remain unchanged.'
 
 # Keep deterministic governance facts here.

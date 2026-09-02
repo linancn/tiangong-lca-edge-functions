@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-09-01
-lastReviewedCommit: 1a5a4b90b75e8bfbd35499ce75e5f7b2ec1dd32e
+lastReviewedAt: 2026-09-02
+lastReviewedCommit: 0a8f93972287baeb21e6b1864fd9aab99f5c2c4e
 lastReviewedNote: 'Reviewed for Edge #364 promote feedback: the required timeout-before-deploy migration preserves the 6000 ms inner deadline without changing auth, provider isolation, budgets, fallback, or branch boundaries.'
 related:
   - .docpact/config.yaml
