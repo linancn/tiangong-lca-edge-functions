@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-06
-lastReviewedCommit: 428576b051ddf8c4d211c142fe60bf794fb310e3
-lastReviewedNote: 'Reviewed for Edge #407: Process/Flow omitted and latest requests preserve the legacy RPC arguments and threshold-zero retry. Matched V2 filters/single-RPC fallback, foundation visibility, auth, pinned runtimes and deployment ownership remain unchanged.'
+lastReviewedCommit: 4e312f5b2681d4f069bdbf37293cb1e3412d1791
+lastReviewedNote: 'Reviewed for Edge #407: legacy Process/Flow RPC arguments and fallback are preserved; two Portal deadline fixtures join owned background cleanup without changing response deadlines, sanitizers or Portal runtime. Matched V2, foundation visibility, auth and deployment contracts remain unchanged.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

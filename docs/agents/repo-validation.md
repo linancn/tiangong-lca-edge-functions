@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-06
-lastReviewedCommit: 428576b051ddf8c4d211c142fe60bf794fb310e3
-lastReviewedNote: 'Reviewed for Edge #407: Process/Flow omitted and latest requests preserve the legacy RPC arguments and threshold-zero retry. Matched V2 filters/single-RPC fallback, foundation visibility, auth, pinned runtimes and deployment ownership remain unchanged.'
+lastReviewedCommit: 4e312f5b2681d4f069bdbf37293cb1e3412d1791
+lastReviewedNote: 'Reviewed for Edge #407: legacy Process/Flow RPC arguments and fallback are preserved; two Portal deadline fixtures join owned background cleanup without changing response deadlines, sanitizers or Portal runtime. Matched V2, foundation visibility, auth and deployment contracts remain unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -107,6 +107,8 @@ Changes to `portal_public_transport.ts`, `portal_hybrid_provider.ts`, `portal_hy
 The minimum targeted command remains the union of the two Portal rows above plus `test/hybrid_search_handler_test.ts`, `test/hybrid_query_utils_test.ts`, `test/auth_test.ts`, `test/supabase_client_test.ts`, `test/embedding_vector_test.ts`, and targeted `deno check` for both Portal entrypoints and the three Portal-only provider/kernel modules. Live provider calls, secret mutation, Function deployment, and enabling Hybrid are separate controlled gates and are not implied by local proof.
 
 The Process/Flow V2 route configurations also serve omitted and explicit `latest` requests. `test/hybrid_search_handler_test.ts` must prove that these four legacy combinations preserve the exact 12-parameter Database RPC contract and return the threshold-zero retry result. Matched V2 keeps its visibility/type fields and single-RPC fallback; foundation routes retain their supported visibility fields. The Flow fixture binds its own legacy RPC name.
+
+Portal deadline fixtures that return before detached cleanup must await the owned fake Redis client’s close signal before the test ends. Keep the response deadline and Deno resource/op sanitizers enabled; fixture completion is separate from the runtime response-latency assertion.
 
 ## Auth And Probe Notes
 
