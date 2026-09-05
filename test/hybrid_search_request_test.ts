@@ -1,7 +1,10 @@
 import { assertEquals, assertInstanceOf, assertThrows } from 'jsr:@std/assert';
 
 Deno.test('matched-version requests use an explicit 200-candidate opt-in', () => {
-  const parsed = parseHybridSearchClientRequest({ query: 'steel', version_scope: 'matched' });
+  const parsed = parseHybridSearchClientRequest({
+    query: 'steel',
+    version_scope: 'matched',
+  });
   assertEquals(parsed.versionScope, 'matched');
   assertEquals(parsed.rpcOptions.match_count, 200);
   assertEquals(parseHybridSearchClientRequest({ query: 'steel' }).versionScope, 'latest');
@@ -9,8 +12,9 @@ Deno.test('matched-version requests use an explicit 200-candidate opt-in', () =>
     { query: 'steel', version_scope: 'all' },
     { query: 'steel', version_scope: 'matched', match_count: 5000 },
     { query: 'steel', version_scope: 'matched', match_count: 20 },
-  ])
+  ]) {
     assertThrows(() => parseHybridSearchClientRequest(request), HybridSearchRequestError);
+  }
 });
 
 import {
@@ -33,6 +37,7 @@ Deno.test('parseHybridSearchClientRequest normalizes full hybrid search options'
     rrf_k: '60',
     state_code: '0',
     team_id: 'c3000000-0000-4000-8000-000000000297',
+    type_of_data_set: 'LCI result',
   });
 
   assertEquals(parsed.queryText, 'electricity');
@@ -51,6 +56,9 @@ Deno.test('parseHybridSearchClientRequest normalizes full hybrid search options'
     state_code_filter: 0,
     team_id_filter: 'c3000000-0000-4000-8000-000000000297',
   });
+  assertEquals(parsed.entityFilterOptions, {
+    type_of_data_set_filter: 'LCI result',
+  });
 });
 
 Deno.test('parseHybridSearchClientRequest accepts explicit filter_condition string', () => {
@@ -59,7 +67,9 @@ Deno.test('parseHybridSearchClientRequest accepts explicit filter_condition stri
     filter_condition: '{"classification":["materials"]}',
   });
 
-  assertEquals(parsed.rpcOptions.filter_condition, { classification: ['materials'] });
+  assertEquals(parsed.rpcOptions.filter_condition, {
+    classification: ['materials'],
+  });
   assertEquals(parsed.rpcOptions.data_source, 'tg');
   assertEquals(parsed.rpcOptions.page_size, 10);
   assertEquals(parsed.rpcOptions.page_current, 1);
@@ -67,6 +77,7 @@ Deno.test('parseHybridSearchClientRequest accepts explicit filter_condition stri
     state_code_filter: null,
     team_id_filter: null,
   });
+  assertEquals(parsed.entityFilterOptions, { type_of_data_set_filter: null });
 });
 
 Deno.test('parseHybridSearchClientRequest rejects invalid visibility context', () => {
@@ -81,6 +92,18 @@ Deno.test('parseHybridSearchClientRequest rejects invalid visibility context', (
     HybridSearchRequestError,
   );
   assertEquals(error.message, 'team_id must be a UUID');
+});
+
+Deno.test('parseHybridSearchClientRequest rejects unsupported Process dataset types', () => {
+  const error = assertThrows(
+    () =>
+      parseHybridSearchClientRequest({
+        query: 'steel',
+        type_of_data_set: 'foreground',
+      }),
+    HybridSearchRequestError,
+  );
+  assertEquals(error.message, 'type_of_data_set is not a supported Process dataset type');
 });
 
 Deno.test('parseHybridSearchClientRequest rejects invalid filter_condition JSON', () => {
@@ -169,6 +192,7 @@ Deno.test('buildHybridSearchRpcRequest adds reviewed visibility fields only when
     query: 'steel',
     state_code: 0,
     team_id: 'c3000000-0000-4000-8000-000000000297',
+    type_of_data_set: 'Unit process, black box',
   });
 
   const payload = buildHybridSearchRpcRequest(
@@ -177,10 +201,12 @@ Deno.test('buildHybridSearchRpcRequest adds reviewed visibility fields only when
     '[0.1,0.2]',
     parsed.rpcOptions,
     parsed.visibilityOptions,
+    parsed.entityFilterOptions,
   );
 
   assertEquals(payload.state_code_filter, 0);
   assertEquals(payload.team_id_filter, 'c3000000-0000-4000-8000-000000000297');
+  assertEquals(payload.type_of_data_set_filter, 'Unit process, black box');
 });
 
 Deno.test('HybridSearchRequestError keeps its concrete error type', () => {

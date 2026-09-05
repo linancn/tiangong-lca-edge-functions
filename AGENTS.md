@@ -38,9 +38,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-09-02
-lastReviewedCommit: 5f225c74d739910ccbd9157b59442281ca98ad03
-lastReviewedNote: 'Reviewed for Edge #400: explicit Portal V2 and JWT-backed matched-version protocols preserve exact identity, bounded group continuation, English-vector cache isolation and existing security/timeout boundaries.'
+lastReviewedAt: 2026-09-05
+lastReviewedCommit: 2ad33e73001fd550d42d5a1572e3c363abe25807
+lastReviewedNote: 'Reviewed for Edge #403: matched Process/Flow routes require JWT and selected-team context before paid work, validate canonical filters, and delegate adaptive retrieval plus threshold fallback to Database V2.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -166,7 +166,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 ## Hard Boundaries
 
 - Portal V2 is an explicit wire-version opt-in on the same signed endpoint. It calls only the additive public V2 Database API, validates best-version groups plus every exact member, and uses opaque query-bound continuation. V1 callers retain their old public API contract. Never relabel a V1 response as V2.
-- Process/Flow matched-version mode requires a verified JWT context before model work, fixes each recall budget at 200, and acknowledges exact-version output with `versionScope=matched`. Omitted mode keeps legacy behavior; service credentials gain no new RPC grant.
+- Process/Flow matched-version mode requires a verified JWT context before model work, fixes each recall budget at 200, and acknowledges exact-version output with `versionScope=matched`. It validates and forwards state/team context, requires a selected team for `te` before paid work, forwards the reviewed Process dataset type, and validates the canonical Flow type/input/classification contract. The Database V2 RPC owns threshold fallback inside the single Edge RPC call; omitted mode keeps legacy behavior and service credentials gain no new RPC grant.
 - The bounded full-text selector always reserves the original query and alternates English/Chinese model aliases so OR expansion cannot starve English terms. This does not restrict source-document languages or change the legacy selector.
 - do not invent schema truth or migration history in this repo
 - do not bypass `supabase/functions/deno.json` with a direct JSR, npm, HTTPS, or other `@supabase/functions-js` specifier; all Functions JS type imports use the exact mapped alias so local checks and remote bundles resolve 2.112.4

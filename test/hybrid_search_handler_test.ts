@@ -26,6 +26,23 @@ const VERSIONED_CONFIG: HybridSearchRouteConfig = {
   rpcName: 'hybrid_search_processes',
   versionedRpcName: 'hybrid_search_process_versions_v1',
 };
+const VERSIONED_V2_CONFIG: HybridSearchRouteConfig = {
+  ...VERSIONED_CONFIG,
+  versionedRpcName: 'hybrid_search_process_versions_v2',
+  forwardVisibilityContext: true,
+  forwardProcessTypeFilter: true,
+  requireSelectedTeamContext: true,
+  rpcOwnsThresholdFallback: true,
+};
+const FLOW_VERSIONED_V2_CONFIG: HybridSearchRouteConfig = {
+  ...VERSIONED_V2_CONFIG,
+  functionName: 'flow_hybrid_search',
+  entityKind: 'flow',
+  entityLabel: 'Flow',
+  entityPlural: 'flows',
+  versionedRpcName: 'hybrid_search_flow_versions_v2',
+  forwardProcessTypeFilter: false,
+};
 const VERSION_ID = '11111111-1111-4111-8111-111111111111';
 const VERIFIED_JWT_AUTH = {
   isAuthenticated: true,
@@ -47,7 +64,11 @@ Deno.test(
           allowedMethods: [AuthMethod.JWT, AuthMethod.SERVICE_API_KEY],
           authClient: {
             auth: {
-              getClaims: () => Promise.resolve({ data: null, error: { message: 'JWT rejected' } }),
+              getClaims: () =>
+                Promise.resolve({
+                  data: null,
+                  error: { message: 'JWT rejected' },
+                }),
             },
           } as unknown as SupabaseClient,
         });
@@ -64,7 +85,11 @@ Deno.test(
       },
       rewriteQuery: async () => {
         calls.push('rewrite');
-        return { semantic_query_en: 'copper', fulltext_query_en: [], fulltext_query_zh: [] };
+        return {
+          semantic_query_en: 'copper',
+          fulltext_query_en: [],
+          fulltext_query_zh: [],
+        };
       },
       generateEmbedding: async () => {
         calls.push('embedding');
@@ -118,7 +143,11 @@ Deno.test(
       }),
       rewriteQuery: async () => {
         calls += 1;
-        return { semantic_query_en: 'copper', fulltext_query_en: [], fulltext_query_zh: [] };
+        return {
+          semantic_query_en: 'copper',
+          fulltext_query_en: [],
+          fulltext_query_zh: [],
+        };
       },
     });
     const response = await handler(
@@ -198,8 +227,9 @@ Deno.test(
         }),
       }),
     );
-    for (let attempt = 0; attempt < 20 && calls.length === 0; attempt++)
+    for (let attempt = 0; attempt < 20 && calls.length === 0; attempt++) {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
     assertEquals(calls, ['rewrite']);
     resolveRewrite({
       semantic_query_en: 'copper production',
@@ -208,7 +238,10 @@ Deno.test(
     });
     const response = await responsePromise;
     assertEquals(response.status, 200);
-    assertEquals(await response.json(), { data: rows, versionScope: 'matched' });
+    assertEquals(await response.json(), {
+      data: rows,
+      versionScope: 'matched',
+    });
     assertEquals(calls, ['rewrite', 'embedding', 'rpc']);
   },
 );
@@ -260,6 +293,206 @@ Deno.test(
 );
 
 Deno.test(
+  'Next V2 forwards selected-team and Process type scope and owns fallback in one RPC',
+  async () => {
+    const rpcCalls: Array<{ name: string; body: Record<string, unknown> }> = [];
+    const logCalls: unknown[] = [];
+    const handler = createHybridSearchHandler(VERSIONED_V2_CONFIG, {
+      authenticate: async () => VERIFIED_JWT_AUTH,
+      rewriteQuery: async () => ({
+        semantic_query_en: 'copper',
+        fulltext_query_en: ['copper'],
+        fulltext_query_zh: [],
+      }),
+      generateEmbedding: async () => VECTOR,
+      createRpcClient: () => ({
+        client: {
+          rpc: (name: string, body: Record<string, unknown>) => {
+            rpcCalls.push({ name, body });
+            return Promise.resolve({ data: [], error: null });
+          },
+        } as unknown as SupabaseClient,
+        userContextKind: 'jwt',
+        bearerToken: 'actor.jwt.signature',
+      }),
+      logger: {
+        log: (...args: unknown[]) => logCalls.push(args),
+        error: () => undefined,
+      },
+    });
+
+    const response = await handler(
+      new Request('http://localhost/process_hybrid_search', {
+        method: 'POST',
+        body: JSON.stringify({
+          query: 'private copper query',
+          version_scope: 'matched',
+          data_source: 'te',
+          state_code: 20,
+          team_id: 'c3000000-0000-4000-8000-000000000297',
+          type_of_data_set: 'LCI result',
+        }),
+      }),
+    );
+
+    assertEquals(response.status, 200);
+    assertEquals(await response.json(), { data: [], versionScope: 'matched' });
+    assertEquals(rpcCalls.length, 1);
+    assertEquals(rpcCalls[0].name, 'hybrid_search_process_versions_v2');
+    assertEquals(rpcCalls[0].body.state_code_filter, 20);
+    assertEquals(rpcCalls[0].body.team_id_filter, 'c3000000-0000-4000-8000-000000000297');
+    assertEquals(rpcCalls[0].body.type_of_data_set_filter, 'LCI result');
+    assertFalse(JSON.stringify(logCalls).includes('private copper query'));
+  },
+);
+
+Deno.test('Next V2 rejects missing selected-team scope before model or RPC work', async () => {
+  let calls = 0;
+  const handler = createHybridSearchHandler(VERSIONED_V2_CONFIG, {
+    authenticate: async () => VERIFIED_JWT_AUTH,
+    rewriteQuery: async () => {
+      calls++;
+      return {
+        semantic_query_en: 'copper',
+        fulltext_query_en: [],
+        fulltext_query_zh: [],
+      };
+    },
+  });
+  const response = await handler(
+    new Request('http://localhost/process_hybrid_search', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: 'copper',
+        version_scope: 'matched',
+        data_source: 'te',
+      }),
+    }),
+  );
+  assertEquals(response.status, 400);
+  assertEquals(calls, 0);
+});
+
+Deno.test('Next V2 forwards an optional public institution team scope', async () => {
+  const rpcCalls: Array<{ name: string; body: Record<string, unknown> }> = [];
+  const handler = createHybridSearchHandler(VERSIONED_V2_CONFIG, {
+    authenticate: async () => VERIFIED_JWT_AUTH,
+    rewriteQuery: async () => ({
+      semantic_query_en: 'copper',
+      fulltext_query_en: ['copper'],
+      fulltext_query_zh: [],
+    }),
+    generateEmbedding: async () => VECTOR,
+    createRpcClient: () => ({
+      client: {
+        rpc: (name: string, body: Record<string, unknown>) => {
+          rpcCalls.push({ name, body });
+          return Promise.resolve({ data: [], error: null });
+        },
+      } as unknown as SupabaseClient,
+      userContextKind: 'jwt',
+      bearerToken: 'actor.jwt.signature',
+    }),
+  });
+  const response = await handler(
+    new Request('http://localhost/process_hybrid_search', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: 'copper',
+        version_scope: 'matched',
+        data_source: 'tg',
+        team_id: 'c3000000-0000-4000-8000-000000000297',
+      }),
+    }),
+  );
+  assertEquals(response.status, 200);
+  assertEquals(rpcCalls.length, 1);
+  assertEquals(rpcCalls[0].body.data_source, 'tg');
+  assertEquals(rpcCalls[0].body.team_id_filter, 'c3000000-0000-4000-8000-000000000297');
+});
+
+Deno.test('Next Flow V2 rejects malformed classification before model or RPC work', async () => {
+  let calls = 0;
+  const handler = createHybridSearchHandler(FLOW_VERSIONED_V2_CONFIG, {
+    authenticate: async () => VERIFIED_JWT_AUTH,
+    rewriteQuery: async () => {
+      calls++;
+      return {
+        semantic_query_en: 'flow',
+        fulltext_query_en: [],
+        fulltext_query_zh: [],
+      };
+    },
+  });
+  const response = await handler(
+    new Request('http://localhost/flow_hybrid_search', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: 'flow',
+        version_scope: 'matched',
+        filter_condition: { classification: [{ scope: 'wrong', code: '01' }] },
+      }),
+    }),
+  );
+  assertEquals(response.status, 400);
+  assertEquals(calls, 0);
+});
+
+Deno.test('Next Flow V2 rejects unsupported Flow types before model or RPC work', async () => {
+  let calls = 0;
+  const handler = createHybridSearchHandler(FLOW_VERSIONED_V2_CONFIG, {
+    authenticate: async () => VERIFIED_JWT_AUTH,
+    rewriteQuery: async () => {
+      calls++;
+      return {
+        semantic_query_en: 'flow',
+        fulltext_query_en: [],
+        fulltext_query_zh: [],
+      };
+    },
+  });
+  const response = await handler(
+    new Request('http://localhost/flow_hybrid_search', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: 'flow',
+        version_scope: 'matched',
+        filter_condition: { flowType: 'Foreground flow' },
+      }),
+    }),
+  );
+  assertEquals(response.status, 400);
+  assertEquals(calls, 0);
+});
+
+Deno.test('Next Flow V2 rejects a Process-only type filter before model or RPC work', async () => {
+  let calls = 0;
+  const handler = createHybridSearchHandler(FLOW_VERSIONED_V2_CONFIG, {
+    authenticate: async () => VERIFIED_JWT_AUTH,
+    rewriteQuery: async () => {
+      calls++;
+      return {
+        semantic_query_en: 'flow',
+        fulltext_query_en: [],
+        fulltext_query_zh: [],
+      };
+    },
+  });
+  const response = await handler(
+    new Request('http://localhost/flow_hybrid_search', {
+      method: 'POST',
+      body: JSON.stringify({
+        query: 'flow',
+        version_scope: 'matched',
+        type_of_data_set: 'LCI result',
+      }),
+    }),
+  );
+  assertEquals(response.status, 400);
+  assertEquals(calls, 0);
+});
+
+Deno.test(
   'matched-version mode rejects unsupported routes and bounds before model calls',
   async () => {
     for (const [config, extra] of [
@@ -272,13 +505,21 @@ Deno.test(
         authenticate: async () => ({ isAuthenticated: true }),
         rewriteQuery: async () => {
           calls++;
-          return { semantic_query_en: 'copper', fulltext_query_en: [], fulltext_query_zh: [] };
+          return {
+            semantic_query_en: 'copper',
+            fulltext_query_en: [],
+            fulltext_query_zh: [],
+          };
         },
       });
       const response = await handler(
         new Request('http://localhost/search', {
           method: 'POST',
-          body: JSON.stringify({ query: 'copper', version_scope: 'matched', ...extra }),
+          body: JSON.stringify({
+            query: 'copper',
+            version_scope: 'matched',
+            ...extra,
+          }),
         }),
       );
       assertEquals(response.status, 400);
@@ -354,7 +595,10 @@ Deno.test(
         bearerToken: 'header.payload.signature',
       }),
       now: () => ++now,
-      logger: { log: (...args: unknown[]) => logCalls.push(args), error: () => undefined },
+      logger: {
+        log: (...args: unknown[]) => logCalls.push(args),
+        error: () => undefined,
+      },
     });
 
     const response = await handler(
@@ -385,9 +629,13 @@ Deno.test(
       [0.5, 0],
     );
     assertEquals(rpcCalls[0].body.data_source, 'my');
-    assertEquals(rpcCalls[0].body.filter_condition, { classification: ['materials'] });
+    assertEquals(rpcCalls[0].body.filter_condition, {
+      classification: ['materials'],
+    });
     assertEquals(typeof rpcCalls[0].body.filter_condition, 'object');
-    assertEquals(rpcCalls[1].body.filter_condition, { classification: ['materials'] });
+    assertEquals(rpcCalls[1].body.filter_condition, {
+      classification: ['materials'],
+    });
     assertEquals(rpcCalls[0].body.state_code_filter, 0);
     assertEquals(rpcCalls[0].body.team_id_filter, 'c3000000-0000-4000-8000-000000000297');
     assertEquals(rpcCalls[1].body.state_code_filter, 0);
@@ -410,7 +658,10 @@ Deno.test(
       createRpcClient: () => ({
         client: {
           rpc() {
-            return Promise.resolve({ data: [{ id: 'contact-1' }], error: null });
+            return Promise.resolve({
+              data: [{ id: 'contact-1' }],
+              error: null,
+            });
           },
         } as unknown as SupabaseClient,
         userContextKind: 'service',
@@ -450,7 +701,10 @@ Deno.test(
           client: {
             rpc(_name: string, body: Record<string, unknown>) {
               rpcBody = body;
-              return Promise.resolve({ data: [{ id: 'contact-1' }], error: null });
+              return Promise.resolve({
+                data: [{ id: 'contact-1' }],
+                error: null,
+              });
             },
           } as unknown as SupabaseClient,
           userContextKind: 'jwt',
@@ -484,7 +738,11 @@ Deno.test('shared Hybrid handler rejects invalid requests before model or RPC ca
     authenticate: async () => ({ isAuthenticated: true }),
     rewriteQuery: async () => {
       rewriteCalled = true;
-      return { semantic_query_en: '', fulltext_query_en: [], fulltext_query_zh: [] };
+      return {
+        semantic_query_en: '',
+        fulltext_query_en: [],
+        fulltext_query_zh: [],
+      };
     },
   });
 
