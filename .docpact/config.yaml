@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-09-24'
-lastReviewedCommit: '12dbbd2162e7274a5eb328469e856222785144e5'
-lastReviewedNote: 'Reviewed for Edge #434: reviewer Contact activation remains inside existing command-runtime ownership, coverage, and routing rules.'
+lastReviewedAt: '2026-09-27'
+lastReviewedCommit: '422feb7acedc7ab16c3e393a291ceb6a05c6b65c'
+lastReviewedNote: 'Reviewed for Edge #439: exact Main d906ed2 is synchronized with Dev422feb7 while preserving reviewer Contact activation and every Dev-only runtime/test contract. Foundation helper functions remain api with public table/queue schema and two private derivative targets; the owned Hybrid deadline fixture cleanup is retained without runtime/budget changes. Dev qualification/deployment and RootMain source eligibility remain separate gates.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
