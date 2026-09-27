@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-27
-lastReviewedCommit: d0d65fb9322a90d87f5723ebe5e688fd054571bf
-lastReviewedNote: 'Reviewed for Edge #437: all nine generated queries independently qualify function and public table schemas. Hosted proof must own queue messages because ACK/defer mutate pgmq; metadata/zero-row compilation, real consumer outcomes and separately guarded dead-letter recovery retain precise evidence boundaries.'
+lastReviewedCommit: 97855a510f298fbe0cfc2b493363a497283de36e
+lastReviewedNote: 'Reviewed for Edge #437: foundation function targets match canonical api while public table/queue schema, nine targets and auth/pool/DS contracts remain unchanged. Required Linux CI exposed two existing deadline fixtures without owned cleanup; they now create and await their fake Redis client after unchanged deadline/status/abort/no-DB assertions, with all sanitizers enabled. No Portal runtime, budget, deploy/auth setting or ownership/routing change is introduced.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

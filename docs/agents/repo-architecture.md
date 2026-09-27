@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-27
-lastReviewedCommit: d0d65fb9322a90d87f5723ebe5e688fd054571bf
-lastReviewedNote: 'Reviewed for Edge #437: seven normal embedding helpers are in api and two guarded derivative helpers remain private. Queue schema identifies the public source table independently from function schema; auth, separately quoted identifiers and the bounded one-connection pool remain unchanged.'
+lastReviewedCommit: 97855a510f298fbe0cfc2b493363a497283de36e
+lastReviewedNote: 'Reviewed for Edge #437: foundation function targets match canonical api while public table/queue schema, nine targets and auth/pool/DS contracts remain unchanged. Required Linux CI exposed two existing deadline fixtures without owned cleanup; they now create and await their fake Redis client after unchanged deadline/status/abort/no-DB assertions, with all sanitizers enabled. No Portal runtime, budget, deploy/auth setting or ownership/routing change is introduced.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml

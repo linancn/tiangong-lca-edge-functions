@@ -1789,6 +1789,8 @@ Deno.test(
         },
         {
           timeoutMs: 100,
+          redis: undefined,
+          redisFactory: async () => redis,
           rewriteQuery: (_config: unknown, _query: string, signal: AbortSignal) => {
             rewriteSignal = signal;
             return neverPromise();
@@ -1808,6 +1810,14 @@ Deno.test(
     assertEquals(embeddingCalls, 0);
     assertEquals(embeddingSignal, undefined);
     assertEquals(databaseCalls, 0);
+    assertEquals(
+      await raceWithTimeout(
+        redis.closed.promise.then(() => true),
+        500,
+        false,
+      ),
+      true,
+    );
   },
 );
 
@@ -1829,6 +1839,8 @@ Deno.test(
         },
         {
           timeoutMs: 100,
+          redis: undefined,
+          redisFactory: async () => redis,
           generateEmbedding: (_query: string, signal: AbortSignal) => {
             embeddingSignal = signal;
             return new Promise((_resolve, reject) => {
@@ -1858,6 +1870,14 @@ Deno.test(
     assertEquals(typeof events[0].embeddingLatencyMs, 'number');
     assertEquals(events[0].status, response.status);
     assertEquals(events[0].errorCode, 'hybrid_timeout');
+    assertEquals(
+      await raceWithTimeout(
+        redis.closed.promise.then(() => true),
+        500,
+        false,
+      ),
+      true,
+    );
   },
 );
 
