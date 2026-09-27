@@ -23,9 +23,9 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-09-21
-lastReviewedCommit: 568ad2c
-lastReviewedNote: 'Reviewed for Edge #425 with workspace #1432: the optional save-draft expected-before field changes no setup, serve, deploy or request-example guidance in this landing document.'
+lastReviewedAt: 2026-09-27
+lastReviewedCommit: d516fd4a6b860256d09be95c83e77fcbcbb2cc41
+lastReviewedNote: 'Reviewed for Edge #439: combined Dev inventory is 157 roots, 73 Node and 578 Deno tests; exact Main embedding namespace repair and Dev-only runtime contracts remain intact. Source-table/public versus function/api separation, auth, bounded pool and owned deadline fixture cleanup remain unchanged.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -493,7 +493,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 155-root Deno graph, 73 Node contract tests, and 575 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 157-root Deno graph, 73 Node contract tests, and 578 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 

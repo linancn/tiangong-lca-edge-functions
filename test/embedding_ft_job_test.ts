@@ -19,11 +19,11 @@ const TABLE_FUNCTIONS: Record<string, string> = {
 };
 
 const EXPECTED_TARGETS = [
-  { table: 'contacts', contentFunction: 'contacts_embedding_ft_input', schema: 'public' },
+  { table: 'contacts', contentFunction: 'contacts_embedding_ft_input', schema: 'api' },
   {
     table: 'flowproperties',
     contentFunction: 'flowproperties_embedding_ft_input',
-    schema: 'public',
+    schema: 'api',
   },
   { table: 'flows', contentFunction: 'flows_embedding_ft_input', schema: 'api' },
   {
@@ -42,8 +42,8 @@ const EXPECTED_TARGETS = [
     contentFunction: 'processes_derivative_rebuild_embedding_input',
     schema: 'private',
   },
-  { table: 'sources', contentFunction: 'sources_embedding_ft_input', schema: 'public' },
-  { table: 'unitgroups', contentFunction: 'unitgroups_embedding_ft_input', schema: 'public' },
+  { table: 'sources', contentFunction: 'sources_embedding_ft_input', schema: 'api' },
+  { table: 'unitgroups', contentFunction: 'unitgroups_embedding_ft_input', schema: 'api' },
 ] as const;
 
 function job(table: string, contentFunction = TABLE_FUNCTIONS[table], schema = 'public') {
@@ -120,15 +120,19 @@ Deno.test('embedding_ft qualifies all canonical cutover functions with api', () 
   }
 });
 
-Deno.test('embedding_ft keeps unchanged foundation functions in public', () => {
-  for (const table of ['contacts', 'flowproperties', 'sources', 'unitgroups']) {
-    const [parsed] = parseEmbeddingFtJobs([job(table)]);
-    assertEquals(embeddingFtFunctionTarget(parsed), {
-      schema: 'public',
-      function: TABLE_FUNCTIONS[table],
-    });
-  }
-});
+Deno.test(
+  'embedding_ft keeps foundation table jobs public while targeting canonical api functions',
+  () => {
+    for (const table of ['contacts', 'flowproperties', 'sources', 'unitgroups']) {
+      const [parsed] = parseEmbeddingFtJobs([job(table)]);
+      assertEquals(parsed.schema, 'public');
+      assertEquals(embeddingFtFunctionTarget(parsed), {
+        schema: 'api',
+        function: TABLE_FUNCTIONS[table],
+      });
+    }
+  },
+);
 
 Deno.test('embedding_ft accepts canonical PostgreSQL UUID text beyond RFC version bits', () => {
   for (const id of [
@@ -152,36 +156,37 @@ Deno.test('embedding_ft rejects arbitrary schema, table, function, and column id
   }
 });
 
-Deno.test('embedding_ft uses separately quoted schema and function identifiers', () => {
-  const identifiers: string[] = [];
-  const fakeSql = ((valueOrStrings: string | TemplateStringsArray, ...values: unknown[]) => {
-    if (typeof valueOrStrings === 'string') {
-      identifiers.push(valueOrStrings);
-      return `quoted:${valueOrStrings}`;
+Deno.test(
+  'embedding_ft separately quotes every reviewed function target and its public table',
+  () => {
+    for (const { table, contentFunction, schema: functionSchema } of EXPECTED_TARGETS) {
+      const identifiers: string[] = [];
+      const fakeSql = ((valueOrStrings: string | TemplateStringsArray, ...values: unknown[]) => {
+        if (typeof valueOrStrings === 'string') {
+          identifiers.push(valueOrStrings);
+          return `quoted:${valueOrStrings}`;
+        }
+        return { strings: [...valueOrStrings], values };
+      }) as unknown as Parameters<typeof buildEmbeddingFtContentQuery>[0];
+
+      const [parsed] = parseEmbeddingFtJobs([job(table, contentFunction)]);
+      const query = buildEmbeddingFtContentQuery(fakeSql, parsed) as {
+        strings: string[];
+        values: unknown[];
+      };
+
+      assertEquals(identifiers, [functionSchema, contentFunction, 'public', table]);
+      assertStringIncludes(query.strings.join(''), 'select');
+      assertEquals(query.values.slice(0, 4), [
+        `quoted:${functionSchema}`,
+        `quoted:${contentFunction}`,
+        'quoted:public',
+        `quoted:${table}`,
+      ]);
+      assertEquals(query.values.slice(4), [parsed.id, parsed.version]);
     }
-    return { strings: [...valueOrStrings], values };
-  }) as unknown as Parameters<typeof buildEmbeddingFtContentQuery>[0];
-
-  const [parsed] = parseEmbeddingFtJobs([job('lifecyclemodels')]);
-  const query = buildEmbeddingFtContentQuery(fakeSql, parsed) as {
-    strings: string[];
-    values: unknown[];
-  };
-
-  assertEquals(identifiers, [
-    'api',
-    'lifecyclemodels_embedding_ft_input',
-    'public',
-    'lifecyclemodels',
-  ]);
-  assertStringIncludes(query.strings.join(''), 'select');
-  assertEquals(query.values.slice(0, 4), [
-    'quoted:api',
-    'quoted:lifecyclemodels_embedding_ft_input',
-    'quoted:public',
-    'quoted:lifecyclemodels',
-  ]);
-});
+  },
+);
 
 Deno.test('embedding_ft rejects malformed batches before target evaluation', () => {
   const error = assertThrows(
