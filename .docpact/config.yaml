@@ -1,8 +1,8 @@
 version: 1
 layout: repo
-lastReviewedAt: '2026-09-21'
-lastReviewedCommit: '568ad2c'
-lastReviewedNote: 'Reviewed for Edge #425 with workspace #1432: the guarded draft-save transport changes no routing intent, ownership entry, coverage rule or governed-doc inventory; only the save-draft command surface gained an optional expected-before field.'
+lastReviewedAt: '2026-09-27'
+lastReviewedCommit: 'd0d65fb9322a90d87f5723ebe5e688fd054571bf'
+lastReviewedNote: 'Reviewed for Edge #437: embedding target relocation changes no routing, ownership, rule, inventory or toolchain boundary. The runtime map now matches canonical Database api helpers while public source-table payloads and nine closed targets remain unchanged.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

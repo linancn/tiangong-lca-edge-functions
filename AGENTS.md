@@ -38,9 +38,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-09-21
-lastReviewedCommit: 568ad2c
-lastReviewedNote: 'Reviewed for Edge #425 with workspace #1432: the dataset save-draft command carries an optional expected before image to the database-owned guarded RPC, fails closed without fallback or retry, and changes no branch, deploy, auth or toolchain boundary.'
+lastReviewedAt: 2026-09-27
+lastReviewedCommit: d0d65fb9322a90d87f5723ebe5e688fd054571bf
+lastReviewedNote: 'Reviewed for Edge #437: the four foundation embedding input targets use canonical api functions while source-table job schema remains public. Ownership, M2 hotfix/backmerge, exact toolchain, auth, closed target set and bounded pool remain unchanged; hosted deployment/recovery and Root integration are separate gates.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
