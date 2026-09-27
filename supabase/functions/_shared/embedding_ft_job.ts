@@ -59,25 +59,25 @@ const ALLOWED_EMBEDDING_FT_TARGETS: Readonly<
   },
   contacts: {
     contacts_embedding_ft_input: {
-      schema: 'public',
+      schema: 'api',
       function: 'contacts_embedding_ft_input',
     },
   },
   flowproperties: {
     flowproperties_embedding_ft_input: {
-      schema: 'public',
+      schema: 'api',
       function: 'flowproperties_embedding_ft_input',
     },
   },
   sources: {
     sources_embedding_ft_input: {
-      schema: 'public',
+      schema: 'api',
       function: 'sources_embedding_ft_input',
     },
   },
   unitgroups: {
     unitgroups_embedding_ft_input: {
-      schema: 'public',
+      schema: 'api',
       function: 'unitgroups_embedding_ft_input',
     },
   },
