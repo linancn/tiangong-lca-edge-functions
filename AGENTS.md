@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-27
-lastReviewedCommit: 97855a510f298fbe0cfc2b493363a497283de36e
-lastReviewedNote: 'Reviewed for Edge #437: foundation function targets match canonical api while public table/queue schema, nine targets and auth/pool/DS contracts remain unchanged. Required Linux CI exposed two existing deadline fixtures without owned cleanup; they now create and await their fake Redis client after unchanged deadline/status/abort/no-DB assertions, with all sanitizers enabled. No Portal runtime, budget, deploy/auth setting or ownership/routing change is introduced.'
+lastReviewedCommit: 422feb7acedc7ab16c3e393a291ceb6a05c6b65c
+lastReviewedNote: 'Reviewed for Edge #439: exact Main d906ed2 is synchronized with Dev422feb7 while preserving reviewer Contact activation and every Dev-only runtime/test contract. Foundation helper functions remain api with public table/queue schema and two private derivative targets; the owned Hybrid deadline fixture cleanup is retained without runtime/budget changes. Dev qualification/deployment and RootMain source eligibility remain separate gates.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md

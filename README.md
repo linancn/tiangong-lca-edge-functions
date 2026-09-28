@@ -24,8 +24,8 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-09-27
-lastReviewedCommit: 97855a510f298fbe0cfc2b493363a497283de36e
-lastReviewedNote: 'Reviewed for Edge #437: foundation function targets match canonical api while public table/queue schema, nine targets and auth/pool/DS contracts remain unchanged. Required Linux CI exposed two existing deadline fixtures without owned cleanup; they now create and await their fake Redis client after unchanged deadline/status/abort/no-DB assertions, with all sanitizers enabled. No Portal runtime, budget, deploy/auth setting or ownership/routing change is introduced.'
+lastReviewedCommit: d516fd4a6b860256d09be95c83e77fcbcbb2cc41
+lastReviewedNote: 'Reviewed for Edge #439: combined Dev inventory is 157 roots, 73 Node and 578 Deno tests; exact Main embedding namespace repair and Dev-only runtime contracts remain intact. Source-table/public versus function/api separation, auth, bounded pool and owned deadline fixture cleanup remain unchanged.'
 ---
 
 # TianGong-LCA-Edge-Functions
@@ -493,7 +493,7 @@ Use `pnpm format` only when you intend to rewrite files with Prettier.
 pnpm check
 ```
 
-This canonical gate validates exact runtime versions, one bounded shared 153-root Deno graph, 73 Node contract tests, and 563 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
+This canonical gate validates exact runtime versions, one bounded shared 157-root Deno graph, 73 Node contract tests, and 578 default Deno behavior tests; the one credentialed live Upstash test is ignored unless explicitly selected. It intentionally skips the currently disabled `antchain_*` functions. The retired generic non-FT embedding worker and LLM summary webhooks are no longer part of the source inventory; the deterministic `embedding_ft` family remains active.
 
 3. Run minimal checks for affected files when you need scoped verification during iteration:
 
