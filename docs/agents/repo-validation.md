@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-29
-lastReviewedCommit: 6e8565c9230f6302ebd44546fa3b1a5b15b624ed
-lastReviewedNote: 'Reviewed for Edge #439: exact Main d906ed2 is synchronized with Dev422feb7 while preserving all Dev-only publication, reviewer Contact and Hybrid runtime/test contracts. Foundation helper functions remain api with public table/queue schema and two private derivative targets; owned Hybrid deadline fixture cleanup remains without runtime/budget changes. Combined inventory/count qualification and Dev deployment remain gates; RootMain selects only eligible Main.'
+lastReviewedCommit: 3acebf0e8a6f49d1715a21ba9e17252879e2de8d
+lastReviewedNote: 'Reviewed for Edge #442 after integrating current Dev through Edge #443: the actor-bound rejected review-report download Function remains within 159 shared graph roots; combined delivery runs 73 Node contract tests and 584 default Deno behavior tests. Runtime, compiler, batching, and credentialed-live-test boundaries remain unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -55,7 +55,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 157 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots (81 of them under `test/`) in one shared graph, runs 73 Node contract tests, and executes 578 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 159 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots (82 of them under `test/`) in one shared graph, runs 73 Node contract tests, and executes 584 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 Review note, 2026-08-31: Edge #357 upgrades every direct runtime/import dependency to the latest stable version verified for exact Deno 2.1.4, including OpenAI 7.8 and Supabase JSR 2.112.4. Validation requires empty `pnpm outdated` and exact-Deno `deno outdated --latest`, one import-map/direct-import contract, targeted OpenAI/Redis/Supabase/Auth checks, Redis 0.41.2's dual-provider signature adaptation, the canonical full gate, and no Portal credential/config mutation. Official OpenAI documentation continues to define `client.responses.create` as the primary JavaScript API; Chat fallback remains covered.
 
