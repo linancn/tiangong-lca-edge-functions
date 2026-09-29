@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-09-29
-lastReviewedCommit: 6e8565c9230f6302ebd44546fa3b1a5b15b624ed
-lastReviewedNote: 'Reviewed for Edge #439: exact Main d906ed2 is synchronized with Dev422feb7 while preserving reviewer Contact activation and every Dev-only runtime/test contract. Foundation helper functions remain api with public table/queue schema and two private derivative targets; the owned Hybrid deadline fixture cleanup is retained without runtime/budget changes. Dev qualification/deployment and RootMain source eligibility remain separate gates.'
+lastReviewedCommit: 3acebf0e8a6f49d1715a21ba9e17252879e2de8d
+lastReviewedNote: 'Reviewed for Edge #442 after integrating current Dev through Edge #443: the actor-bound report-download command signs only database-authorized current external_docs attachments for five minutes, exposes no storage locator, and follows the existing command runtime, validation, and deployment contracts.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
