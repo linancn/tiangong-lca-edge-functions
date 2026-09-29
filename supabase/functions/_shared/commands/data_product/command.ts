@@ -53,7 +53,9 @@ const closureLinkPolicySchema = z
   .object({
     linkSemanticsVersion: z.literal('signed-flow-balance-v1').optional(),
     flowIdentityPolicy: z.literal('exact-flow-version-reference-unit-v2').optional(),
-    allocationSemanticsVersion: z.literal('tidas-reference-allocation-v3').optional(),
+    allocationSemanticsVersion: z
+      .enum(['tidas-reference-allocation-v3', 'tidas-reference-allocation-v4'])
+      .optional(),
     technosphereBoundaryPolicy: z.enum(['closed', 'open', 'cutoff']).optional(),
     providerUniversePolicy: z.enum(['scope_only', 'eligible_transitive_expansion-v1']).optional(),
   })

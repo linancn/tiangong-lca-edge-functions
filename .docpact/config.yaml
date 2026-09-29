@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-09-29'
-lastReviewedCommit: '6e8565c9230f6302ebd44546fa3b1a5b15b624ed'
-lastReviewedNote: 'Reviewed for Edge #442: the new review-report command, actor RPC adapter, Function, tests, and exact inventory updates remain covered by existing runtime, proof, documentation, and deployment routing; rule semantics are unchanged.'
+lastReviewedCommit: '3acebf0e8a6f49d1715a21ba9e17252879e2de8d'
+lastReviewedNote: 'Reviewed for Edge #442 after integrating current Dev through Edge #443: the review-report command, actor RPC adapter, Function, tests, and exact inventory updates remain covered by existing runtime, proof, documentation, and deployment routing; rule semantics are unchanged.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
