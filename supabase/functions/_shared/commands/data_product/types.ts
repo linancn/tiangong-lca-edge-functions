@@ -13,7 +13,7 @@ export type DataProductClosureRequestedScope = {
   linkPolicy?: {
     linkSemanticsVersion?: 'signed-flow-balance-v1';
     flowIdentityPolicy?: 'exact-flow-version-reference-unit-v2';
-    allocationSemanticsVersion?: 'tidas-reference-allocation-v3';
+    allocationSemanticsVersion?: 'tidas-reference-allocation-v3' | 'tidas-reference-allocation-v4';
     technosphereBoundaryPolicy?: 'closed' | 'open' | 'cutoff';
     providerUniversePolicy?: 'scope_only' | 'eligible_transitive_expansion-v1';
   };

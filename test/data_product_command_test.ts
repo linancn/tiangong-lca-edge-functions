@@ -2179,3 +2179,49 @@ Deno.test('executeDataProductCommand propagates manager authorization failures',
     message: 'Data product manager role is required',
   });
 });
+
+Deno.test('closure allocation versions are forwarded exactly during v4 rollout', () => {
+  const request = {
+    action: 'create_closure_check',
+    requestedScope: {
+      coverageMode: 'global_eligible',
+      lciaMethods: [{ id: TEST_USER_ID, version: '01.00.000' }],
+    },
+    requestIdempotencyToken: 'allocation-v4-contract',
+  };
+  const omitted = dataProductCommandRequestSchema.parse(request);
+  assertEquals('requestedScope' in omitted && omitted.requestedScope.linkPolicy, undefined);
+  for (const version of [
+    'tidas-reference-allocation-v3',
+    'tidas-reference-allocation-v4',
+  ] as const) {
+    const parsed = dataProductCommandRequestSchema.parse({
+      ...request,
+      requestedScope: {
+        ...request.requestedScope,
+        linkPolicy: { allocationSemanticsVersion: version },
+      },
+    });
+    assertEquals(
+      'requestedScope' in parsed && parsed.requestedScope.linkPolicy?.allocationSemanticsVersion,
+      version,
+    );
+  }
+  for (const version of [
+    'tidas-reference-allocation-v2',
+    'tidas-reference-allocation-v5',
+    '',
+    null,
+  ]) {
+    assertEquals(
+      dataProductCommandRequestSchema.safeParse({
+        ...request,
+        requestedScope: {
+          ...request.requestedScope,
+          linkPolicy: { allocationSemanticsVersion: version },
+        },
+      }).success,
+      false,
+    );
+  }
+});
