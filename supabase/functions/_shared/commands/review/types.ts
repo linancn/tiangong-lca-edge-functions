@@ -87,6 +87,13 @@ export type ReviewQualityDiagnosticRequest =
       runId?: string;
     };
 
+export type ReviewReportDownloadRequest = {
+  processId: string;
+  processVersion: string;
+  sourceId: string;
+  sourceVersion: string;
+};
+
 export type ReviewResponsibility = {
   reviewId: string;
   reviewKind: ReviewKind;
