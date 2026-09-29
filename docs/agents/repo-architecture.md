@@ -52,6 +52,8 @@ This repo is organized around Edge Function families plus a shared runtime layer
 
 Shared Supabase clients default database operations to `api`. Every direct relation access selects `public` explicitly and is limited to the nine core entity tables. Worker, identity, review, LCA, TIDAS, and Data Product internal state is consumed only through database-owned capability façades; Edge never selects `private` through the Data API.
 
+Data Product closure intent admits allocation v3 and v4 during coordinated rollout and forwards an explicitly requested version unchanged. Omitted policy remains Database-owned. Database #755 selects v4 for new requests; Worker #305 owns v4 compilation. Edge admission alone does not grant old certificates v4 validity.
+
 ## Stable Path Map
 
 | Path group | Stability | Why it matters |
