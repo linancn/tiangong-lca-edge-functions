@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-10-04
-lastReviewedCommit: 4e14e529faf246a7d1f81e47f4a50db9311808ae
-lastReviewedNote: 'Reviewed Edge #448: shared preflight caches header permission for 600 seconds with explicit Authorization; origins, route methods, per-request actor checks and business response caching remain unchanged. Canonical checks and browser regression qualify the header contract.'
+lastReviewedCommit: a35fed5b5647ecdbbb8ba7d3bde1b4f15b969457
+lastReviewedNote: 'Reviewed Edge #451 at a35fed5: explicit Functions JS request-header names restore preflight reuse in tested Firefox versions while preserving wildcard caller permission, the 600-second lifetime and per-request actor checks. Routing, ownership, branch policy, function inventory and Portal isolation remain consistent; the validation guide records the browser and handler proof boundaries.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -69,7 +69,7 @@ If you reactivate or rely on that route family, update the inventory and validat
 
 ### Browser preflight regression
 
-For shared CORS changes, exercise an actual cross-origin browser request with Authorization and the SDK headers. Compare the old and new header policy across more than the browser's default cache lifetime, and prove that a changed/expired bearer still reaches authentication and receives 401 rather than reusing success. `test/command_runtime_test.ts` separately proves preflight bypasses actor/business work, while POST still resolves its actor on every call and unsupported methods remain rejected. No response-cache directive or credential wildcard is introduced.
+For shared CORS changes, exercise actual cross-origin requests in both Firefox and Chromium with the complete Functions JS header set: Authorization, apikey, Content-Type, x-client-info, and x-region when a function region is selected. Isolated Firefox 140.0.2 and 153.0 regressions showed that wildcard header permission allowed POST but did not reuse its preflight cache; explicitly naming the SDK headers restored reuse. Keeping `*` alongside those names preserves other callers' header permission. Compare the old and new header policy across more than the browser's default cache lifetime, and prove that a changed/expired bearer still reaches authentication and receives 401 rather than reusing success. Include an additional caller header to verify wildcard compatibility. `test/command_runtime_test.ts` separately proves explicit SDK header coverage, preflight bypassing actor/business work, POST resolving its actor on every call, and unsupported methods remaining rejected. No response-cache directive or credential wildcard is introduced.
 
 ## Validation Matrix
 
