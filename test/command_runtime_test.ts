@@ -108,3 +108,87 @@ Deno.test('createCommandHandler propagates actor resolution failures', async () 
     message: 'Authentication required',
   });
 });
+
+Deno.test(
+  'command preflight caches header permission without resolving an actor or executing work',
+  async () => {
+    let actorCalls = 0;
+    let executions = 0;
+    const handler = createCommandHandler({
+      parse: (body) => ({ ok: true as const, value: body }),
+      resolveActor: async () => {
+        actorCalls += 1;
+        return { ok: true as const, value: fakeActor };
+      },
+      execute: async () => {
+        executions += 1;
+        return { ok: true as const, body: { ok: true } };
+      },
+    });
+    const response = await handler(
+      new Request('http://localhost/command', {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'https://lca.tiangong.earth',
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'authorization,apikey,content-type,x-client-info',
+        },
+      }),
+    );
+    assertEquals(response.status, 200);
+    assertEquals(response.headers.get('access-control-max-age'), '600');
+    assertEquals(response.headers.get('access-control-allow-origin'), '*');
+    const allowed = response.headers
+      .get('access-control-allow-headers')!
+      .toLowerCase()
+      .split(',')
+      .map((header) => header.trim());
+    // Fetch treats Authorization as a non-wildcard request header.
+    assertEquals(allowed.includes('authorization'), true);
+    assertEquals(allowed.includes('*'), true);
+    assertEquals(response.headers.has('cache-control'), false);
+    assertEquals(actorCalls, 0);
+    assertEquals(executions, 0);
+    await response.body?.cancel();
+  },
+);
+
+Deno.test(
+  'a successful preflight never substitutes for authentication on a later POST',
+  async () => {
+    let actorCalls = 0;
+    let executions = 0;
+    const handler = createCommandHandler({
+      parse: (body) => ({ ok: true as const, value: body }),
+      resolveActor: async () => {
+        actorCalls += 1;
+        return { ok: false as const, response: new Response('Unauthorized', { status: 401 }) };
+      },
+      execute: async () => {
+        executions += 1;
+        return { ok: true as const, body: {} };
+      },
+    });
+    const preflight = await handler(new Request('http://localhost/command', { method: 'OPTIONS' }));
+    await preflight.body?.cancel();
+    for (const token of ['expired-token', 'different-expired-token']) {
+      const response = await handler(
+        new Request('http://localhost/command', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: '{}',
+        }),
+      );
+      assertEquals(response.status, 401);
+      await response.body?.cancel();
+    }
+    assertEquals(actorCalls, 2);
+    assertEquals(executions, 0);
+    const unsupported = await handler(
+      new Request('http://localhost/command', { method: 'DELETE' }),
+    );
+    assertEquals(unsupported.status, 405);
+    await unsupported.body?.cancel();
+    assertEquals(actorCalls, 2);
+  },
+);

@@ -38,9 +38,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-09-29
-lastReviewedCommit: 3acebf0e8a6f49d1715a21ba9e17252879e2de8d
-lastReviewedNote: 'Reviewed for Edge #442 after integrating current Dev through Edge #443: the actor-bound report-download command signs only database-authorized current external_docs attachments for five minutes, exposes no storage locator, and follows the existing command runtime, validation, and deployment contracts.'
+lastReviewedAt: 2026-10-04
+lastReviewedCommit: 4e14e529faf246a7d1f81e47f4a50db9311808ae
+lastReviewedNote: 'Reviewed Edge #448: shared preflight caches header permission for 600 seconds with explicit Authorization; origins, route methods, per-request actor checks and business response caching remain unchanged. Canonical checks and browser regression qualify the header contract.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
