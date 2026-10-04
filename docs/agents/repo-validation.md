@@ -69,7 +69,7 @@ If you reactivate or rely on that route family, update the inventory and validat
 
 ### Browser preflight regression
 
-For shared CORS changes, exercise an actual cross-origin browser request with Authorization and the SDK headers. Compare the old and new header policy across more than the browser's default cache lifetime, and prove that a changed/expired bearer still reaches authentication and receives 401 rather than reusing success. `test/command_runtime_test.ts` separately proves preflight bypasses actor/business work, while POST still resolves its actor on every call and unsupported methods remain rejected. No response-cache directive or credential wildcard is introduced.
+For shared CORS changes, exercise actual cross-origin requests in both Firefox and Chromium with the complete Functions JS header set: Authorization, apikey, Content-Type, x-client-info, and x-region when a function region is selected. Isolated Firefox 140.0.2 and 153.0 regressions showed that wildcard header permission allowed POST but did not reuse its preflight cache; explicitly naming the SDK headers restored reuse. Keeping `*` alongside those names preserves other callers' header permission. Compare the old and new header policy across more than the browser's default cache lifetime, and prove that a changed/expired bearer still reaches authentication and receives 401 rather than reusing success. Include an additional caller header to verify wildcard compatibility. `test/command_runtime_test.ts` separately proves explicit SDK header coverage, preflight bypassing actor/business work, POST resolving its actor on every call, and unsupported methods remaining rejected. No response-cache directive or credential wildcard is introduced.
 
 ## Validation Matrix
 

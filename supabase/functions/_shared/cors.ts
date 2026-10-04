@@ -1,6 +1,7 @@
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  // Authorization is never covered by the Fetch preflight header wildcard.
-  'Access-Control-Allow-Headers': '*, authorization',
+  // Firefox permits wildcard headers but only reuses explicitly cached header names.
+  // Keep the wildcard for other callers and name every header sent by Functions JS.
+  'Access-Control-Allow-Headers': '*, authorization, apikey, content-type, x-client-info, x-region',
   'Access-Control-Max-Age': '600',
 };

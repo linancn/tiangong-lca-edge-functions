@@ -131,7 +131,8 @@ Deno.test(
         headers: {
           Origin: 'https://lca.tiangong.earth',
           'Access-Control-Request-Method': 'POST',
-          'Access-Control-Request-Headers': 'authorization,apikey,content-type,x-client-info',
+          'Access-Control-Request-Headers':
+            'authorization,apikey,content-type,x-client-info,x-region',
         },
       }),
     );
@@ -143,8 +144,10 @@ Deno.test(
       .toLowerCase()
       .split(',')
       .map((header) => header.trim());
-    // Fetch treats Authorization as a non-wildcard request header.
-    assertEquals(allowed.includes('authorization'), true);
+    // Firefox requires explicit names to reuse SDK preflights, even with a wildcard.
+    for (const header of ['authorization', 'apikey', 'content-type', 'x-client-info', 'x-region']) {
+      assertEquals(allowed.includes(header), true, `Missing cached SDK header: ${header}`);
+    }
     assertEquals(allowed.includes('*'), true);
     assertEquals(response.headers.has('cache-control'), false);
     assertEquals(actorCalls, 0);
