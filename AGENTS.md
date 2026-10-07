@@ -38,9 +38,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-04
-lastReviewedCommit: a35fed5b5647ecdbbb8ba7d3bde1b4f15b969457
-lastReviewedNote: 'Reviewed Edge #451 at a35fed5: explicit Functions JS request-header names restore preflight reuse in tested Firefox versions while preserving wildcard caller permission, the 600-second lifetime and per-request actor checks. Routing, ownership, branch policy, function inventory and Portal isolation remain consistent; the validation guide records the browser and handler proof boundaries.'
+lastReviewedAt: 2026-10-07
+lastReviewedCommit: 670d0256ed91ef33597ffe59467245a98400e28d
+lastReviewedNote: 'Reviewed Edge #458 source670d025: raw latest count and integer-offset rejection precedes model work; matched/Open Data dispatch, auth, default and threshold-zero fallback remain covered. Targeted62 and canonical590 Deno tests plus73 Node contracts pass; independent review reports no material findings. Main deployment, Dev backmerge and workspace integration remain delivery-record gates.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -167,6 +167,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 
 - Portal V2 is an explicit wire-version opt-in on the same signed endpoint. It calls only the additive public V2 Database API, validates best-version groups plus every exact member, and uses opaque query-bound continuation. V1 callers retain their old public API contract. Never relabel a V1 response as V2.
 - Process/Flow matched-version mode requires a verified JWT context before model work, fixes each recall budget at 200, and acknowledges exact-version output with `versionScope=matched`. It validates and forwards state/team context, requires a selected team for `te` before paid work, forwards the reviewed Process dataset type, and validates the canonical Flow type/input/classification contract. The Database V2 RPC owns threshold fallback inside the single matched-mode Edge RPC call; omitted and explicit `latest` mode retain the legacy RPC parameter contract and Edge-owned empty-result retry at threshold zero. Service credentials gain no new RPC grant.
+- Raw Hybrid omitted/latest requests reject page_size or match_count above 100 and integer-range pagination before rewrite, embedding or RPC work. Matched 200-candidate and Open Data routes retain their own contracts. Database SQLSTATE `22023` maps to HTTP 400; other RPC failures retain HTTP 500.
 - The bounded full-text selector always reserves the original query and alternates English/Chinese model aliases so OR expansion cannot starve English terms. This does not restrict source-document languages or change the legacy selector.
 - do not invent schema truth or migration history in this repo
 - do not bypass `supabase/functions/deno.json` with a direct JSR, npm, HTTPS, or other `@supabase/functions-js` specifier; all Functions JS type imports use the exact mapped alias so local checks and remote bundles resolve 2.112.4

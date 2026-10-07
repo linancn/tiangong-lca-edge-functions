@@ -34,9 +34,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-04
-lastReviewedCommit: a35fed5b5647ecdbbb8ba7d3bde1b4f15b969457
-lastReviewedNote: 'Reviewed Edge #451 at a35fed5: explicit Functions JS request-header names restore preflight reuse in tested Firefox versions while preserving wildcard caller permission, the 600-second lifetime and per-request actor checks. Routing, ownership, branch policy, function inventory and Portal isolation remain consistent; the validation guide records the browser and handler proof boundaries.'
+lastReviewedAt: 2026-10-07
+lastReviewedCommit: 670d0256ed91ef33597ffe59467245a98400e28d
+lastReviewedNote: 'Reviewed Edge #458 source670d025: raw latest count and integer-offset rejection precedes model work; matched/Open Data dispatch, auth, default and threshold-zero fallback remain covered. Targeted62 and canonical590 Deno tests plus73 Node contracts pass; independent review reports no material findings. Main deployment, Dev backmerge and workspace integration remain delivery-record gates.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -87,6 +87,10 @@ Data Product closure intent admits allocation v3 and v4 during coordinated rollo
 
 Shared `corsHeaders` retains the existing public-origin and custom-header wildcard, explicitly lists `authorization` because it is not covered by the Fetch header wildcard, and advertises a 600-second preflight cache lifetime. This caches browser permission to send request headers, never a business response or an authenticated principal. Every later request still passes the route's method and actor checks; the CORS change does not advertise additional methods or enable cookie credentials.
 
+## Raw Hybrid request admission
+
+The shared Hybrid handler authenticates and parses before rejecting raw omitted/latest requests whose page or recall count exceeds 100, whose page-current cannot fit the RPC integer argument, or whose offset exceeds 2,147,483,647 row slots. Division checks the offset before multiplication; deep valid pages remain accepted. These failures return HTTP 400 before rewrite, embedding, client creation or RPC work. Matched-version and Open Data selectors retain their separate contracts. Database `22023` errors return HTTP 400, including errors from the legacy threshold-zero retry; other RPC errors retain HTTP 500.
+
 ## Branch Model In Practice
 
 `tiangong-lca-edge-functions` is an M2 repo:
@@ -101,7 +105,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 159 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 73 Node contract tests and 586 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
+The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 159 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 73 Node contract tests and 590 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
 
 Edge #379 removes the final identity-provider client, leaving AWS SDK 3.1121.0 only for SageMaker Runtime. OpenAI 7.8.0, Supabase JSR 2.112.4, Upstash Redis 1.38.3, Deno Redis 0.41.2, Zod 4.5.4, and Prettier 3.9.6 remain exact. Edge #361 makes every Functions JS type import use the mapped alias and rejects JSR, npm, HTTPS, and every alternative direct scheme, so local graph checks and Supabase deployment bundles share exact 2.112.4 resolution. Redis packages remain only for Portal. OpenAI Responses and Chat wrapper shapes remain valid on 7.8. Deno Redis 0.41.2 changed `get`/`eval` typing, so the Portal adapter branches explicitly between Upstash and Standard clients without weakening Lua, timeout, or error semantics.
 
