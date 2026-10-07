@@ -34,9 +34,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-07
-lastReviewedCommit: e1725b31a1dfb8afebc3d4f03f5f3a9be25076c8
-lastReviewedNote: 'Reviewed Edge #451 at a35fed5: explicit Functions JS request-header names restore preflight reuse in tested Firefox versions while preserving wildcard caller permission, the 600-second lifetime and per-request actor checks. Routing, ownership, branch policy, function inventory and Portal isolation remain consistent; the validation guide records the browser and handler proof boundaries.'
+lastReviewedAt: 2026-10-08
+lastReviewedCommit: e07b793d5139ffae11cb9a4744678b043443b43f
+lastReviewedNote: 'Reviewed Edge #460 merge e07b793: exact Main0657386 raw Hybrid bounds and tests are included, while existing Dev allocation-v5 command/types/tests remain byte-identical to d7d3d0b. Only review-metadata conflicts required resolution. Canonical lint and73 Node/591 Deno tests pass; root must continue to pin the qualified Main hotfix, not this Dev-only merge.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -55,7 +55,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 159 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots (82 of them under `test/`) in one shared graph, runs 73 Node contract tests, and executes 586 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 159 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots (82 of them under `test/`) in one shared graph, runs 73 Node contract tests, and executes 591 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 Review note, 2026-08-31: Edge #357 upgrades every direct runtime/import dependency to the latest stable version verified for exact Deno 2.1.4, including OpenAI 7.8 and Supabase JSR 2.112.4. Validation requires empty `pnpm outdated` and exact-Deno `deno outdated --latest`, one import-map/direct-import contract, targeted OpenAI/Redis/Supabase/Auth checks, Redis 0.41.2's dual-provider signature adaptation, the canonical full gate, and no Portal credential/config mutation. Official OpenAI documentation continues to define `client.responses.create` as the primary JavaScript API; Chat fallback remains covered.
 
@@ -131,6 +131,8 @@ Changes to `portal_public_transport.ts`, `portal_hybrid_provider.ts`, `portal_hy
 - LCIA reads only `PORTAL_LCIA_DEPLOYMENT_SHA`, Hybrid reads only `PORTAL_HYBRID_DEPLOYMENT_SHA`, and a missing/invalid/other-route SHA yields `unknown` rather than a cross-route or retired shared fallback
 
 The minimum targeted command remains the union of the two Portal rows above plus `test/hybrid_search_handler_test.ts`, `test/hybrid_query_utils_test.ts`, `test/auth_test.ts`, `test/supabase_client_test.ts`, `test/embedding_vector_test.ts`, and targeted `deno check` for both Portal entrypoints and the three Portal-only provider/kernel modules. Live provider calls, secret mutation, Function deployment, and enabling Hybrid are separate controlled gates and are not implied by local proof.
+
+Raw Hybrid admission proof in `test/hybrid_search_handler_test.ts` must cover omitted and explicit latest modes, page/recall counts 101 and INT_MAX, string-valued numbers, offset overflow and out-of-range page-current with zero rewrite, embedding, client or RPC calls. Preserve defaults, NULL normalization, Foundry 80, boundary 100, valid deep pages, matched 200 and Open Data dispatch. Prove SQLSTATE `22023` maps to HTTP 400 on both initial and threshold-zero fallback RPC errors while other RPC errors remain HTTP 500.
 
 The Process/Flow V2 route configurations also serve omitted and explicit `latest` requests. `test/hybrid_search_handler_test.ts` must prove that these four legacy combinations preserve the exact 12-parameter Database RPC contract and return the threshold-zero retry result. Matched V2 keeps its visibility/type fields and single-RPC fallback; foundation routes retain their supported visibility fields. The Flow fixture binds its own legacy RPC name.
 
