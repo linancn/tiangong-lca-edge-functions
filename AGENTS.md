@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-04
-lastReviewedCommit: a35fed5b5647ecdbbb8ba7d3bde1b4f15b969457
+lastReviewedAt: 2026-10-07
+lastReviewedCommit: e1725b31a1dfb8afebc3d4f03f5f3a9be25076c8
 lastReviewedNote: 'Reviewed Edge #451 at a35fed5: explicit Functions JS request-header names restore preflight reuse in tested Firefox versions while preserving wildcard caller permission, the 600-second lifetime and per-request actor checks. Routing, ownership, branch policy, function inventory and Portal isolation remain consistent; the validation guide records the browser and handler proof boundaries.'
 related:
   - .docpact/config.yaml
