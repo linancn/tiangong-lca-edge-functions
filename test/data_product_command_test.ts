@@ -2180,20 +2180,21 @@ Deno.test('executeDataProductCommand propagates manager authorization failures',
   });
 });
 
-Deno.test('closure allocation versions are forwarded exactly during v4 rollout', () => {
+Deno.test('closure allocation versions are forwarded exactly during v5 rollout', () => {
   const request = {
     action: 'create_closure_check',
     requestedScope: {
       coverageMode: 'global_eligible',
       lciaMethods: [{ id: TEST_USER_ID, version: '01.00.000' }],
     },
-    requestIdempotencyToken: 'allocation-v4-contract',
+    requestIdempotencyToken: 'allocation-v5-contract',
   };
   const omitted = dataProductCommandRequestSchema.parse(request);
   assertEquals('requestedScope' in omitted && omitted.requestedScope.linkPolicy, undefined);
   for (const version of [
     'tidas-reference-allocation-v3',
     'tidas-reference-allocation-v4',
+    'tidas-reference-allocation-v5',
   ] as const) {
     const parsed = dataProductCommandRequestSchema.parse({
       ...request,
@@ -2206,10 +2207,14 @@ Deno.test('closure allocation versions are forwarded exactly during v4 rollout',
       'requestedScope' in parsed && parsed.requestedScope.linkPolicy?.allocationSemanticsVersion,
       version,
     );
+    if (parsed.action !== 'create_closure_check') throw new Error('unexpected action');
+    const args = buildLciaScopeClosureCheckRequestRpcArgs(parsed, auditPayload);
+    assertEquals(args.p_requested_scope, parsed.requestedScope);
+    assertEquals(args.p_request_idempotency_token, request.requestIdempotencyToken);
   }
   for (const version of [
     'tidas-reference-allocation-v2',
-    'tidas-reference-allocation-v5',
+    'tidas-reference-allocation-v999',
     '',
     null,
   ]) {
@@ -2223,5 +2228,47 @@ Deno.test('closure allocation versions are forwarded exactly during v4 rollout',
       }).success,
       false,
     );
+  }
+});
+
+Deno.test('allocation v5 closure RPC preserves exact intent and database rejection', async () => {
+  for (const version of [
+    'tidas-reference-allocation-v4',
+    'tidas-reference-allocation-v5',
+  ] as const) {
+    const client = new FakeRpcSupabase({
+      data: {
+        ok: false,
+        code: 'invalid_closure_link_policy',
+        status: 400,
+        message: 'invalid_closure_link_policy',
+      },
+      error: null,
+    });
+    const parsed = dataProductCommandRequestSchema.parse({
+      action: 'create_closure_check',
+      resultSetId: TEST_RESULT_SET_ID,
+      requestedScope: {
+        coverageMode: 'global_eligible',
+        lciaMethods: [{ id: TEST_USER_ID, version: '01.00.000' }],
+        linkPolicy: { allocationSemanticsVersion: version },
+      },
+      requestIdempotencyToken: 'allocation-v5-rpc',
+    });
+    if (parsed.action !== 'create_closure_check') throw new Error('unexpected action');
+    const result = await callLciaScopeClosureCheckRequestRpc(client as never, parsed, auditPayload);
+    assertEquals(client.calls, [
+      {
+        fn: 'cmd_lcia_scope_closure_check_request_v3',
+        args: {
+          p_result_set_id: TEST_RESULT_SET_ID,
+          p_requested_scope: parsed.requestedScope,
+          p_request_idempotency_token: 'allocation-v5-rpc',
+          p_audit: auditPayload,
+        },
+      },
+    ]);
+    assertEquals(result.ok, false);
+    if (!result.ok) assertEquals(result.code, 'invalid_closure_link_policy');
   }
 });

@@ -34,9 +34,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-04
-lastReviewedCommit: a35fed5b5647ecdbbb8ba7d3bde1b4f15b969457
-lastReviewedNote: 'Reviewed Edge #451 at a35fed5: explicit Functions JS request-header names restore preflight reuse in tested Firefox versions while preserving wildcard caller permission, the 600-second lifetime and per-request actor checks. Routing, ownership, branch policy, function inventory and Portal isolation remain consistent; the validation guide records the browser and handler proof boundaries.'
+lastReviewedAt: 2026-10-07
+lastReviewedCommit: e1725b31a1dfb8afebc3d4f03f5f3a9be25076c8
+lastReviewedNote: 'Reviewed allocation v5 companion contract, exact request identity and coordinated rollout with Worker #311; existing ownership and branch boundaries remain unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -52,7 +52,7 @@ This repo is organized around Edge Function families plus a shared runtime layer
 
 Shared Supabase clients default database operations to `api`. Every direct relation access selects `public` explicitly and is limited to the nine core entity tables. Worker, identity, review, LCA, TIDAS, and Data Product internal state is consumed only through database-owned capability façades; Edge never selects `private` through the Data API.
 
-Data Product closure intent admits allocation v3 and v4 during coordinated rollout and forwards an explicitly requested version unchanged. Omitted policy remains Database-owned. Database #755 selects v4 for new requests; Worker #305 owns v4 compilation. Edge admission alone does not grant old certificates v4 validity.
+Data Product closure intent admits allocation v3, v4 and v5 and forwards an explicitly requested version unchanged. Omitted policy remains Database-owned. Database #789 freezes v5 for new requests and rejects stale explicit versions; Worker #311 owns v5 compilation for Product/Waste allocation targets in either direction. Coordinate those deployments before v5 admission is enabled. Edge transport compatibility does not grant historical certificates current validity or upgrade their evidence.
 
 ## Stable Path Map
 
