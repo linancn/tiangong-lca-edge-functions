@@ -984,3 +984,177 @@ Deno.test(
     }
   },
 );
+
+type BoundsRpcResult = {
+  data: unknown;
+  error: { code: string; message: string } | null;
+};
+
+function rawBoundsFixture(
+  config: HybridSearchRouteConfig,
+  results: BoundsRpcResult[] = [{ data: [{ id: VERSION_ID, version: '01.00.000' }], error: null }],
+) {
+  const work = { rewrite: 0, embedding: 0, client: 0 };
+  const rpcCalls: Array<{ name: string; body: Record<string, unknown> }> = [];
+  const handler = createHybridSearchHandler(config, {
+    authenticate: async () => VERIFIED_JWT_AUTH,
+    rewriteQuery: async () => {
+      work.rewrite++;
+      return { semantic_query_en: 'steel', fulltext_query_en: ['steel'], fulltext_query_zh: [] };
+    },
+    generateEmbedding: async () => {
+      work.embedding++;
+      return VECTOR;
+    },
+    createRpcClient: () => {
+      work.client++;
+      return {
+        client: {
+          rpc: (name: string, body: Record<string, unknown>) => {
+            rpcCalls.push({ name, body });
+            return Promise.resolve(results[Math.min(rpcCalls.length - 1, results.length - 1)]);
+          },
+        } as unknown as SupabaseClient,
+        userContextKind: 'jwt',
+        bearerToken: 'actor.jwt.signature',
+      };
+    },
+    logger: { log: () => undefined, error: () => undefined },
+  });
+  return {
+    work,
+    rpcCalls,
+    invoke: (body: Record<string, unknown>) =>
+      handler(
+        new Request('https://example.invalid/search', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer actor.jwt.signature' },
+          body: JSON.stringify({ query: 'steel', ...body }),
+        }),
+      ),
+  };
+}
+
+Deno.test('raw latest bounds reject requests before rewrite, embedding or RPC work', async () => {
+  for (const config of [CONTACT_CONFIG, VERSIONED_V2_CONFIG, FLOW_VERSIONED_V2_CONFIG]) {
+    for (const version_scope of [undefined, 'latest']) {
+      for (const options of [
+        { page_size: 101 },
+        { match_count: 101 },
+        { page_size: '101' },
+        { match_count: '101' },
+        { page_size: 2_147_483_647 },
+        { match_count: 2_147_483_647 },
+        { page_current: 2_147_483_647, page_size: 10 },
+        { page_current: '2147483647', page_size: '10' },
+        { page_current: 2_147_483_648, page_size: 1 },
+        { page_current: Math.floor(2_147_483_647 / 100) + 2, page_size: 100 },
+        { page_current: Number.MAX_SAFE_INTEGER, page_size: 1 },
+      ]) {
+        const fixture = rawBoundsFixture(config);
+        const response = await fixture.invoke({ version_scope, ...options });
+        assertEquals(response.status, 400);
+        assertEquals(fixture.work, { rewrite: 0, embedding: 0, client: 0 });
+        assertEquals(fixture.rpcCalls, []);
+      }
+    }
+  }
+});
+
+Deno.test(
+  'raw latest bounds retain defaults, NULL, Foundry80,100 and wide pagination',
+  async () => {
+    for (const config of [CONTACT_CONFIG, VERSIONED_V2_CONFIG, FLOW_VERSIONED_V2_CONFIG]) {
+      for (const version_scope of [undefined, 'latest']) {
+        for (const options of [
+          {},
+          { page_size: null, match_count: null, page_current: null },
+          {
+            page_size: 80,
+            match_count: 80,
+            match_threshold: 0.15,
+            lexical_weight: 0.8,
+            semantic_weight: 0.2,
+            rrf_k: 30,
+          },
+          { page_size: 100, match_count: 100 },
+          { page_size: '100', match_count: '100' },
+          { page_size: 99, page_current: 1_000_000 },
+          { page_size: 1, page_current: 2_147_483_647 },
+          { page_size: 100, page_current: Math.floor(2_147_483_647 / 100) + 1 },
+        ] as Array<Record<string, unknown>>) {
+          const fixture = rawBoundsFixture(config);
+          const response = await fixture.invoke({ version_scope, ...options });
+          assertEquals(response.status, 200);
+          assertEquals(fixture.work, { rewrite: 1, embedding: 1, client: 1 });
+          assertEquals(fixture.rpcCalls.length, 1);
+          assertEquals(fixture.rpcCalls[0].name, config.rpcName);
+          assertEquals(fixture.rpcCalls[0].body.page_size, Number(options.page_size ?? 10));
+          assertEquals(fixture.rpcCalls[0].body.match_count, Number(options.match_count ?? 20));
+          assertEquals(fixture.rpcCalls[0].body.page_current, options.page_current ?? 1);
+          if ('lexical_weight' in options) {
+            assertEquals(fixture.rpcCalls[0].body.lexical_weight, 0.8);
+            assertEquals(fixture.rpcCalls[0].body.semantic_weight, 0.2);
+            assertEquals(fixture.rpcCalls[0].body.rrf_k, 30);
+            assertEquals(fixture.rpcCalls[0].body.match_threshold, 0.15);
+          }
+        }
+      }
+    }
+  },
+);
+
+Deno.test('raw bounds leave matched200 and Open Data dispatch on their own contracts', async () => {
+  for (const config of [VERSIONED_V2_CONFIG, FLOW_VERSIONED_V2_CONFIG]) {
+    const matched = rawBoundsFixture(config, [{ data: [], error: null }]);
+    const response = await matched.invoke({ version_scope: 'matched', match_count: 200 });
+    assertEquals(response.status, 200);
+    assertEquals(matched.rpcCalls.length, 1);
+    assertEquals(matched.rpcCalls[0].name, config.versionedRpcName);
+    assertEquals(matched.rpcCalls[0].body.match_count, 200);
+  }
+  for (const version_scope of [undefined, 'latest', 'matched']) {
+    const config = {
+      ...VERSIONED_V2_CONFIG,
+      openDataRpcName: 'hybrid_search_open_data_catalog',
+    };
+    const openData = rawBoundsFixture(config, [{ data: [], error: null }]);
+    const response = await openData.invoke({
+      version_scope,
+      source_filter: 'all',
+      publication_filter: 'all',
+      match_count: 200,
+    });
+    assertEquals(response.status, 200);
+    assertEquals(openData.rpcCalls[0].name, 'hybrid_search_open_data_catalog');
+    assertEquals(openData.rpcCalls[0].body.match_count, 200);
+    assertEquals(openData.work, { rewrite: 1, embedding: 1, client: 1 });
+    assertEquals(openData.rpcCalls.length, version_scope === 'matched' ? 1 : 2);
+  }
+});
+
+Deno.test(
+  'SQLSTATE22023 maps to400 on initial and fallback RPC errors; other failures stay500',
+  async () => {
+    for (const code of ['22023', '42501', 'XX000']) {
+      for (const fallback of [false, true]) {
+        const failure = { data: null, error: { code, message: 'fixed database error' } };
+        const fixture = rawBoundsFixture(
+          VERSIONED_V2_CONFIG,
+          fallback ? [{ data: [], error: null }, failure] : [failure],
+        );
+        const response = await fixture.invoke({ match_count: 80, page_size: 80 });
+        assertEquals(response.status, code === '22023' ? 400 : 500);
+        assertEquals(await response.json(), { error: 'fixed database error' });
+        assertEquals(fixture.work, { rewrite: 1, embedding: 1, client: 1 });
+        assertEquals(fixture.rpcCalls.length, fallback ? 2 : 1);
+        if (fallback) {
+          assertEquals(
+            fixture.rpcCalls.map(({ body }) => body.match_threshold),
+            [0.5, 0],
+          );
+        }
+      }
+    }
+  },
+);

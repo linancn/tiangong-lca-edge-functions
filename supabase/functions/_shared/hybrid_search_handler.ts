@@ -152,6 +152,23 @@ export function createHybridSearchHandler(
       }
 
       const versioned = parsedRequest.versionScope === 'matched';
+      // Raw latest RPCs use integer pagination and a 100-candidate budget.
+      // Open Data and matched versions have their own Database contracts.
+      if (!versioned && !parsedRequest.openDataFilterRequested) {
+        const { page_size, page_current, match_count } = parsedRequest.rpcOptions;
+        if (page_size > 100) {
+          return jsonResponse({ error: 'Raw hybrid search page_size exceeds 100' }, 400);
+        }
+        if (match_count > 100) {
+          return jsonResponse({ error: 'Raw hybrid search match_count exceeds 100' }, 400);
+        }
+        if (
+          page_current > 2_147_483_647 ||
+          page_current - 1 > Math.floor(2_147_483_647 / page_size)
+        ) {
+          return jsonResponse({ error: 'Raw hybrid search pagination exceeds integer range' }, 400);
+        }
+      }
       if (versioned && !config.versionedRpcName) {
         return jsonResponse(
           { error: 'Matched version search is not supported by this route' },
@@ -372,7 +389,7 @@ export function createHybridSearchHandler(
           error_message: error.message,
           fallback_used: fallbackUsed,
         });
-        return jsonResponse({ error: error.message }, 500);
+        return jsonResponse({ error: error.message }, error.code === '22023' ? 400 : 500);
       }
 
       if (versioned) {
