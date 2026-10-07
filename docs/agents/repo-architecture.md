@@ -34,9 +34,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-07
-lastReviewedCommit: 670d0256ed91ef33597ffe59467245a98400e28d
-lastReviewedNote: 'Reviewed Edge #458 source670d025: raw latest count and integer-offset rejection precedes model work; matched/Open Data dispatch, auth, default and threshold-zero fallback remain covered. Targeted62 and canonical590 Deno tests plus73 Node contracts pass; independent review reports no material findings. Main deployment, Dev backmerge and workspace integration remain delivery-record gates.'
+lastReviewedAt: 2026-10-08
+lastReviewedCommit: e07b793d5139ffae11cb9a4744678b043443b43f
+lastReviewedNote: 'Reviewed Edge #460 merge e07b793: exact Main0657386 raw Hybrid bounds and tests are included, while existing Dev allocation-v5 command/types/tests remain byte-identical to d7d3d0b. Only review-metadata conflicts required resolution. Canonical lint and73 Node/591 Deno tests pass; root must continue to pin the qualified Main hotfix, not this Dev-only merge.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -52,7 +52,7 @@ This repo is organized around Edge Function families plus a shared runtime layer
 
 Shared Supabase clients default database operations to `api`. Every direct relation access selects `public` explicitly and is limited to the nine core entity tables. Worker, identity, review, LCA, TIDAS, and Data Product internal state is consumed only through database-owned capability façades; Edge never selects `private` through the Data API.
 
-Data Product closure intent admits allocation v3 and v4 during coordinated rollout and forwards an explicitly requested version unchanged. Omitted policy remains Database-owned. Database #755 selects v4 for new requests; Worker #305 owns v4 compilation. Edge admission alone does not grant old certificates v4 validity.
+Data Product closure intent admits allocation v3, v4 and v5 and forwards an explicitly requested version unchanged. Omitted policy remains Database-owned. Database #789 freezes v5 for new requests and rejects stale explicit versions; Worker #311 owns v5 compilation for Product/Waste allocation targets in either direction. Coordinate those deployments before v5 admission is enabled. Edge transport compatibility does not grant historical certificates current validity or upgrade their evidence.
 
 ## Stable Path Map
 
@@ -105,7 +105,7 @@ This means branch behavior is part of the repo contract, not just a GitHub UI pr
 
 ## Auth And Deploy Architecture
 
-The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 159 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 73 Node contract tests and 590 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
+The authoritative runtime/compiler is Deno `2.1.4` and the actual compiler reported by that runtime is TypeScript `5.6.2`. This matches Supabase CLI `2.116.0` -> Edge Runtime `1.74.3` -> Deno `2.1.4`, with each mapping bound to reviewed upstream source evidence. There is no npm TypeScript or format-plugin compiler sidecar. Exact Node `24.19.0` plus pnpm `11.24.0` remain only because the repository still needs the pinned Supabase CLI, non-mutating Prettier, and Node orchestration/contracts. The 159 current function/test roots fit one shared graph-check batch; the runner partitions only after 200 roots. Canonical validation runs 73 Node contract tests and 591 default Deno behavior tests; the credentialed live Upstash test is opt-in and ignored by default.
 
 Edge #379 removes the final identity-provider client, leaving AWS SDK 3.1121.0 only for SageMaker Runtime. OpenAI 7.8.0, Supabase JSR 2.112.4, Upstash Redis 1.38.3, Deno Redis 0.41.2, Zod 4.5.4, and Prettier 3.9.6 remain exact. Edge #361 makes every Functions JS type import use the mapped alias and rejects JSR, npm, HTTPS, and every alternative direct scheme, so local graph checks and Supabase deployment bundles share exact 2.112.4 resolution. Redis packages remain only for Portal. OpenAI Responses and Chat wrapper shapes remain valid on 7.8. Deno Redis 0.41.2 changed `get`/`eval` typing, so the Portal adapter branches explicitly between Upstash and Standard clients without weakening Lua, timeout, or error semantics.
 
