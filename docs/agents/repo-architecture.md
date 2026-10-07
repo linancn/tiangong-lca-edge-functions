@@ -34,9 +34,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-07
-lastReviewedCommit: 670d0256ed91ef33597ffe59467245a98400e28d
-lastReviewedNote: 'Reviewed Edge #458 source670d025: raw latest count and integer-offset rejection precedes model work; matched/Open Data dispatch, auth, default and threshold-zero fallback remain covered. Targeted62 and canonical590 Deno tests plus73 Node contracts pass; independent review reports no material findings. Main deployment, Dev backmerge and workspace integration remain delivery-record gates.'
+lastReviewedAt: 2026-10-08
+lastReviewedCommit: e07b793d5139ffae11cb9a4744678b043443b43f
+lastReviewedNote: 'Reviewed Edge #460 merge e07b793: exact Main0657386 raw Hybrid bounds and tests are included, while existing Dev allocation-v5 command/types/tests remain byte-identical to d7d3d0b. Only review-metadata conflicts required resolution. Canonical lint and73 Node/591 Deno tests pass; root must continue to pin the qualified Main hotfix, not this Dev-only merge.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
