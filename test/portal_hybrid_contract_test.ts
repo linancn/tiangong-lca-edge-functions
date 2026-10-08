@@ -11,6 +11,7 @@ import {
 } from '../supabase/functions/_shared/portal_hybrid_security_event.ts';
 import {
   buildPortalOpenAIResponsesParameters,
+  buildPortalOpenAIChatParameters,
   PORTAL_OPENAI_MAX_OUTPUT_TOKENS,
 } from '../supabase/functions/_shared/portal_openai_structured.ts';
 
@@ -82,6 +83,35 @@ Deno.test('Portal V2 requests explicitly opt into bounded opaque continuation on
     );
   }
 });
+
+Deno.test(
+  'Portal capability Chat requests retain non-stored bounded none reasoning controls',
+  () => {
+    const schema = { type: 'object', properties: {}, additionalProperties: false };
+    const parameters = buildPortalOpenAIChatParameters(
+      { schemaName: 'rewrite_queries', schema, systemPrompt: 'system', userPrompt: 'user' },
+      { apiKey: 'sk-private-test-value', model: 'gpt-6-luna' },
+    );
+    assertEquals(parameters, {
+      model: 'gpt-6-luna',
+      temperature: 0,
+      store: false,
+      max_completion_tokens: 256,
+      reasoning_effort: 'none',
+      verbosity: 'low',
+      messages: [
+        { role: 'system', content: 'system' },
+        { role: 'user', content: 'user' },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'rewrite_queries', schema, strict: true },
+      },
+    });
+    assertEquals(Object.hasOwn(parameters, 'service_tier'), false);
+    assertEquals(JSON.stringify(parameters).includes('sk-private-test-value'), false);
+  },
+);
 
 Deno.test('Portal V2 groups preserve every exact version and rank by their best member', () => {
   const page = versionedCandidatePage();

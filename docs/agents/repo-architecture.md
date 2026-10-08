@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-10-08
-lastReviewedCommit: e07b793d5139ffae11cb9a4744678b043443b43f
-lastReviewedNote: 'Reviewed Edge #460 merge e07b793: exact Main0657386 raw Hybrid bounds and tests are included, while existing Dev allocation-v5 command/types/tests remain byte-identical to d7d3d0b. Only review-metadata conflicts required resolution. Canonical lint and73 Node/591 Deno tests pass; root must continue to pin the qualified Main hotfix, not this Dev-only merge.'
+lastReviewedCommit: 931c86999d2e95382a215c93d769c7a7a81bcba7
+lastReviewedNote: 'Reviewed Edge #463 explicit raw/Portal model configuration, none/low rewrite controls, removal of implicit fallback models, provider/prompt-bound Portal cache identity, bounded comparison and Dev credential exception. Runtime authorization, retrieval budgets and branch/integration policy are unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -67,7 +67,7 @@ Data Product closure intent admits allocation v3, v4 and v5 and forwards an expl
 | `supabase/functions/_shared/portal_security_event.ts` and `portal_hybrid_security_event.ts` | stable | route-specific allowlisted exactly-once Portal events, correlation IDs, fixed rewrite/embedding outcome and bounded-latency fields, and the R2 bounded background logger boundary |
 | `supabase/functions/_shared/portal_hybrid_contract.ts` and `portal_hybrid_repository.ts` | stable | strict R2 request/public candidate/Edge response DTOs and the publishable-only `api.portal_hybrid_search_v1` transport |
 | `supabase/functions/_shared/portal_hybrid_deadline.ts` | stable | one absolute 25-second Edge handler-entry deadline with five seconds of BFF headroom, shared model/database AbortSignal, remaining-time operation caps, and non-blocking bounded cleanup |
-| `supabase/functions/_shared/portal_hybrid_provider.ts`, `portal_hybrid_kernel.ts`, and `portal_openai_structured.ts` | stable | strict Portal-only OpenAI/SageMaker/AWS configuration plus non-stored, 256-token, none-reasoning, low-verbosity structured Responses parameters resolved after the kill switch; existing generic kernels remain byte-for-byte unchanged |
+| `supabase/functions/_shared/portal_hybrid_provider.ts`, `portal_hybrid_kernel.ts`, and `portal_openai_structured.ts` | stable | strict Portal-only OpenAI/SageMaker/AWS configuration plus non-stored, 256-token, none-reasoning, low-verbosity structured Responses parameters resolved after the kill switch; generic credentials stay isolated; raw rewriting has its own required model/none contract |
 | `supabase/functions/_shared/command_runtime/**` | stable | request parsing, actor context, audit payload, and command-handler skeleton |
 | `supabase/functions/_shared/commands/**` | stable | dataset, review, membership, notification, and profile command logic |
 | `supabase/functions/_shared/db_rpc/**` | stable | thin wrappers over database RPC calls; SQL truth still lives in `database-engine` |
@@ -361,3 +361,9 @@ If one of those changes, assume more than one function family is affected.
 This repository has a versioned local `pre-push` hook under `.githooks/pre-push` that delegates to `scripts/docpact-gate.sh` and then runs non-mutating `pnpm lint` plus canonical `pnpm check`. The hook aborts if the lint step changes the working tree, so generated formatting changes must be reviewed and committed before push. The gate resolves the CLI through `scripts/docpact`, so local agent shells do not need bare `docpact` on `PATH`. The hook is the local guard for docpact config validation, enforced doc-governance linting, and the complete Edge Function type/behavior gate; the GitHub `CI` workflow is manual-dispatch only.
 
 Package enqueue accepts optional `import_policy=root_closure_v2`, dispatches it to `svc_tidas_package_import_enqueue_v2`, and rejects unknown policies before RPC. Omission keeps legacy enqueue. Status reads use owner-scoped `svc_tidas_package_read_v2`; `import_progress` contains committed receipt counts. `import_details` uses the existing artifact lifecycle/signing path; Edge performs no dataset validation.
+
+## Explicit query-rewrite model configuration
+
+Raw Hybrid rewriting reads required `HYBRID_OPENAI_CHAT_MODEL` at call time and sends explicit reasoning `none`. Portal keeps required `PORTAL_OPENAI_CHAT_MODEL` and isolated provider credentials with its existing none/non-stored/low/256 contract. The production upgrade target for both is `gpt-6-luna`; this is operator configuration, not a code fallback. `_shared/openai_model.ts` validates explicit model inputs before provider construction. Generic translation retains required `OPENAI_CHAT_MODEL` or its existing explicit caller model and is not silently migrated by the search setting.
+
+Portal V1 and V2 hashes now bind provider identity, reasoning, actual synonym rules/schema and a named task-template revision. V1 still includes the entire signed body; V2 still uses query/kind so filter/page changes reuse model inputs. Model or prompt identity changes miss old cache entries, and incompatible V2 continuation fails before new model/DB work. Payload schema, TTL, authorization and candidate budgets are unchanged.
