@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-10-08'
-lastReviewedCommit: 'e07b793d5139ffae11cb9a4744678b043443b43f'
-lastReviewedNote: 'Reviewed Edge #460 merge e07b793: exact Main0657386 raw Hybrid bounds and tests are included, while existing Dev allocation-v5 command/types/tests remain byte-identical to d7d3d0b. Only review-metadata conflicts required resolution. Canonical lint and73 Node/591 Deno tests pass; root must continue to pin the qualified Main hotfix, not this Dev-only merge.'
+lastReviewedCommit: '38dd7c06e3801142ce580a4288978747e714f363'
+lastReviewedNote: 'Reviewed Edge #462 opt-in exact-revision current-public batch projection, explicit absence, strict impact identity, bounds and legacy compatibility; auth, deploy and branch policy are unchanged.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

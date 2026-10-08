@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-10-08
-lastReviewedCommit: e07b793d5139ffae11cb9a4744678b043443b43f
-lastReviewedNote: 'Reviewed Edge #460 merge e07b793: exact Main0657386 raw Hybrid bounds and tests are included, while existing Dev allocation-v5 command/types/tests remain byte-identical to d7d3d0b. Only review-metadata conflicts required resolution. Canonical lint and73 Node/591 Deno tests pass; root must continue to pin the qualified Main hotfix, not this Dev-only merge.'
+lastReviewedCommit: 38dd7c06e3801142ce580a4288978747e714f363
+lastReviewedNote: 'Reviewed Edge #462 opt-in exact-revision current-public batch projection, explicit absence, strict impact identity, bounds and legacy compatibility; auth, deploy and branch policy are unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -132,6 +132,8 @@ Non-JWT bearer values are sent only to Supabase claims verification and known in
 `scripts/probe-functions-auth.cjs` exists because gateway rejection and runtime-auth rejection are different operational failures.
 
 ## Current Function Families
+
+`data_product_results` adds the opt-in `processes_one_impact_exact` public reader for 1–100 unique Process ID/version references and one explicit impact UUID. It resolves the current public package once and returns ordered `{id, version, status, value, unit}` rows. Exact mode never selects a different impact; absent revisions/categories/cells return `missing` with null value, while finite zero and negative results remain `available`. Inconsistent snapshot/query bindings fail with `published_lcia_projection_invalid`. The legacy selected/ranked/all-impact projections retain their existing contracts. Deploy this additive reader before the Published Processes consumer release; it does not enqueue Solver work.
 
 ### Command-style app and admin endpoints
 
