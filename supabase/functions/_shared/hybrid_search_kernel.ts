@@ -7,6 +7,7 @@ import {
   type HybridSearchQuery,
 } from './hybrid_query_utils.ts';
 import { openaiStructuredOutput } from './openai_structured.ts';
+import { resolveOpenAIModel } from './openai_model.ts';
 
 export interface HybridSearchKernelConfig {
   functionName: string;
@@ -14,7 +15,6 @@ export interface HybridSearchKernelConfig {
   entityPlural: string;
 }
 
-const OPENAI_CHAT_MODEL = Deno.env.get('OPENAI_CHAT_MODEL') ?? 'gpt-4.1-mini';
 const SAGEMAKER_ENDPOINT_NAME = Deno.env.get('SAGEMAKER_ENDPOINT_NAME');
 const AWS_REGION = 'us-east-1';
 const AWS_ACCESS_KEY_ID = Deno.env.get('AWS_ACCESS_KEY_ID');
@@ -43,6 +43,7 @@ export async function rewriteHybridSearchQuery(
   queryText: string,
   signal?: AbortSignal,
 ): Promise<HybridSearchQuery> {
+  const model = resolveOpenAIModel(undefined, 'HYBRID_OPENAI_CHAT_MODEL');
   return await openaiStructuredOutput<HybridSearchQuery>({
     schemaName: `${config.functionName}_queries`,
     schema: hybridQuerySchema,
@@ -50,7 +51,7 @@ export async function rewriteHybridSearchQuery(
 Task: Transform description of ${config.entityPlural} into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.
 ${HYBRID_SYNONYM_RULES}`,
     userPrompt: `${config.entityLabel} description: ${queryText}`,
-    options: { model: OPENAI_CHAT_MODEL, temperature: 0 },
+    options: { model, temperature: 0, reasoningEffort: 'none', verbosity: 'low' },
     signal,
   });
 }

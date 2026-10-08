@@ -4,6 +4,8 @@ import { extractEmbeddingVector } from '../_shared/embedding_vector.ts';
 import {
   buildHybridFulltextQueryTerms,
   buildBoundedHybridFulltextQueryTerms,
+  HYBRID_SYNONYM_RULES,
+  hybridQuerySchema,
   type HybridSearchQuery,
   sanitizeHybridQueryOutput,
 } from '../_shared/hybrid_query_utils.ts';
@@ -93,6 +95,17 @@ export const PORTAL_HYBRID_MAX_REQUEST_BYTES = 32 * 1024;
 // A separate keyspace prevents still-live raw-query vectors from being reused
 // after the query pipeline changes to rewrite -> English embedding.
 const PORTAL_HYBRID_MODEL_CACHE_ROUTE = 'portal_hybrid_english_v2';
+// Bump when the kernel's task or user-message template changes. Schema/rule
+// edits are additionally bound by their actual content below.
+export const PORTAL_HYBRID_REWRITE_TASK_REVISION = 'three-specific-queries.v1';
+
+export function portalHybridRewriteCacheIdentity(
+  taskTemplateRevision = PORTAL_HYBRID_REWRITE_TASK_REVISION,
+  synonymRules = HYBRID_SYNONYM_RULES,
+  schema = hybridQuerySchema,
+) {
+  return { taskTemplateRevision, synonymRules, schema };
+}
 
 type PortalHybridHandlerOptions = {
   keyring?: PortalHmacKeyring;
@@ -626,24 +639,25 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         const modelCacheRoute = versioned
           ? 'portal_hybrid_english_query_v3'
           : PORTAL_HYBRID_MODEL_CACHE_ROUTE;
-        const modelCacheHash = versioned
-          ? encodeBase64Url(
-              await deadline.run(() =>
-                computePortalBodyHash(
-                  new TextEncoder().encode(
-                    JSON.stringify({
-                      kind: hybridRequest.kind,
-                      query: hybridRequest.query,
-                      model: providerConfig.openAi.model,
-                      modelEndpoint: providerConfig.openAi.baseUrl,
-                      embeddingEndpoint: providerConfig.sageMaker.endpointName,
-                      embeddingRegion: providerConfig.sageMaker.region,
-                    }),
-                  ),
-                ),
+        const modelCacheHash = encodeBase64Url(
+          await deadline.run(() =>
+            computePortalBodyHash(
+              new TextEncoder().encode(
+                JSON.stringify({
+                  requestIdentity: versioned
+                    ? { kind: hybridRequest.kind, query: hybridRequest.query }
+                    : { bodyHash: verification.bodyHash },
+                  model: providerConfig.openAi.model,
+                  modelEndpoint: providerConfig.openAi.baseUrl,
+                  embeddingEndpoint: providerConfig.sageMaker.endpointName,
+                  embeddingRegion: providerConfig.sageMaker.region,
+                  reasoningEffort: 'none',
+                  rewrite: portalHybridRewriteCacheIdentity(),
+                }),
               ),
-            )
-          : verification.bodyHash;
+            ),
+          ),
+        );
 
         let cached: string | null;
         try {

@@ -117,6 +117,32 @@ export function buildPortalOpenAIResponsesParameters(
   };
 }
 
+export function buildPortalOpenAIChatParameters(
+  request: PortalOpenAIStructuredRequest,
+  provider: Readonly<PortalOpenAIProviderConfig>,
+): OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming {
+  return {
+    model: provider.model,
+    temperature: request.temperature ?? 0,
+    store: false as const,
+    max_completion_tokens: PORTAL_OPENAI_MAX_OUTPUT_TOKENS,
+    reasoning_effort: 'none' as const,
+    verbosity: 'low' as const,
+    messages: [
+      { role: 'system' as const, content: request.systemPrompt },
+      { role: 'user' as const, content: request.userPrompt },
+    ],
+    response_format: {
+      type: 'json_schema' as const,
+      json_schema: {
+        name: request.schemaName,
+        schema: request.schema,
+        strict: true as const,
+      },
+    },
+  };
+}
+
 export async function portalOpenAIStructuredOutput<T>(
   request: PortalOpenAIStructuredRequest,
   provider: Readonly<PortalOpenAIProviderConfig>,
@@ -139,22 +165,7 @@ export async function portalOpenAIStructuredOutput<T>(
       ? await client.responses.create(parameters, { signal: request.signal })
       : await client.responses.create(parameters);
   } else if (client.chat?.completions?.create) {
-    const parameters = {
-      model: provider.model,
-      temperature: request.temperature ?? 0,
-      messages: [
-        { role: 'system', content: request.systemPrompt },
-        { role: 'user', content: request.userPrompt },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: request.schemaName,
-          schema: request.schema,
-          strict: true,
-        },
-      },
-    };
+    const parameters = buildPortalOpenAIChatParameters(request, provider);
     response = request.signal
       ? await client.chat.completions.create(parameters, { signal: request.signal })
       : await client.chat.completions.create(parameters);

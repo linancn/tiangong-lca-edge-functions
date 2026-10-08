@@ -1,0 +1,201 @@
+{
+  "schemaVersion": "hybrid-rewrite-eval.v1",
+  "baselineModel": "gpt-5.4-nano",
+  "candidateModel": "gpt-6-luna",
+  "promptContract": {
+    "systemTemplate": "Field: Life Cycle Assessment (LCA)\nTask: Transform description of ${config.entityPlural} into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.\n${HYBRID_SYNONYM_RULES}",
+    "userTemplate": "${config.entityLabel} description: ${queryText}",
+    "synonymRules": "\nOutput rules:\n1) Return dictionary-style synonyms/aliases only.\n2) Do NOT output topic or intent phrases, e.g. \"life cycle assessment\", \"environmental impact\", \"生命周期评估\", \"环境影响\".\n3) Prefer canonical names, common aliases, transliterations, and CAS numbers.\n4) Avoid explanatory sentences.\n5) Keep outputs deterministic: canonical term first, then standardized abbreviations/identifiers, then common aliases.\n6) Avoid near-duplicate variants that only add redundant words.\n",
+    "schemaSourceSha256": "53f7b4506b580872b5dd110f399b3dbf5d3527b65ba41b8766e7b349ec877ae7",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "semantic_query_en": {
+          "title": "SemanticQueryEN",
+          "description": "Canonical query term for semantic retrieval in English.",
+          "type": "string"
+        },
+        "fulltext_query_en": {
+          "title": "FulltextQueryEN",
+          "description": "Dictionary-like aliases in English only. No intent/topic phrases.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fulltext_query_zh": {
+          "title": "FulltextQueryZH",
+          "description": "Dictionary-like aliases in Simplified Chinese only. No intent/topic phrases.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["semantic_query_en", "fulltext_query_en", "fulltext_query_zh"],
+      "additionalProperties": false
+    }
+  },
+  "cases": [
+    {
+      "id": "process-electricity",
+      "entityKind": "process",
+      "entityLabel": "Process",
+      "entityPlural": "processes",
+      "query": "中国低压电网电力生产",
+      "portal": true,
+      "expectations": {
+        "semanticAll": ["electric", "low[- ]?voltage", "china|chinese"],
+        "allowedIdentifiers": []
+      }
+    },
+    {
+      "id": "process-recycled-aluminium",
+      "entityKind": "process",
+      "entityLabel": "Process",
+      "entityPlural": "processes",
+      "query": "recycled aluminium production",
+      "portal": true,
+      "expectations": {
+        "semanticAll": ["recycl", "alumini?um"],
+        "hardSemanticAll": ["recycl"],
+        "forbidden": ["primary aluminium", "primary aluminum"],
+        "allowedIdentifiers": ["7429-90-5"]
+      }
+    },
+    {
+      "id": "process-russian-copper",
+      "entityKind": "process",
+      "entityLabel": "Process",
+      "entityPlural": "processes",
+      "query": "производство меди",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["copper", "produc"],
+        "allowedIdentifiers": ["7440-50-8"]
+      }
+    },
+    {
+      "id": "flow-dichloromethane",
+      "entityKind": "flow",
+      "entityLabel": "Flow",
+      "entityPlural": "flows",
+      "query": "二氯甲烷 CAS 75-09-2",
+      "portal": true,
+      "expectations": {
+        "semanticAll": ["dichloromethane|methylene chloride"],
+        "requiredIdentifiers": ["75-09-2"],
+        "allowedIdentifiers": ["75-09-2"]
+      }
+    },
+    {
+      "id": "flow-long-chemical",
+      "entityKind": "flow",
+      "entityLabel": "Flow",
+      "entityPlural": "flows",
+      "query": "(111479-05-1) OR (Propanoic acid, 2-[4-[(6-chloro-2-quinoxalinyl)oxy]phenoxy]-, 2-[[(1-methylethylidene)amino]oxy]ethyl ester, (2R)-)",
+      "portal": true,
+      "expectations": {
+        "semanticAll": ["quizalofop|propanoic"],
+        "requiredIdentifiers": ["111479-05-1"],
+        "allowedIdentifiers": ["111479-05-1"]
+      }
+    },
+    {
+      "id": "flow-fossil-carbon-dioxide",
+      "entityKind": "flow",
+      "entityLabel": "Flow",
+      "entityPlural": "flows",
+      "query": "carbon dioxide, fossil",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["carbon dioxide|CO2", "fossil"],
+        "hardSemanticAll": ["fossil"],
+        "forbidden": ["biogenic"],
+        "allowedIdentifiers": ["124-38-9"]
+      }
+    },
+    {
+      "id": "flow-ambiguous-ac",
+      "entityKind": "flow",
+      "entityLabel": "Flow",
+      "entityPlural": "flows",
+      "query": "AC",
+      "portal": false,
+      "expectations": {
+        "semanticAll": [],
+        "allowedIdentifiers": [],
+        "manualReview": "AC is ambiguous; judge unsupported specificity without presuming one canonical expansion."
+      }
+    },
+    {
+      "id": "lifecyclemodel-steel",
+      "entityKind": "lifecyclemodel",
+      "entityLabel": "Lifecycle model",
+      "entityPlural": "lifecycle models",
+      "query": "cradle-to-gate steel lifecycle model",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["steel", "cradle[- ]to[- ]gate"],
+        "allowedIdentifiers": []
+      }
+    },
+    {
+      "id": "contact-proper-name",
+      "entityKind": "contact",
+      "entityLabel": "Contact",
+      "entityPlural": "contacts",
+      "query": "TianGong LCA Research Team",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["tiangong"],
+        "hardSemanticAll": ["tiangong"],
+        "allowedIdentifiers": []
+      }
+    },
+    {
+      "id": "source-standard-edition",
+      "entityKind": "source",
+      "entityLabel": "Source",
+      "entityPlural": "sources",
+      "query": "ISO 14040:2006",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["ISO", "14040", "2006"],
+        "requiredIdentifiers": ["14040", "2006"],
+        "allowedIdentifiers": []
+      }
+    },
+    {
+      "id": "flowproperty-heating-value",
+      "entityKind": "flowproperty",
+      "entityLabel": "Flow property",
+      "entityPlural": "flow properties",
+      "query": "lower heating value",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["lower heating|net calorific"],
+        "forbidden": ["higher heating", "gross calorific"],
+        "allowedIdentifiers": []
+      }
+    },
+    {
+      "id": "unitgroup-mass",
+      "entityKind": "unitgroup",
+      "entityLabel": "Unit group",
+      "entityPlural": "unit groups",
+      "query": "mass units kg g",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["mass"],
+        "allowedIdentifiers": []
+      }
+    }
+  ],
+  "scoringNotes": [
+    "Score raw output before normalization. This runner does not emulate the Deno sanitizer.",
+    "Hard failures: incomplete/malformed structure, missing required identifier, invented CAS identifier, fossil/recycled/proper-name meaning loss, and explicitly forbidden substitutions.",
+    "Regex checks are predeclared screening rules; ambiguous terms and broader LCA relevance require human review.",
+    "Do not interpret result overlap or alias count as a quality score."
+  ]
+}

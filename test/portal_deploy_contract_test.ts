@@ -219,7 +219,7 @@ Deno.test(
     );
     assertStringIncludes(
       genericHybridKernel,
-      "const OPENAI_CHAT_MODEL = Deno.env.get('OPENAI_CHAT_MODEL') ?? 'gpt-4.1-mini';",
+      "resolveOpenAIModel(undefined, 'HYBRID_OPENAI_CHAT_MODEL')",
     );
     assertStringIncludes(
       genericHybridKernel,
@@ -227,7 +227,7 @@ Deno.test(
     );
     assertStringIncludes(
       genericHybridKernel,
-      'options: { model: OPENAI_CHAT_MODEL, temperature: 0 }',
+      "options: { model, temperature: 0, reasoningEffort: 'none', verbosity: 'low' }",
     );
     assertStringIncludes(loginHybridHandler, 'rewriteQuery: rewriteHybridSearchQuery');
     assertStringIncludes(loginHybridHandler, 'generateEmbedding: generateHybridSearchEmbedding');
@@ -261,7 +261,8 @@ Deno.test(
     }
     for (const retainedGeneric of [
       'OPENAI_API_KEY=',
-      'OPENAI_CHAT_MODEL=gpt-4.1-mini',
+      'OPENAI_CHAT_MODEL=',
+      'HYBRID_OPENAI_CHAT_MODEL=',
       'OPENAI_BASE_URL=',
       'SAGEMAKER_ENDPOINT_NAME=',
       'AWS_ACCESS_KEY_ID=',
