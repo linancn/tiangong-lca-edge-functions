@@ -1,0 +1,311 @@
+{
+  "schemaVersion": "hybrid-rewrite-eval-tuned.v1",
+  "baselineModel": "gpt-5.4-nano",
+  "candidateModel": "gpt-6-luna",
+  "promptContract": {
+    "systemTemplate": "Field: Life Cycle Assessment (LCA)\nTask: Transform description of ${config.entityPlural} into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.\n${HYBRID_SYNONYM_RULES}",
+    "userTemplate": "${config.entityLabel} description: ${queryText}",
+    "synonymRules": "\nOutput rules:\n1) Return dictionary-style synonyms/aliases only.\n2) Do NOT output topic or intent phrases, e.g. \"life cycle assessment\", \"environmental impact\", \"生命周期评估\", \"环境影响\".\n3) Prefer canonical names, common aliases, transliterations, and CAS numbers.\n4) Avoid explanatory sentences.\n5) Keep outputs deterministic: canonical term first, then standardized abbreviations/identifiers, then common aliases.\n6) Avoid near-duplicate variants that only add redundant words.\n",
+    "schemaSourceSha256": "53f7b4506b580872b5dd110f399b3dbf5d3527b65ba41b8766e7b349ec877ae7",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "semantic_query_en": {
+          "title": "SemanticQueryEN",
+          "description": "Canonical query term for semantic retrieval in English.",
+          "type": "string"
+        },
+        "fulltext_query_en": {
+          "title": "FulltextQueryEN",
+          "description": "Dictionary-like aliases in English only. No intent/topic phrases.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fulltext_query_zh": {
+          "title": "FulltextQueryZH",
+          "description": "Dictionary-like aliases in Simplified Chinese only. No intent/topic phrases.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["semantic_query_en", "fulltext_query_en", "fulltext_query_zh"],
+      "additionalProperties": false
+    }
+  },
+  "cases": [
+    {
+      "id": "process-electricity",
+      "entityKind": "process",
+      "entityLabel": "Process",
+      "entityPlural": "processes",
+      "query": "中国低压电网电力生产",
+      "portal": true,
+      "expectations": {
+        "semanticAll": ["electric", "low[- ]?voltage", "china|chinese"],
+        "allowedIdentifiers": [],
+        "hardSemanticAll": ["electric", "low[- ]?voltage", "china|chinese"],
+        "standaloneAliasForbidden": ["^(?:china|chinese|low[- ]?voltage|中国|低压)$"],
+        "manualReview": "Each alias should name electricity/grid power; isolated geography or voltage terms lose the searched entity.",
+        "criteriaRevision": "hybrid-rewrite-criteria.v3"
+      }
+    },
+    {
+      "id": "process-recycled-aluminium",
+      "entityKind": "process",
+      "entityLabel": "Process",
+      "entityPlural": "processes",
+      "query": "recycled aluminium production",
+      "portal": true,
+      "expectations": {
+        "semanticAll": ["recycl", "alumini?um"],
+        "hardSemanticAll": ["\\brecycl(?:ed|ing)\\b"],
+        "forbidden": [
+          "primary aluminium",
+          "primary aluminum",
+          "\\b(?:un[- ]?recycled|non[- ]?recycled|not[- ]+recycled|virgin)\\b",
+          "未(?:经)?回收",
+          "未再生",
+          "非再生",
+          "非回收",
+          "原生(?:铝|鋁)"
+        ],
+        "allowedIdentifiers": ["7429-90-5"],
+        "criteriaRevision": "hybrid-rewrite-criteria.v3"
+      }
+    },
+    {
+      "id": "process-russian-copper",
+      "entityKind": "process",
+      "entityLabel": "Process",
+      "entityPlural": "processes",
+      "query": "производство меди",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["copper", "produc"],
+        "allowedIdentifiers": ["7440-50-8"],
+        "criteriaRevision": "hybrid-rewrite-criteria.v3"
+      }
+    },
+    {
+      "id": "flow-dichloromethane",
+      "entityKind": "flow",
+      "entityLabel": "Flow",
+      "entityPlural": "flows",
+      "query": "二氯甲烷 CAS 75-09-2",
+      "portal": true,
+      "expectations": {
+        "semanticAll": ["dichloromethane|methylene chloride"],
+        "requiredIdentifiers": ["75-09-2"],
+        "allowedIdentifiers": ["75-09-2"],
+        "forbidden": ["\\bmethyl[ -]+chloride\\b", "\\bchloromethane\\b"],
+        "languageExemptions": ["^75-09-2$"],
+        "criteriaRevision": "hybrid-rewrite-criteria.v3"
+      }
+    },
+    {
+      "id": "flow-long-chemical",
+      "entityKind": "flow",
+      "entityLabel": "Flow",
+      "entityPlural": "flows",
+      "query": "(111479-05-1) OR (Propanoic acid, 2-[4-[(6-chloro-2-quinoxalinyl)oxy]phenoxy]-, 2-[[(1-methylethylidene)amino]oxy]ethyl ester, (2R)-)",
+      "portal": true,
+      "expectations": {
+        "semanticAll": ["propaquizafop|111479-05-1|propanoic acid"],
+        "requiredIdentifiers": ["111479-05-1"],
+        "allowedIdentifiers": ["111479-05-1"],
+        "hardSemanticAll": [
+          "propaquizafop|111479-05-1|propanoic acid,? 2-\\[4-\\[\\(6-chloro-2-quinoxalinyl\\)oxy\\]phenoxy\\]"
+        ],
+        "forbidden": ["quizalofop", "tefuryl"],
+        "languageExemptions": ["^111479-05-1$"],
+        "manualReview": "Every semantic/alias term must be the verified Propaquizafop name, exact supplied chemical name/expression, supplied CAS, or a combination of verified name with that CAS. A correct CAS does not validate an unrelated name.",
+        "criteriaRevision": "hybrid-rewrite-criteria.v3",
+        "allowedChemicalNames": [
+          "Propaquizafop",
+          "Propanoic acid, 2-[4-[(6-chloro-2-quinoxalinyl)oxy]phenoxy]-, 2-[[(1-methylethylidene)amino]oxy]ethyl ester, (2R)-",
+          "(111479-05-1) OR (Propanoic acid, 2-[4-[(6-chloro-2-quinoxalinyl)oxy]phenoxy]-, 2-[[(1-methylethylidene)amino]oxy]ethyl ester, (2R)-)"
+        ],
+        "allowedChemicalIdentifiers": ["111479-05-1"],
+        "verifiedChemicalName": "Propaquizafop"
+      }
+    },
+    {
+      "id": "flow-fossil-carbon-dioxide",
+      "entityKind": "flow",
+      "entityLabel": "Flow",
+      "entityPlural": "flows",
+      "query": "carbon dioxide, fossil",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["carbon dioxide|CO2", "fossil"],
+        "hardSemanticAll": ["\\bfossil\\b"],
+        "forbidden": [
+          "biogenic",
+          "\\bnon[- ]?fossil\\b",
+          "\\bnot[- ]+fossil\\b",
+          "非化石",
+          "无化石",
+          "非矿物"
+        ],
+        "allowedIdentifiers": ["124-38-9"],
+        "criteriaRevision": "hybrid-rewrite-criteria.v3"
+      }
+    },
+    {
+      "id": "flow-ambiguous-ac",
+      "entityKind": "flow",
+      "entityLabel": "Flow",
+      "entityPlural": "flows",
+      "query": "AC",
+      "portal": false,
+      "expectations": {
+        "semanticAll": [],
+        "allowedIdentifiers": [],
+        "manualReview": "Bare AC has no disambiguating context. Retain AC without speculative expansion in either language.",
+        "semanticExact": "AC",
+        "aliasAllowedExact": ["AC"],
+        "languageExemptions": ["^AC$"],
+        "criteriaRevision": "hybrid-rewrite-criteria.v3"
+      }
+    },
+    {
+      "id": "lifecyclemodel-steel",
+      "entityKind": "lifecyclemodel",
+      "entityLabel": "Lifecycle model",
+      "entityPlural": "lifecycle models",
+      "query": "cradle-to-gate steel lifecycle model",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["steel", "cradle[- ]to[- ]gate"],
+        "allowedIdentifiers": [],
+        "hardSemanticAll": ["steel", "cradle[- ]to[- ]gate"],
+        "forbidden": ["gate[- ]to[- ]gate"],
+        "criteriaRevision": "hybrid-rewrite-criteria.v3"
+      }
+    },
+    {
+      "id": "contact-proper-name",
+      "entityKind": "contact",
+      "entityLabel": "Contact",
+      "entityPlural": "contacts",
+      "query": "TianGong LCA Research Team",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["tiangong"],
+        "hardSemanticAll": ["tiangong"],
+        "allowedIdentifiers": [],
+        "criteriaRevision": "hybrid-rewrite-criteria.v3"
+      }
+    },
+    {
+      "id": "source-standard-edition",
+      "entityKind": "source",
+      "entityLabel": "Source",
+      "entityPlural": "sources",
+      "query": "ISO 14040:2006",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["ISO", "14040", "2006"],
+        "requiredIdentifiers": ["14040", "2006"],
+        "allowedIdentifiers": [],
+        "languageExemptions": ["^ISO\\s*14040(?::\\s*2006)?$", "^14040(?::\\s*2006)?$", "^2006$"],
+        "criteriaRevision": "hybrid-rewrite-criteria.v3",
+        "standardTuple": {
+          "number": "14040",
+          "year": "2006"
+        }
+      }
+    },
+    {
+      "id": "flowproperty-heating-value",
+      "entityKind": "flowproperty",
+      "entityLabel": "Flow property",
+      "entityPlural": "flow properties",
+      "query": "lower heating value",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["lower heating|net calorific"],
+        "forbidden": ["higher heating", "gross calorific"],
+        "allowedIdentifiers": [],
+        "criteriaRevision": "hybrid-rewrite-criteria.v3"
+      }
+    },
+    {
+      "id": "unitgroup-mass",
+      "entityKind": "unitgroup",
+      "entityLabel": "Unit group",
+      "entityPlural": "unit groups",
+      "query": "mass units kg g",
+      "portal": false,
+      "expectations": {
+        "semanticAll": ["mass"],
+        "allowedIdentifiers": [],
+        "languageExemptions": ["^(?:kg|g|mg|t|lb|oz)$"],
+        "criteriaRevision": "hybrid-rewrite-criteria.v3"
+      }
+    }
+  ],
+  "scoringNotes": [
+    "Score raw output before normalization. This runner does not emulate the Deno sanitizer.",
+    "Hard failures: incomplete/malformed structure, missing required identifier, invented CAS identifier, fossil/recycled/proper-name meaning loss, and explicitly forbidden substitutions.",
+    "Regex checks are predeclared screening rules; ambiguous terms and broader LCA relevance require human review.",
+    "Do not interpret result overlap or alias count as a quality score.",
+    "Criteria v2 follows Run 1 manual review. Rescore every prior raw observation with these same criteria before comparing phases.",
+    "Chemical ground truth corrects the erroneous quizalofop acceptance in criteria v1; preserve the original fixture and results.",
+    "Exact ISO/CAS/unit symbols are explicit language exemptions, recorded per observation; they do not waive meaning or identifier checks.",
+    "Tuned evaluation changes model, candidate prompt/schema, and candidate raw verbosity; it is not a model-only comparison.",
+    "Criteria v3 closes correct-identifier-plus-wrong-name, qualifier-negation, and mismatched standard-number/year false acceptances. Apply uniformly to both full rounds; earlier observations remain immutable."
+  ],
+  "phase": "tuned",
+  "criteriaRevision": "hybrid-rewrite-criteria.v3",
+  "candidatePromptContract": {
+    "systemTemplate": "Field: Life Cycle Assessment (LCA)\nTask: Transform description of ${config.entityPlural} into three specific queries: SemanticQueryEN, FulltextQueryEN and FulltextQueryZH.\n${HYBRID_SYNONYM_RULES}",
+    "userTemplate": "${config.entityLabel} description: ${queryText}",
+    "synonymRules": "\nOutput rules:\n1) Preserve the complete subject and every explicit qualifier in semantic_query_en: geography, voltage, recycled/fossil origin, edition, and system boundary. Do not replace the subject with a broader category.\n2) Return concise dictionary aliases for that SAME subject, with its canonical term first. Countries, voltages, years and system boundaries alone are not synonyms of a process or material.\n3) Copy supplied CAS numbers, UUIDs, standard editions, formulas and unit symbols exactly. Never invent identifiers or infer an unprovided chemical/common/trade name from a registry number or a complex chemical name. Preserve stereochemistry. For an unfamiliar long chemical name with a supplied CAS number, use that exact identifier rather than guessing a shorter compound name.\n4) Keep ambiguous abbreviations verbatim unless the query disambiguates them. Preserve proper names; do not invent translated organizations or entities.\n5) Use English aliases and Simplified Chinese aliases in their respective arrays. Exact supplied identifiers, symbols and proper names may be repeated verbatim in either array; do not add a \"CAS\" prefix to a bare registry number.\n6) Do NOT add topic or intent phrases such as \"life cycle assessment\", \"environmental impact\", \"生命周期评估\" or \"环境影响\". Keep such words only when they are already part of an exact supplied proper name.\n7) Avoid explanations, duplicates differing only in case, and redundant near-duplicate aliases. Do not introduce unrelated alternatives to fill the arrays.\n",
+    "schemaSourceSha256": "79fe31de424e8b1238e6440839b45efb8493febc61e4bcaf1fe4330dcb64d3ec",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "semantic_query_en": {
+          "title": "SemanticQueryEN",
+          "description": "Canonical English query preserving the subject and explicit qualifiers, or an exact supplied identifier when resolving an unknown chemical name would require guessing.",
+          "type": "string"
+        },
+        "fulltext_query_en": {
+          "title": "FulltextQueryEN",
+          "description": "English dictionary aliases for the same subject. Preserve supplied identifiers; do not emit isolated attributes or invent registry names.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fulltext_query_zh": {
+          "title": "FulltextQueryZH",
+          "description": "Simplified Chinese aliases for the same subject. Supplied identifiers, unit symbols and proper names may remain verbatim. No intent/topic phrases.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": ["semantic_query_en", "fulltext_query_en", "fulltext_query_zh"],
+      "additionalProperties": false
+    }
+  },
+  "groundTruthSources": [
+    {
+      "caseId": "flow-long-chemical",
+      "url": "https://pubchem.ncbi.nlm.nih.gov/compound/16213016",
+      "fact": "Propaquizafop has CAS 111479-05-1."
+    },
+    {
+      "caseId": "flow-long-chemical",
+      "url": "https://pubchem.ncbi.nlm.nih.gov/compound/Quizalofop-tefuryl",
+      "fact": "Quizalofop-tefuryl has CAS 119738-06-6 and is not a synonym for the supplied chemical."
+    }
+  ]
+}

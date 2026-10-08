@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-10-08
-lastReviewedCommit: 38dd7c06e3801142ce580a4288978747e714f363
-lastReviewedNote: 'Reviewed Edge #462 opt-in exact-revision current-public batch projection, explicit absence, strict impact identity, bounds and legacy compatibility; auth, deploy and branch policy are unchanged.'
+lastReviewedCommit: 'e4ca0f0775bde5d8d9b684608b1fa530b9c98822'
+lastReviewedNote: 'Reviewed Edge #466 back-merge of Main5281b50 Luna search hotfix into Deve4ca0f0. All nine deployed search/translation function sources remain identical to reviewed Main; concurrent #462 exact-revision LCIA projection code/tests are retained unchanged. Only review metadata conflicted; no runtime policy or branch/integration boundary changes.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -126,8 +126,8 @@ Changes to `portal_public_transport.ts`, `portal_hybrid_provider.ts`, `portal_hy
 - `PORTAL_SUPABASE_PUBLISHABLE_KEY` is a modern publishable key present in the current project's platform-owned `SUPABASE_PUBLISHABLE_KEYS` registry, is paired only with platform-injected `SUPABASE_URL`, matches inbound `apikey` exactly, and is reused unchanged downstream; hosted requires HTTPS and rejects Authorization, while pinned CLI `2.116.0` uses `sb-api-key` and leaves Authorization absent. Exact local `http://kong:8000` retains only the older-client anon Bearer compatibility. Generic/direct-or-helper `REMOTE_*`, legacy-anon fallback, secret/service-role, user, missing, malformed, and cross-project key/URL configurations fail before Redis, model, or database work
 - exact false or unset `PORTAL_HYBRID_ENABLED` returns before Portal Redis, JSON, OpenAI, SageMaker/AWS, or database configuration is read
 - enabled R2 requires the complete strict `PORTAL_OPENAI_*`, `PORTAL_SAGEMAKER_*`, and `PORTAL_AWS_*` surface and passes that exact object into both shared model kernels; generic-only, partial, malformed, whitespace-bearing, credential-bearing URL, and insecure remote URL configurations fail before provider or database calls
-- Portal Responses parameters remain `store=false`, `max_output_tokens=256`, `reasoning.effort=none`, and `text.verbosity=low` with the same strict JSON Schema/model/prompts/temperature/AbortSignal; tests must reject API-key capture and any implicit `service_tier`, while Chat fallback and generic/login wrappers remain unchanged
-- `hybrid_search_kernel.ts` and `openai_structured.ts` remain byte-for-byte equal to the `dev` baseline, while existing login Hybrid, embedding, auth, and shared-kernel tests pass unchanged, proving their generic environment precedence and responses were not replaced by Portal values
+- Portal Responses parameters remain `store=false`, `max_output_tokens=256`, `reasoning.effort=none`, and `text.verbosity=low` with the same strict JSON Schema/model/prompts/temperature/AbortSignal; tests must reject API-key capture and any implicit `service_tier`, while the SDK-capability Chat path carries equivalent controls and raw rewriting independently enforces its required model and none contract
+- login Hybrid, embedding, auth and shared-kernel regressions preserve their wire/authorization contracts. The explicitly requested query-rewrite migration removes generic model literals and adds required raw model configuration/none; Portal values must still never replace generic credentials
 - LCIA reads only `PORTAL_LCIA_DEPLOYMENT_SHA`, Hybrid reads only `PORTAL_HYBRID_DEPLOYMENT_SHA`, and a missing/invalid/other-route SHA yields `unknown` rather than a cross-route or retired shared fallback
 
 The minimum targeted command remains the union of the two Portal rows above plus `test/hybrid_search_handler_test.ts`, `test/hybrid_query_utils_test.ts`, `test/auth_test.ts`, `test/supabase_client_test.ts`, `test/embedding_vector_test.ts`, and targeted `deno check` for both Portal entrypoints and the three Portal-only provider/kernel modules. Live provider calls, secret mutation, Function deployment, and enabling Hybrid are separate controlled gates and are not implied by local proof.
@@ -221,3 +221,11 @@ The `pre-push` hook runs `scripts/docpact-gate.sh`, which delegates CLI lookup t
 Partial package import proof must cover policy omission/v2/invalid values, exact RPC dispatch, preserved requester authorization, committed-count projection and `import_details` signed downloads. Pair with Database #634 and Worker #283; deploy Database/Worker compatibility before Edge and enable the frontend last.
 
 Example scope changes additionally require the shared request, RPC-context and handler tests to prove fixed `-1` normalization, conflicting-state rejection, verified JWT propagation before paid work, and preservation of latest/matched RPC and response contracts.
+
+## Query-rewrite model migration qualification
+
+Run canonical checks plus the focused model-resolution, OpenAI request, Portal request/cache and Hybrid caller suites. Prove missing/blank/invalid configuration makes zero provider requests; raw model selection is independent of translation; both supported SDK surfaces preserve explicit none; and an API error never triggers a different model or API retry path.
+
+Run `scripts/evaluate-hybrid-rewrite.cjs` against the fixed corpus with an existing user-authorized local key file. Retain exact source/corpus/request bindings, all raw outputs, completeness, reasoning/cache/input/output token counts, paired timings and failures. Score raw output before normalization, manually examine hard semantic/identifier failures, and qualify selected downstream results at unchanged budgets. Completed scheduling is not a quality gate; accepted-output latency must be distinguished from incomplete/invalid fast failures. Test model/schema/rules cache identity changes and V2 restart semantics.
+
+Issue #463 has explicit user authorization for local actual-provider comparison using `supabase/.env.local` and bounded production read-only acceptance. Its persistent Dev lacks provider credentials; do not copy production keys there or label negative/configuration checks as successful live model calls. Use local actual-provider qualification, canonical mocked/local route proofs, Dev deployed-source/configuration verification and the authorized production normal/rejection and signed Portal checks. Record this exception and all actual environments in delivery evidence. Delete any task-created evaluator resources; do not create them when local credentials suffice.

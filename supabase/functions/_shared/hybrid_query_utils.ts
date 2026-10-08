@@ -9,12 +9,14 @@ export const hybridQuerySchema: Record<string, unknown> = {
   properties: {
     semantic_query_en: {
       title: 'SemanticQueryEN',
-      description: 'Canonical query term for semantic retrieval in English.',
+      description:
+        'Canonical English query preserving the subject and explicit qualifiers, or an exact supplied identifier when resolving an unknown chemical name would require guessing.',
       type: 'string',
     },
     fulltext_query_en: {
       title: 'FulltextQueryEN',
-      description: 'Dictionary-like aliases in English only. No intent/topic phrases.',
+      description:
+        'English dictionary aliases for the same subject. Preserve supplied identifiers; do not emit isolated attributes or invent registry names.',
       type: 'array',
       items: {
         type: 'string',
@@ -22,7 +24,8 @@ export const hybridQuerySchema: Record<string, unknown> = {
     },
     fulltext_query_zh: {
       title: 'FulltextQueryZH',
-      description: 'Dictionary-like aliases in Simplified Chinese only. No intent/topic phrases.',
+      description:
+        'Simplified Chinese aliases for the same subject. Supplied identifiers, unit symbols and proper names may remain verbatim. No intent/topic phrases.',
       type: 'array',
       items: {
         type: 'string',
@@ -35,12 +38,13 @@ export const hybridQuerySchema: Record<string, unknown> = {
 
 export const HYBRID_SYNONYM_RULES = `
 Output rules:
-1) Return dictionary-style synonyms/aliases only.
-2) Do NOT output topic or intent phrases, e.g. "life cycle assessment", "environmental impact", "生命周期评估", "环境影响".
-3) Prefer canonical names, common aliases, transliterations, and CAS numbers.
-4) Avoid explanatory sentences.
-5) Keep outputs deterministic: canonical term first, then standardized abbreviations/identifiers, then common aliases.
-6) Avoid near-duplicate variants that only add redundant words.
+1) Preserve the complete subject and every explicit qualifier in semantic_query_en: geography, voltage, recycled/fossil origin, edition, and system boundary. Do not replace the subject with a broader category.
+2) Return concise dictionary aliases for that SAME subject, with its canonical term first. Countries, voltages, years and system boundaries alone are not synonyms of a process or material.
+3) Copy supplied CAS numbers, UUIDs, standard editions, formulas and unit symbols exactly. Never invent identifiers or infer an unprovided chemical/common/trade name from a registry number or a complex chemical name. Preserve stereochemistry. For an unfamiliar long chemical name with a supplied CAS number, use that exact identifier rather than guessing a shorter compound name.
+4) Keep ambiguous abbreviations verbatim unless the query disambiguates them. Preserve proper names; do not invent translated organizations or entities.
+5) Use English aliases and Simplified Chinese aliases in their respective arrays. Exact supplied identifiers, symbols and proper names may be repeated verbatim in either array; do not add a "CAS" prefix to a bare registry number.
+6) Do NOT add topic or intent phrases such as "life cycle assessment", "environmental impact", "生命周期评估" or "环境影响". Keep such words only when they are already part of an exact supplied proper name.
+7) Avoid explanations, duplicates differing only in case, and redundant near-duplicate aliases. Do not introduce unrelated alternatives to fill the arrays.
 `;
 
 const EN_FORBIDDEN_SUBSTRINGS = [
