@@ -141,6 +141,19 @@ export type PublishedLciaProcessesOneImpactProjection = {
   values: Record<string, number>;
 };
 
+export type PublishedLciaExactProcessesProjection = {
+  mode: 'processes_one_impact_exact';
+  impact_id: string;
+  rowCount: number;
+  values: Array<{
+    id: string;
+    version: string;
+    status: 'available' | 'missing';
+    value: number | null;
+    unit: string;
+  }>;
+};
+
 export type PublishedLciaRankedProcessesProjection = {
   kind: 'ranked_processes';
   impact_id: string;
@@ -554,6 +567,91 @@ export function projectPublishedProcessesOneImpact({
     impact_id: impact.impactCategoryId,
     impact_index: impact.impactIndex,
     rowCount: processes.length,
+    values,
+  };
+}
+
+// Opt-in reader: preserve exact revisions and absence, without the legacy first-impact/zero fallback.
+export function projectPublishedExactProcessesOneImpact({
+  snapshotIndex,
+  queryArtifact,
+  impactMetadata,
+  impactCategoryId,
+  processes,
+}: {
+  snapshotIndex: SnapshotIndexDocument;
+  queryArtifact: AllUnitQueryEnvelope;
+  impactMetadata?: LciaResultPackageImpactMetadata[];
+  impactCategoryId: string;
+  processes: PublishedLciaProcessRef[];
+}): PublishedLciaExactProcessesProjection | null {
+  if (
+    resultProjectionUnavailable(snapshotIndex, queryArtifact) ||
+    !Number.isSafeInteger(snapshotIndex.process_count) ||
+    snapshotIndex.process_count < 0 ||
+    !Number.isSafeInteger(snapshotIndex.impact_count) ||
+    snapshotIndex.impact_count < 0 ||
+    queryArtifact.process_count !== snapshotIndex.process_count ||
+    queryArtifact.impact_count !== snapshotIndex.impact_count ||
+    !Array.isArray(snapshotIndex.process_map) ||
+    !Array.isArray(snapshotIndex.impact_map) ||
+    !Array.isArray(queryArtifact.h_matrix) ||
+    snapshotIndex.process_map.some((entry) => !isRecord(entry)) ||
+    snapshotIndex.impact_map.some((entry) => !isRecord(entry))
+  ) {
+    return null;
+  }
+  const impacts = snapshotIndex.impact_map.filter((entry) => entry.impact_id === impactCategoryId);
+  if (impacts.length > 1) return null;
+  const impact = impacts[0];
+  if (
+    impact &&
+    (!Number.isInteger(impact.impact_index) ||
+      impact.impact_index < 0 ||
+      impact.impact_index >= snapshotIndex.impact_count)
+  ) {
+    return null;
+  }
+  const unit = impact
+    ? impactOptionsFrom(snapshotIndex, impactMetadata).find(
+        (option) => option.impactCategoryId === impactCategoryId,
+      )!.unit
+    : '';
+  const requested = new Set(
+    processes.map((process) => processLookupKey(process.id, process.version)),
+  );
+  const processEntries = new Map<string, SnapshotIndexProcessEntry>();
+  for (const entry of snapshotIndex.process_map) {
+    const key = processLookupKey(entry.process_id, entry.process_version);
+    if (!requested.has(key)) continue;
+    if (processEntries.has(key)) return null;
+    processEntries.set(key, entry);
+  }
+  const values: PublishedLciaExactProcessesProjection['values'] = [];
+  for (const process of processes) {
+    const entry = processEntries.get(processLookupKey(process.id, process.version));
+    if (
+      entry &&
+      (!Number.isInteger(entry.process_index) ||
+        entry.process_index < 0 ||
+        entry.process_index >= snapshotIndex.process_count)
+    ) {
+      return null;
+    }
+    const row = entry ? queryArtifact.h_matrix[entry.process_index] : undefined;
+    const value = impact && Array.isArray(row) ? row[impact.impact_index] : undefined;
+    const available = typeof value === 'number' && Number.isFinite(value);
+    values.push({
+      ...process,
+      status: available ? 'available' : 'missing',
+      value: available ? value : null,
+      unit,
+    });
+  }
+  return {
+    mode: 'processes_one_impact_exact',
+    impact_id: impactCategoryId,
+    rowCount: values.length,
     values,
   };
 }

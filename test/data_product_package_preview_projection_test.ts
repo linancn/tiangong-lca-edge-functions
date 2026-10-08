@@ -4,6 +4,7 @@ import {
   previewMetadataRefsFromProjection,
   projectLciaResultPackagePreviewRows,
   projectPublishedProcessAllImpacts,
+  projectPublishedExactProcessesOneImpact,
   projectPublishedProcessesOneImpact,
   projectPublishedRankedProcessesOneImpact,
 } from '../supabase/functions/_shared/commands/data_product/package_preview_projection.ts';
@@ -472,4 +473,136 @@ Deno.test('published LCIA result projections read values from the all-unit matri
       ],
     },
   );
+});
+
+function exactFixture() {
+  return {
+    impactCategoryId: '6209b35f-9447-40b5-b68c-a1099e3674a0',
+    processes: [
+      { id: TEST_PROCESS_A, version: '01.00.000' },
+      { id: TEST_PROCESS_A, version: '01.00.001' },
+      { id: TEST_PROCESS_B, version: '01.00.000' },
+      { id: TEST_PROCESS_C, version: '01.00.000' },
+    ],
+    snapshotIndex: {
+      version: 1,
+      snapshot_id: TEST_SNAPSHOT_ID,
+      process_count: 3,
+      impact_count: 2,
+      process_map: [
+        { process_id: TEST_PROCESS_A, process_version: '01.00.000', process_index: 0 },
+        { process_id: TEST_PROCESS_A, process_version: '01.00.001', process_index: 1 },
+        { process_id: TEST_PROCESS_B, process_version: '01.00.000', process_index: 2 },
+      ],
+      impact_map: [
+        { impact_id: 'other-impact', impact_index: 0, impact_name: 'Other', unit: 'other unit' },
+        {
+          impact_id: '6209b35f-9447-40b5-b68c-a1099e3674a0',
+          impact_index: 1,
+          impact_name: 'Climate change',
+          unit: 'kg CO2 Equivalents',
+        },
+      ],
+    },
+    queryArtifact: {
+      version: 1,
+      format: 'all-unit-query:v1',
+      snapshot_id: TEST_SNAPSHOT_ID,
+      job_id: 'job-a',
+      process_count: 3,
+      impact_count: 2,
+      h_matrix: [
+        [999, 0],
+        [888, -0.125],
+        [777, 1.25],
+      ],
+    },
+  };
+}
+Deno.test('exact public impact batch preserves revisions, zero, negatives and missing', () => {
+  const fixture = exactFixture();
+  const result = projectPublishedExactProcessesOneImpact(fixture)!;
+  assertEquals(result.mode, 'processes_one_impact_exact');
+  assertEquals(result.impact_id, fixture.impactCategoryId);
+  assertEquals(result.rowCount, 4);
+  assertEquals(
+    result.values.map((row) => [row.id, row.version, row.status, row.value, row.unit]),
+    [
+      [TEST_PROCESS_A, '01.00.000', 'available', 0, 'kg CO2 Equivalents'],
+      [TEST_PROCESS_A, '01.00.001', 'available', -0.125, 'kg CO2 Equivalents'],
+      [TEST_PROCESS_B, '01.00.000', 'available', 1.25, 'kg CO2 Equivalents'],
+      [TEST_PROCESS_C, '01.00.000', 'missing', null, 'kg CO2 Equivalents'],
+    ],
+  );
+});
+Deno.test(
+  'exact public impact batch never selects another impact or fabricates absent cells',
+  () => {
+    const missingImpact = exactFixture();
+    missingImpact.impactCategoryId = 'missing';
+    assertEquals(
+      projectPublishedExactProcessesOneImpact(missingImpact)!.values.map((row) => row.value),
+      [null, null, null, null],
+    );
+    const sparse = exactFixture();
+    sparse.queryArtifact.h_matrix = [[999], [888, NaN], [777, Infinity]];
+    assertEquals(
+      projectPublishedExactProcessesOneImpact(sparse)!.values.map((row) => row.status),
+      ['missing', 'missing', 'missing', 'missing'],
+    );
+    const absentRow = exactFixture();
+    absentRow.queryArtifact.h_matrix = [];
+    assertEquals(projectPublishedExactProcessesOneImpact(absentRow)!.values[0].value, null);
+    const stringValue = exactFixture();
+    stringValue.queryArtifact.h_matrix[0][1] = '0' as unknown as number;
+    assertEquals(projectPublishedExactProcessesOneImpact(stringValue)!.values[0].value, null);
+  },
+);
+Deno.test('exact public impact batch rejects inconsistent artifact/index bindings', () => {
+  const mutations: Array<(fixture: ReturnType<typeof exactFixture>) => void> = [
+    (fixture) => {
+      fixture.queryArtifact.snapshot_id = 'different';
+    },
+    (fixture) => {
+      fixture.queryArtifact.format = 'unknown';
+    },
+    (fixture) => {
+      fixture.queryArtifact.process_count = 4;
+    },
+    (fixture) => {
+      fixture.queryArtifact.impact_count = 4;
+    },
+    (fixture) => {
+      fixture.snapshotIndex.process_count = -1;
+    },
+    (fixture) => {
+      fixture.snapshotIndex.impact_count = 0.5;
+    },
+    (fixture) => {
+      fixture.queryArtifact.h_matrix = null as never;
+    },
+    (fixture) => {
+      fixture.snapshotIndex.process_map = null as never;
+    },
+    (fixture) => {
+      fixture.snapshotIndex.impact_map = null as never;
+    },
+    (fixture) => {
+      fixture.snapshotIndex.impact_map.push(fixture.snapshotIndex.impact_map[1]);
+    },
+    (fixture) => {
+      fixture.snapshotIndex.impact_map[1].impact_index = 2;
+    },
+    (fixture) => {
+      fixture.snapshotIndex.process_map.push(fixture.snapshotIndex.process_map[0]);
+    },
+    (fixture) => {
+      fixture.snapshotIndex.process_map[0].process_index = 3;
+    },
+  ];
+  for (const mutate of mutations) {
+    const fixture = exactFixture();
+    mutate(fixture);
+    assertEquals(projectPublishedExactProcessesOneImpact(fixture), null);
+  }
 });

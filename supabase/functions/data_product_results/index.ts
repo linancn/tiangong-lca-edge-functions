@@ -9,6 +9,7 @@ import {
   type AllUnitQueryEnvelope,
   deriveSnapshotIndexUrl,
   projectPublishedProcessAllImpacts,
+  projectPublishedExactProcessesOneImpact,
   projectPublishedProcessesOneImpact,
   projectPublishedRankedProcessesOneImpact,
   queryArtifactUrlFromPackagePreview,
@@ -67,6 +68,20 @@ export const dataProductPublishedResultsRequestSchema = z.preprocess(
         impactCategoryId: z.string().trim().min(1).max(200),
         offset: z.coerce.number().int().min(0).default(0),
         limit: z.coerce.number().int().min(1).max(MAX_RANKED_LIMIT).default(DEFAULT_RANKED_LIMIT),
+      })
+      .strict(),
+    z
+      .object({
+        mode: z.literal('processes_one_impact_exact'),
+        impactCategoryId: z.string().uuid(),
+        processes: z
+          .array(processRefSchema)
+          .min(1)
+          .max(100)
+          .refine(
+            (refs) => new Set(refs.map((ref) => `${ref.id}@${ref.version}`)).size === refs.length,
+            'exact Process references must be unique',
+          ),
       })
       .strict(),
   ]),
@@ -180,7 +195,7 @@ function processRefsForRequest(request: DataProductPublishedResultsRequest) {
       },
     ];
   }
-  if (request.mode === 'processes_one_impact') {
+  if (request.mode === 'processes_one_impact' || request.mode === 'processes_one_impact_exact') {
     return request.processes.map((process) => ({
       processId: process.id,
       processVersion: process.version,
@@ -189,7 +204,7 @@ function processRefsForRequest(request: DataProductPublishedResultsRequest) {
   return [];
 }
 
-function createPublishedResultsRepository(
+export function createPublishedResultsRepository(
   serviceSupabase: SupabaseClient = createSupabaseServiceClient(),
   artifacts: DataProductCommandRepository = createDataProductCommandRepository(
     serviceSupabase,
@@ -316,6 +331,24 @@ function createPublishedResultsRepository(
             values: projection.values,
           },
         };
+      }
+
+      if (request.mode === 'processes_one_impact_exact') {
+        const projection = projectPublishedExactProcessesOneImpact({
+          snapshotIndex: snapshotIndex.data,
+          queryArtifact: queryArtifact.data,
+          impactMetadata,
+          impactCategoryId: request.impactCategoryId,
+          processes: request.processes,
+        });
+        if (!projection) {
+          return commandFailure(
+            'published_lcia_projection_invalid',
+            502,
+            'Current public LCIA result artifacts are inconsistent',
+          );
+        }
+        return { ok: true, data: { ...common, ...projection } };
       }
 
       if (request.mode === 'processes_one_impact') {

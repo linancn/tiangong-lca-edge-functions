@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-10-08'
-lastReviewedCommit: '931c86999d2e95382a215c93d769c7a7a81bcba7'
-lastReviewedNote: 'Reviewed Edge #463 explicit raw/Portal model configuration, none/low rewrite controls, removal of implicit fallback models, provider/prompt-bound Portal cache identity, bounded comparison and Dev credential exception. Runtime authorization, retrieval budgets and branch/integration policy are unchanged.'
+lastReviewedCommit: 'e4ca0f0775bde5d8d9b684608b1fa530b9c98822'
+lastReviewedNote: 'Reviewed Edge #466 back-merge of Main5281b50 Luna search hotfix into Deve4ca0f0. All nine deployed search/translation function sources remain identical to reviewed Main; concurrent #462 exact-revision LCIA projection code/tests are retained unchanged. Only review metadata conflicted; no runtime policy or branch/integration boundary changes.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.
