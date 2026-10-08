@@ -133,6 +133,8 @@ Non-JWT bearer values are sent only to Supabase claims verification and known in
 
 ## Current Function Families
 
+`data_product_results` adds the opt-in `processes_one_impact_exact` public reader for 1–100 unique Process ID/version references and one explicit impact UUID. It resolves the current public package once and returns ordered `{id, version, status, value, unit}` rows. Exact mode never selects a different impact; absent revisions/categories/cells return `missing` with null value, while finite zero and negative results remain `available`. Inconsistent snapshot/query bindings fail with `published_lcia_projection_invalid`. The legacy selected/ranked/all-impact projections retain their existing contracts. Deploy this additive reader before the Published Processes consumer release; it does not enqueue Solver work.
+
 ### Command-style app and admin endpoints
 
 These endpoints usually share the same runtime skeleton:
