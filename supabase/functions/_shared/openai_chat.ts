@@ -1,4 +1,5 @@
 import OpenAI from '@openai/openai';
+import { resolveOpenAIModel } from './openai_model.ts';
 
 /**
  * Reusable OpenAI client (lazy initialized singleton).
@@ -19,7 +20,7 @@ function getClient(baseUrl?: string): OpenAI {
 }
 
 export interface OpenAIChatOptions {
-  /** Model name; defaults to env OPENAI_CHAT_MODEL or falls back to gpt-5-mini */
+  /** Explicit model name; omission requires OPENAI_CHAT_MODEL. */
   model?: string;
   /** Enable streaming (default false). Function currently returns aggregate result. */
   stream?: boolean;
@@ -44,6 +45,7 @@ export async function openaiChat(
   options: OpenAIChatOptions = {},
 ): Promise<OpenAIChatResult> {
   if (!input) throw new Error('input must not be empty');
+  const model = resolveOpenAIModel(options.model);
 
   // allow both camelCase (preferred) and snake_case (legacy) for base url in options
   const baseUrl =
@@ -52,7 +54,6 @@ export async function openaiChat(
     Deno.env.get('OPENAI_BASE_URL') ||
     undefined;
   const client = getClient(baseUrl);
-  const model = options.model || Deno.env.get('OPENAI_CHAT_MODEL') || 'gpt-4.1-mini';
   const stream = options.stream ?? false;
 
   const response = await client.responses.create({

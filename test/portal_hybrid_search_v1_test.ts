@@ -1,6 +1,10 @@
 import { assert, assertEquals, assertRejects, assertStringIncludes } from 'jsr:@std/assert';
 
-import type { HybridSearchQuery } from '../supabase/functions/_shared/hybrid_query_utils.ts';
+import {
+  HYBRID_SYNONYM_RULES,
+  hybridQuerySchema,
+  type HybridSearchQuery,
+} from '../supabase/functions/_shared/hybrid_query_utils.ts';
 import {
   type PortalHybridModelCache,
   type PortalHybridSearchRequest,
@@ -38,9 +42,280 @@ import {
   isPortalHybridEnabled,
   PORTAL_HYBRID_FUNCTION_PATH,
   PORTAL_HYBRID_RUNTIME_PATH,
+  PORTAL_HYBRID_REWRITE_TASK_REVISION,
+  portalHybridRewriteCacheIdentity,
 } from '../supabase/functions/portal_hybrid_search_v1/index.ts';
 
 const NOW_SECONDS = 1_800_000_000;
+
+Deno.test(
+  'Portal never reads cache keys predating provider and rewrite identity binding',
+  async () => {
+    for (const versioned of [false, true]) {
+      const redis = new FakePortalRedis();
+      const payload = versioned
+        ? { ...REQUEST, schemaVersion: 'portal.hybrid-search-request.v2', cursor: 'old_cursor' }
+        : REQUEST;
+      const request = await signedRequest({ payload });
+      const previousHash = versioned
+        ? encodeBase64Url(
+            await computePortalBodyHash(
+              new TextEncoder().encode(
+                JSON.stringify({
+                  kind: REQUEST.kind,
+                  query: REQUEST.query,
+                  model: PROVIDER_CONFIG.openAi.model,
+                  modelEndpoint: PROVIDER_CONFIG.openAi.baseUrl,
+                  embeddingEndpoint: PROVIDER_CONFIG.sageMaker.endpointName,
+                  embeddingRegion: PROVIDER_CONFIG.sageMaker.region,
+                }),
+              ),
+            ),
+          )
+        : request.headers.get('x-portal-body-sha256');
+      const previousRoute = versioned
+        ? 'portal_hybrid_english_query_v3'
+        : 'portal_hybrid_english_v2';
+      const previousKey = `${redis.namespace}:cache:${previousRoute}:${previousHash}`;
+      const previousCache: PortalHybridModelCache = {
+        schemaVersion: 'portal.hybrid-model-cache.v2',
+        interpretation: {
+          source: 'model_generated',
+          advisory: true,
+          semanticQuery: 'old model query',
+          terms: [{ language: 'en', value: 'old alias' }],
+        },
+        queryTerms: ['old alias'],
+        queryEmbedding: VECTOR,
+      };
+      redis.cacheGetOperation = (key) =>
+        Promise.resolve(key === previousKey ? JSON.stringify(previousCache) : null);
+      const calls = { rewrite: 0, embedding: 0, database: 0 };
+      const handler = createPortalHybridSearchHandler(
+        handlerOptions(
+          redis,
+          {
+            query: () => {
+              calls.database++;
+              return Promise.resolve(versioned ? versionedDatabasePage() : databasePage());
+            },
+          },
+          {
+            rewriteQuery: async () => {
+              calls.rewrite++;
+              return REWRITE;
+            },
+            generateEmbedding: async () => {
+              calls.embedding++;
+              return VECTOR;
+            },
+          },
+        ),
+      );
+      const response = await handler(request);
+      assertEquals(response.status, versioned ? 400 : 200);
+      assertEquals(redis.cacheReadKeys.includes(previousKey), false);
+      assertEquals(
+        calls,
+        versioned
+          ? { rewrite: 0, embedding: 0, database: 0 }
+          : { rewrite: 1, embedding: 1, database: 1 },
+      );
+      assertEquals(redis.calls.includes('circuit_failure'), false);
+    }
+  },
+);
+
+Deno.test(
+  'Portal rewrite identity binds actual schema, rules, and the task-template revision',
+  async () => {
+    const identity = portalHybridRewriteCacheIdentity();
+    assertEquals(identity, {
+      taskTemplateRevision: PORTAL_HYBRID_REWRITE_TASK_REVISION,
+      synonymRules: HYBRID_SYNONYM_RULES,
+      schema: hybridQuerySchema,
+    });
+    const variants = [
+      identity,
+      portalHybridRewriteCacheIdentity(`${PORTAL_HYBRID_REWRITE_TASK_REVISION}.changed`),
+      portalHybridRewriteCacheIdentity(undefined, `${HYBRID_SYNONYM_RULES}\nChanged rule.`),
+      portalHybridRewriteCacheIdentity(undefined, undefined, {
+        ...hybridQuerySchema,
+        description: 'changed schema',
+      }),
+    ];
+    const hashes = await Promise.all(
+      variants.map(async (value) =>
+        encodeBase64Url(
+          await computePortalBodyHash(new TextEncoder().encode(JSON.stringify(value))),
+        ),
+      ),
+    );
+    assertEquals(new Set(hashes).size, variants.length);
+  },
+);
+
+Deno.test(
+  'both Portal cache paths isolate provider identity while preserving their request scope',
+  async () => {
+    for (const versioned of [false, true]) {
+      const redis = new FakePortalRedis();
+      const cachedByKey = new Map<string, string>();
+      redis.cacheGetOperation = (key) => Promise.resolve(cachedByKey.get(key) ?? null);
+      let provider = PROVIDER_CONFIG;
+      let rewriteCalls = 0;
+      const handler = createPortalHybridSearchHandler(
+        handlerOptions(
+          redis,
+          {
+            query: () => Promise.resolve(versioned ? versionedDatabasePage() : databasePage()),
+          },
+          {
+            providerConfig: undefined,
+            providerConfigFactory: () => provider,
+            rewriteQuery: async () => {
+              rewriteCalls++;
+              return REWRITE;
+            },
+          },
+        ),
+      );
+      const payload = versioned
+        ? { ...REQUEST, schemaVersion: 'portal.hybrid-search-request.v2', cursor: null }
+        : REQUEST;
+      const first = await handler(await signedRequest({ payload }));
+      assertEquals(first.status, 200);
+      cachedByKey.set(redis.cacheWriteKeys[0], redis.cacheWrites[0]);
+      const same = await handler(await signedRequest({ payload }));
+      assertEquals(same.status, 200);
+      assertEquals(same.headers.get('x-portal-cache'), 'hit');
+      assertEquals(rewriteCalls, 1);
+
+      const changedFilter = await handler(
+        await signedRequest({ payload: { ...payload, filters: { geography: 'FR' } } }),
+      );
+      assertEquals(changedFilter.status, 200);
+      assertEquals(changedFilter.headers.get('x-portal-cache'), versioned ? 'hit' : 'miss');
+      assertEquals(rewriteCalls, versioned ? 1 : 2);
+
+      const baselineCalls = rewriteCalls;
+      for (const changedProvider of [
+        { ...PROVIDER_CONFIG, openAi: { ...PROVIDER_CONFIG.openAi, model: 'gpt-6-luna' } },
+        {
+          ...PROVIDER_CONFIG,
+          openAi: { ...PROVIDER_CONFIG.openAi, baseUrl: 'https://changed.example/v1' },
+        },
+        {
+          ...PROVIDER_CONFIG,
+          sageMaker: { ...PROVIDER_CONFIG.sageMaker, endpointName: 'changed-endpoint' },
+        },
+        { ...PROVIDER_CONFIG, sageMaker: { ...PROVIDER_CONFIG.sageMaker, region: 'us-west-2' } },
+      ]) {
+        provider = changedProvider;
+        const changed = await handler(await signedRequest({ payload }));
+        assertEquals(changed.status, 200);
+        assertEquals(changed.headers.get('x-portal-cache'), 'miss');
+      }
+      assertEquals(rewriteCalls, baselineCalls + 4);
+      assertEquals(new Set(redis.cacheReadKeys).size, versioned ? 5 : 6);
+      assertEquals(
+        redis.cacheWriteKeys.some((key) => key.includes(PROVIDER_CONFIG.openAi.apiKey)),
+        false,
+      );
+    }
+  },
+);
+
+Deno.test(
+  'Portal V2 continuation after a model identity change stops before model and Database work',
+  async () => {
+    const redis = new FakePortalRedis();
+    const cachedByKey = new Map<string, string>();
+    redis.cacheGetOperation = (key) => Promise.resolve(cachedByKey.get(key) ?? null);
+    let provider = PROVIDER_CONFIG;
+    const calls = { rewrite: 0, embedding: 0, database: 0 };
+    const handler = createPortalHybridSearchHandler(
+      handlerOptions(
+        redis,
+        {
+          query: () => {
+            calls.database++;
+            return Promise.resolve(versionedDatabasePage());
+          },
+        },
+        {
+          providerConfig: undefined,
+          providerConfigFactory: () => provider,
+          rewriteQuery: async () => {
+            calls.rewrite++;
+            return REWRITE;
+          },
+          generateEmbedding: async () => {
+            calls.embedding++;
+            return VECTOR;
+          },
+        },
+      ),
+    );
+    const payload = { ...REQUEST, schemaVersion: 'portal.hybrid-search-request.v2', cursor: null };
+    assertEquals((await handler(await signedRequest({ payload }))).status, 200);
+    cachedByKey.set(redis.cacheWriteKeys[0], redis.cacheWrites[0]);
+    provider = { ...PROVIDER_CONFIG, openAi: { ...PROVIDER_CONFIG.openAi, model: 'gpt-6-luna' } };
+    const continuation = await handler(
+      await signedRequest({ payload: { ...payload, cursor: 'old_cursor' } }),
+    );
+    assertEquals(continuation.status, 400);
+    assertEquals(await responseCode(continuation), 'invalid_request');
+    assertEquals(calls, { rewrite: 1, embedding: 1, database: 1 });
+    assertEquals(redis.calls.includes('circuit_failure'), false);
+  },
+);
+
+Deno.test(
+  'Portal schema identity change invalidates both caches and restarts V2 continuation',
+  async () => {
+    const originalDescription = hybridQuerySchema.description;
+    try {
+      for (const versioned of [false, true]) {
+        const redis = new FakePortalRedis();
+        const cachedByKey = new Map<string, string>();
+        redis.cacheGetOperation = (key) => Promise.resolve(cachedByKey.get(key) ?? null);
+        let rewriteCalls = 0;
+        const handler = createPortalHybridSearchHandler(
+          handlerOptions(
+            redis,
+            {
+              query: () => Promise.resolve(versioned ? versionedDatabasePage() : databasePage()),
+            },
+            {
+              rewriteQuery: async () => {
+                rewriteCalls++;
+                return REWRITE;
+              },
+            },
+          ),
+        );
+        const payload = versioned
+          ? { ...REQUEST, schemaVersion: 'portal.hybrid-search-request.v2', cursor: null }
+          : REQUEST;
+        assertEquals((await handler(await signedRequest({ payload }))).status, 200);
+        cachedByKey.set(redis.cacheWriteKeys[0], redis.cacheWrites[0]);
+        hybridQuerySchema.description = `schema revision test ${versioned}`;
+        const changed = await handler(
+          await signedRequest({
+            payload: versioned ? { ...payload, cursor: 'old_cursor' } : payload,
+          }),
+        );
+        assertEquals(changed.status, versioned ? 400 : 200);
+        assertEquals(rewriteCalls, versioned ? 1 : 2);
+        assertEquals(new Set(redis.cacheReadKeys).size, 2);
+      }
+    } finally {
+      if (originalDescription === undefined) delete hybridQuerySchema.description;
+      else hybridQuerySchema.description = originalDescription;
+    }
+  },
+);
 
 function versionedDatabasePage(): Extract<
   PortalPublicHybridCandidatePage,

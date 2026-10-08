@@ -1,4 +1,5 @@
 import OpenAI from '@openai/openai';
+import { resolveOpenAIModel } from './openai_model.ts';
 
 const _clients = new Map<string, OpenAI>();
 
@@ -119,6 +120,8 @@ function parseJson(text: string): unknown {
 export interface OpenAIStructuredOptions {
   model?: string;
   temperature?: number;
+  reasoningEffort?: 'none';
+  verbosity?: 'low';
   baseUrl?: string;
 }
 
@@ -131,10 +134,56 @@ export interface OpenAIStructuredRequest {
   signal?: AbortSignal;
 }
 
-export async function openaiStructuredOutput<T>(request: OpenAIStructuredRequest): Promise<T> {
-  const baseUrl = request.options?.baseUrl || Deno.env.get('OPENAI_BASE_URL') || undefined;
-  const model = request.options?.model || Deno.env.get('OPENAI_CHAT_MODEL') || 'gpt-4.1-mini';
+export function buildOpenAIResponsesParameters(request: OpenAIStructuredRequest, model: string) {
   const temperature = request.options?.temperature ?? 0;
+  return {
+    model,
+    temperature,
+    ...(request.options?.reasoningEffort === undefined
+      ? {}
+      : { reasoning: { effort: request.options.reasoningEffort } }),
+    input: [
+      { role: 'system', content: request.systemPrompt },
+      { role: 'user', content: request.userPrompt },
+    ],
+    text: {
+      ...(request.options?.verbosity === undefined ? {} : { verbosity: request.options.verbosity }),
+      format: {
+        type: 'json_schema',
+        name: request.schemaName,
+        schema: request.schema,
+        strict: true,
+      },
+    },
+  };
+}
+
+export function buildOpenAIChatParameters(request: OpenAIStructuredRequest, model: string) {
+  return {
+    model,
+    ...(request.options?.verbosity === undefined ? {} : { verbosity: request.options.verbosity }),
+    temperature: request.options?.temperature ?? 0,
+    ...(request.options?.reasoningEffort === undefined
+      ? {}
+      : { reasoning_effort: request.options.reasoningEffort }),
+    messages: [
+      { role: 'system', content: request.systemPrompt },
+      { role: 'user', content: request.userPrompt },
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: request.schemaName,
+        schema: request.schema,
+        strict: true,
+      },
+    },
+  };
+}
+
+export async function openaiStructuredOutput<T>(request: OpenAIStructuredRequest): Promise<T> {
+  const model = resolveOpenAIModel(request.options?.model);
+  const baseUrl = request.options?.baseUrl || Deno.env.get('OPENAI_BASE_URL') || undefined;
 
   const client = getClient(baseUrl);
   const clientAny = client as unknown as {
@@ -151,42 +200,12 @@ export async function openaiStructuredOutput<T>(request: OpenAIStructuredRequest
   let response: unknown;
 
   if (clientAny.responses?.create) {
-    const parameters = {
-      model,
-      temperature,
-      input: [
-        { role: 'system', content: request.systemPrompt },
-        { role: 'user', content: request.userPrompt },
-      ],
-      text: {
-        format: {
-          type: 'json_schema',
-          name: request.schemaName,
-          schema: request.schema,
-          strict: true,
-        },
-      },
-    };
+    const parameters = buildOpenAIResponsesParameters(request, model);
     response = request.signal
       ? await clientAny.responses.create(parameters, { signal: request.signal })
       : await clientAny.responses.create(parameters);
   } else if (clientAny.chat?.completions?.create) {
-    const parameters = {
-      model,
-      temperature,
-      messages: [
-        { role: 'system', content: request.systemPrompt },
-        { role: 'user', content: request.userPrompt },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: request.schemaName,
-          schema: request.schema,
-          strict: true,
-        },
-      },
-    };
+    const parameters = buildOpenAIChatParameters(request, model);
     response = request.signal
       ? await clientAny.chat.completions.create(parameters, { signal: request.signal })
       : await clientAny.chat.completions.create(parameters);
