@@ -35,7 +35,7 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-10-09
-lastReviewedCommit: 7531b83951dc04f138366e799acca4625ff52c36
+lastReviewedCommit: 1a0d513092bc98459d4d052e3a297ce9abdef17c
 lastReviewedNote: 'Reviewed Edge #466 back-merge of Main5281b50 Luna search hotfix into Deve4ca0f0. All nine deployed search/translation function sources remain identical to reviewed Main; concurrent #462 exact-revision LCIA projection code/tests are retained unchanged. Only review metadata conflicted; no runtime policy or branch/integration boundary changes.'
 related:
   - ../../AGENTS.md
@@ -55,7 +55,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 161 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots (84 of them under `test/`) in one shared graph, runs 83 Node contract tests, and executes 614 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 161 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots (84 of them under `test/`) in one shared graph, runs 102 Node contract tests, and executes 614 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 Review note, 2026-08-31: Edge #357 upgrades every direct runtime/import dependency to the latest stable version verified for exact Deno 2.1.4, including OpenAI 7.8 and Supabase JSR 2.112.4. Validation requires empty `pnpm outdated` and exact-Deno `deno outdated --latest`, one import-map/direct-import contract, targeted OpenAI/Redis/Supabase/Auth checks, Redis 0.41.2's dual-provider signature adaptation, the canonical full gate, and no Portal credential/config mutation. Official OpenAI documentation continues to define `client.responses.create` as the primary JavaScript API; Chat fallback remains covered.
 
