@@ -34,8 +34,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-08
-lastReviewedCommit: 'e4ca0f0775bde5d8d9b684608b1fa530b9c98822'
+lastReviewedAt: 2026-10-09
+lastReviewedCommit: 1a0d513092bc98459d4d052e3a297ce9abdef17c
 lastReviewedNote: 'Reviewed Edge #466 back-merge of Main5281b50 Luna search hotfix into Deve4ca0f0. All nine deployed search/translation function sources remain identical to reviewed Main; concurrent #462 exact-revision LCIA projection code/tests are retained unchanged. Only review metadata conflicted; no runtime policy or branch/integration boundary changes.'
 related:
   - ../../AGENTS.md
@@ -369,3 +369,7 @@ Package enqueue accepts optional `import_policy=root_closure_v2`, dispatches it 
 Raw Hybrid rewriting reads required `HYBRID_OPENAI_CHAT_MODEL` at call time and sends explicit reasoning `none`. Portal keeps required `PORTAL_OPENAI_CHAT_MODEL` and isolated provider credentials with its existing none/non-stored/low/256 contract. The production upgrade target for both is `gpt-6-luna`; this is operator configuration, not a code fallback. `_shared/openai_model.ts` validates explicit model inputs before provider construction. Generic translation retains required `OPENAI_CHAT_MODEL` or its existing explicit caller model and is not silently migrated by the search setting.
 
 Portal V1 and V2 hashes now bind provider identity, reasoning, actual synonym rules/schema and a named task-template revision. V1 still includes the entire signed body; V2 still uses query/kind so filter/page changes reuse model inputs. Model or prompt identity changes miss old cache entries, and incompatible V2 continuation fails before new model/DB work. Payload schema, TTL, authorization and candidate budgets are unchanged.
+
+## Dataset display command
+
+`app_dataset_display_set_batch` replaces the retired one-way Process publisher. It authenticates through the shared command runtime, accepts only `items` and boolean `isVisible`, and validates 1–100 exact identities from the seven dataset kinds (excluding LCIA methods and ILCD). It forwards the verified actor client to `api.cmd_dataset_display_set_batch`; the database owns the live manager role, source existence, locks and atomic visibility storage. No owner, team or state constraint is introduced, no actor identity is accepted in payloads, and no service client is used. Responses preserve changed/unchanged counts for both set and cancel. Authentication, role, input, infrastructure and invalid-response failures remain distinct. The matching Database migration must precede this endpoint and the frontend rollout.
