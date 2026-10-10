@@ -5,6 +5,7 @@ import {
   type PortalPublicHybridCandidatePage,
   portalPublicHybridCandidatePageV1Schema,
   portalPublicHybridCandidatePageV2Schema,
+  portalPublicHybridCandidatePageV3Schema,
 } from './portal_hybrid_contract.ts';
 import {
   readPortalBoundedStream,
@@ -100,10 +101,13 @@ export function createPortalHybridRepository(
         throw new PortalHybridRepositoryError('contract_failure');
       }
       const normalizedTerms = parsedTerms.map((term) => (term.success ? term.data : ''));
-      const versioned = parsedRequest.data.schemaVersion === 'portal.hybrid-search-request.v2';
-      const rpcPath = versioned
-        ? '/rest/v1/rpc/portal_hybrid_search_v2'
-        : '/rest/v1/rpc/portal_hybrid_search_v1';
+      const scoped = parsedRequest.data.schemaVersion === 'portal.hybrid-search-request.v3';
+      const versioned = parsedRequest.data.schemaVersion !== 'portal.hybrid-search-request.v1';
+      const rpcPath = scoped
+        ? '/rest/v1/rpc/portal_hybrid_search_v3'
+        : versioned
+          ? '/rest/v1/rpc/portal_hybrid_search_v2'
+          : '/rest/v1/rpc/portal_hybrid_search_v1';
       const response = await fetchImpl(`${supabaseUrl}${rpcPath}`, {
         method: 'POST',
         headers: {
@@ -113,12 +117,15 @@ export function createPortalHybridRepository(
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          ...(parsedRequest.data.schemaVersion === 'portal.hybrid-search-request.v3'
+            ? { p_allowed_brands: parsedRequest.data.allowedBrandCodes }
+            : {}),
           p_kind: parsedRequest.data.kind,
           p_query_terms: normalizedTerms,
           p_query_embedding: serializePortalHybridEmbedding(queryEmbedding),
           p_filters: parsedRequest.data.filters,
           p_limit: parsedRequest.data.limit,
-          ...(parsedRequest.data.schemaVersion === 'portal.hybrid-search-request.v2'
+          ...(parsedRequest.data.schemaVersion !== 'portal.hybrid-search-request.v1'
             ? { p_cursor: parsedRequest.data.cursor }
             : {}),
         }),
@@ -131,9 +138,11 @@ export function createPortalHybridRepository(
       }
       const value = await readRepositoryResponse(response);
       const parsed = (
-        versioned
-          ? portalPublicHybridCandidatePageV2Schema
-          : portalPublicHybridCandidatePageV1Schema
+        scoped
+          ? portalPublicHybridCandidatePageV3Schema
+          : versioned
+            ? portalPublicHybridCandidatePageV2Schema
+            : portalPublicHybridCandidatePageV1Schema
       ).safeParse(value);
       if (
         !parsed.success ||

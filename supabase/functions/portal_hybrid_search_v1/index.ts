@@ -633,11 +633,13 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         }
         const hybridRequest = parsedRequest.data;
         event.kind = hybridRequest.kind;
-        const versioned = hybridRequest.schemaVersion === 'portal.hybrid-search-request.v2';
+        const versioned = hybridRequest.schemaVersion !== 'portal.hybrid-search-request.v1';
         // V2 continuation/filter/page changes reuse only the model inputs.
         // Raw request signing/replay protection remains bound to the full body.
         const modelCacheRoute = versioned
-          ? 'portal_hybrid_english_query_v3'
+          ? hybridRequest.schemaVersion === 'portal.hybrid-search-request.v3'
+            ? 'portal_hybrid_display_query_v1'
+            : 'portal_hybrid_english_query_v3'
           : PORTAL_HYBRID_MODEL_CACHE_ROUTE;
         const modelCacheHash = encodeBase64Url(
           await deadline.run(() =>
@@ -645,7 +647,17 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
               new TextEncoder().encode(
                 JSON.stringify({
                   requestIdentity: versioned
-                    ? { kind: hybridRequest.kind, query: hybridRequest.query }
+                    ? {
+                        kind: hybridRequest.kind,
+                        query: hybridRequest.query,
+                        ...(hybridRequest.schemaVersion === 'portal.hybrid-search-request.v3'
+                          ? {
+                              schemaVersion: hybridRequest.schemaVersion,
+                              allowedBrandCodes: hybridRequest.allowedBrandCodes,
+                              brand: hybridRequest.filters.brand ?? null,
+                            }
+                          : {}),
+                      }
                     : { bodyHash: verification.bodyHash },
                   model: providerConfig.openAi.model,
                   modelEndpoint: providerConfig.openAi.baseUrl,
@@ -693,7 +705,7 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         } else {
           event.cache = 'miss';
           if (
-            hybridRequest.schemaVersion === 'portal.hybrid-search-request.v2' &&
+            hybridRequest.schemaVersion !== 'portal.hybrid-search-request.v1' &&
             hybridRequest.cursor !== null
           ) {
             // A cursor is tied to the original rewrite/vector. Do not spend on
@@ -848,10 +860,13 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         }
 
         const edgePage =
-          databasePage.schemaVersion === 'portal.public-hybrid-candidate-page.v2'
+          databasePage.schemaVersion !== 'portal.public-hybrid-candidate-page.v1'
             ? {
                 ...databasePage,
-                schemaVersion: 'portal.hybrid-search-page.v2',
+                schemaVersion:
+                  databasePage.schemaVersion === 'portal.public-hybrid-candidate-page.v3'
+                    ? 'portal.hybrid-search-page.v3'
+                    : 'portal.hybrid-search-page.v2',
                 interpretation: modelCache.interpretation,
               }
             : {
@@ -865,7 +880,9 @@ export function createPortalHybridSearchHandler(options: PortalHybridHandlerOpti
         if (
           !parsedPage.success ||
           parsedPage.data.kind !== hybridRequest.kind ||
-          (parsedPage.data.schemaVersion === 'portal.hybrid-search-page.v2') !== versioned ||
+          (parsedPage.data.schemaVersion !== 'portal.hybrid-search-page.v1') !== versioned ||
+          (parsedPage.data.schemaVersion === 'portal.hybrid-search-page.v3') !==
+            (hybridRequest.schemaVersion === 'portal.hybrid-search-request.v3') ||
           parsedPage.data.items.length > hybridRequest.limit
         ) {
           event.database = 'contract_failed';

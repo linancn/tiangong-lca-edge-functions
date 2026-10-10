@@ -34,9 +34,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-09
-lastReviewedCommit: 1a0d513092bc98459d4d052e3a297ce9abdef17c
-lastReviewedNote: 'Reviewed Edge #466 back-merge of Main5281b50 Luna search hotfix into Deve4ca0f0. All nine deployed search/translation function sources remain identical to reviewed Main; concurrent #462 exact-revision LCIA projection code/tests are retained unchanged. Only review metadata conflicted; no runtime policy or branch/integration boundary changes.'
+lastReviewedAt: 2026-10-10
+lastReviewedCommit: 96586ac7025eed8dc7d0b5c514716985ee43ff3c
+lastReviewedNote: 'Edge #473: reviewed active signed Hybrid V3 and LCIA V2 scoped readers, scope-bound cache identity and fresh LCIA qualification on every response; rollout and deployment remain separate.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -55,7 +55,7 @@ pnpm lint
 pnpm check
 ```
 
-`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 161 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots (84 of them under `test/`) in one shared graph, runs 102 Node contract tests, and executes 614 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
+`pnpm check` first requires exact Deno `2.1.4` / bundled TypeScript `5.6.2`, Supabase CLI `2.116.0`, Node `24.19.0`, and pnpm `11.24.0`. It then checks all 162 enabled `supabase/functions/*/index.ts` and `test/*.ts` roots (85 of them under `test/`) in one shared graph, runs 102 Node contract tests, and executes 619 default Deno behavior tests while the one credentialed live Upstash test remains ignored unless explicitly selected. Deno is the authoritative compiler; no npm TypeScript package participates.
 
 Review note, 2026-08-31: Edge #357 upgrades every direct runtime/import dependency to the latest stable version verified for exact Deno 2.1.4, including OpenAI 7.8 and Supabase JSR 2.112.4. Validation requires empty `pnpm outdated` and exact-Deno `deno outdated --latest`, one import-map/direct-import contract, targeted OpenAI/Redis/Supabase/Auth checks, Redis 0.41.2's dual-provider signature adaptation, the canonical full gate, and no Portal credential/config mutation. Official OpenAI documentation continues to define `client.responses.create` as the primary JavaScript API; Chat fallback remains covered.
 
@@ -231,3 +231,11 @@ Run `scripts/evaluate-hybrid-rewrite.cjs` against the fixed corpus with an exist
 Issue #463 has explicit user authorization for local actual-provider comparison using `supabase/.env.local` and bounded production read-only acceptance. Its persistent Dev lacks provider credentials; do not copy production keys there or label negative/configuration checks as successful live model calls. Use local actual-provider qualification, canonical mocked/local route proofs, Dev deployed-source/configuration verification and the authorized production normal/rejection and signed Portal checks. Record this exception and all actual environments in delivery evidence. Delete any task-created evaluator resources; do not create them when local credentials suffice.
 
 Dataset-display changes additionally run `test/app_dataset_display_set_batch_test.ts`, proving all seven kinds, both actions, exact identities, parser bounds, actor-first handling, one actor-preserving RPC, role denial and malformed-response rejection. The paired Database suite owns source/role/state and transaction truth. Local checks do not deploy or remove hosted function versions.
+
+## Portal deployment scope contracts
+
+Run `test/portal_brand_scope_test.ts` with the retained Hybrid contract suite on exact Deno 2.1.4. Prove strict canonical scope, distinct scope identities, user-filter separation, unknown-key denial, retained query/year/Flow limits and legacy rejection of the opt-in envelope. These parser tests do not establish HMAC transport, scope forwarding, Redis isolation or live rollout readiness; those must pass with the matching handler/repository changes in Edge #473.
+
+## Scoped Portal wire qualification
+
+`portal_brand_scope_test.ts`, `portal_hybrid_search_v1_test.ts` and `portal_data_product_results_v1_test.ts` cover canonical signed scope, strict legacy/new wire separation, the exact scoped RPC and parameter, rejection of legacy DTO fallback, and LCIA revalidation before cache expiry. Run `pnpm check` with the repository Node and Deno versions, preserving the existing HMAC, replay/admission, deadlines, provider and publication regressions. Hosted Database/Edge/Portal compatibility, paired brand deployments, cutover and cache invalidation remain separate release receipts; local success is not deployment.

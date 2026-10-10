@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { portalAllowedBrandCodesSchema, portalBrandCodeSchema } from './portal_brand_scope.ts';
 
 const utf8Encoder = new TextEncoder();
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001f\u007f-\u009f]/u;
@@ -114,9 +115,29 @@ export const portalHybridSearchRequestV2Schema = z
       });
     }
   });
+export const portalHybridSearchRequestV3Schema = z
+  .strictObject({
+    ...portalHybridSearchRequestV2Schema.shape,
+    schemaVersion: z.literal('portal.hybrid-search-request.v3'),
+    allowedBrandCodes: portalAllowedBrandCodesSchema,
+    filters: portalHybridFiltersSchema.safeExtend({ brand: portalBrandCodeSchema.optional() }),
+  })
+  .superRefine((value, context) => {
+    if (value.kind === 'flow' && value.filters.processSubtype !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        message: 'processSubtype is not valid for Flow search',
+        path: ['filters', 'processSubtype'],
+      });
+    }
+  });
+
+export type PortalHybridSearchRequestV3 = z.infer<typeof portalHybridSearchRequestV3Schema>;
+
 export const portalHybridSearchRequestSchema = z.union([
   portalHybridSearchRequestV1Schema,
   portalHybridSearchRequestV2Schema,
+  portalHybridSearchRequestV3Schema,
 ]);
 export type PortalHybridSearchRequest = z.infer<typeof portalHybridSearchRequestSchema>;
 
@@ -480,9 +501,50 @@ function validateVersionGroups(value: VersionPageShape, context: z.RefinementCtx
 
 export const portalPublicHybridCandidatePageV2Schema =
   versionPageBaseSchema.superRefine(validateVersionGroups);
+const displayBrandSchema = z
+  .discriminatedUnion('code', [
+    z.strictObject({ code: z.literal('tiangong_lca'), name: z.literal('Tiangong LCA') }),
+    z.strictObject({ code: z.literal('bafu'), name: z.literal('BAFU') }),
+    z.strictObject({ code: z.literal('uslci'), name: z.literal('USLCI') }),
+    z.strictObject({ code: z.literal('worldsteel'), name: z.literal('World steel') }),
+  ])
+  .nullable();
+const displayVersionPageShape = {
+  ...versionPageShape,
+  schemaVersion: z.literal('portal.public-hybrid-candidate-page.v3'),
+  items: z.array(portalPublicHybridCandidateV2Schema.extend({ brand: displayBrandSchema })).max(20),
+  versionGroups: z
+    .array(
+      versionGroupSchema.extend({
+        matches: z
+          .array(
+            z.strictObject({
+              key: publicDatasetKeySchema,
+              match: portalPublicHybridMatchV2Schema,
+              brand: displayBrandSchema,
+            }),
+          )
+          .min(1)
+          .max(400),
+      }),
+    )
+    .max(20),
+};
+export const portalPublicHybridCandidatePageV3Schema = z
+  .strictObject(displayVersionPageShape)
+  .superRefine(validateVersionGroups);
+export const portalHybridSearchPageV3Schema = z
+  .strictObject({
+    ...displayVersionPageShape,
+    schemaVersion: z.literal('portal.hybrid-search-page.v3'),
+    interpretation: portalHybridInterpretationSchema,
+  })
+  .superRefine(validateVersionGroups);
+
 export const portalPublicHybridCandidatePageSchema = z.union([
   portalPublicHybridCandidatePageV1Schema,
   portalPublicHybridCandidatePageV2Schema,
+  portalPublicHybridCandidatePageV3Schema,
 ]);
 export type PortalPublicHybridCandidatePage = z.infer<typeof portalPublicHybridCandidatePageSchema>;
 
@@ -497,6 +559,7 @@ export const portalHybridSearchPageV2Schema = z
 export const portalHybridSearchPageSchema = z.union([
   portalHybridSearchPageV1Schema,
   portalHybridSearchPageV2Schema,
+  portalHybridSearchPageV3Schema,
 ]);
 export type PortalHybridSearchPage = z.infer<typeof portalHybridSearchPageSchema>;
 
