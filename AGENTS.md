@@ -38,8 +38,8 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-08
-lastReviewedCommit: 'e4ca0f0775bde5d8d9b684608b1fa530b9c98822'
+lastReviewedAt: 2026-10-09
+lastReviewedCommit: 1a0d513092bc98459d4d052e3a297ce9abdef17c
 lastReviewedNote: 'Reviewed Edge #466 back-merge of Main5281b50 Luna search hotfix into Deve4ca0f0. All nine deployed search/translation function sources remain identical to reviewed Main; concurrent #462 exact-revision LCIA projection code/tests are retained unchanged. Only review metadata conflicted; no runtime policy or branch/integration boundary changes.'
 related:
   - .docpact/config.yaml
