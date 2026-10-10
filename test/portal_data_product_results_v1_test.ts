@@ -869,7 +869,7 @@ Deno.test('numeric zero and incomplete response context fail the exact DTO bound
   assertEquals((await response.json()).code, 'published_lcia_unavailable');
 });
 
-Deno.test('successful LCIA response cache is validated and prevents a second DB call', async () => {
+Deno.test('successful LCIA cache is revalidated against current database visibility', async () => {
   const redis = new HandlerRedis();
   const databaseCalls: string[] = [];
   const handler = createPortalDataProductResultsHandler(
@@ -878,11 +878,11 @@ Deno.test('successful LCIA response cache is validated and prevents a second DB 
   assertEquals((await handler(await signedRequest({ nonceSeed: 11 }))).status, 200);
   const cached = await handler(await signedRequest({ nonceSeed: 12 }));
   assertEquals(cached.status, 200);
-  assertEquals(cached.headers.get('X-Portal-Cache'), 'hit');
-  assertEquals(databaseCalls, ['database']);
+  assertEquals(cached.headers.get('X-Portal-Cache'), 'miss');
+  assertEquals(databaseCalls, ['database', 'database']);
 });
 
-Deno.test('revoked publication becomes unavailable at the 60-second cache boundary', async () => {
+Deno.test('revoked publication becomes unavailable before the cache expires', async () => {
   const redis = new HandlerRedis();
   let clockMillis = 0;
   let currentPublication: PortalPublishedLciaPage | null = page();
@@ -903,15 +903,14 @@ Deno.test('revoked publication becomes unavailable at the 60-second cache bounda
   clockMillis = 59_999;
   redis.nowMillis = clockMillis;
   const stillCached = await handler(await signedRequest({ nonceSeed: 71 }));
-  assertEquals(stillCached.status, 200);
-  assertEquals(stillCached.headers.get('X-Portal-Cache'), 'hit');
+  assertEquals(stillCached.status, 404);
 
   clockMillis = 60_000;
   redis.nowMillis = clockMillis;
   const revoked = await handler(await signedRequest({ nonceSeed: 72 }));
   assertEquals(revoked.status, 404);
   assertEquals((await revoked.json()).code, 'published_lcia_unavailable');
-  assertEquals(databaseCalls, [0, 60_000]);
+  assertEquals(databaseCalls, [0, 59_999, 60_000]);
 });
 
 Deno.test('request body limit is enforced without Redis or database work', async () => {
@@ -1080,4 +1079,53 @@ Deno.test('Portal repository rejects secret/service credentials and unsafe remot
       'published_lcia_upstream_unavailable',
     );
   }
+});
+
+Deno.test('signed LCIA V2 scope is strict and forwarded only to the scoped RPC', async () => {
+  const payload = {
+    ...DEFAULT_REQUEST,
+    schemaVersion: 'portal.published-lcia-request.v2',
+    allowedBrandCodes: ['bafu', 'tiangong_lca'],
+  };
+  const redis = new HandlerRedis();
+  let calls = 0;
+  const database = createPortalPublishedLciaRepository({
+    supabaseUrl: 'https://example.supabase.co',
+    publishableKey: 'sb_publishable_test',
+    fetchImpl: ((url, init) => {
+      calls++;
+      assertEquals(
+        String(url),
+        'https://example.supabase.co/rest/v1/rpc/portal_get_published_lcia_values_v2',
+      );
+      assertEquals(JSON.parse(String((init as RequestInit)?.body)).p_allowed_brands, [
+        'bafu',
+        'tiangong_lca',
+      ]);
+      return Promise.resolve(Response.json(page()));
+    }) as typeof fetch,
+  });
+  const handler = createPortalDataProductResultsHandler(handlerOptions(redis, database));
+  assertEquals((await handler(await signedRequest({ payload, nonceSeed: 181 }))).status, 200);
+  let scopeNonce = 181;
+  for (const allowedBrandCodes of [
+    undefined,
+    [],
+    ['*'],
+    ['bafu', 'bafu'],
+    ['tiangong_lca', 'bafu'],
+  ]) {
+    assertEquals(
+      (
+        await handler(
+          await signedRequest({
+            payload: { ...payload, allowedBrandCodes },
+            nonceSeed: ++scopeNonce,
+          }),
+        )
+      ).status,
+      400,
+    );
+  }
+  assertEquals(calls, 1);
 });

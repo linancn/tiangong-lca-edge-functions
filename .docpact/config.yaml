@@ -1,8 +1,8 @@
 version: 1
 layout: repo
 lastReviewedAt: '2026-10-10'
-lastReviewedCommit: 'c8a7ff307854c7a35743e07ddd2837d41b33fe6f'
-lastReviewedNote: 'Edge #473: reviewed opt-in canonical brand scope and Hybrid V3 request foundation; existing runtime entrypoints, transport and deployment policy remain unchanged.'
+lastReviewedCommit: '96586ac7025eed8dc7d0b5c514716985ee43ff3c'
+lastReviewedNote: 'Edge #473: reviewed active signed Hybrid V3 and LCIA V2 scoped readers, scope-bound cache identity and fresh LCIA qualification on every response; rollout and deployment remain separate.'
 
 # Keep deterministic governance facts here.
 # AGENTS.md stays as the repo contract entrypoint.

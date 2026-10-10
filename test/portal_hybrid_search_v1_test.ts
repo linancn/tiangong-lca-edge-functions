@@ -6,6 +6,7 @@ import {
   type HybridSearchQuery,
 } from '../supabase/functions/_shared/hybrid_query_utils.ts';
 import {
+  portalHybridSearchRequestSchema,
   type PortalHybridModelCache,
   type PortalHybridSearchRequest,
   type PortalPublicHybridCandidatePage,
@@ -2408,3 +2409,53 @@ Deno.test('Portal Hybrid absorbs detached logger throws and rejections', async (
   await flushPortalHybridSecurityEvent();
   assertEquals(loggerCalls, 2);
 });
+
+Deno.test(
+  'Portal V3 repository binds scope to the additive RPC and refuses V2 fallback',
+  async () => {
+    const scoped = {
+      ...REQUEST,
+      schemaVersion: 'portal.hybrid-search-request.v3' as const,
+      allowedBrandCodes: ['bafu', 'tiangong_lca'] as const,
+      filters: { brand: 'uslci' as const },
+      cursor: null,
+    };
+    const request = portalHybridSearchRequestSchema.parse(scoped);
+    const oldPage = versionedDatabasePage();
+    const brand = { code: 'tiangong_lca', name: 'Tiangong LCA' } as const;
+    const response = {
+      ...oldPage,
+      schemaVersion: 'portal.public-hybrid-candidate-page.v3' as const,
+      items: oldPage.items.map((item) => ({ ...item, brand })),
+      versionGroups: oldPage.versionGroups.map((group) => ({
+        ...group,
+        matches: group.matches.map((match) => ({ ...match, brand })),
+      })),
+    };
+    let calls = 0;
+    const repository = createPortalHybridRepository({
+      supabaseUrl: 'https://example.supabase.co',
+      publishableKey: TRUSTED_PUBLISHABLE_KEY,
+      fetchImpl: (url, init) => {
+        calls++;
+        assertEquals(
+          String(url),
+          'https://example.supabase.co/rest/v1/rpc/portal_hybrid_search_v3',
+        );
+        const body = JSON.parse(String((init as RequestInit).body));
+        assertEquals(body.p_allowed_brands, ['bafu', 'tiangong_lca']);
+        assertEquals(body.p_filters, { brand: 'uslci' });
+        return Promise.resolve(Response.json(calls === 1 ? response : oldPage));
+      },
+    });
+    assertEquals(
+      await repository.query(request, ['steel'], VECTOR, new AbortController().signal),
+      response,
+    );
+    await assertRejects(
+      () => repository.query(request, ['steel'], VECTOR, new AbortController().signal),
+      PortalHybridRepositoryError,
+    );
+    assertEquals(calls, 2);
+  },
+);

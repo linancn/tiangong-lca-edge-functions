@@ -77,8 +77,8 @@ Deno.test('V3 retains strict unknown-field, query, filter and Flow validation', 
     assertEquals(portalHybridSearchRequestV3Schema.safeParse(invalid).success, false);
 });
 
-Deno.test('live legacy parser does not silently accept or strip a V3 scope', () => {
-  assertEquals(portalHybridSearchRequestSchema.safeParse(request).success, false);
+Deno.test('live parser selects V3 explicitly and rejects scope on legacy wires', () => {
+  assertEquals(portalHybridSearchRequestSchema.safeParse(request).success, true);
   assertEquals(
     portalHybridSearchRequestSchema.safeParse({
       ...request,

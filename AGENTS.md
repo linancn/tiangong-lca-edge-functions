@@ -39,8 +39,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-10-10
-lastReviewedCommit: c8a7ff307854c7a35743e07ddd2837d41b33fe6f
-lastReviewedNote: 'Edge #473: reviewed opt-in canonical brand scope and Hybrid V3 request foundation; existing runtime entrypoints, transport and deployment policy remain unchanged.'
+lastReviewedCommit: 96586ac7025eed8dc7d0b5c514716985ee43ff3c
+lastReviewedNote: 'Edge #473: reviewed active signed Hybrid V3 and LCIA V2 scoped readers, scope-bound cache identity and fresh LCIA qualification on every response; rollout and deployment remain separate.'
 related:
   - .docpact/config.yaml
   - docs/agents/repo-validation.md
@@ -165,6 +165,7 @@ Do not infer routine workflow from GitHub default-branch UI alone.
 
 ## Hard Boundaries
 
+- Portal V3 requires a canonical HMAC-bound `allowedBrandCodes` set and uses only scoped Database V3; LCIA request V2 similarly uses scoped LCIA V2 and rechecks visibility/publication on every cache hit. There is no unscoped fallback for either wire.
 - Portal V2 is an explicit wire-version opt-in on the same signed endpoint. It calls only the additive public V2 Database API, validates best-version groups plus every exact member, and uses opaque query-bound continuation. V1 callers retain their old public API contract. Never relabel a V1 response as V2.
 - Process/Flow matched-version mode requires a verified JWT context before model work, fixes each recall budget at 200, and acknowledges exact-version output with `versionScope=matched`. It validates and forwards state/team context, requires a selected team for `te` before paid work, forwards the reviewed Process dataset type, and validates the canonical Flow type/input/classification contract. The Database V2 RPC owns threshold fallback inside the single matched-mode Edge RPC call; omitted and explicit `latest` mode retain the legacy RPC parameter contract and Edge-owned empty-result retry at threshold zero. Service credentials gain no new RPC grant.
 - Raw Hybrid omitted/latest requests reject page_size or match_count above 100 and integer-range pagination before rewrite, embedding or RPC work. Matched 200-candidate and Open Data routes retain their own contracts. Database SQLSTATE `22023` maps to HTTP 400; other RPC failures retain HTTP 500.

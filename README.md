@@ -24,7 +24,7 @@ checkPaths:
   - supabase/.env.example
   - test.example.http
 lastReviewedAt: 2026-10-10
-lastReviewedCommit: c8a7ff307854c7a35743e07ddd2837d41b33fe6f
+lastReviewedCommit: 96586ac7025eed8dc7d0b5c514716985ee43ff3c
 lastReviewedNote: 'Edge #473: reviewed opt-in canonical brand scope and Hybrid V3 request foundation; existing runtime entrypoints, transport and deployment policy remain unchanged.'
 ---
 
@@ -341,7 +341,7 @@ The signed JSON body has one fixed shape:
 
 `processes_one_impact` and `ranked_processes_one_impact` require a non-empty `impactCategoryId`; `process_all_impacts` requires exactly one Process reference, while the other modes accept 1–50 exact Process ID/version references. The request/response limits remain 32 KiB/512 KiB. A successful response is the exact top-level `portal.published-lcia-page.v1` DTO with `rows`, not an artifact-derived envelope. No current finalized publication returns a stable locator-free `404`; guard/upstream outage returns `503`; budget or concurrency exhaustion returns `429`. Missing or incomplete public evidence is unavailable and is never replaced with numeric zero.
 
-The function validates HMAC over the raw body before transport, Redis, or JSON work, then constant-time matches the inbound public `apikey`, registers nonce with `SET NX EX 120`, acquires an atomic budget/concurrency lease, and releases the lease in `finally`. Only then may it read the hash-key cache or invoke `api.portal_get_published_lcia_values_v1` with explicit `Content-Profile: api` and the same resolved dedicated publishable credential. The LCIA cache is capped at 60 seconds so a revoked publication is rechecked within the visibility SLA; Redis is never a visibility or authorization fact source.
+The function validates HMAC over the raw body before transport, Redis, or JSON work, then constant-time matches the inbound public `apikey`, registers nonce with `SET NX EX 120`, acquires an atomic budget/concurrency lease, and releases the lease in `finally`. Only then may it read the hash-key cache and invoke the version-matching public LCIA façade with explicit `Content-Profile: api` and the same resolved dedicated publishable credential. The LCIA cache is capped at 60 seconds, but every admitted request rechecks current Database qualification and values before returning numerics, including cache hits; Redis is never a visibility or authorization fact source.
 
 Each request invokes exactly one non-blocking `portal.security-event.v1` logger with only correlation ID, route, mode, cache state, HMAC/transport outcome enums, backend class, bounded latency/row/status fields, current/previous key match, recovered-lease count, error code, and the exact validated `PORTAL_LCIA_DEPLOYMENT_SHA` (or `unknown`). It never reads the Hybrid or retired shared SHA name. Raw bodies, queries, dataset UUIDs, nonce, key ID, body hash, Redis keys, cache values, API keys, secrets, Cookies, and locators are not event fields. A throwing or never-resolving logger cannot alter or delay the response.
 
@@ -622,3 +622,7 @@ The retired review-submit Gate, coordinator, and job endpoints are no longer dep
   - standard Supabase browser clients may send the matching project publishable key (or configured legacy anon key) as both `apikey` and Bearer Authorization; this remains a public read and is not treated as an authenticated actor. Other Authorization credentials must authenticate normally.
 
 Set `LCA_RELEASE_STORAGE_BUCKET` only when release artifacts should not use the normal `S3_BUCKET`/`lca_results` private bucket. The interactive release CLI needs only the public API URL, publishable key, public OAuth client ID, and its private client-local OAuth session for a `data_product_manager`; it must never receive `REMOTE_SUPABASE_SECRET_KEY`.
+
+### Deployment-scoped Portal data
+
+The signed Hybrid V3 and LCIA V2 envelopes carry `allowedBrandCodes` from the Portal server. Deploy compatible Database readers first. These routes use only scoped public RPCs and retain current HMAC/publishable-key configuration. Data brand selection is configured in Portal, independently of visual branding. LCIA cache hits recheck current database qualification. No production activation or business-data backfill is part of the code migration.

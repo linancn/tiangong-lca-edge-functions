@@ -1,6 +1,7 @@
 import '@supabase/functions-js/edge-runtime.d.ts';
 
 import { z } from 'zod';
+import { portalAllowedBrandCodesSchema } from '../_shared/portal_brand_scope.ts';
 
 import {
   loadPortalHmacKeyring,
@@ -100,7 +101,7 @@ function uniqueProcessReferences(value: Array<{ id: string; version: string }>):
   return new Set(value.map((item) => `${item.id}@${item.version}`)).size === value.length;
 }
 
-export const portalPublishedLciaRequestSchema = z.discriminatedUnion('mode', [
+export const portalPublishedLciaRequestV1Schema = z.discriminatedUnion('mode', [
   z
     .object({
       mode: z.literal('process_all_impacts'),
@@ -130,6 +131,19 @@ export const portalPublishedLciaRequestSchema = z.discriminatedUnion('mode', [
     .strict(),
 ]);
 
+const scopedLciaFields = {
+  schemaVersion: z.literal('portal.published-lcia-request.v2'),
+  allowedBrandCodes: portalAllowedBrandCodesSchema,
+};
+export const portalPublishedLciaRequestV2Schema = z.discriminatedUnion('mode', [
+  portalPublishedLciaRequestV1Schema.options[0].extend(scopedLciaFields),
+  portalPublishedLciaRequestV1Schema.options[1].extend(scopedLciaFields),
+  portalPublishedLciaRequestV1Schema.options[2].extend(scopedLciaFields),
+]);
+export const portalPublishedLciaRequestSchema = z.union([
+  portalPublishedLciaRequestV1Schema,
+  portalPublishedLciaRequestV2Schema,
+]);
 export type PortalPublishedLciaRequest = z.infer<typeof portalPublishedLciaRequestSchema>;
 
 const exactIdentitySchema = z.object({ id: uuidSchema, version: versionSchema }).strict();
@@ -234,7 +248,7 @@ export function createPortalPublishedLciaRepository(
   return {
     async query(request, signal) {
       const response = await fetchImpl(
-        `${supabaseUrl}/rest/v1/rpc/portal_get_published_lcia_values_v1`,
+        `${supabaseUrl}/rest/v1/rpc/${'allowedBrandCodes' in request ? 'portal_get_published_lcia_values_v2' : 'portal_get_published_lcia_values_v1'}`,
         {
           method: 'POST',
           headers: {
@@ -244,6 +258,9 @@ export function createPortalPublishedLciaRepository(
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
+            ...('allowedBrandCodes' in request
+              ? { p_allowed_brands: request.allowedBrandCodes }
+              : {}),
             p_mode: request.mode,
             p_process_refs: request.processRefs,
             p_impact_ref: request.impactCategoryId,
@@ -528,15 +545,17 @@ export function createPortalDataProductResultsHandler(
             if (parsedCached.success && parsedCached.data.mode === parsedRequest.data.mode) {
               eventCache = 'hit';
               eventRows = parsedCached.data.rows.length;
-              return jsonResponse(200, parsedCached.data, { 'X-Portal-Cache': 'hit' });
+              // Cached values are never authority: the scoped DB read below revalidates
+              // current visibility and publication before returning any numbers.
             }
           } catch (_error) {
             // A malformed cache entry is treated as an unavailable security dependency below.
           }
-          eventCache = 'invalid';
-          return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
-        }
-        eventCache = 'miss';
+          if (eventCache !== 'hit') {
+            eventCache = 'invalid';
+            return errorResponse(503, 'guard_unavailable', 'Portal request guard unavailable');
+          }
+        } else eventCache = 'miss';
 
         const timeoutMs = guardTiming.upstreamTimeoutMs;
         if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 8_000) {

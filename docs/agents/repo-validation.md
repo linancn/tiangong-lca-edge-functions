@@ -35,8 +35,8 @@ checkPaths:
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
 lastReviewedAt: 2026-10-10
-lastReviewedCommit: c8a7ff307854c7a35743e07ddd2837d41b33fe6f
-lastReviewedNote: 'Edge #473: reviewed opt-in canonical brand scope and Hybrid V3 request foundation; existing runtime entrypoints, transport and deployment policy remain unchanged.'
+lastReviewedCommit: 96586ac7025eed8dc7d0b5c514716985ee43ff3c
+lastReviewedNote: 'Edge #473: reviewed active signed Hybrid V3 and LCIA V2 scoped readers, scope-bound cache identity and fresh LCIA qualification on every response; rollout and deployment remain separate.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -235,3 +235,7 @@ Dataset-display changes additionally run `test/app_dataset_display_set_batch_tes
 ## Portal deployment scope contracts
 
 Run `test/portal_brand_scope_test.ts` with the retained Hybrid contract suite on exact Deno 2.1.4. Prove strict canonical scope, distinct scope identities, user-filter separation, unknown-key denial, retained query/year/Flow limits and legacy rejection of the opt-in envelope. These parser tests do not establish HMAC transport, scope forwarding, Redis isolation or live rollout readiness; those must pass with the matching handler/repository changes in Edge #473.
+
+## Scoped Portal wire qualification
+
+`portal_brand_scope_test.ts`, `portal_hybrid_search_v1_test.ts` and `portal_data_product_results_v1_test.ts` cover canonical signed scope, strict legacy/new wire separation, the exact scoped RPC and parameter, rejection of legacy DTO fallback, and LCIA revalidation before cache expiry. Run `pnpm check` with the repository Node and Deno versions, preserving the existing HMAC, replay/admission, deadlines, provider and publication regressions. Hosted Database/Edge/Portal compatibility, paired brand deployments, cutover and cache invalidation remain separate release receipts; local success is not deployment.
