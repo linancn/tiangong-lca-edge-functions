@@ -23,9 +23,9 @@ checkPaths:
   - supabase/config.toml
   - supabase/.env.example
   - test.example.http
-lastReviewedAt: 2026-10-08
-lastReviewedCommit: 931c86999d2e95382a215c93d769c7a7a81bcba7
-lastReviewedNote: 'Reviewed Edge #463 explicit raw/Portal model configuration, none/low rewrite controls, removal of implicit fallback models, provider/prompt-bound Portal cache identity, bounded comparison and Dev credential exception. Runtime authorization, retrieval budgets and branch/integration policy are unchanged.'
+lastReviewedAt: 2026-10-10
+lastReviewedCommit: c8a7ff307854c7a35743e07ddd2837d41b33fe6f
+lastReviewedNote: 'Edge #473: reviewed opt-in canonical brand scope and Hybrid V3 request foundation; existing runtime entrypoints, transport and deployment policy remain unchanged.'
 ---
 
 # TianGong-LCA-Edge-Functions

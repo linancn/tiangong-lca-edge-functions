@@ -34,9 +34,9 @@ checkPaths:
   - scripts/docpact
   - scripts/docpact-gate.sh
   - scripts/install-git-hooks.sh
-lastReviewedAt: 2026-10-09
-lastReviewedCommit: 1a0d513092bc98459d4d052e3a297ce9abdef17c
-lastReviewedNote: 'Reviewed Edge #466 back-merge of Main5281b50 Luna search hotfix into Deve4ca0f0. All nine deployed search/translation function sources remain identical to reviewed Main; concurrent #462 exact-revision LCIA projection code/tests are retained unchanged. Only review metadata conflicted; no runtime policy or branch/integration boundary changes.'
+lastReviewedAt: 2026-10-10
+lastReviewedCommit: c8a7ff307854c7a35743e07ddd2837d41b33fe6f
+lastReviewedNote: 'Edge #473: reviewed opt-in canonical brand scope and Hybrid V3 request foundation; existing runtime entrypoints, transport and deployment policy remain unchanged.'
 related:
   - ../../AGENTS.md
   - ../../.docpact/config.yaml
@@ -373,3 +373,9 @@ Portal V1 and V2 hashes now bind provider identity, reasoning, actual synonym ru
 ## Dataset display command
 
 `app_dataset_display_set_batch` replaces the retired one-way Process publisher. It authenticates through the shared command runtime, accepts only `items` and boolean `isVisible`, and validates 1–100 exact identities from the seven dataset kinds (excluding LCIA methods and ILCD). It forwards the verified actor client to `api.cmd_dataset_display_set_batch`; the database owns the live manager role, source existence, locks and atomic visibility storage. No owner, team or state constraint is introduced, no actor identity is accepted in payloads, and no service client is used. Responses preserve changed/unchanged counts for both set and cancel. Authentication, role, input, infrastructure and invalid-response failures remain distinct. The matching Database migration must precede this endpoint and the frontend rollout.
+
+## Portal deployment scope foundation (Edge #473)
+
+`portal_brand_scope.ts` admits only a nonempty, unique, sorted array of the four Database brand codes and derives a versioned scope identity. Its source is Database commit `489402c6d118be4202cef22f9b89266c9229ed76`, common-types v2. `portal_scoped_hybrid_contract.ts` defines the opt-in signed Hybrid request v3: required `allowedBrandCodes`, separate optional `filters.brand`, and retained query/filter/cursor/limit restrictions. A known out-of-scope filter remains a valid empty-result query. Missing scope, unknown codes and unknown keys fail.
+
+The live V1/V2 parser still rejects this envelope. Handler/repository adoption, LCIA v2, scope-bound cache/cursor identities and deployment qualification remain in #473. Only the matching scoped DB APIs may serve these new requests; there will be no unscoped fallback. This checkpoint changes no deployed route.
